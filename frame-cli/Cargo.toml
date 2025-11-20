@@ -22,6 +22,7 @@ anyhow.workspace = true
 clap.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+chrono.workspace = true
 
 # Internal dependencies
 frame-server = { path = "../frame-server" }
