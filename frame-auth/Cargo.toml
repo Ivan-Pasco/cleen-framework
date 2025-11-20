@@ -13,6 +13,8 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
+uuid.workspace = true
+chrono.workspace = true
 
 # Internal dependencies
 frame-data = { path = "../frame-data" }

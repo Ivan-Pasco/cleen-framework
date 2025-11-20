@@ -958,6 +958,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "async-trait",
+ "chrono",
  "frame-data",
  "host-bridge",
  "jsonwebtoken",
@@ -966,6 +967,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

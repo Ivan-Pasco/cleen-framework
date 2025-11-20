@@ -1,5 +1,5 @@
 use anyhow::Result;
-use axum::{Router, Server};
+use axum::Router;
 use std::net::SocketAddr;
 use wasmtime::*;
 

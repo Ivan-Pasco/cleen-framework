@@ -1,6 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use crate::{Connection, Row, QueryBuilder, OrderDirection};
+use crate::{Connection, Row, QueryBuilder};
+use crate::query::OrderDirection;
 
 /// Trait that all ORM models must implement
 pub trait Model: Sized + Serialize + for<'de> Deserialize<'de> {
