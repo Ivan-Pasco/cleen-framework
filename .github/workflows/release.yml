@@ -1,0 +1,253 @@
+name: Release Frame Framework
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Frame Framework v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            # Frame Framework v${{ steps.get_version.outputs.version }}
+
+            Full-stack WebAssembly framework for Clean Language
+
+            ## Installation
+
+            ```bash
+            cleen install frame
+            ```
+
+            Or download the appropriate binary for your platform below.
+
+            ## What's New
+
+            See [CHANGELOG.md](https://github.com/Ivan-Pasco/cleen-framework/blob/main/CHANGELOG.md) for details.
+
+  build-release:
+    name: Build ${{ matrix.name }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            name: linux-x86_64
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            name: linux-aarch64
+            archive: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            name: macos-x86_64
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            name: macos-aarch64
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+            archive: zip
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+          profile: minimal
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build Frame CLI
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }} --bin frame
+
+      - name: Install wasm32 target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Build Runtime WASMs
+        run: |
+          # Build each runtime component as WASM
+          cargo build --release --target wasm32-unknown-unknown -p host-bridge
+
+      - name: Create release directory
+        run: |
+          mkdir -p frame-${{ needs.create-release.outputs.version }}/bin
+          mkdir -p frame-${{ needs.create-release.outputs.version }}/lib
+          mkdir -p frame-${{ needs.create-release.outputs.version }}/templates
+
+      - name: Copy binaries (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cp target/${{ matrix.target }}/release/frame frame-${{ needs.create-release.outputs.version }}/bin/
+          chmod +x frame-${{ needs.create-release.outputs.version }}/bin/frame
+
+      - name: Copy binaries (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cp target/${{ matrix.target }}/release/frame.exe frame-${{ needs.create-release.outputs.version }}/bin/
+
+      - name: Copy runtime WASMs
+        run: |
+          # Copy compiled WASM modules (when available)
+          # cp target/wasm32-unknown-unknown/release/*.wasm frame-${{ needs.create-release.outputs.version }}/lib/ || true
+
+      - name: Copy templates
+        run: |
+          # Copy project templates (when created)
+          # cp -r templates/* frame-${{ needs.create-release.outputs.version }}/templates/ || true
+          echo "Templates will be added in future releases" > frame-${{ needs.create-release.outputs.version }}/templates/README.txt
+
+      - name: Create README
+        run: |
+          cat > frame-${{ needs.create-release.outputs.version }}/README.txt << 'EOF'
+          Frame Framework v${{ needs.create-release.outputs.version }}
+
+          Installation:
+
+          1. Extract this archive
+          2. Move the 'frame' binary to a directory in your PATH
+             Unix/Linux/macOS: sudo mv bin/frame /usr/local/bin/
+             Or: mkdir -p ~/.local/bin && mv bin/frame ~/.local/bin/
+
+          3. Verify installation:
+             frame --version
+
+          4. Create your first project:
+             frame new my-app
+             cd my-app
+             frame serve
+
+          Documentation: https://github.com/clean-lang/clean-language-cleen-framework
+          EOF
+
+      - name: Create archive (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          tar czf frame-${{ matrix.name }}.tar.gz frame-${{ needs.create-release.outputs.version }}
+
+      - name: Create archive (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          7z a frame-${{ matrix.name }}.zip frame-${{ needs.create-release.outputs.version }}
+
+      - name: Generate checksum (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          shasum -a 256 frame-${{ matrix.name }}.tar.gz > frame-${{ matrix.name }}.tar.gz.sha256
+
+      - name: Generate checksum (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          certutil -hashfile frame-${{ matrix.name }}.zip SHA256 > frame-${{ matrix.name }}.zip.sha256
+
+      - name: Upload archive
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./frame-${{ matrix.name }}.${{ matrix.archive }}
+          asset_name: frame-${{ matrix.name }}.${{ matrix.archive }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./frame-${{ matrix.name }}.${{ matrix.archive }}.sha256
+          asset_name: frame-${{ matrix.name }}.${{ matrix.archive }}.sha256
+          asset_content_type: text/plain
+
+  update-manifest:
+    name: Update Version Manifest
+    needs: [create-release, build-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create version manifest
+        run: |
+          cat > version-manifest.json << EOF
+          {
+            "version": "${{ needs.create-release.outputs.version }}",
+            "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "linux-x86_64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-linux-x86_64.tar.gz",
+              "linux-aarch64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-linux-aarch64.tar.gz",
+              "macos-x86_64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-macos-x86_64.tar.gz",
+              "macos-aarch64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-macos-aarch64.tar.gz",
+              "windows-x86_64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-windows-x86_64.zip"
+            }
+          }
+          EOF
+
+      - name: Upload manifest
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./version-manifest.json
+          asset_name: version-manifest.json
+          asset_content_type: application/json

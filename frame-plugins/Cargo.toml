@@ -1,0 +1,25 @@
+[package]
+name = "frame-plugins"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+
+# Internal dependencies
+frame-server = { path = "../frame-server" }
+frame-data = { path = "../frame-data" }
+frame-ui = { path = "../frame-ui" }
+
+# Plugin system dependencies
+libloading = "0.8"
+
+[dev-dependencies]
+tempfile = "3.8"

@@ -1,0 +1,21 @@
+[package]
+name = "frame-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+# UI rendering dependencies
+html5ever = "0.26"
+markup5ever = "0.11"
+tendril = "0.4"
+
+[dev-dependencies]
+pretty_assertions = "1.4"

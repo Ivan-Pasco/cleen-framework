@@ -1,0 +1,44 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Build artifacts
+/build/
+/dist/
+*.wasm
+*.tar.gz
+*.zip
+*.sha256
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# System
+.DS_Store
+Thumbs.db
+
+# Temporary files
+/tmp/
+*.tmp
+*.log
+
+# Test results
+/tests/results/
+*.test
+
+# Node (if needed for tooling)
+node_modules/
+package-lock.json
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+ehthumbs.db
+Desktop.ini

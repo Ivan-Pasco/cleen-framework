@@ -1,0 +1,32 @@
+# Application Configuration
+
+app:
+	name = "Frame Example App"
+	env = "development"
+	port = 3000
+
+db:
+	driver = "postgres"
+	host = "localhost"
+	port = 5432
+	database = "frame_example"
+	username = env("DB_USER")
+	password = env("DB_PASSWORD")
+
+auth:
+	session:
+		cookie = "frame.sid"
+		timeoutMinutes = 60
+	jwt:
+		secret = env("JWT_SECRET")
+		ttlMinutes = 60
+
+ui:
+	theme:
+		color:
+			primary = "#2563eb"
+			secondary = "#64748b"
+			success = "#10b981"
+			danger = "#ef4444"
+			text = "#0f172a"
+			background = "#ffffff"

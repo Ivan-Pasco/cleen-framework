@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = [
+    "frame-cli",
+    "frame-server",
+    "frame-data",
+    "frame-ui",
+    "frame-auth",
+    "frame-plugins",
+    "host-bridge",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Ivan Pasco"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/clean-language/frame"
+homepage = "https://cleanlanguage.org"
+
+[workspace.dependencies]
+# Shared dependencies across all Frame modules
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+thiserror = "1.0"
+async-trait = "0.1"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# WebAssembly runtime
+wasmtime = "16.0"
+wasm-encoder = "0.40"
+
+# HTTP and networking
+axum = "0.7"
+hyper = "1.0"
+tower = "0.4"
+tower-http = "0.5"
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "json", "chrono", "uuid"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# CLI
+clap = { version = "4.4", features = ["derive", "cargo"] }
