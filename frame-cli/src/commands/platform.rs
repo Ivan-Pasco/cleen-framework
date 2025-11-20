@@ -12,7 +12,7 @@ pub async fn init_pwa() -> Result<()> {
 	// Create manifest.json
 	fs::write(
 		"public/manifest.json",
-		r#"{
+		r##"{
   "name": "Frame App",
   "short_name": "FrameApp",
   "start_url": "/",
@@ -32,7 +32,7 @@ pub async fn init_pwa() -> Result<()> {
     }
   ]
 }
-"#,
+"##,
 	)?;
 
 	// Create service worker
