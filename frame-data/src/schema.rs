@@ -25,7 +25,7 @@ pub enum FieldType {
 	Related { model: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Constraint {
 	PrimaryKey,
 	Auto,
