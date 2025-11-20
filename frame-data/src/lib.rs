@@ -1,6 +1,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use host_bridge::{DbBridge, DbConfig};
 
 mod schema;
 mod query;
@@ -46,48 +49,132 @@ impl Data {
 
 /// Database connection abstraction
 pub struct Connection {
-	// This would interface with host-bridge::DbBridge
 	pub(crate) driver: String,
+	pub(crate) bridge: Arc<RwLock<DbBridge>>,
 	pub(crate) connected: bool,
 }
 
 impl Connection {
+	/// Create a new connection with the given driver
 	pub fn new(driver: impl Into<String>) -> Self {
 		Self {
 			driver: driver.into(),
+			bridge: Arc::new(RwLock::new(DbBridge::new())),
 			connected: false,
 		}
 	}
 
-	pub async fn connect(&mut self) -> Result<()> {
-		// Would call host-bridge to establish connection
+	/// Create a connection from an existing DbBridge instance
+	pub fn from_bridge(driver: impl Into<String>, bridge: Arc<RwLock<DbBridge>>) -> Self {
+		Self {
+			driver: driver.into(),
+			bridge,
+			connected: true,
+		}
+	}
+
+	/// Connect to the database using the provided configuration
+	pub async fn connect(&mut self, config: DbConfig) -> Result<()> {
+		let mut bridge = self.bridge.write().await;
+		bridge.configure(config).await?;
 		self.connected = true;
 		Ok(())
 	}
 
+	/// Execute a SELECT query and return rows
 	pub async fn query(&self, sql: &str, params: Vec<serde_json::Value>) -> Result<Vec<Row>> {
-		// TODO: Implement database query via Host Bridge
-		// Reference: TASKS.md Phase 4 - Frame Data
-		// Spec: documents/specification/04_frame_data.md
-		//
-		// Implementation steps:
-		// 1. Call host_bridge::db::query with sql and params
-		// 2. Parse BridgeResponse
-		// 3. Convert DbResult rows to Vec<Row>
-		// 4. Handle errors (DB_ERROR, TIMEOUT, etc.)
+		if !self.connected {
+			anyhow::bail!("Not connected to database. Call connect() first.");
+		}
 
-		unimplemented!("Connection::query - See TASKS.md Phase 4")
+		// Prepare request
+		let request = serde_json::json!({
+			"sql": sql,
+			"params": params
+		});
+
+		// Call DbBridge
+		let mut bridge = self.bridge.write().await;
+		let response = bridge.call("query", request).await?;
+
+		// Parse response
+		if response["ok"] == true {
+			let rows = response["data"]["rows"]
+				.as_array()
+				.ok_or_else(|| anyhow::anyhow!("Invalid response format: missing rows array"))?;
+
+			// Convert JSON rows to Row structs
+			let result: Result<Vec<Row>> = rows
+				.iter()
+				.map(|row| {
+					let obj = row
+						.as_object()
+						.ok_or_else(|| anyhow::anyhow!("Invalid row format"))?;
+
+					let columns: HashMap<String, serde_json::Value> = obj
+						.iter()
+						.map(|(k, v)| (k.clone(), v.clone()))
+						.collect();
+
+					Ok(Row { columns })
+				})
+				.collect();
+
+			result
+		} else {
+			// Extract error information
+			let err = &response["err"];
+			let code = err["code"]
+				.as_str()
+				.unwrap_or("DB_ERROR");
+			let message = err["message"]
+				.as_str()
+				.unwrap_or("Database query failed");
+
+			anyhow::bail!("[{}] {}", code, message)
+		}
 	}
 
+	/// Execute an INSERT/UPDATE/DELETE query and return affected rows
 	pub async fn execute(&self, sql: &str, params: Vec<serde_json::Value>) -> Result<u64> {
-		// TODO: Implement database execute via Host Bridge
-		// Reference: TASKS.md Phase 4 - Frame Data
-		// Spec: documents/specification/04_frame_data.md
-		//
-		// Used for INSERT, UPDATE, DELETE
-		// Returns number of affected rows
+		if !self.connected {
+			anyhow::bail!("Not connected to database. Call connect() first.");
+		}
 
-		unimplemented!("Connection::execute - See TASKS.md Phase 4")
+		// Prepare request
+		let request = serde_json::json!({
+			"sql": sql,
+			"params": params
+		});
+
+		// Call DbBridge
+		let mut bridge = self.bridge.write().await;
+		let response = bridge.call("execute", request).await?;
+
+		// Parse response
+		if response["ok"] == true {
+			let affected_rows = response["data"]["affected_rows"]
+				.as_u64()
+				.ok_or_else(|| anyhow::anyhow!("Invalid response format: missing affected_rows"))?;
+
+			Ok(affected_rows)
+		} else {
+			// Extract error information
+			let err = &response["err"];
+			let code = err["code"]
+				.as_str()
+				.unwrap_or("DB_ERROR");
+			let message = err["message"]
+				.as_str()
+				.unwrap_or("Database execute failed");
+
+			anyhow::bail!("[{}] {}", code, message)
+		}
+	}
+
+	/// Get reference to the underlying DbBridge (for advanced usage)
+	pub fn bridge(&self) -> Arc<RwLock<DbBridge>> {
+		Arc::clone(&self.bridge)
 	}
 }
 
@@ -109,11 +196,140 @@ impl Row {
 mod tests {
 	use super::*;
 
-	#[tokio::test]
-	async fn test_connection_creation() {
-		let mut conn = Connection::new("postgres");
+	// Enable SQLite driver for testing
+	fn install_driver() {
+		use sqlx::any::install_default_drivers;
+		static INIT: std::sync::Once = std::sync::Once::new();
+		INIT.call_once(|| {
+			install_default_drivers();
+		});
+	}
+
+	#[test]
+	fn test_connection_creation() {
+		let conn = Connection::new("postgres");
 		assert!(!conn.connected);
 		assert_eq!(conn.driver, "postgres");
+	}
+
+	#[tokio::test]
+	async fn test_connection_connect() {
+		install_driver();
+
+		let mut conn = Connection::new("sqlite");
+
+		// Use in-memory SQLite database for testing
+		let config = DbConfig {
+			database_url: "sqlite:file::memory:?cache=shared".to_string(),
+			max_connections: 5,
+			min_connections: 1,
+			connection_timeout: 5000,
+			query_timeout: 10000,
+		};
+
+		let result = conn.connect(config).await;
+		assert!(result.is_ok(), "Failed to connect: {:?}", result.err());
+		assert!(conn.connected);
+	}
+
+	#[tokio::test]
+	async fn test_query_without_connection() {
+		let conn = Connection::new("postgres");
+
+		let result = conn.query("SELECT 1", vec![]).await;
+		assert!(result.is_err());
+		assert!(result.unwrap_err().to_string().contains("Not connected"));
+	}
+
+	#[tokio::test]
+	async fn test_execute_without_connection() {
+		let conn = Connection::new("postgres");
+
+		let result = conn.execute("INSERT INTO test VALUES (1)", vec![]).await;
+		assert!(result.is_err());
+		assert!(result.unwrap_err().to_string().contains("Not connected"));
+	}
+
+	#[tokio::test]
+	async fn test_query_with_connection() {
+		install_driver();
+
+		let mut conn = Connection::new("sqlite");
+
+		// Use in-memory SQLite database for testing
+		let config = DbConfig {
+			database_url: "sqlite:file::memory:?cache=shared".to_string(),
+			max_connections: 5,
+			min_connections: 1,
+			connection_timeout: 5000,
+			query_timeout: 10000,
+		};
+
+		conn.connect(config).await.unwrap();
+
+		// Create a test table
+		conn.execute(
+			"CREATE TABLE test_users (id INTEGER PRIMARY KEY, name TEXT)",
+			vec![],
+		)
+		.await
+		.unwrap();
+
+		// Insert test data
+		conn.execute(
+			"INSERT INTO test_users (id, name) VALUES (?, ?)",
+			vec![serde_json::json!(1), serde_json::json!("Alice")],
+		)
+		.await
+		.unwrap();
+
+		// Query the data
+		let rows = conn.query("SELECT * FROM test_users", vec![]).await.unwrap();
+
+		assert_eq!(rows.len(), 1);
+
+		let id: i64 = rows[0].get("id").unwrap();
+		assert_eq!(id, 1);
+
+		let name: String = rows[0].get("name").unwrap();
+		assert_eq!(name, "Alice");
+	}
+
+	#[tokio::test]
+	async fn test_execute_returns_affected_rows() {
+		install_driver();
+
+		let mut conn = Connection::new("sqlite");
+
+		// Use in-memory SQLite database for testing
+		let config = DbConfig {
+			database_url: "sqlite:file::memory:?cache=shared".to_string(),
+			max_connections: 5,
+			min_connections: 1,
+			connection_timeout: 5000,
+			query_timeout: 10000,
+		};
+
+		conn.connect(config).await.unwrap();
+
+		// Create table
+		conn.execute(
+			"CREATE TABLE test_data (id INTEGER PRIMARY KEY, value TEXT)",
+			vec![],
+		)
+		.await
+		.unwrap();
+
+		// Insert multiple rows
+		let affected = conn
+			.execute(
+				"INSERT INTO test_data (id, value) VALUES (?, ?)",
+				vec![serde_json::json!(1), serde_json::json!("test")],
+			)
+			.await
+			.unwrap();
+
+		assert_eq!(affected, 1);
 	}
 
 	#[test]
@@ -129,5 +345,15 @@ mod tests {
 
 		let name: String = row.get("name").unwrap();
 		assert_eq!(name, "Test");
+	}
+
+	#[test]
+	fn test_row_get_missing_column() {
+		let columns = HashMap::new();
+		let row = Row { columns };
+
+		let result: Result<i32> = row.get("nonexistent");
+		assert!(result.is_err());
+		assert!(result.unwrap_err().to_string().contains("Column not found"));
 	}
 }
