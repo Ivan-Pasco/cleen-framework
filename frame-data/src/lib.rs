@@ -11,7 +11,10 @@ mod transaction;
 mod model;
 
 pub use schema::{Schema, Field, FieldType, Constraint};
-pub use query::{Query, QueryBuilder, WhereClause, OrderBy};
+pub use query::{
+	Query, QueryBuilder, WhereClause, WhereCondition, WhereOperator, OrderBy, OrderDirection,
+	InsertBuilder, UpdateBuilder, DeleteBuilder, Join, JoinType,
+};
 pub use transaction::Transaction;
 pub use model::Model;
 
