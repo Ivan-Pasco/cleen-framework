@@ -3,3 +3,4 @@
 
 pub mod commands;
 pub mod compiler;
+pub mod manifest;

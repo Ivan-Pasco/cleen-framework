@@ -24,6 +24,9 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 chrono.workspace = true
 
+# Manifest parsing
+toml = "0.8"
+
 # Internal dependencies
 frame-server = { path = "../frame-server" }
 frame-data = { path = "../frame-data" }

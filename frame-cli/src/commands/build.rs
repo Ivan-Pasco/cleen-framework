@@ -4,6 +4,7 @@ use std::path::Path;
 use tracing::info;
 
 use crate::compiler::CompilerInvoker;
+use crate::manifest::Manifest;
 
 pub async fn build_project(target: &str, release: bool) -> Result<()> {
 	info!("Building Frame project for target: {}", target);
@@ -33,15 +34,25 @@ pub async fn build_project(target: &str, release: bool) -> Result<()> {
 
 fn validate_project_structure() -> Result<()> {
 	// Check if we're in a Frame project directory
-	if !Path::new("package.frame.toml").exists() {
-		anyhow::bail!("Not a Frame project (package.frame.toml not found)");
+	// Try package.clean.toml first, then fall back to package.frame.toml
+	if !Path::new("package.clean.toml").exists() && !Path::new("package.frame.toml").exists() {
+		anyhow::bail!(
+			"Not a Clean Language project. Expected package.clean.toml or package.frame.toml.\n\
+			 Create one with: frame new <name>"
+		);
 	}
 	Ok(())
 }
 
 fn build_web(_release: bool) -> Result<()> {
-	println!("  → Creating output directory");
-	fs::create_dir_all("dist/web")?;
+	// Load manifest
+	let manifest = Manifest::load(Path::new("."))
+		.context("Failed to load manifest")?;
+
+	// Get output directory from manifest
+	let out_dir = manifest.out_dir().join("web");
+	println!("  → Creating output directory: {}", out_dir.display());
+	fs::create_dir_all(&out_dir)?;
 
 	// Detect Clean compiler
 	println!("  → Detecting Clean compiler");
@@ -50,12 +61,22 @@ fn build_web(_release: bool) -> Result<()> {
 
 	println!("  → Found Clean compiler v{}", compiler.version());
 
-	// Find all Clean Language files
+	// Find all Clean Language files in source directories
 	println!("  → Finding Clean Language files");
-	let cln_files = CompilerInvoker::find_cln_files(Path::new("."))?;
+	let mut cln_files = Vec::new();
+	for src_dir in manifest.src_dirs() {
+		if src_dir.exists() {
+			let mut files = CompilerInvoker::find_cln_files(&src_dir)?;
+			cln_files.append(&mut files);
+		}
+	}
+
+	// Remove duplicates and sort
+	cln_files.sort();
+	cln_files.dedup();
 
 	if cln_files.is_empty() {
-		anyhow::bail!("No .cln files found in project directory");
+		anyhow::bail!("No .cln files found in project source directories");
 	}
 
 	println!("  → Found {} .cln file(s)", cln_files.len());
@@ -65,23 +86,27 @@ fn build_web(_release: bool) -> Result<()> {
 
 	// Compile backend.wasm
 	println!("  → Compiling backend.wasm");
-	compiler.compile_project(&cln_files, Path::new("dist/web/backend.wasm"))
+	let backend_wasm = out_dir.join("backend.wasm");
+	compiler.compile_project(&cln_files, &backend_wasm)
 		.context("Failed to compile backend WASM module")?;
 
 	println!("  → Compiling frontend.wasm");
 	// For Phase 1, we use the same WASM for both frontend and backend
 	// Phase 2+ will separate these based on client: vs server: blocks
-	fs::copy("dist/web/backend.wasm", "dist/web/frontend.wasm")
+	let frontend_wasm = out_dir.join("frontend.wasm");
+	fs::copy(&backend_wasm, &frontend_wasm)
 		.context("Failed to copy WASM module for frontend")?;
 
 	println!("  → Copying static assets");
 	if Path::new("public").exists() {
-		copy_dir_recursively("public", "dist/web/public")?;
+		let public_out = out_dir.join("public");
+		copy_dir_recursively("public", &public_out)?;
 	}
 
 	// Create index.html
+	let index_html = out_dir.join("index.html");
 	fs::write(
-		"dist/web/index.html",
+		&index_html,
 		r#"<!DOCTYPE html>
 <html>
 <head>

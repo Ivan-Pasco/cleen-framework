@@ -5,47 +5,73 @@ use axum::{
 };
 use notify::{Watcher, RecursiveMode, Event, EventKind};
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tower_http::services::ServeDir;
 use tracing::{info, warn};
 
-pub async fn start_dev_server(host: &str, port: u16) -> Result<()> {
-	info!("Starting Frame development server on {}:{}", host, port);
+use crate::manifest::Manifest;
 
-	// Validate project structure
-	if !Path::new("package.frame.toml").exists() {
-		anyhow::bail!("Not a Frame project (package.frame.toml not found)");
-	}
+pub async fn start_dev_server(host: &str, port: u16) -> Result<()> {
+	// Load manifest to get configuration
+	let manifest = Manifest::load(Path::new("."))
+		.context("Failed to load manifest")?;
+
+	// Use manifest config if available, otherwise use CLI args
+	let actual_host = if let Some(ref frame) = manifest.frame {
+		if let Some(ref server) = frame.server {
+			server.host.clone()
+		} else {
+			host.to_string()
+		}
+	} else {
+		host.to_string()
+	};
+
+	let actual_port = if let Some(ref frame) = manifest.frame {
+		if let Some(ref server) = frame.server {
+			server.port
+		} else {
+			port
+		}
+	} else {
+		port
+	};
+
+	info!("Starting Frame development server on {}:{}", actual_host, actual_port);
 
 	println!("🚀 Frame development server starting...");
-	println!("   Local:   http://{}:{}", host, port);
+	println!("   Local:   http://{}:{}", actual_host, actual_port);
 
 	// Build the project first
 	println!("\n📦 Building project...");
-	super::build::build_project("web", false).await?;
+	let target = manifest.target();
+	super::build::build_project(&target, false).await?;
+
+	// Determine serve directory from manifest
+	let serve_dir = manifest.out_dir().join(&target);
 
 	println!("\n⚡ Hot reload enabled");
-	println!("📂 Serving from: ./dist/web");
+	println!("📂 Serving from: {}", serve_dir.display());
 	println!("👀 Watching: .cln files");
 
 	// Set up file watcher for hot reload
 	let rebuilding = Arc::new(AtomicBool::new(false));
-	setup_file_watcher(rebuilding.clone())?;
+	setup_file_watcher(rebuilding.clone(), target.clone())?;
 
 	// Start HTTP server
-	let addr = format!("{}:{}", host, port)
+	let addr = format!("{}:{}", actual_host, actual_port)
 		.parse::<SocketAddr>()
 		.context("Invalid host or port")?;
 
-	serve_static_files(addr).await?;
+	serve_static_files(addr, serve_dir).await?;
 
 	Ok(())
 }
 
-fn setup_file_watcher(rebuilding: Arc<AtomicBool>) -> Result<()> {
+fn setup_file_watcher(rebuilding: Arc<AtomicBool>, target: String) -> Result<()> {
 	info!("Setting up file watcher for .cln files");
 
 	// Create a channel for receiving file system events
@@ -94,11 +120,12 @@ fn setup_file_watcher(rebuilding: Arc<AtomicBool>) -> Result<()> {
 
 							println!("\n🔄 Changes detected, rebuilding...");
 
-							// Trigger rebuild
+							// Trigger rebuild with the target from manifest
+							let target_clone = target.clone();
 							let rebuild_result = tokio::runtime::Handle::try_current()
 								.map(|handle| {
 									handle.block_on(async {
-										super::build::build_project("web", false).await
+										super::build::build_project(&target_clone, false).await
 									})
 								})
 								.unwrap_or_else(|_| {
@@ -106,7 +133,7 @@ fn setup_file_watcher(rebuilding: Arc<AtomicBool>) -> Result<()> {
 									tokio::runtime::Runtime::new()
 										.unwrap()
 										.block_on(async {
-											super::build::build_project("web", false).await
+											super::build::build_project(&target_clone, false).await
 										})
 								});
 
@@ -139,10 +166,10 @@ fn setup_file_watcher(rebuilding: Arc<AtomicBool>) -> Result<()> {
 	Ok(())
 }
 
-async fn serve_static_files(addr: SocketAddr) -> Result<()> {
+async fn serve_static_files(addr: SocketAddr, serve_dir: PathBuf) -> Result<()> {
 	// Create router for serving static files
 	let app = Router::new()
-		.nest_service("/", get_service(ServeDir::new("dist/web")));
+		.nest_service("/", get_service(ServeDir::new(serve_dir)));
 
 	println!("\n✓ Server ready!");
 	println!("\nPress Ctrl+C to stop\n");
