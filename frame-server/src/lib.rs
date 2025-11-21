@@ -6,9 +6,32 @@ use wasmtime::*;
 mod runtime;
 mod router;
 mod middleware;
+mod bridge;
+mod request;
+mod response;
+mod server;
+mod static_files;
 
-pub use runtime::WasmRuntime;
-pub use router::FrameRouter;
+pub use runtime::{WasmRuntime, RuntimeConfig};
+pub use router::{FrameRouter, Route, HttpMethod};
+pub use bridge::{BridgeLinker, BridgeState};
+pub use request::{Request, RequestBuilder, User};
+pub use response::{
+	Response, json, json_with_status, html, text, redirect, redirect_permanent,
+	not_found, not_found_with_message, bad_request, unauthorized, unauthorized_with_message,
+	forbidden, forbidden_with_message, internal_error, validation_error, no_content, custom,
+};
+pub use middleware::{
+	logging_middleware, error_handling_middleware, request_id_middleware, auth_middleware,
+	CorsConfig, CorsLayer, CorsMiddleware,
+};
+pub use server::{
+	ServerConfig, ServerMetrics, ServerState,
+	health_check_handler, metrics_handler, add_system_endpoints, start_server,
+};
+pub use static_files::{
+	StaticFileConfig, add_static_routes, serve_static_file,
+};
 
 /// Frame server that executes WASM modules
 pub struct FrameServer {
@@ -30,28 +53,14 @@ impl FrameServer {
 	}
 
 	pub async fn start(&self) -> Result<()> {
-		println!("🚀 Frame server starting on {}", self.addr);
+		// Create server configuration
+		let config = ServerConfig::new(self.addr);
 
-		// TODO: Implement server startup
-		// Reference: TASKS.md Phase 3 - Frame Server
-		// Spec: documents/specification/03_frame_server.md
-		//
-		// Implementation steps:
-		// 1. Load and compile WASM modules (server.wasm, ui.wasm)
-		// 2. Initialize Host Bridge for this runtime
-		// 3. Parse manifest.json for route mappings
-		// 4. Set up Axum routes using file-based routing
-		// 5. Configure middleware (logging, CORS, etc.)
-		// 6. Start HTTP server on self.addr
-		// 7. Handle graceful shutdown
-		//
-		// Each request flow:
-		// - Parse HTTP request → Clean types
-		// - Execute WASM function in isolated context
-		// - Bridge calls go through HostBridge
-		// - Convert result → HTTP response
+		// Add system endpoints (health, metrics) to the router
+		let app = add_system_endpoints(self.router.clone(), &config);
 
-		unimplemented!("FrameServer::start - See TASKS.md Phase 3")
+		// Start the server
+		start_server(app, config).await
 	}
 
 	pub fn router(&self) -> &Router {
