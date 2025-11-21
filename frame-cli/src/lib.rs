@@ -2,3 +2,4 @@
 // Exposes command modules for testing
 
 pub mod commands;
+pub mod compiler;

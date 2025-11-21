@@ -3,6 +3,8 @@ use std::fs;
 use std::path::Path;
 use tracing::info;
 
+use crate::compiler::CompilerInvoker;
+
 pub async fn build_project(target: &str, release: bool) -> Result<()> {
 	info!("Building Frame project for target: {}", target);
 
@@ -41,12 +43,36 @@ fn build_web(_release: bool) -> Result<()> {
 	println!("  → Creating output directory");
 	fs::create_dir_all("dist/web")?;
 
+	// Detect Clean compiler
+	println!("  → Detecting Clean compiler");
+	let compiler = CompilerInvoker::detect()
+		.context("Failed to detect Clean compiler. Please install via: cleen install latest")?;
+
+	println!("  → Found Clean compiler v{}", compiler.version());
+
+	// Find all Clean Language files
+	println!("  → Finding Clean Language files");
+	let cln_files = CompilerInvoker::find_cln_files(Path::new("."))?;
+
+	if cln_files.is_empty() {
+		anyhow::bail!("No .cln files found in project directory");
+	}
+
+	println!("  → Found {} .cln file(s)", cln_files.len());
+	for file in &cln_files {
+		println!("     - {}", file.display());
+	}
+
+	// Compile backend.wasm
 	println!("  → Compiling backend.wasm");
-	// Simulate WASM compilation - in production this would call the Clean compiler
-	fs::write("dist/web/backend.wasm", b"WASM backend module")?;
+	compiler.compile_project(&cln_files, Path::new("dist/web/backend.wasm"))
+		.context("Failed to compile backend WASM module")?;
 
 	println!("  → Compiling frontend.wasm");
-	fs::write("dist/web/frontend.wasm", b"WASM frontend module")?;
+	// For Phase 1, we use the same WASM for both frontend and backend
+	// Phase 2+ will separate these based on client: vs server: blocks
+	fs::copy("dist/web/backend.wasm", "dist/web/frontend.wasm")
+		.context("Failed to copy WASM module for frontend")?;
 
 	println!("  → Copying static assets");
 	if Path::new("public").exists() {
@@ -168,8 +194,22 @@ fn build_server(_release: bool) -> Result<()> {
 	println!("  → Creating output directory");
 	fs::create_dir_all("dist/server")?;
 
+	// Detect Clean compiler
+	println!("  → Detecting Clean compiler");
+	let compiler = CompilerInvoker::detect()
+		.context("Failed to detect Clean compiler. Please install via: cleen install latest")?;
+
+	// Find all Clean Language files
+	println!("  → Finding Clean Language files");
+	let cln_files = CompilerInvoker::find_cln_files(Path::new("."))?;
+
+	if cln_files.is_empty() {
+		anyhow::bail!("No .cln files found in project directory");
+	}
+
 	println!("  → Compiling backend.wasm");
-	fs::write("dist/server/backend.wasm", b"WASM server module")?;
+	compiler.compile_project(&cln_files, Path::new("dist/server/backend.wasm"))
+		.context("Failed to compile server WASM module")?;
 
 	println!("  → Creating server runtime");
 	fs::write(
@@ -199,8 +239,22 @@ fn build_cli(_release: bool) -> Result<()> {
 	println!("  → Creating output directory");
 	fs::create_dir_all("dist/cli")?;
 
+	// Detect Clean compiler
+	println!("  → Detecting Clean compiler");
+	let compiler = CompilerInvoker::detect()
+		.context("Failed to detect Clean compiler. Please install via: cleen install latest")?;
+
+	// Find all Clean Language files
+	println!("  → Finding Clean Language files");
+	let cln_files = CompilerInvoker::find_cln_files(Path::new("."))?;
+
+	if cln_files.is_empty() {
+		anyhow::bail!("No .cln files found in project directory");
+	}
+
 	println!("  → Compiling CLI binary");
-	fs::write("dist/cli/app.wasm", b"WASM CLI module")?;
+	compiler.compile_project(&cln_files, Path::new("dist/cli/app.wasm"))
+		.context("Failed to compile CLI WASM module")?;
 
 	println!("  → Bundling WASM runtime");
 	fs::write(

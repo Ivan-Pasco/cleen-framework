@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use tracing::info;
 
 mod commands;
+mod compiler;
 
 #[derive(Parser)]
 #[command(name = "frame")]

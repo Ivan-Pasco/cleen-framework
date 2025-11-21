@@ -3,10 +3,14 @@ use axum::{
 	routing::get_service,
 	Router,
 };
+use notify::{Watcher, RecursiveMode, Event, EventKind};
 use std::net::SocketAddr;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 use tower_http::services::ServeDir;
-use tracing::info;
+use tracing::{info, warn};
 
 pub async fn start_dev_server(host: &str, port: u16) -> Result<()> {
 	info!("Starting Frame development server on {}:{}", host, port);
@@ -25,9 +29,11 @@ pub async fn start_dev_server(host: &str, port: u16) -> Result<()> {
 
 	println!("\n⚡ Hot reload enabled");
 	println!("📂 Serving from: ./dist/web");
+	println!("👀 Watching: .cln files");
 
 	// Set up file watcher for hot reload
-	setup_file_watcher()?;
+	let rebuilding = Arc::new(AtomicBool::new(false));
+	setup_file_watcher(rebuilding.clone())?;
 
 	// Start HTTP server
 	let addr = format!("{}:{}", host, port)
@@ -39,11 +45,97 @@ pub async fn start_dev_server(host: &str, port: u16) -> Result<()> {
 	Ok(())
 }
 
-fn setup_file_watcher() -> Result<()> {
-	// Set up file watcher for hot reload
-	// In a full implementation, this would watch backend/, frontend/, public/
-	// and trigger rebuilds when files change
-	info!("File watcher configured for hot reload");
+fn setup_file_watcher(rebuilding: Arc<AtomicBool>) -> Result<()> {
+	info!("Setting up file watcher for .cln files");
+
+	// Create a channel for receiving file system events
+	let (tx, rx) = std::sync::mpsc::channel::<Result<Event, notify::Error>>();
+
+	// Create a watcher
+	let mut watcher = notify::recommended_watcher(tx)
+		.context("Failed to create file watcher")?;
+
+	// Watch the current directory recursively for .cln files
+	watcher.watch(Path::new("."), RecursiveMode::Recursive)
+		.context("Failed to watch current directory")?;
+
+	// Spawn a background task to handle file change events
+	std::thread::spawn(move || {
+		// Keep watcher alive
+		let _watcher = watcher;
+
+		// Debounce timer to avoid rebuilding on rapid file changes
+		let mut last_rebuild = std::time::Instant::now();
+		let debounce_duration = Duration::from_millis(500);
+
+		loop {
+			match rx.recv() {
+				Ok(Ok(event)) => {
+					// Check if this is a file modification event
+					if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_)) {
+						// Check if any .cln files were modified
+						let has_cln_changes = event.paths.iter().any(|path| {
+							path.extension().and_then(|ext| ext.to_str()) == Some("cln")
+						});
+
+						if has_cln_changes {
+							// Debounce: only rebuild if enough time has passed
+							let now = std::time::Instant::now();
+							if now.duration_since(last_rebuild) < debounce_duration {
+								continue;
+							}
+
+							// Check if already rebuilding
+							if rebuilding.swap(true, Ordering::SeqCst) {
+								continue; // Already rebuilding, skip
+							}
+
+							last_rebuild = now;
+
+							println!("\n🔄 Changes detected, rebuilding...");
+
+							// Trigger rebuild
+							let rebuild_result = tokio::runtime::Handle::try_current()
+								.map(|handle| {
+									handle.block_on(async {
+										super::build::build_project("web", false).await
+									})
+								})
+								.unwrap_or_else(|_| {
+									// If no tokio runtime, create a new one
+									tokio::runtime::Runtime::new()
+										.unwrap()
+										.block_on(async {
+											super::build::build_project("web", false).await
+										})
+								});
+
+							match rebuild_result {
+								Ok(_) => {
+									println!("✓ Rebuild complete\n");
+								}
+								Err(e) => {
+									warn!("❌ Rebuild failed: {}", e);
+									eprintln!("❌ Rebuild failed: {}\n", e);
+								}
+							}
+
+							rebuilding.store(false, Ordering::SeqCst);
+						}
+					}
+				}
+				Ok(Err(e)) => {
+					warn!("File watcher error: {}", e);
+				}
+				Err(e) => {
+					warn!("Channel error: {}", e);
+					break;
+				}
+			}
+		}
+	});
+
+	info!("File watcher started successfully");
 	Ok(())
 }
 
