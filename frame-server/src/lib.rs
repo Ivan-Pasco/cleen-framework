@@ -11,6 +11,7 @@ mod request;
 mod response;
 mod server;
 mod static_files;
+mod ssr;
 
 pub use runtime::{WasmRuntime, RuntimeConfig};
 pub use router::{FrameRouter, Route, HttpMethod};
@@ -31,6 +32,9 @@ pub use server::{
 };
 pub use static_files::{
 	StaticFileConfig, add_static_routes, serve_static_file,
+};
+pub use ssr::{
+	SsrEngine, SsrConfig,
 };
 
 /// Frame server that executes WASM modules
