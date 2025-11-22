@@ -14,8 +14,8 @@
  * ## Available Plugins
  *
  * - `WebPlugin`: Handles `endpoints:` blocks for HTTP routing
- * - `DataPlugin`: Handles `data:` blocks for model definitions (TODO)
- * - `ComponentPlugin`: Handles `component:` blocks for UI (TODO)
+ * - `DataPlugin`: Handles `data:` blocks for ORM model definitions
+ * - `ComponentPlugin`: Handles `component:` blocks for UI components
  */
 
 // Re-export plugin infrastructure from compiler
@@ -26,13 +26,11 @@ pub use clean_language_compiler::plugins::{
 // Frame DSL plugins
 mod web;
 mod data;
+mod component;
 
 pub use web::WebPlugin;
 pub use data::DataPlugin;
-
-// TODO: Add component plugin
-// mod component;
-// pub use component::ComponentPlugin;
+pub use component::ComponentPlugin;
 
 /// Create a plugin registry with all Frame plugins registered
 ///
@@ -54,8 +52,7 @@ pub fn create_frame_registry() -> Result<PluginRegistry, PluginError> {
     PluginRegistry::builder()
         .add(WebPlugin::new())
         .add(DataPlugin::new())
-        // TODO: Add ComponentPlugin when implemented
-        // .add(ComponentPlugin::new())
+        .add(ComponentPlugin::new())
         .build()
 }
 
@@ -73,8 +70,8 @@ mod tests {
         // Verify DataPlugin is registered
         assert!(registry.handles("data"));
 
-        // TODO: Add check for ComponentPlugin when implemented
-        // assert!(registry.handles("component"));
+        // Verify ComponentPlugin is registered
+        assert!(registry.handles("component"));
     }
 
     #[test]
