@@ -765,4 +765,103 @@ bcb781d feat(orm): implement complete QueryBuilder with SQL generation
 **Test Results:** 51 tests passing (11 Connection + 24 QueryBuilder + 10 Model + 9 Transaction - 3 warnings)
 **Total Lines of Code:** ~2000+ lines of production code + comprehensive tests
 
+## Complete Roundtrip Example ✅
+
+**File:** `frame-data/examples/blog_roundtrip.rs`
+
+A comprehensive working example demonstrating all Frame Data ORM features in action.
+
+### Example Features
+
+**Models Defined:**
+- `User` - Blog user with id, name, email, active fields
+- `Post` - Blog post with id, user_id, title, content, published fields
+- `Comment` - Comment with id, post_id, author_name, content, approved fields
+
+**Workflow Demonstrated:**
+
+1. **Database Connection** - Connect to in-memory SQLite with cache=shared
+2. **Schema Creation** - CREATE TABLE statements with foreign keys
+3. **CRUD Create** - User::create() and Post::create()
+4. **CRUD Read** - User::find(), User::all(), Post::where_clause()
+5. **CRUD Update** - Post::update() with modified fields
+6. **Complex Queries** - QueryBuilder with multiple WHERE conditions, ORDER BY, LIMIT
+7. **Transactions** - Atomic multi-operation transactions with commit/rollback
+8. **Relationships** - Manual relationship queries (users → posts, posts → comments)
+9. **CRUD Delete** - Comment::delete()
+
+### Key Implementation Details
+
+**Database URL Format:**
+```rust
+database_url: "sqlite:file::memory:?cache=shared".to_string()
+```
+Critical: `cache=shared` required for in-memory databases to persist state
+
+**SQLite Driver Installation:**
+```rust
+use sqlx::any::install_default_drivers;
+static INIT: std::sync::Once = std::sync::Once::new();
+INIT.call_once(|| {
+    install_default_drivers();
+});
+```
+
+**Boolean Handling:**
+- Models use `bool` type
+- SQLite stores as INTEGER (0/1)
+- Automatic bidirectional conversion by Model trait
+
+### Example Output
+
+```
+🚀 Frame Data ORM - Complete Roundtrip Example
+
+📊 Step 1: Connecting to database...
+✅ Connected!
+
+🏗️  Step 2: Creating database schema...
+✅ Schema created!
+
+➕ Step 3: Creating records...
+✅ Created user: User { id: Some(1), name: "Alice Johnson", ... }
+✅ Created post: Post { id: Some(1), user_id: 1, title: "Getting Started with Frame Data ORM", ... }
+
+📖 Step 4: Reading records...
+Found user by ID: Alice Johnson (alice@example.com)
+Total users: 1
+User has 1 posts
+
+✏️  Step 5: Updating records...
+Before update - Published: false
+After update - Published: true
+
+🔍 Step 6: Running complex queries...
+Generated SQL: SELECT id, title, published FROM posts WHERE user_id = $1 AND published = $2 ORDER BY id DESC LIMIT 10
+Found 1 published posts
+
+💰 Step 7: Demonstrating transactions...
+✅ Transaction committed - both user and post created atomically
+✅ Transaction rolled back - Charlie was not created
+
+🔗 Step 8: Working with relationships...
+User 1 has 1 posts
+Post 1 has 3 comments
+
+🗑️  Step 9: Deleting records...
+Deleted comment 1: true
+Remaining comments: 2
+
+🎉 Roundtrip complete! All operations successful.
+```
+
+### Running the Example
+
+```bash
+cd frame-data
+cargo run --example blog_roundtrip
+```
+
+**Result:** All 9 steps execute successfully, demonstrating complete ORM functionality from connection through CRUD operations, transactions, and cleanup.
+
 **Deferred to Future Phase:** Relationships (hasMany, belongsTo, eager/lazy loading)

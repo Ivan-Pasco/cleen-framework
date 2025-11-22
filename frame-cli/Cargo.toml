@@ -30,6 +30,10 @@ toml = "0.8"
 # Internal dependencies
 frame-server = { path = "../frame-server" }
 frame-data = { path = "../frame-data" }
+frame-compiler-plugins = { path = "../frame-compiler-plugins" }
+
+# Compiler library (for direct integration)
+clean-language-compiler = { path = "../../clean-language-compiler", version = "0.14.0" }
 
 # Additional CLI dependencies
 indicatif = "0.17"

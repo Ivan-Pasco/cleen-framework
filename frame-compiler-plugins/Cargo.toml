@@ -1,0 +1,21 @@
+[package]
+name = "frame-compiler-plugins"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Clean Frame DSL compiler plugins for endpoints, data models, and UI components"
+
+[dependencies]
+# Clean Language Compiler (for plugin infrastructure)
+# Version constraint: Frame plugins require compiler >= 0.14.0
+clean-language-compiler = { path = "../../clean-language-compiler", version = "0.14.0" }
+
+# Workspace dependencies
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# None yet - will add for plugin testing

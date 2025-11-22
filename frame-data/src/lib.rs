@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use host_bridge::{DbBridge, DbConfig};
+use host_bridge::DbBridge;
 
 mod schema;
 mod query;
@@ -17,6 +17,9 @@ pub use query::{
 };
 pub use transaction::Transaction;
 pub use model::Model;
+
+// Re-export DbConfig for public API
+pub use host_bridge::DbConfig;
 
 /// Main ORM interface for Frame Data
 pub struct Data {
