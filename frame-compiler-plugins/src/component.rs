@@ -39,7 +39,7 @@
  */
 
 use clean_language_compiler::ast::{
-    Class, Constructor, Expression, Field, Function, FunctionModifier, FunctionSyntax, Parameter,
+    BinaryOperator, Class, Constructor, Expression, Field, Function, FunctionModifier, FunctionSyntax, Parameter,
     SourceLocation, Statement, Type, Value, Visibility,
 };
 use clean_language_compiler::plugins::{FrameworkBlock, FrameworkPlugin, PluginError, PluginResult};
@@ -387,10 +387,8 @@ impl ComponentPlugin {
         component: &ComponentDef,
         location: &Option<SourceLocation>,
     ) -> Function {
-        // For now, generate a simple string concatenation
-        // In the future, this should generate Widget API calls
-
-        let html_string = self.template_to_html(&component.template);
+        // Generate dynamic HTML building expression with proper interpolation
+        let html_expr = self.template_to_expression(&component.template, location);
 
         Function {
             name: "render".to_string(),
@@ -402,7 +400,7 @@ impl ComponentPlugin {
                 type_args: Vec::new(),
             },
             body: vec![Statement::Return {
-                value: Some(Expression::Literal(Value::String(html_string))),
+                value: Some(html_expr),
                 location: location.clone(),
             }],
             description: None,
@@ -413,7 +411,7 @@ impl ComponentPlugin {
         }
     }
 
-    /// Convert template to HTML string (simplified)
+    /// Convert template to HTML string (simplified, for debugging)
     fn template_to_html(&self, nodes: &[HtmlNode]) -> String {
         let mut html = String::new();
 
@@ -450,6 +448,112 @@ impl ComponentPlugin {
         }
 
         html
+    }
+
+    /// Convert template to Expression tree with proper interpolation
+    fn template_to_expression(&self, nodes: &[HtmlNode], location: &Option<SourceLocation>) -> Expression {
+        let mut parts: Vec<Expression> = Vec::new();
+
+        for node in nodes {
+            self.add_node_to_parts(node, &mut parts, location);
+        }
+
+        // Concatenate all parts with + operator
+        self.concatenate_expressions(parts, location)
+    }
+
+    /// Add a single node to the expression parts
+    fn add_node_to_parts(&self, node: &HtmlNode, parts: &mut Vec<Expression>, location: &Option<SourceLocation>) {
+        match node {
+            HtmlNode::Element {
+                tag,
+                attributes,
+                children,
+            } => {
+                // Opening tag: <tag
+                parts.push(Expression::Literal(Value::String(format!("<{}", tag))));
+
+                // Attributes: attr="value"
+                for (name, value) in attributes {
+                    parts.push(Expression::Literal(Value::String(format!(" {}=\"{}\"", name, value))));
+                }
+
+                // Close opening tag: >
+                parts.push(Expression::Literal(Value::String(">".to_string())));
+
+                // Children
+                for child in children {
+                    self.add_node_to_parts(child, parts, location);
+                }
+
+                // Closing tag: </tag>
+                parts.push(Expression::Literal(Value::String(format!("</{}>", tag))));
+            }
+            HtmlNode::Text(text) => {
+                parts.push(Expression::Literal(Value::String(text.clone())));
+            }
+            HtmlNode::Interpolation(expr) => {
+                // Parse the interpolation expression (e.g., "user.name")
+                // Generate: this.user.name.toString()
+                let expr_ast = self.parse_interpolation_expr(expr, location);
+                parts.push(expr_ast);
+            }
+        }
+    }
+
+    /// Parse an interpolation expression like "user.name" into an AST Expression
+    fn parse_interpolation_expr(&self, expr_str: &str, location: &Option<SourceLocation>) -> Expression {
+        // Simple parsing: split by '.' to handle property access
+        let parts: Vec<&str> = expr_str.trim().split('.').collect();
+
+        if parts.is_empty() {
+            // Fallback to empty string if parsing fails
+            return Expression::Literal(Value::String(String::new()));
+        }
+
+        // Start with the first part as a variable (field name)
+        // In class methods, fields are accessed directly by name, not via 'this'
+        let mut current_expr = Expression::Variable(parts[0].to_string());
+
+        // Chain additional property accesses
+        for part in parts.iter().skip(1) {
+            current_expr = Expression::PropertyAccess {
+                object: Box::new(current_expr),
+                property: part.to_string(),
+                location: location.clone().unwrap_or_default(),
+            };
+        }
+
+        // Wrap in toString() method call to convert to string
+        Expression::MethodCall {
+            object: Box::new(current_expr),
+            method: "toString".to_string(),
+            arguments: Vec::new(),
+            location: location.clone().unwrap_or_default(),
+        }
+    }
+
+    /// Concatenate multiple expressions with the + operator
+    fn concatenate_expressions(&self, parts: Vec<Expression>, location: &Option<SourceLocation>) -> Expression {
+        if parts.is_empty() {
+            return Expression::Literal(Value::String(String::new()));
+        }
+
+        if parts.len() == 1 {
+            return parts.into_iter().next().unwrap();
+        }
+
+        // Build left-to-right concatenation: a + b + c + d
+        let mut result = parts[0].clone();
+        for part in parts.iter().skip(1) {
+            result = Expression::Binary(
+                Box::new(result),
+                BinaryOperator::Add,
+                Box::new(part.clone()),
+            );
+        }
+
+        result
     }
 }
 
