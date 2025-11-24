@@ -9,7 +9,7 @@ description = "Clean Frame DSL compiler plugins for endpoints, data models, and 
 [dependencies]
 # Clean Language Compiler (for plugin infrastructure)
 # Version constraint: Frame plugins require compiler >= 0.14.0
-clean-language-compiler = { path = "../../clean-language-compiler", version = "0.14.0" }
+clean-language-compiler = { git = "https://github.com/Ivan-Pasco/clean-language-compiler", branch = "main" }
 
 # Workspace dependencies
 serde.workspace = true
