@@ -117,11 +117,14 @@ jobs:
           path: target
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Fetch dependencies
+        run: |
+          echo "Fetching git dependencies..."
+          cargo fetch --target ${{ matrix.target }}
+          echo "Dependencies fetched successfully"
+
       - name: Build Frame CLI
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }} --bin frame
+        run: cargo build --release --target ${{ matrix.target }} --bin frame
 
       - name: Install wasm32 target
         run: rustup target add wasm32-unknown-unknown
