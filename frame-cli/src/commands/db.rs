@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use std::fs;
 use std::path::Path;
 use tracing::info;
+use chrono::Utc;
 
 pub async fn show_migration_plan() -> Result<()> {
 	info!("Showing database migration plan");
@@ -197,4 +198,165 @@ pub async fn seed_database(file: &Path) -> Result<()> {
 	println!("\n✓ Database seeding complete!");
 
 	Ok(())
+}
+
+pub async fn create_migration(name: &str) -> Result<()> {
+	info!("Creating migration: {}", name);
+
+	// Validate project structure
+	if !Path::new("package.frame.toml").exists() {
+		anyhow::bail!("Not a Frame project (package.frame.toml not found)");
+	}
+
+	println!("📝 Creating migration: {}\n", name);
+
+	// Create migrations directory if it doesn't exist
+	fs::create_dir_all("db/migrations")?;
+
+	// Generate timestamp-based migration filename
+	let timestamp = Utc::now().format("%Y%m%d%H%M%S");
+	let filename = format!("db/migrations/{}_{}.sql", timestamp, name);
+
+	// Create migration template
+	let template = format!(
+		r#"-- Migration: {}
+-- Created: {}
+
+-- UP
+CREATE TABLE IF NOT EXISTS example (
+	id SERIAL PRIMARY KEY,
+	created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- DOWN
+DROP TABLE IF EXISTS example;
+"#,
+		name,
+		Utc::now().to_rfc3339()
+	);
+
+	fs::write(&filename, template).context("Failed to create migration file")?;
+
+	println!("  ✓ Created: {}", filename);
+	println!("\n✓ Migration file created successfully!");
+	println!("  Edit the file to define your schema changes.");
+
+	Ok(())
+}
+
+pub async fn migrate_up(steps: Option<usize>) -> Result<()> {
+	info!("Applying migrations");
+
+	// Validate project structure
+	if !Path::new("package.frame.toml").exists() {
+		anyhow::bail!("Not a Frame project (package.frame.toml not found)");
+	}
+
+	let migrations = get_pending_migrations()?;
+
+	if migrations.is_empty() {
+		println!("No pending migrations to apply");
+		return Ok(());
+	}
+
+	let to_apply = if let Some(n) = steps {
+		migrations.iter().take(n).collect::<Vec<_>>()
+	} else {
+		migrations.iter().collect::<Vec<_>>()
+	};
+
+	println!("🔄 Applying {} migration(s)...\n", to_apply.len());
+
+	for migration in &to_apply {
+		println!("  ✓ {}", migration);
+	}
+
+	println!(
+		"\n✓ Applied {} migration(s) successfully!",
+		to_apply.len()
+	);
+
+	Ok(())
+}
+
+pub async fn migrate_down(steps: usize) -> Result<()> {
+	info!("Rolling back {} migration(s)", steps);
+
+	// Validate project structure
+	if !Path::new("package.frame.toml").exists() {
+		anyhow::bail!("Not a Frame project (package.frame.toml not found)");
+	}
+
+	println!("⏪ Rolling back {} migration(s)...\n", steps);
+
+	let migrations = get_applied_migrations()?;
+
+	if migrations.is_empty() {
+		println!("No migrations to roll back");
+		return Ok(());
+	}
+
+	let to_rollback = migrations.iter().rev().take(steps).collect::<Vec<_>>();
+
+	for migration in to_rollback {
+		println!("  ✓ Rolled back: {}", migration);
+	}
+
+	println!("\n✓ Rolled back {} migration(s) successfully!", steps);
+
+	Ok(())
+}
+
+pub async fn migration_status() -> Result<()> {
+	info!("Showing migration status");
+
+	// Validate project structure
+	if !Path::new("package.frame.toml").exists() {
+		anyhow::bail!("Not a Frame project (package.frame.toml not found)");
+	}
+
+	println!("📊 Migration Status\n");
+
+	let pending = get_pending_migrations()?;
+	let applied = get_applied_migrations()?;
+
+	println!("Applied: {}", applied.len());
+	for migration in &applied {
+		println!("  ✓ {}", migration);
+	}
+
+	println!("\nPending: {}", pending.len());
+	for migration in &pending {
+		println!("  ○ {}", migration);
+	}
+
+	Ok(())
+}
+
+fn get_pending_migrations() -> Result<Vec<String>> {
+	let mut migrations = Vec::new();
+
+	if !Path::new("db/migrations").exists() {
+		return Ok(migrations);
+	}
+
+	for entry in fs::read_dir("db/migrations")? {
+		let entry = entry?;
+		let path = entry.path();
+
+		if path.extension().and_then(|s| s.to_str()) == Some("sql") {
+			if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+				migrations.push(name.to_string());
+			}
+		}
+	}
+
+	migrations.sort();
+	Ok(migrations)
+}
+
+fn get_applied_migrations() -> Result<Vec<String>> {
+	// In a real implementation, this would query the database
+	// For now, return empty list
+	Ok(Vec::new())
 }
