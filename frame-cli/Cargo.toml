@@ -33,7 +33,7 @@ frame-data = { path = "../frame-data" }
 frame-compiler-plugins = { path = "../frame-compiler-plugins" }
 
 # Compiler library (for direct integration)
-clean-language-compiler = { path = "../../clean-language-compiler", version = "0.14.0" }
+clean-language-compiler = { git = "https://github.com/Ivan-Pasco/clean-language-compiler", branch = "main" }
 
 # Additional CLI dependencies
 indicatif = "0.17"
