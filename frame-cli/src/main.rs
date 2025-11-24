@@ -6,6 +6,8 @@ use tracing::info;
 mod commands;
 mod compiler;
 mod manifest;
+mod openapi;
+mod sdk_typescript;
 
 #[derive(Parser)]
 #[command(name = "frame")]
@@ -70,11 +72,28 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum DbCommands {
-	/// Show SQL diff for pending migrations
-	Plan,
+	/// Create a new migration file
+	Create {
+		/// Migration name (e.g., create_users_table)
+		name: String,
+	},
 
 	/// Apply pending migrations
-	Migrate,
+	Migrate {
+		/// Number of migrations to apply (default: all)
+		#[arg(short, long)]
+		steps: Option<usize>,
+	},
+
+	/// Rollback migrations
+	Rollback {
+		/// Number of migrations to rollback (default: 1)
+		#[arg(short, long, default_value = "1")]
+		steps: usize,
+	},
+
+	/// Show migration status
+	Status,
 
 	/// Execute database seeding script
 	Seed {
@@ -156,11 +175,17 @@ async fn main() -> Result<()> {
 			commands::build::build_project(&target, release).await?;
 		}
 		Commands::Db { action } => match action {
-			DbCommands::Plan => {
-				commands::db::show_migration_plan().await?;
+			DbCommands::Create { name } => {
+				commands::db::create_migration(&name).await?;
 			}
-			DbCommands::Migrate => {
-				commands::db::apply_migrations().await?;
+			DbCommands::Migrate { steps } => {
+				commands::db::migrate_up(steps).await?;
+			}
+			DbCommands::Rollback { steps } => {
+				commands::db::migrate_down(steps).await?;
+			}
+			DbCommands::Status => {
+				commands::db::migration_status().await?;
 			}
 			DbCommands::Seed { file } => {
 				commands::db::seed_database(&file).await?;
