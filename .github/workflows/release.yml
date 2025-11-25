@@ -147,13 +147,19 @@ jobs:
 
       # Runtime WASMs will be added in future releases when WASM build is configured
 
-      - name: Copy templates
+      - name: Copy templates (Unix)
+        if: matrix.os != 'windows-latest'
         run: |
-          # Copy project templates (when created)
-          # cp -r templates/* frame-${{ needs.create-release.outputs.version }}/templates/ || true
           echo "Templates will be added in future releases" > frame-${{ needs.create-release.outputs.version }}/templates/README.txt
 
-      - name: Create README
+      - name: Copy templates (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          echo "Templates will be added in future releases" > frame-${{ needs.create-release.outputs.version }}/templates/README.txt
+        shell: pwsh
+
+      - name: Create README (Unix)
+        if: matrix.os != 'windows-latest'
         run: |
           cat > frame-${{ needs.create-release.outputs.version }}/README.txt << 'EOF'
           Frame Framework v${{ needs.create-release.outputs.version }}
@@ -173,8 +179,32 @@ jobs:
              cd my-app
              frame serve
 
-          Documentation: https://github.com/clean-lang/clean-language-cleen-framework
+          Documentation: https://github.com/Ivan-Pasco/cleen-framework
           EOF
+
+      - name: Create README (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          @"
+          Frame Framework v${{ needs.create-release.outputs.version }}
+
+          Installation:
+
+          1. Extract this archive
+          2. Move frame.exe to a directory in your PATH
+             Or add the bin folder to your PATH environment variable
+
+          3. Verify installation:
+             frame --version
+
+          4. Create your first project:
+             frame new my-app
+             cd my-app
+             frame serve
+
+          Documentation: https://github.com/Ivan-Pasco/cleen-framework
+          "@ | Out-File -FilePath "frame-${{ needs.create-release.outputs.version }}/README.txt" -Encoding utf8
+        shell: pwsh
 
       - name: Create archive (Unix)
         if: matrix.archive == 'tar.gz'
