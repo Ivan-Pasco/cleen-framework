@@ -128,14 +128,6 @@ jobs:
       - name: Build Frame CLI
         run: cargo build --release --target ${{ matrix.target }} --bin frame
 
-      - name: Install wasm32 target
-        run: rustup target add wasm32-unknown-unknown
-
-      - name: Build Runtime WASMs
-        run: |
-          # Build each runtime component as WASM
-          cargo build --release --target wasm32-unknown-unknown -p host-bridge
-
       - name: Create release directory
         run: |
           mkdir -p frame-${{ needs.create-release.outputs.version }}/bin
@@ -153,10 +145,7 @@ jobs:
         run: |
           cp target/${{ matrix.target }}/release/frame.exe frame-${{ needs.create-release.outputs.version }}/bin/
 
-      - name: Copy runtime WASMs
-        run: |
-          # Copy compiled WASM modules (when available)
-          # cp target/wasm32-unknown-unknown/release/*.wasm frame-${{ needs.create-release.outputs.version }}/lib/ || true
+      # Runtime WASMs will be added in future releases when WASM build is configured
 
       - name: Copy templates
         run: |
