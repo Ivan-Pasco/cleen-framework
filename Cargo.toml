@@ -1,15 +1,20 @@
 [workspace]
 resolver = "2"
-members = [
-    "frame-cli",
-    "frame-server",
-    "frame-data",
-    "frame-ui",
-    "frame-auth",
-    "frame-plugins",
-    "frame-compiler-plugins",
-    "host-bridge",
-]
+members = []
+
+# NOTE: All Rust crates have been replaced:
+# - frame-cli      -> replaced by `cleen` (external package manager)
+# - frame-server   -> replaced by `clean-server` (separate repo, installed via `cleen server install`)
+# - frame-runtime  -> replaced by `clean-server` (separate repo)
+# - host-bridge    -> moved to `clean-server` repo
+# - frame-data     -> replaced by `frame.data` plugin
+# - frame-ui       -> replaced by `frame.ui` plugin
+# - frame-auth     -> replaced by `frame.auth` plugin
+# - frame-plugins  -> deleted (old Rust plugin system)
+# - frame-compiler-plugins -> deleted (replaced by Clean plugins)
+#
+# See plugins/ directory for the new Clean Language plugin sources.
+# See https://github.com/Ivan-Pasco/clean-server for the server runtime.
 
 [workspace.package]
 version = "0.1.0"
@@ -38,7 +43,7 @@ wasm-encoder = "0.40"
 axum = "0.7"
 hyper = "1.0"
 tower = "0.4"
-tower-http = "0.5"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Database
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "json", "chrono", "uuid"] }
@@ -50,6 +55,9 @@ clap = { version = "4.4", features = ["derive", "cargo"] }
 
 # HTTP client - force rustls-tls for cross-compilation compatibility (no OpenSSL)
 reqwest = { version = "0.11", default-features = false, features = ["json", "gzip", "brotli", "rustls-tls", "stream"] }
+
+# URL parsing
+url = "2.5"
 
 # Force vendored OpenSSL for cross-compilation (builds from source, no system deps)
 openssl = { version = "0.10", features = ["vendored"] }
