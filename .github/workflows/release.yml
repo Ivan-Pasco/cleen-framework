@@ -10,9 +10,6 @@ permissions:
   contents: write
   packages: write
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   create-release:
     name: Create Release
@@ -34,7 +31,7 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: Frame Framework v${{ steps.get_version.outputs.version }}
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
           body: |
             # Frame Framework v${{ steps.get_version.outputs.version }}
 
@@ -46,194 +43,72 @@ jobs:
             cleen install frame
             ```
 
-            Or download the appropriate binary for your platform below.
+            Or download the plugin package below and extract to your project.
+
+            ## Included Plugins
+
+            - **frame.auth** - Authentication and authorization
+            - **frame.data** - ORM and database operations
+            - **frame.httpserver** - HTTP server runtime
+            - **frame.ui** - UI components and rendering
 
             ## What's New
 
             See [CHANGELOG.md](https://github.com/Ivan-Pasco/cleen-framework/blob/main/CHANGELOG.md) for details.
 
-  build-release:
-    name: Build ${{ matrix.name }}
+  package-plugins:
+    name: Package Plugins
     needs: create-release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Native builds only (no cross-compilation) to avoid OpenSSL issues
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            name: linux-x86_64
-            archive: tar.gz
-          - os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-            name: linux-aarch64
-            archive: tar.gz
-          - os: macos-13
-            target: x86_64-apple-darwin
-            name: macos-x86_64
-            archive: tar.gz
-          - os: macos-14
-            target: aarch64-apple-darwin
-            name: macos-aarch64
-            archive: tar.gz
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            name: windows-x86_64
-            archive: zip
-
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-          profile: minimal
-
-      - name: Install OpenSSL (Linux)
-        if: runner.os == 'Linux'
+      - name: Create plugin package
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config
+          mkdir -p frame-plugins-${{ needs.create-release.outputs.version }}
 
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          # Copy all plugin directories
+          cp -r plugins/frame.auth frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.data frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.httpserver frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.ui frame-plugins-${{ needs.create-release.outputs.version }}/
 
-      - name: Cache cargo index
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Cache target directory
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Fetch dependencies
-        run: |
-          echo "Fetching git dependencies..."
-          cargo fetch --target ${{ matrix.target }}
-          echo "Dependencies fetched successfully"
-
-      - name: Build Frame CLI
-        run: cargo build --release --target ${{ matrix.target }} --bin frame
-
-      - name: Create release directory
-        run: |
-          mkdir -p frame-${{ needs.create-release.outputs.version }}/bin
-          mkdir -p frame-${{ needs.create-release.outputs.version }}/lib
-          mkdir -p frame-${{ needs.create-release.outputs.version }}/templates
-
-      - name: Copy binaries (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          cp target/${{ matrix.target }}/release/frame frame-${{ needs.create-release.outputs.version }}/bin/
-          chmod +x frame-${{ needs.create-release.outputs.version }}/bin/frame
-
-      - name: Copy binaries (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          cp target/${{ matrix.target }}/release/frame.exe frame-${{ needs.create-release.outputs.version }}/bin/
-
-      # Runtime WASMs will be added in future releases when WASM build is configured
-
-      - name: Copy templates (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          echo "Templates will be added in future releases" > frame-${{ needs.create-release.outputs.version }}/templates/README.txt
-
-      - name: Copy templates (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          echo "Templates will be added in future releases" > frame-${{ needs.create-release.outputs.version }}/templates/README.txt
-        shell: pwsh
-
-      - name: Create README (Unix)
-        if: matrix.os != 'windows-latest'
-        run: |
-          cat > frame-${{ needs.create-release.outputs.version }}/README.txt << 'EOF'
-          Frame Framework v${{ needs.create-release.outputs.version }}
+          # Create README
+          cat > frame-plugins-${{ needs.create-release.outputs.version }}/README.txt << 'EOF'
+          Frame Framework Plugins v${{ needs.create-release.outputs.version }}
 
           Installation:
 
-          1. Extract this archive
-          2. Move the 'frame' binary to a directory in your PATH
-             Unix/Linux/macOS: sudo mv bin/frame /usr/local/bin/
-             Or: mkdir -p ~/.local/bin && mv bin/frame ~/.local/bin/
+          1. Extract this archive to your project's plugins directory
+          2. Or install via cleen: cleen install frame
 
-          3. Verify installation:
-             frame --version
-
-          4. Create your first project:
-             frame new my-app
-             cd my-app
-             frame serve
+          Included Plugins:
+          - frame.auth - Authentication and authorization
+          - frame.data - ORM and database operations
+          - frame.httpserver - HTTP server runtime
+          - frame.ui - UI components and rendering
 
           Documentation: https://github.com/Ivan-Pasco/cleen-framework
           EOF
 
-      - name: Create README (Windows)
-        if: matrix.os == 'windows-latest'
+      - name: Create archive
         run: |
-          @"
-          Frame Framework v${{ needs.create-release.outputs.version }}
+          tar czf frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz frame-plugins-${{ needs.create-release.outputs.version }}
 
-          Installation:
-
-          1. Extract this archive
-          2. Move frame.exe to a directory in your PATH
-             Or add the bin folder to your PATH environment variable
-
-          3. Verify installation:
-             frame --version
-
-          4. Create your first project:
-             frame new my-app
-             cd my-app
-             frame serve
-
-          Documentation: https://github.com/Ivan-Pasco/cleen-framework
-          "@ | Out-File -FilePath "frame-${{ needs.create-release.outputs.version }}/README.txt" -Encoding utf8
-        shell: pwsh
-
-      - name: Create archive (Unix)
-        if: matrix.archive == 'tar.gz'
+      - name: Generate checksum
         run: |
-          tar czf frame-${{ matrix.name }}.tar.gz frame-${{ needs.create-release.outputs.version }}
+          sha256sum frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz > frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz.sha256
 
-      - name: Create archive (Windows)
-        if: matrix.archive == 'zip'
-        run: |
-          7z a frame-${{ matrix.name }}.zip frame-${{ needs.create-release.outputs.version }}
-
-      - name: Generate checksum (Unix)
-        if: matrix.archive == 'tar.gz'
-        run: |
-          shasum -a 256 frame-${{ matrix.name }}.tar.gz > frame-${{ matrix.name }}.tar.gz.sha256
-
-      - name: Generate checksum (Windows)
-        if: matrix.archive == 'zip'
-        run: |
-          certutil -hashfile frame-${{ matrix.name }}.zip SHA256 > frame-${{ matrix.name }}.zip.sha256
-
-      - name: Upload archive
+      - name: Upload plugin archive
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./frame-${{ matrix.name }}.${{ matrix.archive }}
-          asset_name: frame-${{ matrix.name }}.${{ matrix.archive }}
-          asset_content_type: application/octet-stream
+          asset_path: ./frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz
+          asset_name: frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz
+          asset_content_type: application/gzip
 
       - name: Upload checksum
         uses: actions/upload-release-asset@v1
@@ -241,17 +116,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./frame-${{ matrix.name }}.${{ matrix.archive }}.sha256
-          asset_name: frame-${{ matrix.name }}.${{ matrix.archive }}.sha256
+          asset_path: ./frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz.sha256
+          asset_name: frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz.sha256
           asset_content_type: text/plain
 
   update-manifest:
     name: Update Version Manifest
-    needs: [create-release, build-release]
+    needs: [create-release, package-plugins]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Create version manifest
         run: |
@@ -259,13 +134,13 @@ jobs:
           {
             "version": "${{ needs.create-release.outputs.version }}",
             "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "linux-x86_64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-linux-x86_64.tar.gz",
-              "linux-aarch64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-linux-aarch64.tar.gz",
-              "macos-x86_64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-macos-x86_64.tar.gz",
-              "macos-aarch64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-macos-aarch64.tar.gz",
-              "windows-x86_64": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-windows-x86_64.zip"
-            }
+            "plugins": {
+              "frame.auth": "included",
+              "frame.data": "included",
+              "frame.httpserver": "included",
+              "frame.ui": "included"
+            },
+            "download": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz"
           }
           EOF
 
