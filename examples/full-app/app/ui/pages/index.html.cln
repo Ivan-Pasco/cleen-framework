@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>TaskFlow - Project Management</title>
+	<link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+	<app-header></app-header>
+
+	<main class="landing-page">
+		<section class="hero">
+			<h1>Manage Your Projects with TaskFlow</h1>
+			<p>A modern project management tool built with Clean Framework.</p>
+			<div class="cta-buttons">
+				<a href="/login" class="btn btn-primary">Get Started</a>
+				<a href="/dashboard" class="btn btn-secondary">View Demo</a>
+			</div>
+		</section>
+
+		<section class="features">
+			<h2>Features</h2>
+			<div class="feature-grid">
+				<div class="feature-card">
+					<h3>Task Management</h3>
+					<p>Create, organize, and track tasks with ease.</p>
+				</div>
+				<div class="feature-card">
+					<h3>Project Boards</h3>
+					<p>Visualize your workflow with Kanban boards.</p>
+				</div>
+				<div class="feature-card">
+					<h3>Team Collaboration</h3>
+					<p>Work together with your team in real-time.</p>
+				</div>
+			</div>
+		</section>
+	</main>
+
+	<app-sidebar></app-sidebar>
+</body>
+</html>

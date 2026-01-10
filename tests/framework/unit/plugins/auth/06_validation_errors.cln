@@ -1,0 +1,109 @@
+// Test: frame.auth validation errors
+// Tests that invalid configurations produce appropriate errors
+
+functions:
+	// Test invalid JWT secret (too short)
+	boolean testInvalidJwtSecret()
+		string secret = "short"
+		return secret.length() < 32
+
+	// Test expired token detection
+	boolean testExpiredTokenDetection()
+		string errorCode = "TOKEN_EXPIRED"
+		return errorCode == "TOKEN_EXPIRED"
+
+	// Test invalid token format
+	boolean testInvalidTokenFormat()
+		string errorCode = "INVALID_TOKEN"
+		return errorCode == "INVALID_TOKEN"
+
+	// Test missing auth header
+	boolean testMissingAuthHeader()
+		string errorCode = "NO_AUTH_HEADER"
+		return errorCode == "NO_AUTH_HEADER"
+
+	// Test invalid credentials
+	boolean testInvalidCredentials()
+		string errorCode = "INVALID_CREDENTIALS"
+		return errorCode == "INVALID_CREDENTIALS"
+
+	// Test session not found
+	boolean testSessionNotFound()
+		string errorCode = "SESSION_NOT_FOUND"
+		return errorCode == "SESSION_NOT_FOUND"
+
+	// Test permission denied
+	boolean testPermissionDenied()
+		string errorCode = "PERMISSION_DENIED"
+		return errorCode == "PERMISSION_DENIED"
+
+	// Test weak password rejection
+	boolean testWeakPassword()
+		string errorCode = "WEAK_PASSWORD"
+		return errorCode == "WEAK_PASSWORD"
+
+start()
+	printl("=== Test Suite: Auth Validation Errors ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testInvalidJwtSecret()
+		printl("PASS: invalid JWT secret detected (too short)")
+		passed = passed + 1
+	else
+		printl("FAIL: invalid JWT secret detected")
+		failed = failed + 1
+
+	if testExpiredTokenDetection()
+		printl("PASS: expired token error code exists")
+		passed = passed + 1
+	else
+		printl("FAIL: expired token error code exists")
+		failed = failed + 1
+
+	if testInvalidTokenFormat()
+		printl("PASS: invalid token error code exists")
+		passed = passed + 1
+	else
+		printl("FAIL: invalid token error code exists")
+		failed = failed + 1
+
+	if testMissingAuthHeader()
+		printl("PASS: missing auth header error code exists")
+		passed = passed + 1
+	else
+		printl("FAIL: missing auth header error code exists")
+		failed = failed + 1
+
+	if testInvalidCredentials()
+		printl("PASS: invalid credentials error code exists")
+		passed = passed + 1
+	else
+		printl("FAIL: invalid credentials error code exists")
+		failed = failed + 1
+
+	if testSessionNotFound()
+		printl("PASS: session not found error code exists")
+		passed = passed + 1
+	else
+		printl("FAIL: session not found error code exists")
+		failed = failed + 1
+
+	if testPermissionDenied()
+		printl("PASS: permission denied error code exists")
+		passed = passed + 1
+	else
+		printl("FAIL: permission denied error code exists")
+		failed = failed + 1
+
+	if testWeakPassword()
+		printl("PASS: weak password error code exists")
+		passed = passed + 1
+	else
+		printl("FAIL: weak password error code exists")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

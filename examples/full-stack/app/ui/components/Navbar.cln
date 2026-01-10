@@ -1,0 +1,10 @@
+// Navbar component
+component: name="Navbar", client="off"
+
+nav: class="navbar"
+	a: href="/"
+		"Home"
+	a: href="/posts"
+		"Posts"
+	a: href="/users"
+		"Users"

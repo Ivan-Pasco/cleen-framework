@@ -1,0 +1,21 @@
+// Database Schema - Task Management Application
+// Placeholder models (full ORM support coming soon)
+
+// User model
+data User
+	integer id
+	string email
+	string name
+
+// Project model
+data Project
+	integer id
+	string name
+	string description
+
+// Task model
+data Task
+	integer id
+	string title
+	string description
+	string status

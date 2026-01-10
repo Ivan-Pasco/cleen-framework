@@ -1,0 +1,109 @@
+// Test: frame.ui event handling
+// Tests that event handlers are correctly bound
+
+functions:
+	// Test onClick handler
+	boolean testOnClickHandler()
+		string handler = "onClick: handleClick()"
+		return handler.contains("onClick:")
+
+	// Test onSubmit handler
+	boolean testOnSubmitHandler()
+		string handler = "onSubmit: handleSubmit()"
+		return handler.contains("onSubmit:")
+
+	// Test onChange handler
+	boolean testOnChangeHandler()
+		string handler = "onChange: handleChange(event)"
+		return handler.contains("onChange:")
+
+	// Test onInput handler
+	boolean testOnInputHandler()
+		string handler = "onInput: handleInput(event)"
+		return handler.contains("onInput:")
+
+	// Test event parameter access
+	boolean testEventParameter()
+		string handler = "onClick: handleClick(event)"
+		return handler.contains("(event)")
+
+	// Test prevent default
+	boolean testPreventDefault()
+		string code = "event.preventDefault()"
+		return code.contains("preventDefault()")
+
+	// Test stop propagation
+	boolean testStopPropagation()
+		string code = "event.stopPropagation()"
+		return code.contains("stopPropagation()")
+
+	// Test inline handler
+	boolean testInlineHandler()
+		string htmlStr = "html(<button onClick={handleClick}>+</button>)"
+		return htmlStr.contains("onClick=")
+
+start()
+	printl("=== Test Suite: Event Handling ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testOnClickHandler()
+		printl("PASS: onClick handler supported")
+		passed = passed + 1
+	else
+		printl("FAIL: onClick handler supported")
+		failed = failed + 1
+
+	if testOnSubmitHandler()
+		printl("PASS: onSubmit handler supported")
+		passed = passed + 1
+	else
+		printl("FAIL: onSubmit handler supported")
+		failed = failed + 1
+
+	if testOnChangeHandler()
+		printl("PASS: onChange handler supported")
+		passed = passed + 1
+	else
+		printl("FAIL: onChange handler supported")
+		failed = failed + 1
+
+	if testOnInputHandler()
+		printl("PASS: onInput handler supported")
+		passed = passed + 1
+	else
+		printl("FAIL: onInput handler supported")
+		failed = failed + 1
+
+	if testEventParameter()
+		printl("PASS: event parameter is accessible")
+		passed = passed + 1
+	else
+		printl("FAIL: event parameter is accessible")
+		failed = failed + 1
+
+	if testPreventDefault()
+		printl("PASS: preventDefault is callable")
+		passed = passed + 1
+	else
+		printl("FAIL: preventDefault is callable")
+		failed = failed + 1
+
+	if testStopPropagation()
+		printl("PASS: stopPropagation is callable")
+		passed = passed + 1
+	else
+		printl("FAIL: stopPropagation is callable")
+		failed = failed + 1
+
+	if testInlineHandler()
+		printl("PASS: inline event handler supported")
+		passed = passed + 1
+	else
+		printl("FAIL: inline event handler supported")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

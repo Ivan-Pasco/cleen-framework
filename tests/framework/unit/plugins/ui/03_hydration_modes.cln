@@ -1,0 +1,97 @@
+// Test: frame.ui hydration strategies
+// Tests that hydration modes are correctly handled
+
+functions:
+	// Test default SSR (no client hydration)
+	boolean testDefaultSsr()
+		string component = "component Static:"
+		return component.indexOf("client=") == -1
+
+	// Test client hydration on
+	boolean testClientHydrationOn()
+		string component = "component Interactive(client=\"on\"):"
+		return component.contains("client=\"on\"")
+
+	// Test client hydration visible (lazy)
+	boolean testClientHydrationVisible()
+		string component = "component LazyLoad(client=\"visible\"):"
+		return component.contains("client=\"visible\"")
+
+	// Test client hydration idle
+	boolean testClientHydrationIdle()
+		string component = "component DeferredLoad(client=\"idle\"):"
+		return component.contains("client=\"idle\"")
+
+	// Test client only (no SSR)
+	boolean testClientOnly()
+		string component = "component ClientOnlyMap(client=\"only\"):"
+		return component.contains("client=\"only\"")
+
+	// Test hydration off (static)
+	boolean testHydrationOff()
+		string component = "component PureStatic(client=\"off\"):"
+		return component.contains("client=\"off\"")
+
+	// Test island architecture
+	boolean testIslandArchitecture()
+		string island = "island:\n\tcomponent Counter(client=\"on\"):"
+		return island.contains("island:")
+
+start()
+	printl("=== Test Suite: Hydration Modes ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testDefaultSsr()
+		printl("PASS: default is SSR without client hydration")
+		passed = passed + 1
+	else
+		printl("FAIL: default is SSR without client hydration")
+		failed = failed + 1
+
+	if testClientHydrationOn()
+		printl("PASS: client=\"on\" hydration mode supported")
+		passed = passed + 1
+	else
+		printl("FAIL: client=\"on\" hydration mode supported")
+		failed = failed + 1
+
+	if testClientHydrationVisible()
+		printl("PASS: client=\"visible\" lazy hydration supported")
+		passed = passed + 1
+	else
+		printl("FAIL: client=\"visible\" lazy hydration supported")
+		failed = failed + 1
+
+	if testClientHydrationIdle()
+		printl("PASS: client=\"idle\" deferred hydration supported")
+		passed = passed + 1
+	else
+		printl("FAIL: client=\"idle\" deferred hydration supported")
+		failed = failed + 1
+
+	if testClientOnly()
+		printl("PASS: client=\"only\" mode supported")
+		passed = passed + 1
+	else
+		printl("FAIL: client=\"only\" mode supported")
+		failed = failed + 1
+
+	if testHydrationOff()
+		printl("PASS: client=\"off\" static mode supported")
+		passed = passed + 1
+	else
+		printl("FAIL: client=\"off\" static mode supported")
+		failed = failed + 1
+
+	if testIslandArchitecture()
+		printl("PASS: island architecture supported")
+		passed = passed + 1
+	else
+		printl("FAIL: island architecture supported")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

@@ -1,0 +1,8 @@
+// User model
+model: name="User", table="users"
+	string email
+	string password_hash
+	string name
+	string bio
+	string role
+	string created_at

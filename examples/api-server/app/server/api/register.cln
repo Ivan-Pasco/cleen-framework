@@ -1,0 +1,4 @@
+// Register endpoint
+// Route: POST /api/register
+
+return "{\"message\": \"register endpoint\"}"

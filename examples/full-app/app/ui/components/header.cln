@@ -1,0 +1,18 @@
+// Header Component - Navigation Bar
+
+component:
+	string render()
+		string html = "<header class=\"app-header\">"
+		html = html + "<div class=\"header-left\">"
+		html = html + "<a href=\"/\" class=\"logo\">TaskFlow</a>"
+		html = html + "<nav class=\"main-nav\">"
+		html = html + "<a href=\"/dashboard\" class=\"nav-link\">Dashboard</a>"
+		html = html + "<a href=\"/projects\" class=\"nav-link\">Projects</a>"
+		html = html + "<a href=\"/tasks\" class=\"nav-link\">Tasks</a>"
+		html = html + "</nav>"
+		html = html + "</div>"
+		html = html + "<div class=\"header-right\">"
+		html = html + "<a href=\"/settings\" class=\"user-menu\">Settings</a>"
+		html = html + "</div>"
+		html = html + "</header>"
+		return html

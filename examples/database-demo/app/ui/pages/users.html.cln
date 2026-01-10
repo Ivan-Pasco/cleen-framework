@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Users - Database Demo</title>
+</head>
+<body>
+	<h1>Users</h1>
+	<nav>
+		<a href="/">Home</a> |
+		<a href="/users">Users</a> |
+		<a href="/posts">Posts</a>
+	</nav>
+	<hr>
+
+	<table border="1" cellpadding="10">
+		<thead>
+			<tr>
+				<th>ID</th>
+				<th>Name</th>
+				<th>Email</th>
+				<th>Role</th>
+				<th>Status</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr><td>1</td><td>Alice Johnson</td><td>alice@example.com</td><td>Admin</td><td>Active</td></tr>
+			<tr><td>2</td><td>Bob Smith</td><td>bob@example.com</td><td>Editor</td><td>Active</td></tr>
+			<tr><td>3</td><td>Carol White</td><td>carol@example.com</td><td>Author</td><td>Active</td></tr>
+			<tr><td>4</td><td>David Brown</td><td>david@example.com</td><td>Viewer</td><td>Inactive</td></tr>
+		</tbody>
+	</table>
+
+	<p><a href="/api/users">View as JSON</a></p>
+</body>
+</html>

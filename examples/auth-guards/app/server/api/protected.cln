@@ -1,0 +1,4 @@
+// Protected endpoint - requires authentication
+// Route: GET /api/protected
+
+return "{\"message\": \"This is protected\"}"

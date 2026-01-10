@@ -1,0 +1,12 @@
+// Users API
+// Route: GET, POST /api/users
+
+string method = _req_method()
+
+if method == "GET"
+	return "{\"users\": []}"
+
+if method == "POST"
+	return "{\"message\": \"user created\"}"
+
+return "{\"error\": \"method not allowed\"}"

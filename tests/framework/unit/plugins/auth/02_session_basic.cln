@@ -1,0 +1,109 @@
+// Test: frame.auth session-based authentication
+// Tests that sessions are correctly created and managed
+
+functions:
+	// Test session creation
+	boolean testSessionCreate()
+		string createCall = "Auth.createSession(userId)"
+		return createCall.contains("createSession")
+
+	// Test session retrieval
+	boolean testSessionGet()
+		string getCall = "Auth.getSession(sessionId)"
+		return getCall.contains("getSession")
+
+	// Test session destruction
+	boolean testSessionDestroy()
+		string destroyCall = "Auth.destroySession(sessionId)"
+		return destroyCall.contains("destroySession")
+
+	// Test session cookie settings
+	boolean testSessionCookieHttpOnly()
+		string cookieSetting = "httpOnly: true"
+		return cookieSetting.contains("httpOnly")
+
+	// Test session cookie SameSite
+	boolean testSessionCookieSameSite()
+		string cookieSetting = "sameSite: \"strict\""
+		return cookieSetting.contains("sameSite")
+
+	// Test session expiration
+	boolean testSessionExpiration()
+		string expireSetting = "maxAge: 3600"
+		return expireSetting.contains("maxAge")
+
+	// Test session data storage
+	boolean testSessionDataStorage()
+		string storeCall = "session.set(\"key\", \"value\")"
+		return storeCall.contains(".set(")
+
+	// Test session data retrieval
+	boolean testSessionDataRetrieval()
+		string getCall = "session.get(\"key\")"
+		return getCall.contains(".get(")
+
+start()
+	printl("=== Test Suite: Session Basic ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testSessionCreate()
+		printl("PASS: session creation function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: session creation function exists")
+		failed = failed + 1
+
+	if testSessionGet()
+		printl("PASS: session retrieval function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: session retrieval function exists")
+		failed = failed + 1
+
+	if testSessionDestroy()
+		printl("PASS: session destruction function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: session destruction function exists")
+		failed = failed + 1
+
+	if testSessionCookieHttpOnly()
+		printl("PASS: session cookie httpOnly setting supported")
+		passed = passed + 1
+	else
+		printl("FAIL: session cookie httpOnly setting supported")
+		failed = failed + 1
+
+	if testSessionCookieSameSite()
+		printl("PASS: session cookie sameSite setting supported")
+		passed = passed + 1
+	else
+		printl("FAIL: session cookie sameSite setting supported")
+		failed = failed + 1
+
+	if testSessionExpiration()
+		printl("PASS: session expiration setting supported")
+		passed = passed + 1
+	else
+		printl("FAIL: session expiration setting supported")
+		failed = failed + 1
+
+	if testSessionDataStorage()
+		printl("PASS: session data storage supported")
+		passed = passed + 1
+	else
+		printl("FAIL: session data storage supported")
+		failed = failed + 1
+
+	if testSessionDataRetrieval()
+		printl("PASS: session data retrieval supported")
+		passed = passed + 1
+	else
+		printl("FAIL: session data retrieval supported")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

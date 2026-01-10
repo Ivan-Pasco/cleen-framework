@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>About | Article Blog</title>
+	<link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+	<app-header></app-header>
+	<main class="container">
+		<h1>About Article Blog</h1>
+		<section class="about-content">
+			<p>Article Blog is a demonstration project built with Clean Framework.</p>
+			<p>It showcases the framework's capabilities for building modern web applications:</p>
+			<ul>
+				<li>File-based routing with automatic discovery</li>
+				<li>Reusable component architecture</li>
+				<li>Server-side rendering</li>
+				<li>RESTful API endpoints</li>
+			</ul>
+		</section>
+	</main>
+	<app-footer></app-footer>
+</body>
+</html>

@@ -1,0 +1,17 @@
+// Task Form Component
+
+component:
+	string render()
+		string html = "<form class=\"task-form\" action=\"/api/tasks\" method=\"POST\">"
+		html = html + "<h2>Create Task</h2>"
+		html = html + "<div class=\"form-group\">"
+		html = html + "<label>Title</label>"
+		html = html + "<input type=\"text\" name=\"title\" required>"
+		html = html + "</div>"
+		html = html + "<div class=\"form-group\">"
+		html = html + "<label>Description</label>"
+		html = html + "<textarea name=\"description\"></textarea>"
+		html = html + "</div>"
+		html = html + "<button type=\"submit\" class=\"btn btn-primary\">Create</button>"
+		html = html + "</form>"
+		return html

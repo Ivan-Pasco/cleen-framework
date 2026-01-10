@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Dashboard - TaskFlow</title>
+	<link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+	<app-header></app-header>
+
+	<div class="dashboard-layout">
+		<app-sidebar></app-sidebar>
+
+		<main class="dashboard-content">
+			<h1>Dashboard</h1>
+
+			<section class="stats-section">
+				<stats-card></stats-card>
+				<stats-card></stats-card>
+				<stats-card></stats-card>
+			</section>
+
+			<section class="recent-tasks">
+				<h2>Recent Tasks</h2>
+				<div class="task-list">
+					<task-card></task-card>
+					<task-card></task-card>
+					<task-card></task-card>
+				</div>
+			</section>
+		</main>
+	</div>
+</body>
+</html>

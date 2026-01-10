@@ -1,0 +1,11 @@
+// Todos API - List and Create
+// Route: GET /api/todos - List all todos
+// Route: POST /api/todos - Create a todo
+
+string method = _req_method()
+
+if method == "POST"
+	return "{\"message\": \"Todo created\"}"
+
+// Default: GET - list todos
+return "[]"

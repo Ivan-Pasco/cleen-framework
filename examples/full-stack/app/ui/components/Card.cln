@@ -1,0 +1,12 @@
+// Card component
+component: name="Card", client="off"
+
+props:
+	string title
+	string content
+
+div: class="card"
+	h3:
+		{title}
+	p:
+		{content}

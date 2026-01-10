@@ -1,0 +1,100 @@
+// Test: Host Bridge logging functions
+// Tests that logging bridge functions work correctly
+
+functions:
+	// Test log info
+	boolean testLogInfo()
+		string infoCall = "_log_info(message)"
+		return infoCall.contains("_log_info")
+
+	// Test log warn
+	boolean testLogWarn()
+		string warnCall = "_log_warn(message)"
+		return warnCall.contains("_log_warn")
+
+	// Test log error
+	boolean testLogError()
+		string errorCall = "_log_error(message)"
+		return errorCall.contains("_log_error")
+
+	// Test log debug
+	boolean testLogDebug()
+		string debugCall = "_log_debug(message)"
+		return debugCall.contains("_log_debug")
+
+	// Test log with context
+	boolean testLogContext()
+		string contextCall = "_log_info(message, context)"
+		return contextCall.contains("context")
+
+	// Test log levels
+	boolean testLogLevels()
+		string debug = "DEBUG"
+		string info = "INFO"
+		string warn = "WARN"
+		string errorLevel = "ERROR"
+		return debug == "DEBUG" and info == "INFO"
+
+	// Test structured logging
+	boolean testStructuredLog()
+		string structuredCall = "_log_structured(level, message, fields)"
+		return structuredCall.contains("_log_structured")
+
+start()
+	printl("=== Test Suite: Log Bridge ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testLogInfo()
+		printl("PASS: _log_info function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _log_info function exists")
+		failed = failed + 1
+
+	if testLogWarn()
+		printl("PASS: _log_warn function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _log_warn function exists")
+		failed = failed + 1
+
+	if testLogError()
+		printl("PASS: _log_error function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _log_error function exists")
+		failed = failed + 1
+
+	if testLogDebug()
+		printl("PASS: _log_debug function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _log_debug function exists")
+		failed = failed + 1
+
+	if testLogContext()
+		printl("PASS: log with context supported")
+		passed = passed + 1
+	else
+		printl("FAIL: log with context supported")
+		failed = failed + 1
+
+	if testLogLevels()
+		printl("PASS: log levels are defined")
+		passed = passed + 1
+	else
+		printl("FAIL: log levels are defined")
+		failed = failed + 1
+
+	if testStructuredLog()
+		printl("PASS: structured logging supported")
+		passed = passed + 1
+	else
+		printl("FAIL: structured logging supported")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

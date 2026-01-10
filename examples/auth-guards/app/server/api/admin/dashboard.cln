@@ -1,0 +1,4 @@
+// Admin dashboard - requires admin role
+// Route: GET /api/admin/dashboard
+
+return "{\"message\": \"Admin dashboard\"}"

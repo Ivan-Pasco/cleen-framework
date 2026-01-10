@@ -1,0 +1,5 @@
+// Single User API
+// Route: GET /api/users/:id
+
+string id = _req_param("id")
+return "User details for " + id

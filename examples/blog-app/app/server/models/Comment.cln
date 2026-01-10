@@ -1,0 +1,6 @@
+// Comment model
+model: name="Comment", table="comments"
+	integer post_id
+	integer author_id
+	string body
+	string created_at

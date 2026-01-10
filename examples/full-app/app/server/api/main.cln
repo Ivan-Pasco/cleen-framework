@@ -1,0 +1,6 @@
+// Task Management API
+// Route: GET /api/main
+// Returns API information
+
+string json = "{\"name\": \"TaskFlow API\", \"version\": \"1.0.0\", \"status\": \"ready\"}"
+return json

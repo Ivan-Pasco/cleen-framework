@@ -1,0 +1,6 @@
+// Admin user management endpoint
+// Route: DELETE /api/admin/users/:id
+// Requires: admin role
+
+// Note: id is automatically provided by framework for dynamic routes
+return "{\"message\": \"user deleted\", \"id\": \"" + id + "\"}"

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Blog Demo</title>
+	<link rel="stylesheet" href="/public/css/style.css">
+</head>
+<body>
+	<app-header></app-header>
+
+	<main class="container">
+		<h1>Welcome to Blog Demo</h1>
+		<p>A Clean Framework example with auto-discovery.</p>
+
+		<section class="posts">
+			<h2>Latest Posts</h2>
+			<ul>
+				<li><a href="/blog/hello-world">Hello World</a></li>
+				<li><a href="/blog/getting-started">Getting Started with Clean</a></li>
+				<li><a href="/blog/framework-guide">Framework Guide</a></li>
+			</ul>
+		</section>
+	</main>
+
+	<app-footer></app-footer>
+</body>
+</html>

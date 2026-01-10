@@ -1,0 +1,9 @@
+// Stats Card Component
+
+component:
+	string render()
+		string html = "<div class=\"stats-card\">"
+		html = html + "<span class=\"stats-value\">--</span>"
+		html = html + "<span class=\"stats-title\">Tasks</span>"
+		html = html + "</div>"
+		return html

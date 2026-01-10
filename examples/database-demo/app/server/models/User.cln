@@ -1,0 +1,7 @@
+// User model
+model: name="User", table="users"
+	integer id
+	string name
+	string email
+	string role
+	boolean active

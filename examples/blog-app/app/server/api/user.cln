@@ -1,0 +1,4 @@
+// User API
+// Route: GET /api/user
+
+return "{\"user\": {}}"

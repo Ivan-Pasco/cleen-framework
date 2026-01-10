@@ -1,0 +1,5 @@
+// Admin users list endpoint
+// Route: GET /api/admin/users
+// Requires: admin role
+
+return "{\"users\": []}"

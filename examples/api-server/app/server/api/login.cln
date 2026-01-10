@@ -1,0 +1,4 @@
+// Login endpoint
+// Route: POST /api/login
+
+return "{\"message\": \"login endpoint\"}"

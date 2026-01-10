@@ -1,0 +1,5 @@
+// Footer component
+component: name="Footer", client="off"
+
+footer:
+	p: "Blog App - Built with Frame Framework"

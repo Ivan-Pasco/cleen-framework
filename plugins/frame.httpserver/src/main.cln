@@ -1,0 +1,166 @@
+// frame.web plugin - Web server DSL
+// Provides: server, endpoints blocks
+// Version: 2.2.0
+// Requires: compiler v0.17.1+, clean-server v1.1.0+
+
+functions:
+	string expand(string block_name, string attributes, string body)
+		if block_name == "server"
+			return expand_server(attributes)
+		if block_name == "endpoints"
+			return expand_endpoints(body)
+		return body
+
+	string validate(string block_name, string attributes, string body)
+		return ""
+
+	string get_keywords()
+		return "[\"server\", \"endpoints\"]"
+
+	string expand_server(string attrs)
+		string result = "start()\n"
+		result = result + "\tprintl(\"Server starting\")\n"
+		result = result + "\t_http_listen(3000)\n"
+		return result
+
+	string expand_endpoints(string body)
+		string handlers = "functions:\n"
+		string routes = ""
+		integer idx = 0
+
+		// Parse GET routes
+		string text = body
+		integer pos = text.indexOf("GET /")
+		while pos != -1
+			string path = extract_path(text, pos, 4)
+			string handler_body = extract_handler(text, pos)
+			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
+			handlers = handlers + handler_body + "\n"
+			routes = routes + "\tstatus = _http_route(\"GET\", \"" + path + "\", " + idx.toString() + ")\n"
+			idx = idx + 1
+			text = text.substring(pos + 5, text.length())
+			pos = text.indexOf("GET /")
+
+		// Parse POST routes
+		text = body
+		pos = text.indexOf("POST /")
+		while pos != -1
+			string path = extract_path(text, pos, 5)
+			string handler_body = extract_handler(text, pos)
+			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
+			handlers = handlers + handler_body + "\n"
+			routes = routes + "\tstatus = _http_route(\"POST\", \"" + path + "\", " + idx.toString() + ")\n"
+			idx = idx + 1
+			text = text.substring(pos + 6, text.length())
+			pos = text.indexOf("POST /")
+
+		// Parse PUT routes
+		text = body
+		pos = text.indexOf("PUT /")
+		while pos != -1
+			string path = extract_path(text, pos, 4)
+			string handler_body = extract_handler(text, pos)
+			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
+			handlers = handlers + handler_body + "\n"
+			routes = routes + "\tstatus = _http_route(\"PUT\", \"" + path + "\", " + idx.toString() + ")\n"
+			idx = idx + 1
+			text = text.substring(pos + 5, text.length())
+			pos = text.indexOf("PUT /")
+
+		// Parse DELETE routes
+		text = body
+		pos = text.indexOf("DELETE /")
+		while pos != -1
+			string path = extract_path(text, pos, 7)
+			string handler_body = extract_handler(text, pos)
+			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
+			handlers = handlers + handler_body + "\n"
+			routes = routes + "\tstatus = _http_route(\"DELETE\", \"" + path + "\", " + idx.toString() + ")\n"
+			idx = idx + 1
+			text = text.substring(pos + 8, text.length())
+			pos = text.indexOf("DELETE /")
+
+		// Parse PATCH routes
+		text = body
+		pos = text.indexOf("PATCH /")
+		while pos != -1
+			string path = extract_path(text, pos, 6)
+			string handler_body = extract_handler(text, pos)
+			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
+			handlers = handlers + handler_body + "\n"
+			routes = routes + "\tstatus = _http_route(\"PATCH\", \"" + path + "\", " + idx.toString() + ")\n"
+			idx = idx + 1
+			text = text.substring(pos + 7, text.length())
+			pos = text.indexOf("PATCH /")
+
+		// Build startup code
+		string startup = "start()\n"
+		startup = startup + "\tinteger status = 0\n"
+		startup = startup + "\tprintl(\"Registering routes...\")\n"
+		startup = startup + routes
+		startup = startup + "\tprintl(\"Routes registered\")\n"
+
+		return handlers + startup
+
+	string extract_path(string text, integer pos, integer method_len)
+		string after = text.substring(pos + method_len + 1, text.length())
+		integer colon = after.indexOf(":")
+		if colon == -1
+			return "/"
+		string path = after.substring(0, colon)
+		return path.trim()
+
+	string extract_handler(string text, integer pos)
+		integer colon = text.indexOf(":", pos)
+		if colon == -1
+			return "\t\treturn \"\""
+		string after_colon = text.substring(colon + 1, text.length())
+		integer next_route = find_next_route(after_colon)
+		string handler_code = ""
+		if next_route == -1
+			handler_code = after_colon.trim()
+		else
+			handler_code = after_colon.substring(0, next_route).trim()
+		if handler_code.length() == 0
+			return "\t\treturn \"\""
+		return "\t\t" + handler_code
+
+	integer find_next_route(string text)
+		integer get_pos = text.indexOf("GET /")
+		integer post_pos = text.indexOf("POST /")
+		integer put_pos = text.indexOf("PUT /")
+		integer del_pos = text.indexOf("DELETE /")
+		integer patch_pos = text.indexOf("PATCH /")
+		integer min_pos = -1
+		if get_pos != -1
+			if min_pos == -1
+				min_pos = get_pos
+			else
+				if get_pos < min_pos
+					min_pos = get_pos
+		if post_pos != -1
+			if min_pos == -1
+				min_pos = post_pos
+			else
+				if post_pos < min_pos
+					min_pos = post_pos
+		if put_pos != -1
+			if min_pos == -1
+				min_pos = put_pos
+			else
+				if put_pos < min_pos
+					min_pos = put_pos
+		if del_pos != -1
+			if min_pos == -1
+				min_pos = del_pos
+			else
+				if del_pos < min_pos
+					min_pos = del_pos
+		if patch_pos != -1
+			if min_pos == -1
+				min_pos = patch_pos
+			else
+				if patch_pos < min_pos
+					min_pos = patch_pos
+		return min_pos
+

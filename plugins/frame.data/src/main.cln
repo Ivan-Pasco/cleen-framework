@@ -1,0 +1,81 @@
+// frame.data plugin - ORM and Database DSL
+// Provides: model, query, transaction blocks
+// Version: 1.0.0
+
+functions:
+	// Main entry point - called by compiler for each framework block
+	string expand_block(string block_name, string attributes, string body)
+		if block_name == "model"
+			return expand_model(attributes, body)
+		if block_name == "query"
+			return expand_query(attributes, body)
+		if block_name == "transaction"
+			return expand_transaction(attributes, body)
+		return body
+
+	// Validation entry point
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "model"
+			return validate_model(attributes)
+		if block_name == "query"
+			return validate_query(attributes)
+		return ""
+
+	// Keywords for IDE
+	string get_keywords()
+		return "[\"model\", \"query\", \"transaction\", \"find\", \"where\", \"order\", \"limit\", \"save\", \"delete\"]"
+
+	// Model block expansion
+	string expand_model(string attrs, string body)
+		string name = get_attr(attrs, "name", "Model")
+		string table = get_attr(attrs, "table", name)
+		string result = "class " + name + "\n\tinteger id\n\t" + body + "\n\tfunctions:\n\t\tboolean save()\n\t\t\tif this.id == 0\n\t\t\t\tthis.id = _db_insert(\"" + table + "\", this)\n\t\t\t\treturn this.id > 0\n\t\t\treturn _db_update(\"" + table + "\", this.id, this)\n\t\tboolean delete()\n\t\t\tif this.id == 0\n\t\t\t\treturn false\n\t\t\treturn _db_delete(\"" + table + "\", this.id)\n"
+		return result
+
+	// Query block expansion
+	string expand_query(string attrs, string body)
+		string model = get_attr(attrs, "model", "")
+		if model == ""
+			return body
+		string result = "_db_query(\"SELECT * FROM " + model + "\", [])\n" + body + "\n"
+		return result
+
+	// Transaction block expansion
+	string expand_transaction(string attrs, string body)
+		string result = "_db_begin_transaction()\n" + body + "\n_db_commit()\n"
+		return result
+
+	// Validate model attributes
+	string validate_model(string attrs)
+		string name = get_attr(attrs, "name", "")
+		if name == ""
+			return "model: name attribute is required"
+		return ""
+
+	// Validate query attributes
+	string validate_query(string attrs)
+		string model = get_attr(attrs, "model", "")
+		if model == ""
+			return "query: model attribute is required"
+		return ""
+
+	// Get attribute from attrs string
+	string get_attr(string attrs, string key, string default_val)
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_val
+		return extract_value(attrs, pos)
+
+	// Extract value after key position
+	string extract_value(string json, integer key_pos)
+		integer colon_pos = json.indexOf(":", key_pos)
+		if colon_pos == -1
+			return ""
+		integer quote_start = json.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			return ""
+		integer quote_end = json.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return ""
+		return json.substring(quote_start + 1, quote_end)

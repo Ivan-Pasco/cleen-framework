@@ -1,0 +1,4 @@
+// Post publish - requires post.publish permission
+// Route: GET /api/posts/publish
+
+return "{\"message\": \"Post published\"}"

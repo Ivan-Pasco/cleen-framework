@@ -1,0 +1,11 @@
+// Posts API endpoint
+// Route: GET /api/posts
+// Returns JSON array of blog posts
+
+string json = "["
+json = json + "{\"slug\": \"hello-world\", \"title\": \"Hello World\", \"excerpt\": \"Welcome to Clean Framework\", \"readTime\": 5},"
+json = json + "{\"slug\": \"getting-started\", \"title\": \"Getting Started\", \"excerpt\": \"Learn how to build web apps\", \"readTime\": 10},"
+json = json + "{\"slug\": \"framework-guide\", \"title\": \"Framework Guide\", \"excerpt\": \"A comprehensive guide\", \"readTime\": 15}"
+json = json + "]"
+
+return json

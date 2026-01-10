@@ -1,0 +1,211 @@
+// Host Bridge Mock Functions for Clean Framework Testing
+// Provides mock implementations of bridge functions for isolated testing
+
+// Mock database state
+list<string> mock_db_rows = []
+integer mock_db_last_insert_id = 0
+boolean mock_db_should_fail = false
+string mock_db_error_message = ""
+
+// Mock auth state
+string mock_auth_current_token = ""
+string mock_auth_current_user_id = ""
+string mock_auth_current_role = ""
+boolean mock_auth_is_authenticated = false
+
+// Mock environment state
+list<string> mock_env_keys = []
+list<string> mock_env_values = []
+
+// Mock log state
+list<string> mock_log_messages = []
+
+functions:
+	// === Database Mocks ===
+
+	// Reset database mock state
+	void mockDbReset()
+		mock_db_rows = []
+		mock_db_last_insert_id = 0
+		mock_db_should_fail = false
+		mock_db_error_message = ""
+
+	// Add a mock row to the database
+	void mockDbAddRow(string rowJson)
+		mock_db_rows.add(rowJson)
+		mock_db_last_insert_id = mock_db_rows.size()
+
+	// Set database to fail mode
+	void mockDbSetFail(string errorMessage)
+		mock_db_should_fail = true
+		mock_db_error_message = errorMessage
+
+	// Mock database query
+	string mockDbQuery(string sql, string params)
+		if mock_db_should_fail
+			return "{\"ok\": false, \"err\": {\"code\": \"DB_ERROR\", \"message\": \"" + mock_db_error_message + "\"}}"
+
+		// Return all mock rows as JSON array
+		string result = "["
+		integer i = 0
+		iterate row in mock_db_rows
+			if i > 0
+				result = result + ", "
+			result = result + row
+			i = i + 1
+		result = result + "]"
+		return "{\"ok\": true, \"data\": " + result + "}"
+
+	// Mock database insert
+	string mockDbInsert(string table, string data)
+		if mock_db_should_fail
+			return "{\"ok\": false, \"err\": {\"code\": \"DB_ERROR\", \"message\": \"" + mock_db_error_message + "\"}}"
+
+		mock_db_rows.add(data)
+		mock_db_last_insert_id = mock_db_rows.size()
+		return "{\"ok\": true, \"data\": {\"id\": " + mock_db_last_insert_id.toString() + "}}"
+
+	// Mock database update
+	string mockDbUpdate(string table, string id, string data)
+		if mock_db_should_fail
+			return "{\"ok\": false, \"err\": {\"code\": \"DB_ERROR\", \"message\": \"" + mock_db_error_message + "\"}}"
+
+		return "{\"ok\": true, \"data\": {\"affected_rows\": 1}}"
+
+	// Mock database delete
+	string mockDbDelete(string table, string id)
+		if mock_db_should_fail
+			return "{\"ok\": false, \"err\": {\"code\": \"DB_ERROR\", \"message\": \"" + mock_db_error_message + "\"}}"
+
+		return "{\"ok\": true, \"data\": {\"affected_rows\": 1}}"
+
+	// Get count of mock rows
+	integer mockDbRowCount()
+		return mock_db_rows.size()
+
+	// === Auth Mocks ===
+
+	// Reset auth mock state
+	void mockAuthReset()
+		mock_auth_current_token = ""
+		mock_auth_current_user_id = ""
+		mock_auth_current_role = ""
+		mock_auth_is_authenticated = false
+
+	// Set authenticated user
+	void mockAuthSetUser(string userId, string role)
+		mock_auth_current_user_id = userId
+		mock_auth_current_role = role
+		mock_auth_is_authenticated = true
+		mock_auth_current_token = "mock_token_" + userId
+
+	// Set unauthenticated
+	void mockAuthSetUnauthenticated()
+		mock_auth_current_token = ""
+		mock_auth_current_user_id = ""
+		mock_auth_current_role = ""
+		mock_auth_is_authenticated = false
+
+	// Mock auth create token
+	string mockAuthCreateToken(string userId, string role)
+		return "mock_token_" + userId + "_" + role
+
+	// Mock auth verify token
+	string mockAuthVerifyToken(string token)
+		if token.startsWith("mock_token_")
+			return "{\"ok\": true, \"data\": {\"userId\": \"1\", \"role\": \"user\"}}"
+		return "{\"ok\": false, \"err\": {\"code\": \"AUTH_ERROR\", \"message\": \"Invalid token\"}}"
+
+	// Mock auth hash password
+	string mockAuthHashPassword(string password)
+		return "hashed_" + password
+
+	// Mock auth verify password
+	boolean mockAuthVerifyPassword(string password, string hash)
+		return hash == "hashed_" + password
+
+	// Check if currently authenticated
+	boolean mockAuthIsAuthenticated()
+		return mock_auth_is_authenticated
+
+	// Check if has role
+	boolean mockAuthHasRole(string role)
+		return mock_auth_is_authenticated and mock_auth_current_role == role
+
+	// Get current user ID
+	string mockAuthGetUserId()
+		return mock_auth_current_user_id
+
+	// Get current role
+	string mockAuthGetRole()
+		return mock_auth_current_role
+
+	// === Environment Mocks ===
+
+	// Reset environment mock state
+	void mockEnvReset()
+		mock_env_keys = []
+		mock_env_values = []
+
+	// Set an environment variable
+	void mockEnvSet(string key, string value)
+		mock_env_keys.add(key)
+		mock_env_values.add(value)
+
+	// Get an environment variable
+	string mockEnvGet(string key)
+		integer i = 0
+		iterate k in mock_env_keys
+			if k == key
+				return mock_env_values.get(i)
+			i = i + 1
+		return ""
+
+	// Check if environment variable exists
+	boolean mockEnvHas(string key)
+		iterate k in mock_env_keys
+			if k == key
+				return true
+		return false
+
+	// === Log Mocks ===
+
+	// Reset log mock state
+	void mockLogReset()
+		mock_log_messages = []
+
+	// Mock log info
+	void mockLogInfo(string message)
+		mock_log_messages.add("INFO: " + message)
+
+	// Mock log warn
+	void mockLogWarn(string message)
+		mock_log_messages.add("WARN: " + message)
+
+	// Mock log error
+	void mockLogError(string message)
+		mock_log_messages.add("ERROR: " + message)
+
+	// Get all log messages
+	list<string> mockLogGetMessages()
+		return mock_log_messages
+
+	// Check if log contains message
+	boolean mockLogContains(string substring)
+		iterate msg in mock_log_messages
+			if msg.contains(substring)
+				return true
+		return false
+
+	// Get log message count
+	integer mockLogCount()
+		return mock_log_messages.size()
+
+	// === Reset All Mocks ===
+
+	// Reset all mock state
+	void mockResetAll()
+		mockDbReset()
+		mockAuthReset()
+		mockEnvReset()
+		mockLogReset()

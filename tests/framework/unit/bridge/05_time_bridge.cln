@@ -1,0 +1,97 @@
+// Test: Host Bridge time functions
+// Tests that time bridge functions work correctly
+
+functions:
+	// Test current time
+	boolean testTimeNow()
+		string nowCall = "_time_now()"
+		return nowCall.contains("_time_now")
+
+	// Test time format
+	boolean testTimeFormat()
+		string formatCall = "_time_format(timestamp, YYYY-MM-DD)"
+		return formatCall.contains("_time_format")
+
+	// Test time parse
+	boolean testTimeParse()
+		string parseCall = "_time_parse(dateString, YYYY-MM-DD)"
+		return parseCall.contains("_time_parse")
+
+	// Test time add
+	boolean testTimeAdd()
+		string addCall = "_time_add(timestamp, 1, day)"
+		return addCall.contains("_time_add")
+
+	// Test time diff
+	boolean testTimeDiff()
+		string diffCall = "_time_diff(start, end)"
+		return diffCall.contains("_time_diff")
+
+	// Test time zone
+	boolean testTimeZone()
+		string tzCall = "_time_zone(UTC)"
+		return tzCall.contains("_time_zone")
+
+	// Test unix timestamp
+	boolean testTimeUnix()
+		string unixCall = "_time_unix()"
+		return unixCall.contains("_time_unix")
+
+start()
+	printl("=== Test Suite: Time Bridge ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testTimeNow()
+		printl("PASS: _time_now function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _time_now function exists")
+		failed = failed + 1
+
+	if testTimeFormat()
+		printl("PASS: _time_format function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _time_format function exists")
+		failed = failed + 1
+
+	if testTimeParse()
+		printl("PASS: _time_parse function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _time_parse function exists")
+		failed = failed + 1
+
+	if testTimeAdd()
+		printl("PASS: _time_add function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _time_add function exists")
+		failed = failed + 1
+
+	if testTimeDiff()
+		printl("PASS: _time_diff function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _time_diff function exists")
+		failed = failed + 1
+
+	if testTimeZone()
+		printl("PASS: _time_zone function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _time_zone function exists")
+		failed = failed + 1
+
+	if testTimeUnix()
+		printl("PASS: _time_unix function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _time_unix function exists")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

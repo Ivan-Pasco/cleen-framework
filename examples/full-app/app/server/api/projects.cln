@@ -1,0 +1,11 @@
+// Projects API endpoint
+// Route: GET /api/projects
+// Returns JSON array of projects
+
+string json = "["
+json = json + "{\"id\": 1, \"name\": \"Marketing Campaign\", \"description\": \"Q1 2025 marketing\", \"task_count\": 5},"
+json = json + "{\"id\": 2, \"name\": \"Product Launch\", \"description\": \"New product release\", \"task_count\": 12},"
+json = json + "{\"id\": 3, \"name\": \"Website Redesign\", \"description\": \"Company website refresh\", \"task_count\": 8}"
+json = json + "]"
+
+return json

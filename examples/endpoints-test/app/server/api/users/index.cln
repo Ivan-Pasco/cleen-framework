@@ -1,0 +1,10 @@
+// Users API - List and Create
+// Route: GET /api/users - List users
+// Route: POST /api/users - Create user
+
+string method = _req_method()
+
+if method == "POST"
+	return "user created"
+
+return "user list"

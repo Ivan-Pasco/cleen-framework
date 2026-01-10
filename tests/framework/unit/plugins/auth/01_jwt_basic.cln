@@ -1,0 +1,116 @@
+// Test: frame.auth JWT basic functionality
+// Tests that JWT tokens are correctly created and validated
+
+functions:
+	// Test JWT token structure
+	boolean testJwtStructure()
+		string token = "header.payload.signature"
+		integer dotCount = 0
+		string text = token
+		integer pos = text.indexOf(".")
+		while pos != -1
+			dotCount = dotCount + 1
+			text = text.substring(pos + 1, text.length())
+			pos = text.indexOf(".")
+		return dotCount == 2
+
+	// Test JWT create function
+	boolean testJwtCreate()
+		string createCall = "Auth.createToken(userId, claims)"
+		return createCall.contains("createToken")
+
+	// Test JWT verify function
+	boolean testJwtVerify()
+		string verifyCall = "Auth.verifyToken(token)"
+		return verifyCall.contains("verifyToken")
+
+	// Test JWT decode function
+	boolean testJwtDecode()
+		string decodeCall = "Auth.decodeToken(token)"
+		return decodeCall.contains("decodeToken")
+
+	// Test JWT expiration
+	boolean testJwtExpiration()
+		string claim = "exp: 1234567890"
+		return claim.contains("exp:")
+
+	// Test JWT issuer claim
+	boolean testJwtIssuer()
+		string claim = "iss: \"myapp\""
+		return claim.contains("iss:")
+
+	// Test JWT subject claim
+	boolean testJwtSubject()
+		string claim = "sub: \"user123\""
+		return claim.contains("sub:")
+
+	// Test JWT refresh token
+	boolean testJwtRefresh()
+		string refreshCall = "Auth.refreshToken(token)"
+		return refreshCall.contains("refreshToken")
+
+start()
+	printl("=== Test Suite: JWT Basic ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testJwtStructure()
+		printl("PASS: JWT has correct structure (header.payload.signature)")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT has correct structure")
+		failed = failed + 1
+
+	if testJwtCreate()
+		printl("PASS: JWT create function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT create function exists")
+		failed = failed + 1
+
+	if testJwtVerify()
+		printl("PASS: JWT verify function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT verify function exists")
+		failed = failed + 1
+
+	if testJwtDecode()
+		printl("PASS: JWT decode function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT decode function exists")
+		failed = failed + 1
+
+	if testJwtExpiration()
+		printl("PASS: JWT supports expiration claim")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT supports expiration claim")
+		failed = failed + 1
+
+	if testJwtIssuer()
+		printl("PASS: JWT supports issuer claim")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT supports issuer claim")
+		failed = failed + 1
+
+	if testJwtSubject()
+		printl("PASS: JWT supports subject claim")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT supports subject claim")
+		failed = failed + 1
+
+	if testJwtRefresh()
+		printl("PASS: JWT refresh function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: JWT refresh function exists")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

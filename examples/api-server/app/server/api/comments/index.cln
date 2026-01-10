@@ -1,0 +1,4 @@
+// Comments endpoint
+// Route: POST /api/comments
+
+return "{\"message\": \"comment created\"}"

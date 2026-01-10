@@ -1,0 +1,11 @@
+// Header component
+component: name="Header", client="off"
+
+header:
+	nav:
+		a: href="/"
+			"Blog"
+		a: href="/posts"
+			"Posts"
+		a: href="/login"
+			"Login"

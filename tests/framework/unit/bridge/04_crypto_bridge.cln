@@ -1,0 +1,109 @@
+// Test: Host Bridge crypto functions
+// Tests that crypto bridge functions work correctly
+
+functions:
+	// Test hash function
+	boolean testCryptoHash()
+		string hashCall = "_crypto_hash(sha256, data)"
+		return hashCall.contains("_crypto_hash")
+
+	// Test HMAC function
+	boolean testCryptoHmac()
+		string hmacCall = "_crypto_hmac(sha256, key, data)"
+		return hmacCall.contains("_crypto_hmac")
+
+	// Test random bytes
+	boolean testCryptoRandom()
+		string randomCall = "_crypto_random(32)"
+		return randomCall.contains("_crypto_random")
+
+	// Test UUID generation
+	boolean testCryptoUuid()
+		string uuidCall = "_crypto_uuid()"
+		return uuidCall.contains("_crypto_uuid")
+
+	// Test encrypt function
+	boolean testCryptoEncrypt()
+		string encryptCall = "_crypto_encrypt(aes256, key, data)"
+		return encryptCall.contains("_crypto_encrypt")
+
+	// Test decrypt function
+	boolean testCryptoDecrypt()
+		string decryptCall = "_crypto_decrypt(aes256, key, data)"
+		return decryptCall.contains("_crypto_decrypt")
+
+	// Test bcrypt hash
+	boolean testBcryptHash()
+		string bcryptCall = "_crypto_bcrypt_hash(password, 12)"
+		return bcryptCall.contains("_crypto_bcrypt")
+
+	// Test bcrypt verify
+	boolean testBcryptVerify()
+		string verifyCall = "_crypto_bcrypt_verify(password, hash)"
+		return verifyCall.contains("bcrypt_verify")
+
+start()
+	printl("=== Test Suite: Crypto Bridge ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testCryptoHash()
+		printl("PASS: _crypto_hash function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _crypto_hash function exists")
+		failed = failed + 1
+
+	if testCryptoHmac()
+		printl("PASS: _crypto_hmac function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _crypto_hmac function exists")
+		failed = failed + 1
+
+	if testCryptoRandom()
+		printl("PASS: _crypto_random function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _crypto_random function exists")
+		failed = failed + 1
+
+	if testCryptoUuid()
+		printl("PASS: _crypto_uuid function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _crypto_uuid function exists")
+		failed = failed + 1
+
+	if testCryptoEncrypt()
+		printl("PASS: _crypto_encrypt function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _crypto_encrypt function exists")
+		failed = failed + 1
+
+	if testCryptoDecrypt()
+		printl("PASS: _crypto_decrypt function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _crypto_decrypt function exists")
+		failed = failed + 1
+
+	if testBcryptHash()
+		printl("PASS: bcrypt hash function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: bcrypt hash function exists")
+		failed = failed + 1
+
+	if testBcryptVerify()
+		printl("PASS: bcrypt verify function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: bcrypt verify function exists")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

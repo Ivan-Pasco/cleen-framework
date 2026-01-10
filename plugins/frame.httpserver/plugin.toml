@@ -1,0 +1,44 @@
+[plugin]
+name = "frame.httpserver"
+version = "1.0.0"
+description = "HTTP server plugin for Clean Language - provides routing, request context, and authentication"
+author = "Clean Language Team"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+requires = "clean-server"
+
+[handles]
+blocks = ["server", "route", "middleware", "endpoints"]
+
+[exports]
+expand = "expand"
+validate = "validate"
+get_keywords = "get_keywords"
+
+# Bridge function declarations - server-specific functions provided by clean-server
+# NOTE: Functions with expand_strings = true have their string params expanded to (ptr, len) pairs
+[bridge]
+functions = [
+  # HTTP Server - route registration
+  { name = "_http_listen", params = ["integer"], returns = "integer", description = "Start HTTP server on specified port" },
+  { name = "_http_route", params = ["string", "string", "integer"], returns = "integer", description = "Register route: method, path, handler_idx", expand_strings = true },
+  { name = "_http_route_protected", params = ["string", "string", "integer", "string"], returns = "integer", description = "Register protected route with role requirement", expand_strings = true },
+
+  # Request Context - Parameters
+  { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name", expand_strings = true },
+  { name = "_req_query", params = ["string"], returns = "string", description = "Get query parameter by name", expand_strings = true },
+  { name = "_req_header", params = ["string"], returns = "string", description = "Get request header by name", expand_strings = true },
+
+  # Request Context - Data
+  { name = "_req_body", params = [], returns = "string", description = "Get request body as string" },
+  { name = "_req_method", params = [], returns = "string", description = "Get HTTP method (GET, POST, etc.)" },
+  { name = "_req_path", params = [], returns = "string", description = "Get request path" },
+
+  # Session Authentication
+  { name = "_auth_get_session", params = [], returns = "string", description = "Get current session as JSON" },
+  { name = "_auth_require_auth", params = [], returns = "integer", description = "Check if authenticated (1=yes, 0=no)" },
+  { name = "_auth_require_role", params = ["string"], returns = "integer", description = "Check if user has role", expand_strings = true },
+  { name = "_auth_can", params = ["string"], returns = "integer", description = "Check if user has permission", expand_strings = true },
+  { name = "_auth_has_any_role", params = ["string"], returns = "integer", description = "Check if user has any of the roles (JSON array)", expand_strings = true },
+]

@@ -1,0 +1,5 @@
+// Admin posts list endpoint
+// Route: GET /api/admin/posts
+// Requires: admin role
+
+return "{\"posts\": []}"

@@ -1,0 +1,4 @@
+// Login endpoint
+// Route: POST /api/auth/login
+
+return "{\"message\": \"logged in\"}"

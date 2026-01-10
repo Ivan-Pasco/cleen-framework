@@ -1,0 +1,10 @@
+// Task Card Component
+
+component:
+	string render()
+		string html = "<div class=\"task-card\">"
+		html = html + "<h4>Sample Task</h4>"
+		html = html + "<p>Task description goes here</p>"
+		html = html + "<span class=\"task-status\">In Progress</span>"
+		html = html + "</div>"
+		return html

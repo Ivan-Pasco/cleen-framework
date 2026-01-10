@@ -1,0 +1,10 @@
+// StatCard Component
+// Displays a statistic placeholder
+
+component:
+	string render()
+		string html = "<div class=\"stat-card\">"
+		html = html + "<span class=\"stat-value\">--</span>"
+		html = html + "<span class=\"stat-label\">Stat</span>"
+		html = html + "</div>"
+		return html

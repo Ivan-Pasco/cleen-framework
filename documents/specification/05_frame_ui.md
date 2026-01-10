@@ -1,270 +1,888 @@
 # Frame UI Specification (05)
 
-**Project:** Frame – Full-Stack Framework for Clean Language  
-**Version:** 1.0  
+**Project:** Frame – Full-Stack Framework for Clean Language
+**Version:** 2.1
 **Location:** `/docs/specification/05_frame_ui.md`
 
 ---
 
 ## 1. Introduction
 
-**Frame UI** is an HTML‑first, component‑based UI layer written in **Clean Language**. It renders pages on the server by default (SSR) and can optionally render or hydrate components on the client using a tiny browser bridge and an optional `ui.wasm` bundle.
+**Frame UI** is an **HTML-first**, component-based UI layer for the Frame framework. Pages are written in **standard HTML** with custom tags defined by Clean Language components. This approach ensures:
 
-Goals:
-- Keep UI **simple, declarative, and readable**.
-- Share **one type system** across UI, API, and Data.
-- Offer **SSR by default**, with **client rendering on demand**.
-- Make integration with **any CSS** straightforward.
+- **Designer-friendly**: Edit pages in any HTML editor (VS Code, Sublime, Dreamweaver)
+- **Standard tooling**: Full support for Emmet, Prettier, HTML validators
+- **Zero learning curve**: Web developers already know HTML
+- **Progressive enhancement**: Valid HTML even before compilation
+- **SEO-ready**: SSR by default with clean, semantic markup
 
 ---
 
 ## 2. Architecture Overview
 
 ```
-Clean Components (.cln)
-        │ compile
-        ▼
- ui.wasm (optional, client-only logic)
- server.wasm (SSR renderer)
+app/ui/pages/*.html.cln      (HTML with Clean Language processing)
         │
-        ├─ SSR HTML → browser
-        └─ islands manifest → loader.js (hydrates selected nodes)
+        ▼ parse
+app/ui/components/*.cln      (Clean components define custom tags)
+        │
+        ▼ compile
+dist/app.wasm                (SSR renderer)
+        │
+        ▼ serve
+HTML + loader.js             (Browser receives rendered page)
 ```
 
-- **Server Render (default):** Clean components render to HTML in `server.wasm`.
-- **Hydration (optional):** The browser reads a small **islands manifest** and hydrates only marked components.
-- **Client Render (optional):** The browser can load `ui.wasm` to build or re‑build parts of the DOM without contacting the server.
+**Key principle**: Pages are HTML. Components are Clean. The compiler bridges them.
+
+### 2.1 File Extensions
+
+| Extension | Purpose |
+|-----------|---------|
+| `.html.cln` | HTML pages that need Clean Language processing (data binding, components, etc.) |
+| `.html` | Static HTML files served as-is without processing |
+| `.cln` | Clean Language source files (components, logic, etc.) |
+
+The `.html.cln` extension indicates that the file contains HTML that should be processed by the Clean Language compiler. This allows:
+- Clear distinction between static and dynamic pages
+- Standard HTML tooling support (editors, linters, formatters)
+- IDEs can recognize the file as HTML for syntax highlighting
+
+### 2.2 Project Structure
+
+Clean Framework uses automatic file discovery. Place files in the `app/` folder:
+
+```
+app/
+  ui/                         # Frontend (browser-facing)
+    pages/                    # HTML page routes
+      index.html.cln          # → /
+      about.html.cln          # → /about
+      blog/
+        index.html.cln        # → /blog
+        [slug].html.cln       # → /blog/:slug
+    components/               # Custom HTML elements
+      Header.cln              # → <app-header>
+      UserCard.cln            # → <user-card>
+    layouts/                  # Page wrappers
+      main.html.cln
+    public/                   # Static assets (CSS, images, JS)
+      css/
+      images/
+  server/                     # Backend
+    api/                      # JSON API endpoints (→ /api/*)
+    models/                   # Database schemas
+    middleware/               # Request filters
+  shared/                     # Shared code
+    lib/                      # Utility modules
+```
+
+**Build command:**
+```bash
+frame build           # Discovers files, generates main.cln, compiles to WASM
+frame scan            # Preview discovered routes/components
+```
 
 ---
 
-## 3. Component Syntax (Clean)
+## 3. Page Structure (HTML)
 
-A component is a Clean module with a `render()` function that returns HTML.
+Pages are `.html.cln` files in `app/ui/pages/`. File paths map to URL routes.
+
+### 3.1 Basic Page
+
+```html
+<!-- app/ui/pages/index.html.cln → / -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome</title>
+</head>
+<body>
+    <app-header></app-header>
+
+    <main>
+        <h1>Welcome to Frame</h1>
+        <p>A modern full-stack framework.</p>
+    </main>
+
+    <app-footer></app-footer>
+</body>
+</html>
+```
+
+### 3.2 File-Based Routing
+
+| File Path | URL Route |
+|-----------|-----------|
+| `app/ui/pages/index.html.cln` | `/` |
+| `app/ui/pages/about.html.cln` | `/about` |
+| `app/ui/pages/blog/index.html.cln` | `/blog` |
+| `app/ui/pages/blog/[slug].html.cln` | `/blog/:slug` |
+| `app/ui/pages/users/[id]/posts.html.cln` | `/users/:id/posts` |
+
+### 3.3 Page Metadata
+
+Use standard HTML `<meta>` tags and a special `<page>` element for Frame-specific configuration:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dashboard</title>
+    <meta name="description" content="User dashboard">
+
+    <!-- Frame page configuration -->
+    <page layout="admin" auth="required"></page>
+</head>
+<body>
+    <h1>Dashboard</h1>
+    <user-stats></user-stats>
+</body>
+</html>
+```
+
+**Page attributes:**
+- `layout` - Layout component to wrap page
+- `auth` - Authentication requirement: `required`, `guest`, `none`
+- `roles` - Required roles: `roles="admin,editor"`
+- `cache` - Cache duration: `cache="1h"`, `cache="no-store"`
+
+---
+
+## 4. Custom Tags (Components)
+
+Custom HTML tags are defined by Clean Language components. Tags follow the Web Components naming convention: **lowercase with hyphens, must contain a hyphen**.
+
+### 4.1 Using Custom Tags
+
+```html
+<!-- Pass props as HTML attributes -->
+<user-card user-id="123" show-avatar="true"></user-card>
+
+<!-- Nested content becomes slot -->
+<app-modal title="Confirm">
+    <p>Are you sure you want to delete?</p>
+</app-modal>
+
+<!-- Multiple named slots -->
+<app-layout>
+    <slot name="header">
+        <h1>Page Title</h1>
+    </slot>
+    <slot name="content">
+        <p>Main content here</p>
+    </slot>
+</app-layout>
+```
+
+### 4.2 Component Definition (Clean)
+
+Components are defined in `app/ui/components/*.cln`:
 
 ```clean
-component UserBadge
+// app/ui/components/UserCard.cln
+component: tag="user-card"
     props:
-        name: string
-        role?: string
+        string userId
+        boolean showAvatar = true
 
     functions:
-        Widget render()
-            return (
-                <span class="user-badge">
-                    {name}
-                    if role != null:
-                        <ui-tag>{role}</ui-tag>
-                </span>
-            )
+        string render()
+            user = User.find(userId)
+            html = "<div class=\"user-card\">"
+            if showAvatar
+                html = html + "<img src=\"" + user.avatar + "\" alt=\"\">"
+            html = html + "<h3>" + user.name + "</h3>"
+            html = html + "</div>"
+            return html
 ```
 
-**Key points**
-- **Props** are typed and validated at compile time.
-- No `self/this` required; Clean provides context implicitly.
-- `Widget` represents HTML output (string/virtual tree compiled to SSR/CSR code).
+### 4.3 Component Registry
 
-### Registering a Tag
+Components are auto-discovered from `app/ui/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
+
+**Naming convention:**
+- File: `UserCard.cln`
+- Tag: `user-card`
+- Class: `UserCard`
+
+**Manual registry** (optional, in `/config/tags.cln`):
+
 ```clean
-# config/tags.cln
-_tags:
-    "app-user-badge" = "app/components/UserBadge.cln"
-```
-Usage in HTML/markup:
-```html
-<app-user-badge name="Alice" role="Admin"></app-user-badge>
+tags:
+    "app-header": "app/components/Header"
+    "app-footer": "app/components/Footer"
+    "user-card": "app/components/UserCard"
 ```
 
 ---
 
-## 4. Events & Actions
+## 5. Data Binding
 
-Events are declared as attributes and compiled to typed handlers.
+### 5.1 Interpolation Syntax
+
+Use double curly braces for dynamic values:
 
 ```html
-<ui-button kind="primary" onClick="saveUser"></ui-button>
+<h1>Hello, {{user.name}}</h1>
+<p>You have {{notifications.count}} notifications</p>
+<span class="price">{{formatCurrency(product.price)}}</span>
 ```
+
+**Rules:**
+- `{{expression}}` - HTML-escaped by default (XSS-safe)
+- `{{{expression}}}` - Raw HTML (use only for trusted content)
+- Expressions can include property access, function calls, and simple operations
+
+### 5.2 Page Data
+
+Data for pages comes from a companion `.cln` file or inline `<script type="text/clean">`:
+
+```html
+<!-- app/ui/pages/profile.html.cln -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{user.name}}'s Profile</title>
+</head>
+<body>
+    <h1>{{user.name}}</h1>
+    <p>Member since {{formatDate(user.createdAt)}}</p>
+
+    <script type="text/clean">
+        data:
+            user = User.find(params.id)
+    </script>
+</body>
+</html>
+```
+
+Or in a separate file:
 
 ```clean
-functions:
-    void saveUser()
-        # business logic here
+// app/ui/pages/profile.cln
+page: path="/profile/[id]"
+    data:
+        user = User.find(params.id)
 ```
 
-- On the server, actions can trigger full requests.
-- On the client (hydrated/component rendered), actions run via the browser bridge.
+### 5.3 Conditional Rendering
 
-**Standard event attributes**: `onClick`, `onInput`, `onChange`, `onSubmit`, `onKeyDown`, `onKeyUp`.
+```html
+<!-- if/else -->
+<div if="user.isAdmin">
+    <admin-panel></admin-panel>
+</div>
+<div else>
+    <p>Access denied</p>
+</div>
+
+<!-- Show/hide (renders but hides with CSS) -->
+<div show="isLoading">Loading...</div>
+```
+
+### 5.4 List Rendering
+
+```html
+<ul>
+    <li each="post in posts">
+        <a href="/blog/{{post.slug}}">{{post.title}}</a>
+    </li>
+</ul>
+
+<!-- With index -->
+<ol>
+    <li each="item, index in items">
+        {{index + 1}}. {{item.name}}
+    </li>
+</ol>
+```
 
 ---
 
-## 5. Rendering Modes (Simple Rule)
+## 6. Event Handling
 
-Use a single attribute on any component tag to control hydration:
+### 6.1 Event Attributes
 
-- `client="off"` → **SSR only** (default if omitted)
-- `client="on"` → SSR + hydrate **after load**
-- `client="visible"` → SSR + hydrate **when visible**
-- `client="idle"` → SSR + hydrate **when idle**
-- `client="only"` → **Client‑only** (no SSR)
+Use standard HTML event attributes with Clean function names:
 
-Examples:
 ```html
-<app-user-card user-id="42"></app-user-card>                 <!-- SSR only -->
-<app-counter start="5" client="on"></app-counter>           <!-- hydrate on load -->
-<app-chart dataset="q4" client="visible"></app-chart>       <!-- hydrate when visible -->
-<app-live-feed topic="ai" client="only"></app-live-feed>    <!-- client only -->
+<button onclick="saveUser">Save</button>
+<input oninput="updateSearch" type="text">
+<form onsubmit="handleSubmit">
+    ...
+</form>
 ```
 
-### Pro controls (inside components)
+### 6.2 Event Handlers (Clean)
+
+Define handlers in the component or page:
+
 ```clean
-component Counter
-    hydrate: on        # off | on | idle | visible | only (default = off)
+// In component
+component: tag="user-form"
+    state:
+        string name = ""
 
     functions:
-        onMount()
-        onVisible()
-        onIdle()
+        void saveUser()
+            User.create(name: name)
+            redirect("/users")
+
+        void updateName(Event e)
+            name = e.target.value
 ```
-Page attribute `client="..."` overrides the component `hydrate:` if both are present.
 
----
+### 6.3 Event Modifiers
 
-## 6. Server‑Side Rendering (SSR)
-
-- All pages are SSR by default for **fast first paint** and **SEO**.
-- SSR output is safe‑escaped by default (prevents XSS). Interpolation `{...}` escapes HTML.
-- Use `rawHtml(...)` consciously for trusted HTML only.
-
-### SSR Pipeline
-1. Router resolves page → component tree.
-2. `server.wasm` renders HTML from Clean components.
-3. Islands manifest is generated from `client` attributes.
-4. Browser receives HTML + `loader.js` + optional `ui.wasm`.
-
----
-
-## 7. Client‑Side Rendering (Optional & Friendly)
-
-You can run **Clean UI components in the browser** with `ui.wasm` for dynamic or offline views.
-
-**Minimal HTML boot**
 ```html
-<div id="app"></div>
-<script type="module">
-  const bridge = {
-    dom: {
-      create: t => document.createElement(t),
-      setAttr: (el, k, v) => el.setAttribute(k, v),
-      append: (p, c) => p.appendChild(c),
-      text: (el, t) => { el.textContent = t; }
+<!-- Prevent default -->
+<form onsubmit.prevent="handleSubmit">
+
+<!-- Stop propagation -->
+<button onclick.stop="handleClick">
+
+<!-- Once only -->
+<button onclick.once="initialize">
+
+<!-- Key modifiers -->
+<input onkeydown.enter="submitForm">
+<input onkeydown.escape="cancelEdit">
+```
+
+### 6.4 Standard Events
+
+| Event | Description |
+|-------|-------------|
+| `onclick` | Click/tap |
+| `oninput` | Input value change |
+| `onchange` | Input blur with change |
+| `onsubmit` | Form submission |
+| `onfocus` | Element focused |
+| `onblur` | Element lost focus |
+| `onkeydown` | Key pressed |
+| `onkeyup` | Key released |
+| `onmouseenter` | Mouse entered |
+| `onmouseleave` | Mouse left |
+
+---
+
+## 7. Hydration & Client Rendering
+
+### 7.1 Default: SSR Only
+
+By default, pages render on the server. No JavaScript required.
+
+```html
+<!-- This renders server-side, no client JS -->
+<user-profile user-id="123"></user-profile>
+```
+
+### 7.2 Hydration Modes
+
+Add the `client` attribute to enable client-side interactivity:
+
+```html
+<!-- Hydrate immediately after page load -->
+<counter-widget start="0" client="on"></counter-widget>
+
+<!-- Hydrate when element becomes visible -->
+<data-chart dataset="sales" client="visible"></data-chart>
+
+<!-- Hydrate when browser is idle -->
+<notifications-panel client="idle"></notifications-panel>
+
+<!-- Client-only (no SSR) -->
+<live-chat room="support" client="only"></live-chat>
+```
+
+| Mode | SSR | Hydrate When |
+|------|-----|--------------|
+| `client="off"` (default) | Yes | Never |
+| `client="on"` | Yes | Page load |
+| `client="visible"` | Yes | Intersection Observer |
+| `client="idle"` | Yes | requestIdleCallback |
+| `client="only"` | No | Page load |
+
+### 7.3 Component-Level Default
+
+Set default hydration in the component definition:
+
+```clean
+component: tag="live-editor" client="on"
+    // This component always hydrates by default
+```
+
+Page-level `client` attribute overrides component default.
+
+---
+
+## 8. Layouts
+
+### 8.1 Layout Definition
+
+```html
+<!-- app/ui/layouts/main.html.cln -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{title}} - MyApp</title>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <app-header></app-header>
+
+    <main>
+        <slot></slot>
+    </main>
+
+    <app-footer></app-footer>
+</body>
+</html>
+```
+
+### 8.2 Using Layouts
+
+```html
+<!-- app/ui/pages/about.html.cln -->
+<page layout="main"></page>
+
+<h1>About Us</h1>
+<p>We build great software.</p>
+```
+
+### 8.3 Named Slots
+
+```html
+<!-- app/ui/layouts/dashboard.html.cln -->
+<div class="dashboard">
+    <aside>
+        <slot name="sidebar"></slot>
+    </aside>
+    <main>
+        <slot></slot>
+    </main>
+</div>
+```
+
+```html
+<!-- app/ui/pages/dashboard.html.cln -->
+<page layout="dashboard"></page>
+
+<slot name="sidebar">
+    <nav-menu></nav-menu>
+</slot>
+
+<h1>Dashboard</h1>
+<stats-overview></stats-overview>
+```
+
+---
+
+## 9. Forms
+
+### 9.1 Basic Forms
+
+```html
+<form onsubmit.prevent="createUser">
+    <label>
+        Name
+        <input type="text" name="name" bind="formData.name">
+    </label>
+
+    <label>
+        Email
+        <input type="email" name="email" bind="formData.email">
+    </label>
+
+    <button type="submit">Create User</button>
+</form>
+```
+
+### 9.2 Two-Way Binding
+
+The `bind` attribute creates two-way data binding:
+
+```html
+<input type="text" bind="searchQuery">
+<textarea bind="content"></textarea>
+<select bind="selectedCountry">
+    <option each="country in countries" value="{{country.code}}">
+        {{country.name}}
+    </option>
+</select>
+```
+
+### 9.3 Form Validation
+
+```html
+<input
+    type="email"
+    bind="email"
+    required
+    validate="email"
+    error-message="Please enter a valid email">
+
+<span if="errors.email" class="error">
+    {{errors.email}}
+</span>
+```
+
+---
+
+## 10. Styling
+
+### 10.1 Standard CSS
+
+Use standard CSS files in `/public/css/`:
+
+```html
+<head>
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+```
+
+### 10.2 Scoped Styles
+
+Add scoped styles within components:
+
+```html
+<!-- In component definition or page -->
+<style scoped>
+    .user-card {
+        padding: 1rem;
+        border: 1px solid #e5e7eb;
     }
-  };
-  const { instance } = await WebAssembly.instantiateStreaming(fetch('/ui.wasm'), { bridge });
-  instance.exports.boot('app', {});
-</script>
+</style>
 ```
 
-**Clean side**
-```clean
-module UIClient
-    functions:
-        boot(mountId: string, state: map<string, any>)
-            # build DOM via bridge.dom.*
-```
+### 10.3 CSS Variables (Theming)
 
-> Tip: SSR + hydrate is the default. Use `ui.wasm` for offline‑first pages or highly dynamic widgets.
+Define theme in `/config/ui.cln`:
 
----
-
-## 8. Islands Manifest & Loader
-
-When the SSR engine finds `client="..."`, it emits a small page‑level manifest:
-
-```
-dist/manifest.islands.json
-{
-  "app-chart": { "bundle": "/ui/app-chart.js", "strategy": "visible" },
-  "app-counter": { "bundle": "/ui/app-counter.js", "strategy": "idle" }
-}
-```
-
-A tiny `loader.js` hydrates only those nodes per strategy (load/visible/idle).
-
----
-
-## 9. Theming & CSS
-
-- Use standard CSS in `/public/ui.css` (or any file under `/public`).
-- Variables in `/config/ui.cln` compile to CSS variables automatically.
-
-**`/config/ui.cln`**
 ```clean
 ui:
     theme:
-        color:
-            primary = "#2563eb"
-            text = "#0f172a"
+        colors:
+            primary: "#2563eb"
+            secondary: "#64748b"
+            background: "#ffffff"
+            text: "#0f172a"
+        spacing:
+            sm: "0.5rem"
+            md: "1rem"
+            lg: "2rem"
 ```
 
-**`/public/ui.css`**
+Generated CSS:
+
 ```css
 :root {
-  --color-primary: #2563eb;
-  --color-text: #0f172a;
+    --color-primary: #2563eb;
+    --color-secondary: #64748b;
+    --color-background: #ffffff;
+    --color-text: #0f172a;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 2rem;
 }
-.user-badge { font-weight: 600; color: var(--color-text); }
 ```
 
-You may use any CSS framework (Tailwind, Bootstrap) without special adapters.
+### 10.4 Framework Compatibility
+
+Use any CSS framework. No adapters needed:
+
+```html
+<!-- Tailwind -->
+<button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+    Save
+</button>
+
+<!-- Bootstrap -->
+<button class="btn btn-primary">Save</button>
+```
 
 ---
 
-## 10. Accessibility (A11y)
+## 11. Accessibility
 
-- Prefer semantic HTML elements (`<button>`, `<nav>`, `<header>`).
-- Always set `aria-label` or text content for interactive elements.
-- Maintain focus order; use `tabindex` wisely.
-- Provide text alternatives for icons/images.
+### 11.1 Semantic HTML
+
+Always use semantic elements:
+
+```html
+<!-- Good -->
+<nav>
+    <ul>
+        <li><a href="/">Home</a></li>
+    </ul>
+</nav>
+
+<main>
+    <article>
+        <h1>{{post.title}}</h1>
+    </article>
+</main>
+
+<!-- Avoid -->
+<div class="nav">
+    <div class="nav-item" onclick="goHome">Home</div>
+</div>
+```
+
+### 11.2 ARIA Attributes
+
+```html
+<button
+    aria-label="Close dialog"
+    aria-expanded="{{isOpen}}"
+    onclick="toggleMenu">
+    <icon-x></icon-x>
+</button>
+
+<div role="alert" aria-live="polite" if="notification">
+    {{notification.message}}
+</div>
+```
 
 ---
 
-## 11. Security
+## 12. Security
 
-- Interpolations `{...}` are **HTML‑escaped** by default.
-- Avoid `rawHtml` except for trusted, sanitized content.
-- Client bridges are minimal and never expose `eval` or unrestricted FS.
-- Enforce CSP headers at the host (see Server spec).
+### 12.1 XSS Prevention
+
+- `{{expression}}` is HTML-escaped by default
+- Use `{{{expression}}}` only for trusted, sanitized HTML
+- Never use raw HTML with user input
+
+### 12.2 CSRF Protection
+
+Forms automatically include CSRF tokens:
+
+```html
+<form method="POST" action="/api/users">
+    <!-- CSRF token auto-injected -->
+    <input type="text" name="name">
+    <button type="submit">Create</button>
+</form>
+```
+
+### 12.3 Content Security Policy
+
+Configure CSP in `/config/server.cln`:
+
+```clean
+server:
+    security:
+        csp:
+            default-src: "'self'"
+            script-src: "'self' 'unsafe-inline'"
+            style-src: "'self' 'unsafe-inline'"
+```
 
 ---
 
-## 12. Testing
+## 13. File Structure
 
-- **SSR snapshots:** render components in a test host and compare HTML.
-- **Hydration tests:** run the loader in a headless browser and assert DOM.
-- **Bridge mocks:** use a mock bridge to simulate events and state changes.
+```
+/app
+├── /components          # Clean component definitions
+│   ├── Header.cln
+│   ├── Footer.cln
+│   ├── UserCard.cln
+│   └── ...
+├── /pages               # HTML pages
+│   ├── index.html
+│   ├── about.html
+│   ├── /blog
+│   │   ├── index.html
+│   │   └── [slug].html
+│   └── /dashboard
+│       └── index.html
+├── /layouts             # Layout templates
+│   ├── main.html
+│   └── admin.html
+└── /partials            # Reusable HTML fragments
+    ├── nav.html
+    └── sidebar.html
+
+/config
+├── tags.cln             # Component registry (optional)
+└── ui.cln               # Theme configuration
+
+/public
+├── /css
+│   └── main.css
+├── /js
+│   └── app.js
+└── /images
+    └── logo.svg
+
+/dist                    # Build output
+├── server.wasm
+├── ui.wasm
+├── manifest.islands.json
+└── /public
+```
 
 ---
 
-## 13. AI Development Notes
+## 14. Build Output
 
-For Claude Code and other AI tools:
-- Components are registered in `config/tags.cln` with **deterministic names**.
-- Rendering modes are explicit (`client` attr, or `hydrate:` in component).
-- Bridge contracts are small, typed, and consistent across platforms.
-- Use this file with `03_frame_server.md` to reason about SSR/CSR interactions.
+### 14.1 Islands Manifest
+
+```json
+{
+    "components": {
+        "counter-widget": {
+            "bundle": "/js/counter-widget.js",
+            "strategy": "on"
+        },
+        "data-chart": {
+            "bundle": "/js/data-chart.js",
+            "strategy": "visible"
+        }
+    },
+    "pages": {
+        "/": {
+            "components": ["app-header", "app-footer"]
+        },
+        "/dashboard": {
+            "components": ["counter-widget", "data-chart"],
+            "auth": "required"
+        }
+    }
+}
+```
+
+### 14.2 Loader Script
+
+A minimal `loader.js` hydrates islands based on strategy:
+
+```javascript
+// Auto-generated, ~2KB
+const manifest = await fetch('/manifest.islands.json').then(r => r.json());
+
+// Hydrate based on strategy
+document.querySelectorAll('[data-hydrate]').forEach(el => {
+    const strategy = el.dataset.hydrate;
+    const component = el.tagName.toLowerCase();
+
+    if (strategy === 'on') hydrateNow(el, component);
+    if (strategy === 'visible') observeVisible(el, component);
+    if (strategy === 'idle') requestIdleCallback(() => hydrateNow(el, component));
+});
+```
 
 ---
 
-## 14. File Locations
+## 15. Examples
 
-- Components: `/app/components/*.cln`
-- Pages: `/app/pages/*.cln`
-- Tags registry: `/config/tags.cln`
-- UI config: `/config/ui.cln`
-- Public CSS/JS: `/public/*`
-- Build output: `/dist/ui.wasm`, `/dist/manifest.islands.json`, `/public/loader.js`
+### 15.1 Simple Page
+
+```html
+<!-- app/ui/pages/index.html.cln -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome</title>
+</head>
+<body>
+    <app-header></app-header>
+
+    <main class="container">
+        <h1>Welcome to Frame</h1>
+        <p>Build modern web apps with HTML.</p>
+
+        <a href="/docs" class="btn btn-primary">Get Started</a>
+    </main>
+
+    <app-footer></app-footer>
+</body>
+</html>
+```
+
+### 15.2 Dynamic Page with Data
+
+```html
+<!-- app/ui/pages/blog/[slug].html.cln -->
+<page layout="main"></page>
+
+<script type="text/clean">
+    data:
+        post = Post.find: where: slug=params.slug
+        comments = post.comments: order: createdAt="desc"
+</script>
+
+<article class="blog-post">
+    <header>
+        <h1>{{post.title}}</h1>
+        <p class="meta">
+            By {{post.author.name}} on {{formatDate(post.createdAt)}}
+        </p>
+    </header>
+
+    <div class="content">
+        {{{post.content}}}
+    </div>
+
+    <section class="comments">
+        <h2>Comments ({{comments.length}})</h2>
+
+        <div each="comment in comments" class="comment">
+            <comment-card comment-id="{{comment.id}}"></comment-card>
+        </div>
+
+        <comment-form post-id="{{post.id}}" client="on"></comment-form>
+    </section>
+</article>
+```
+
+### 15.3 Interactive Component
+
+```clean
+// app/ui/components/CommentForm.cln
+component: tag="comment-form" client="on"
+    props:
+        string postId
+
+    state:
+        string content = ""
+        boolean submitting = false
+
+    functions:
+        string render()
+            return "<form class=\"comment-form\">" +
+                "<textarea bind=\"content\" placeholder=\"Write a comment...\"></textarea>" +
+                "<button type=\"submit\" onclick=\"submitComment\" disabled=\"" + submitting.toString() + "\">" +
+                    (if submitting then "Posting..." else "Post Comment") +
+                "</button>" +
+            "</form>"
+
+        void submitComment()
+            submitting = true
+            Comment.create(postId: postId, content: content)
+            content = ""
+            submitting = false
+```
+
+---
+
+## 16. Migration from v1
+
+If migrating from Clean-first syntax:
+
+| v1 (Clean DSL) | v2 (HTML-first) |
+|----------------|-----------------|
+| `page:` blocks | `.html.cln` files |
+| `component:` with layout | `.cln` with `render()` |
+| Clean templating | HTML + `{{}}` |
+| `render()` returns Widget | `render()` returns string |
 
 ---
 
 **End of Document 05**
-

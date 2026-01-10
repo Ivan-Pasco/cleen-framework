@@ -1,0 +1,4 @@
+// Admin users endpoint
+// Route: GET /api/admin/users
+
+return "{\"users\": []}"

@@ -1,0 +1,5 @@
+// Single user API
+// Route: GET /api/users/:id
+
+// Note: id is automatically provided by framework for dynamic routes
+return "{\"id\": " + id + ", \"name\": \"Alice Johnson\", \"email\": \"alice@example.com\", \"role\": \"admin\", \"active\": true}"

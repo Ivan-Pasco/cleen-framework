@@ -1,0 +1,16 @@
+// Single Todo API
+// Route: GET /api/todos/:id - Get a todo
+// Route: PUT /api/todos/:id - Update a todo
+// Route: DELETE /api/todos/:id - Delete a todo
+
+string id = _req_param("id")
+string method = _req_method()
+
+if method == "PUT"
+	return "{\"message\": \"Todo " + id + " updated\"}"
+
+if method == "DELETE"
+	return "{\"message\": \"Todo " + id + " deleted\"}"
+
+// Default: GET
+return "{\"id\": " + id + ", \"title\": \"Sample Todo\", \"done\": false}"

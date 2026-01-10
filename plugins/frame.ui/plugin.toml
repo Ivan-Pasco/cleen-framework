@@ -1,0 +1,40 @@
+[plugin]
+name = "frame.ui"
+version = "2.0.0"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags and component definitions"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[exports]
+# HTML page processing (main entry point for pages)
+process_html = "process_html"
+
+# Component block expansion (for .cln component definitions)
+expand = "expand_block"
+
+# HTML validation against component registry
+validate_html = "validate_html"
+
+# Page metadata extraction
+get_page_meta = "get_page_meta"
+
+# IDE keyword support
+get_keywords = "get_keywords"
+
+[blocks]
+# DSL blocks handled by expand_block
+handles = ["component"]
+
+[html]
+# File extensions processed as HTML pages
+extensions = [".html"]
+
+# Directives recognized in HTML
+directives = ["if", "else", "each", "bind", "client", "slot"]
+
+# Interpolation syntax
+interpolation_escaped = "{{}}"
+interpolation_raw = "{{{}}}"

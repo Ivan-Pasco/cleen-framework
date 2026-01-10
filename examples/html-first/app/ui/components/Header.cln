@@ -1,0 +1,26 @@
+// Header Component
+// Renders the site header with navigation
+
+component:
+	string render()
+		string html = "<header class=\"site-header\">"
+		html = html + "<div class=\"header-content\">"
+		html = html + "<a href=\"/\" class=\"logo\">"
+		html = html + "<img src=\"/images/logo.svg\" alt=\"My App\">"
+		html = html + "</a>"
+		html = html + "<nav class=\"main-nav\">"
+		html = html + "<a href=\"/\">Home</a>"
+		html = html + "<a href=\"/blog\">Blog</a>"
+		html = html + "<a href=\"/about\">About</a>"
+		html = html + "<a href=\"/contact\">Contact</a>"
+		html = html + "</nav>"
+		html = html + "<div class=\"search-box\">"
+		html = html + "<input type=\"search\" placeholder=\"Search...\" aria-label=\"Search\">"
+		html = html + "</div>"
+		html = html + "<div class=\"user-menu\">"
+		html = html + "<a href=\"/login\" class=\"btn btn-outline\">Login</a>"
+		html = html + "<a href=\"/signup\" class=\"btn btn-primary\">Sign Up</a>"
+		html = html + "</div>"
+		html = html + "</div>"
+		html = html + "</header>"
+		return html

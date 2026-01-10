@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Test 04: Canvas Integration (Phase 8)</title>
+    <style>
+        :root {
+            --color-primary: #4a90d9;
+            --color-secondary: #6c757d;
+            --color-success: #28a745;
+            --color-error: #dc3545;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; padding: 20px; }
+        h1, h2, h3 { margin-bottom: 16px; }
+        .test-section { margin-bottom: 24px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; }
+        .test-section h2 { color: var(--color-primary); }
+        .test-result { padding: 8px; margin-top: 8px; border-radius: 4px; }
+        .test-result.pass { background: #d4edda; color: #155724; }
+        .test-result.fail { background: #f8d7da; color: #721c24; }
+        .ui-column { display: flex; flex-direction: column; gap: 8px; }
+        .ui-row { display: flex; flex-direction: row; gap: 8px; align-items: center; flex-wrap: wrap; }
+        .ui-button { padding: 8px 16px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .ui-button:hover { opacity: 0.9; }
+        .ui-button.secondary { background: var(--color-secondary); }
+        canvas { border: 2px solid #333; border-radius: 4px; display: block; margin: 8px 0; }
+        canvas:focus { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+        .info-panel { background: #f0f0f0; padding: 12px; border-radius: 4px; margin: 8px 0; font-family: monospace; font-size: 12px; }
+        #test-results { position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border: 1px solid #ddd; border-radius: 8px; min-width: 200px; max-height: 90vh; overflow: auto; z-index: 1000; }
+    </style>
+</head>
+<body>
+    <h1>UI Test 04: Canvas Integration (Phase 8)</h1>
+
+    <div id="test-results">
+        <h3>Test Results</h3>
+        <div id="results-container"></div>
+    </div>
+
+    <!-- Test Section: Canvas Scene Widget (UI-30) -->
+    <section class="test-section" id="test-canvas-scene">
+        <h2>UI-30: Canvas Scene Widget</h2>
+
+        <p>Basic canvas with static drawing:</p>
+        <canvas id="canvas-static" data-canvas-id="static" width="400" height="200"
+                data-draw="canvas.clear('#1a1a2e'); canvas.rect(20, 20, 100, 60, {fill: '#e94560'}); canvas.circle(200, 100, 40, {fill: '#0f3460'}); canvas.text('Static Canvas', 280, 100, {fill: '#fff'});">
+        </canvas>
+
+        <div class="info-panel" id="canvas-static-info">
+            Canvas initialized: <span id="static-status">checking...</span>
+        </div>
+    </section>
+
+    <!-- Test Section: Drawing Primitives (UI-31) -->
+    <section class="test-section" id="test-primitives">
+        <h2>UI-31: Drawing Primitives</h2>
+
+        <div class="ui-row" style="margin-bottom: 8px;">
+            <button class="ui-button" id="draw-shapes">Draw Shapes</button>
+            <button class="ui-button" id="draw-paths">Draw Paths</button>
+            <button class="ui-button" id="draw-text">Draw Text</button>
+            <button class="ui-button" id="draw-transforms">Transforms</button>
+            <button class="ui-button secondary" id="clear-primitives">Clear</button>
+        </div>
+
+        <canvas id="canvas-primitives" data-canvas-id="primitives" width="600" height="300"></canvas>
+
+        <div class="info-panel">
+            Available primitives: rect, circle, ellipse, line, triangle, text, beginPath, moveTo, lineTo, closePath, fill, stroke, save, restore, translate, rotate, scale
+        </div>
+    </section>
+
+    <!-- Test Section: Animation Loop (UI-32) -->
+    <section class="test-section" id="test-animation">
+        <h2>UI-32: Animation Frame Loop</h2>
+
+        <div class="ui-row" style="margin-bottom: 8px;">
+            <button class="ui-button" id="start-animation">Start</button>
+            <button class="ui-button secondary" id="pause-animation">Pause</button>
+            <button class="ui-button secondary" id="resume-animation">Resume</button>
+        </div>
+
+        <canvas id="canvas-animation" data-canvas-id="animation" width="600" height="200" data-animate="false"></canvas>
+
+        <div class="info-panel">
+            <div>Frame Count: <span id="anim-framecount">0</span></div>
+            <div>FPS: <span id="anim-fps">0</span></div>
+            <div>Time: <span id="anim-time">0.00</span>s</div>
+            <div>Delta: <span id="anim-delta">0.000</span>ms</div>
+        </div>
+    </section>
+
+    <!-- Test Section: Canvas Input (UI-33) -->
+    <section class="test-section" id="test-input">
+        <h2>UI-33: Canvas Input Handling</h2>
+
+        <p>Click and drag on the canvas. Press keys when focused.</p>
+
+        <canvas id="canvas-input" data-canvas-id="input" width="600" height="300" tabindex="0"></canvas>
+
+        <div class="info-panel">
+            <div>Mouse: (<span id="input-x">0</span>, <span id="input-y">0</span>)</div>
+            <div>Mouse Down: <span id="input-down">false</span></div>
+            <div>Last Click: (<span id="input-click-x">-</span>, <span id="input-click-y">-</span>)</div>
+            <div>Keys Held: <span id="input-keys">none</span></div>
+            <div>Touch Count: <span id="input-touch">0</span></div>
+        </div>
+    </section>
+
+    <!-- Test Section: Sprites (UI-34) -->
+    <section class="test-section" id="test-sprites">
+        <h2>UI-34: Sprite & Tilemap Support</h2>
+
+        <div class="ui-row" style="margin-bottom: 8px;">
+            <button class="ui-button" id="draw-sprite">Draw Sprite</button>
+            <button class="ui-button" id="draw-tilemap">Draw Tilemap</button>
+        </div>
+
+        <canvas id="canvas-sprites" data-canvas-id="sprites" width="600" height="300"></canvas>
+
+        <div class="info-panel">
+            Sprite cache: <span id="sprite-cache-count">0</span> images loaded
+        </div>
+    </section>
+
+    <script src="../../plugins/frame.ui/runtime/clean-runtime.js"></script>
+    <script>
+        // Test runner
+        const tests = [];
+        const resultsContainer = document.getElementById('results-container');
+
+        function test(name, fn) {
+            tests.push({ name, fn });
+        }
+
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error(message);
+            }
+        }
+
+        function runTests() {
+            let passed = 0;
+            let failed = 0;
+
+            tests.forEach(({ name, fn }) => {
+                try {
+                    fn();
+                    passed++;
+                    addResult(name, true);
+                } catch (e) {
+                    failed++;
+                    addResult(name, false, e.message);
+                    console.error(`Test failed: ${name}`, e);
+                }
+            });
+
+            console.log(`Tests completed: ${passed} passed, ${failed} failed`);
+        }
+
+        function addResult(name, success, error) {
+            const div = document.createElement('div');
+            div.className = `test-result ${success ? 'pass' : 'fail'}`;
+            div.textContent = success ? `✓ ${name}` : `✗ ${name}: ${error}`;
+            resultsContainer.appendChild(div);
+        }
+
+        // Initialize canvases manually since they're not part of a screen
+        function initManualCanvas(canvasId) {
+            const canvas = document.querySelector(`canvas[data-canvas-id="${canvasId}"]`);
+            if (!canvas) return null;
+
+            const ctx = canvas.getContext('2d');
+            return { canvas, ctx, api: window.CleanRuntime.canvases.get(canvasId)?.api || createCanvasAPI(ctx, canvas) };
+        }
+
+        // Create canvas API (copy from runtime for direct use)
+        function createCanvasAPI(ctx, canvas) {
+            return {
+                get width() { return canvas.width; },
+                get height() { return canvas.height; },
+                clear(color) {
+                    if (color) {
+                        ctx.fillStyle = color;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    } else {
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                },
+                rect(x, y, width, height, options = {}) {
+                    ctx.beginPath();
+                    ctx.rect(x, y, width, height);
+                    if (options.fill) { ctx.fillStyle = options.fill; ctx.fill(); }
+                    if (options.stroke) { ctx.strokeStyle = options.stroke; ctx.lineWidth = options.lineWidth || 1; ctx.stroke(); }
+                },
+                circle(x, y, radius, options = {}) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    if (options.fill) { ctx.fillStyle = options.fill; ctx.fill(); }
+                    if (options.stroke) { ctx.strokeStyle = options.stroke; ctx.lineWidth = options.lineWidth || 1; ctx.stroke(); }
+                },
+                ellipse(x, y, radiusX, radiusY, options = {}) {
+                    ctx.beginPath();
+                    ctx.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
+                    if (options.fill) { ctx.fillStyle = options.fill; ctx.fill(); }
+                    if (options.stroke) { ctx.strokeStyle = options.stroke; ctx.lineWidth = options.lineWidth || 1; ctx.stroke(); }
+                },
+                line(x1, y1, x2, y2, options = {}) {
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.strokeStyle = options.stroke || '#000';
+                    ctx.lineWidth = options.lineWidth || 1;
+                    ctx.stroke();
+                },
+                triangle(x1, y1, x2, y2, x3, y3, options = {}) {
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.lineTo(x3, y3);
+                    ctx.closePath();
+                    if (options.fill) { ctx.fillStyle = options.fill; ctx.fill(); }
+                    if (options.stroke) { ctx.strokeStyle = options.stroke; ctx.lineWidth = options.lineWidth || 1; ctx.stroke(); }
+                },
+                beginPath() { ctx.beginPath(); },
+                moveTo(x, y) { ctx.moveTo(x, y); },
+                lineTo(x, y) { ctx.lineTo(x, y); },
+                closePath() { ctx.closePath(); },
+                fill(color) { if (color) ctx.fillStyle = color; ctx.fill(); },
+                stroke(color, lineWidth) { if (color) ctx.strokeStyle = color; if (lineWidth) ctx.lineWidth = lineWidth; ctx.stroke(); },
+                text(str, x, y, options = {}) {
+                    ctx.font = options.font || '16px sans-serif';
+                    ctx.fillStyle = options.fill || '#000';
+                    ctx.fillText(str, x, y);
+                },
+                save() { ctx.save(); },
+                restore() { ctx.restore(); },
+                translate(x, y) { ctx.translate(x, y); },
+                rotate(angle) { ctx.rotate(angle * Math.PI / 180); },
+                scale(x, y) { ctx.scale(x, y); }
+            };
+        }
+
+        // UI-30: Static canvas test
+        const staticCanvas = document.getElementById('canvas-static');
+        const staticCtx = staticCanvas.getContext('2d');
+        const staticApi = createCanvasAPI(staticCtx, staticCanvas);
+
+        // Draw initial content
+        staticApi.clear('#1a1a2e');
+        staticApi.rect(20, 20, 100, 60, { fill: '#e94560' });
+        staticApi.circle(200, 100, 40, { fill: '#0f3460' });
+        staticApi.text('Static Canvas', 280, 100, { fill: '#fff' });
+        document.getElementById('static-status').textContent = 'Yes';
+
+        // UI-31: Primitives canvas
+        const primCanvas = document.getElementById('canvas-primitives');
+        const primCtx = primCanvas.getContext('2d');
+        const primApi = createCanvasAPI(primCtx, primCanvas);
+
+        document.getElementById('draw-shapes').addEventListener('click', () => {
+            primApi.clear('#222');
+            // Rectangle
+            primApi.rect(20, 20, 80, 50, { fill: '#e94560' });
+            // Circle
+            primApi.circle(180, 45, 35, { fill: '#0f3460' });
+            // Ellipse
+            primApi.ellipse(280, 45, 50, 30, { fill: '#00b894' });
+            // Line
+            primApi.line(350, 20, 450, 70, { stroke: '#fdcb6e', lineWidth: 3 });
+            // Triangle
+            primApi.triangle(500, 70, 550, 20, 580, 70, { fill: '#a29bfe' });
+            // Stroked rect
+            primApi.rect(20, 100, 80, 50, { stroke: '#fff', lineWidth: 2 });
+            // Stroked circle
+            primApi.circle(180, 125, 35, { stroke: '#fff', lineWidth: 2 });
+        });
+
+        document.getElementById('draw-paths').addEventListener('click', () => {
+            primApi.clear('#222');
+            // Custom path - star shape
+            primApi.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (i * 144 - 90) * Math.PI / 180;
+                const x = 100 + Math.cos(angle) * 50;
+                const y = 80 + Math.sin(angle) * 50;
+                if (i === 0) primApi.moveTo(x, y);
+                else primApi.lineTo(x, y);
+            }
+            primApi.closePath();
+            primApi.fill('#ffd700');
+
+            // Arrow path
+            primApi.beginPath();
+            primApi.moveTo(200, 100);
+            primApi.lineTo(280, 100);
+            primApi.lineTo(280, 80);
+            primApi.lineTo(320, 110);
+            primApi.lineTo(280, 140);
+            primApi.lineTo(280, 120);
+            primApi.lineTo(200, 120);
+            primApi.closePath();
+            primApi.fill('#00cec9');
+
+            // Wave path
+            primApi.beginPath();
+            primApi.moveTo(380, 100);
+            for (let x = 0; x < 200; x += 10) {
+                const y = Math.sin(x * 0.05) * 30;
+                primApi.lineTo(380 + x, 100 + y);
+            }
+            primApi.stroke('#ff7675', 3);
+        });
+
+        document.getElementById('draw-text').addEventListener('click', () => {
+            primApi.clear('#222');
+            primApi.text('Small Text', 20, 40, { font: '14px Arial', fill: '#fff' });
+            primApi.text('Medium Text', 20, 80, { font: '20px Georgia', fill: '#74b9ff' });
+            primApi.text('Large Text', 20, 130, { font: 'bold 32px sans-serif', fill: '#fdcb6e' });
+            primApi.text('Unicode: ★ ♠ ♣ ♥ ♦ ☀', 20, 180, { font: '24px Arial', fill: '#00cec9' });
+            primApi.text('Numbers: 12345.67890', 20, 220, { font: '20px monospace', fill: '#a29bfe' });
+        });
+
+        document.getElementById('draw-transforms').addEventListener('click', () => {
+            primApi.clear('#222');
+
+            // Draw without transform
+            primApi.rect(50, 50, 40, 40, { fill: '#e94560' });
+            primApi.text('Original', 50, 110, { fill: '#fff' });
+
+            // Translate
+            primApi.save();
+            primApi.translate(150, 0);
+            primApi.rect(50, 50, 40, 40, { fill: '#0f3460' });
+            primApi.text('Translated', 40, 110, { fill: '#fff' });
+            primApi.restore();
+
+            // Rotate
+            primApi.save();
+            primApi.translate(320, 70);
+            primApi.rotate(45);
+            primApi.rect(-20, -20, 40, 40, { fill: '#00b894' });
+            primApi.restore();
+            primApi.text('Rotated 45°', 280, 130, { fill: '#fff' });
+
+            // Scale
+            primApi.save();
+            primApi.translate(450, 70);
+            primApi.scale(1.5, 0.75);
+            primApi.rect(-20, -20, 40, 40, { fill: '#fdcb6e' });
+            primApi.restore();
+            primApi.text('Scaled', 430, 130, { fill: '#fff' });
+
+            // Combined transforms
+            primApi.save();
+            primApi.translate(150, 200);
+            primApi.rotate(30);
+            primApi.scale(2, 1);
+            primApi.rect(-15, -15, 30, 30, { fill: '#a29bfe' });
+            primApi.restore();
+            primApi.text('Combined', 120, 270, { fill: '#fff' });
+        });
+
+        document.getElementById('clear-primitives').addEventListener('click', () => {
+            primApi.clear();
+        });
+
+        // UI-32: Animation canvas
+        const animCanvas = document.getElementById('canvas-animation');
+        const animCtx = animCanvas.getContext('2d');
+        let animRunning = false;
+        let animFrameCount = 0;
+        let animStartTime = 0;
+        let animLastTime = 0;
+        let animBallX = 50;
+        let animBallVx = 200;
+        let animBallY = 100;
+        let animBallVy = 150;
+        let fpsHistory = [];
+
+        function animationLoop(timestamp) {
+            if (!animRunning) return;
+
+            if (animLastTime === 0) {
+                animLastTime = timestamp;
+                animStartTime = timestamp;
+            }
+
+            const deltaTime = (timestamp - animLastTime) / 1000;
+            animLastTime = timestamp;
+            animFrameCount++;
+
+            // Calculate FPS
+            fpsHistory.push(1 / deltaTime);
+            if (fpsHistory.length > 60) fpsHistory.shift();
+            const avgFps = fpsHistory.reduce((a, b) => a + b, 0) / fpsHistory.length;
+
+            // Update
+            animBallX += animBallVx * deltaTime;
+            animBallY += animBallVy * deltaTime;
+
+            // Bounce
+            if (animBallX > animCanvas.width - 20 || animBallX < 20) {
+                animBallVx = -animBallVx;
+                animBallX = Math.max(20, Math.min(animCanvas.width - 20, animBallX));
+            }
+            if (animBallY > animCanvas.height - 20 || animBallY < 20) {
+                animBallVy = -animBallVy;
+                animBallY = Math.max(20, Math.min(animCanvas.height - 20, animBallY));
+            }
+
+            // Draw
+            animCtx.fillStyle = '#1a1a2e';
+            animCtx.fillRect(0, 0, animCanvas.width, animCanvas.height);
+
+            animCtx.beginPath();
+            animCtx.arc(animBallX, animBallY, 20, 0, Math.PI * 2);
+            animCtx.fillStyle = '#e94560';
+            animCtx.fill();
+
+            // Update info
+            document.getElementById('anim-framecount').textContent = animFrameCount;
+            document.getElementById('anim-fps').textContent = avgFps.toFixed(1);
+            document.getElementById('anim-time').textContent = ((timestamp - animStartTime) / 1000).toFixed(2);
+            document.getElementById('anim-delta').textContent = (deltaTime * 1000).toFixed(1);
+
+            requestAnimationFrame(animationLoop);
+        }
+
+        document.getElementById('start-animation').addEventListener('click', () => {
+            if (!animRunning) {
+                animRunning = true;
+                animLastTime = 0;
+                animFrameCount = 0;
+                fpsHistory = [];
+                requestAnimationFrame(animationLoop);
+            }
+        });
+
+        document.getElementById('pause-animation').addEventListener('click', () => {
+            animRunning = false;
+        });
+
+        document.getElementById('resume-animation').addEventListener('click', () => {
+            if (!animRunning) {
+                animRunning = true;
+                animLastTime = 0; // Reset delta calculation
+                requestAnimationFrame(animationLoop);
+            }
+        });
+
+        // UI-33: Input canvas
+        const inputCanvas = document.getElementById('canvas-input');
+        const inputCtx = inputCanvas.getContext('2d');
+        let inputMouseX = 0, inputMouseY = 0;
+        let inputMouseDown = false;
+        let inputLastClickX = '-', inputLastClickY = '-';
+        let inputKeysHeld = new Set();
+        let drawPoints = [];
+
+        function drawInputCanvas() {
+            inputCtx.fillStyle = '#1a1a2e';
+            inputCtx.fillRect(0, 0, inputCanvas.width, inputCanvas.height);
+
+            // Draw cursor position
+            inputCtx.beginPath();
+            inputCtx.arc(inputMouseX, inputMouseY, 10, 0, Math.PI * 2);
+            inputCtx.strokeStyle = inputMouseDown ? '#e94560' : '#fff';
+            inputCtx.lineWidth = 2;
+            inputCtx.stroke();
+
+            // Draw trail
+            if (drawPoints.length > 1) {
+                inputCtx.beginPath();
+                inputCtx.moveTo(drawPoints[0].x, drawPoints[0].y);
+                for (let i = 1; i < drawPoints.length; i++) {
+                    inputCtx.lineTo(drawPoints[i].x, drawPoints[i].y);
+                }
+                inputCtx.strokeStyle = '#00b894';
+                inputCtx.lineWidth = 3;
+                inputCtx.stroke();
+            }
+
+            // Draw last click marker
+            if (inputLastClickX !== '-') {
+                inputCtx.beginPath();
+                inputCtx.moveTo(inputLastClickX - 10, inputLastClickY - 10);
+                inputCtx.lineTo(inputLastClickX + 10, inputLastClickY + 10);
+                inputCtx.moveTo(inputLastClickX + 10, inputLastClickY - 10);
+                inputCtx.lineTo(inputLastClickX - 10, inputLastClickY + 10);
+                inputCtx.strokeStyle = '#fdcb6e';
+                inputCtx.lineWidth = 2;
+                inputCtx.stroke();
+            }
+
+            // Instructions
+            inputCtx.fillStyle = '#aaa';
+            inputCtx.font = '14px sans-serif';
+            inputCtx.fillText('Click and drag to draw. Press keys when focused.', 10, inputCanvas.height - 10);
+        }
+
+        inputCanvas.addEventListener('mousemove', (e) => {
+            const rect = inputCanvas.getBoundingClientRect();
+            inputMouseX = e.clientX - rect.left;
+            inputMouseY = e.clientY - rect.top;
+            document.getElementById('input-x').textContent = Math.round(inputMouseX);
+            document.getElementById('input-y').textContent = Math.round(inputMouseY);
+
+            if (inputMouseDown) {
+                drawPoints.push({ x: inputMouseX, y: inputMouseY });
+                if (drawPoints.length > 100) drawPoints.shift();
+            }
+
+            drawInputCanvas();
+        });
+
+        inputCanvas.addEventListener('mousedown', (e) => {
+            inputMouseDown = true;
+            document.getElementById('input-down').textContent = 'true';
+            drawPoints = [];
+        });
+
+        inputCanvas.addEventListener('mouseup', (e) => {
+            inputMouseDown = false;
+            document.getElementById('input-down').textContent = 'false';
+        });
+
+        inputCanvas.addEventListener('click', (e) => {
+            const rect = inputCanvas.getBoundingClientRect();
+            inputLastClickX = Math.round(e.clientX - rect.left);
+            inputLastClickY = Math.round(e.clientY - rect.top);
+            document.getElementById('input-click-x').textContent = inputLastClickX;
+            document.getElementById('input-click-y').textContent = inputLastClickY;
+            drawInputCanvas();
+        });
+
+        inputCanvas.addEventListener('keydown', (e) => {
+            inputKeysHeld.add(e.key);
+            document.getElementById('input-keys').textContent = [...inputKeysHeld].join(' + ') || 'none';
+        });
+
+        inputCanvas.addEventListener('keyup', (e) => {
+            inputKeysHeld.delete(e.key);
+            document.getElementById('input-keys').textContent = [...inputKeysHeld].join(' + ') || 'none';
+        });
+
+        inputCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            document.getElementById('input-touch').textContent = e.touches.length;
+        });
+
+        inputCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length > 0) {
+                const rect = inputCanvas.getBoundingClientRect();
+                inputMouseX = e.touches[0].clientX - rect.left;
+                inputMouseY = e.touches[0].clientY - rect.top;
+                document.getElementById('input-x').textContent = Math.round(inputMouseX);
+                document.getElementById('input-y').textContent = Math.round(inputMouseY);
+                drawInputCanvas();
+            }
+        });
+
+        inputCanvas.addEventListener('touchend', (e) => {
+            document.getElementById('input-touch').textContent = e.touches.length;
+        });
+
+        // Initial draw
+        drawInputCanvas();
+
+        // UI-34: Sprites canvas
+        const spriteCanvas = document.getElementById('canvas-sprites');
+        const spriteCtx = spriteCanvas.getContext('2d');
+        const spriteApi = createCanvasAPI(spriteCtx, spriteCanvas);
+
+        // Create a small sprite programmatically
+        function createDemoSprite() {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 32;
+            tempCanvas.height = 32;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Draw a simple character sprite
+            tempCtx.fillStyle = '#4a90d9';
+            tempCtx.fillRect(8, 4, 16, 16); // Body
+            tempCtx.fillStyle = '#ffd700';
+            tempCtx.fillRect(10, 8, 4, 4); // Left eye
+            tempCtx.fillRect(18, 8, 4, 4); // Right eye
+            tempCtx.fillStyle = '#fff';
+            tempCtx.fillRect(12, 20, 8, 4); // Mouth
+
+            return tempCanvas.toDataURL();
+        }
+
+        const demoSpriteUrl = createDemoSprite();
+
+        document.getElementById('draw-sprite').addEventListener('click', () => {
+            spriteCtx.fillStyle = '#1a1a2e';
+            spriteCtx.fillRect(0, 0, spriteCanvas.width, spriteCanvas.height);
+
+            const img = new Image();
+            img.onload = () => {
+                // Draw sprite at different sizes
+                spriteCtx.drawImage(img, 50, 50, 32, 32);
+                spriteCtx.drawImage(img, 120, 40, 48, 48);
+                spriteCtx.drawImage(img, 200, 30, 64, 64);
+                spriteCtx.drawImage(img, 300, 20, 96, 96);
+
+                // Draw grid of sprites (simulating animation frames)
+                for (let i = 0; i < 8; i++) {
+                    spriteCtx.drawImage(img, 50 + i * 40, 180, 32, 32);
+                }
+
+                document.getElementById('sprite-cache-count').textContent = '1';
+
+                spriteCtx.fillStyle = '#fff';
+                spriteCtx.font = '14px sans-serif';
+                spriteCtx.fillText('Sprite at different scales', 50, 140);
+                spriteCtx.fillText('Animation frames (simulated)', 50, 230);
+            };
+            img.src = demoSpriteUrl;
+        });
+
+        document.getElementById('draw-tilemap').addEventListener('click', () => {
+            spriteCtx.fillStyle = '#1a1a2e';
+            spriteCtx.fillRect(0, 0, spriteCanvas.width, spriteCanvas.height);
+
+            // Simple tilemap colors
+            const tiles = {
+                0: '#1a1a2e', // Empty
+                1: '#4a4a6a', // Wall
+                2: '#2d5a2d', // Grass
+                3: '#6a4a2a', // Dirt
+                4: '#3a5a8a'  // Water
+            };
+
+            // Simple tilemap data (10x8)
+            const map = [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+                [1, 2, 3, 3, 2, 2, 4, 4, 2, 1],
+                [1, 2, 3, 3, 2, 2, 4, 4, 2, 1],
+                [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+                [1, 2, 2, 4, 4, 4, 2, 2, 2, 1],
+                [1, 2, 2, 2, 2, 2, 2, 2, 2, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+            ];
+
+            const tileSize = 32;
+            const offsetX = 50;
+            const offsetY = 30;
+
+            map.forEach((row, y) => {
+                row.forEach((tile, x) => {
+                    spriteCtx.fillStyle = tiles[tile];
+                    spriteCtx.fillRect(offsetX + x * tileSize, offsetY + y * tileSize, tileSize - 1, tileSize - 1);
+                });
+            });
+
+            // Legend
+            spriteCtx.fillStyle = '#fff';
+            spriteCtx.font = '12px sans-serif';
+            let legendY = 50;
+            Object.entries(tiles).forEach(([key, color]) => {
+                const labels = ['Empty', 'Wall', 'Grass', 'Dirt', 'Water'];
+                spriteCtx.fillStyle = color;
+                spriteCtx.fillRect(420, legendY - 10, 16, 16);
+                spriteCtx.fillStyle = '#fff';
+                spriteCtx.fillText(labels[key], 445, legendY);
+                legendY += 24;
+            });
+        });
+
+        // Tests
+        test('Canvas API has clear method', () => {
+            assert(typeof staticApi.clear === 'function', 'clear should be a function');
+        });
+
+        test('Canvas API has rect method', () => {
+            assert(typeof staticApi.rect === 'function', 'rect should be a function');
+        });
+
+        test('Canvas API has circle method', () => {
+            assert(typeof staticApi.circle === 'function', 'circle should be a function');
+        });
+
+        test('Canvas API has ellipse method', () => {
+            assert(typeof staticApi.ellipse === 'function', 'ellipse should be a function');
+        });
+
+        test('Canvas API has line method', () => {
+            assert(typeof staticApi.line === 'function', 'line should be a function');
+        });
+
+        test('Canvas API has triangle method', () => {
+            assert(typeof staticApi.triangle === 'function', 'triangle should be a function');
+        });
+
+        test('Canvas API has text method', () => {
+            assert(typeof staticApi.text === 'function', 'text should be a function');
+        });
+
+        test('Canvas API has path methods', () => {
+            assert(typeof staticApi.beginPath === 'function', 'beginPath should exist');
+            assert(typeof staticApi.moveTo === 'function', 'moveTo should exist');
+            assert(typeof staticApi.lineTo === 'function', 'lineTo should exist');
+            assert(typeof staticApi.closePath === 'function', 'closePath should exist');
+            assert(typeof staticApi.fill === 'function', 'fill should exist');
+            assert(typeof staticApi.stroke === 'function', 'stroke should exist');
+        });
+
+        test('Canvas API has transform methods', () => {
+            assert(typeof staticApi.save === 'function', 'save should exist');
+            assert(typeof staticApi.restore === 'function', 'restore should exist');
+            assert(typeof staticApi.translate === 'function', 'translate should exist');
+            assert(typeof staticApi.rotate === 'function', 'rotate should exist');
+            assert(typeof staticApi.scale === 'function', 'scale should exist');
+        });
+
+        test('Canvas width/height are accessible', () => {
+            assert(staticApi.width === 400, 'Width should be 400');
+            assert(staticApi.height === 200, 'Height should be 200');
+        });
+
+        test('CleanRuntime canvas API exists', () => {
+            assert(typeof window.CleanRuntime.canvases !== 'undefined', 'canvases map should exist');
+            assert(typeof window.CleanRuntime.pauseCanvas === 'function', 'pauseCanvas should exist');
+            assert(typeof window.CleanRuntime.resumeCanvas === 'function', 'resumeCanvas should exist');
+        });
+
+        test('window.canvas shorthand exists', () => {
+            assert(typeof window.canvas !== 'undefined', 'window.canvas should exist');
+            assert(typeof window.canvas.pause === 'function', 'canvas.pause should exist');
+            assert(typeof window.canvas.resume === 'function', 'canvas.resume should exist');
+        });
+
+        // Run tests
+        setTimeout(runTests, 100);
+    </script>
+</body>
+</html>

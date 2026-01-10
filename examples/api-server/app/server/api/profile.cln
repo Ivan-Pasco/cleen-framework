@@ -1,0 +1,12 @@
+// User profile endpoint
+// Route: GET, PUT /api/profile
+
+string method = _req_method()
+
+if method == "GET"
+	return "{\"message\": \"user profile\"}"
+
+if method == "PUT"
+	return "{\"message\": \"profile updated\"}"
+
+return "{\"error\": \"method not allowed\"}"

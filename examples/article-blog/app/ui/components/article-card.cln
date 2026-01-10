@@ -1,0 +1,19 @@
+// Article Card Component
+
+component:
+	string render()
+		string card = "<article class=\"article-card\">"
+		card = card + "<div class=\"card-image\">"
+		card = card + "<img src=\"/public/images/placeholder.jpg\" alt=\"Article thumbnail\">"
+		card = card + "</div>"
+		card = card + "<div class=\"card-content\">"
+		card = card + "<span class=\"category\">Technology</span>"
+		card = card + "<h3><a href=\"/articles/sample-article\">Sample Article Title</a></h3>"
+		card = card + "<p>This is a brief excerpt from the article that gives readers a preview of the content...</p>"
+		card = card + "<div class=\"meta\">"
+		card = card + "<span class=\"author\">By Author Name</span>"
+		card = card + "<span class=\"read-time\">5 min read</span>"
+		card = card + "</div>"
+		card = card + "</div>"
+		card = card + "</article>"
+		return card

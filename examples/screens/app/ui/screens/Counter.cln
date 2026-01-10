@@ -1,0 +1,21 @@
+// Counter Screen - Interactive counter component
+// Demonstrates basic state and event handling
+
+screen Counter:
+	state:
+		count: integer = 0
+		label: string = "Count"
+
+	render:
+		ui.column gap 16 padding 20:
+			ui.text label + ": " + count.toString()
+			ui.row gap 8:
+				ui.button "-"
+					onClick:
+						count = count - 1
+				ui.button "+"
+					onClick:
+						count = count + 1
+				ui.button "Reset"
+					onClick:
+						count = 0

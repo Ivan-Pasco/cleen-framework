@@ -1,0 +1,4 @@
+// Admin user management endpoint
+// Route: DELETE /api/admin/user
+
+return "{\"message\": \"user deleted\"}"

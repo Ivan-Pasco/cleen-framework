@@ -1,0 +1,4 @@
+// Health check endpoint
+// Route: GET /api/health
+
+return "{\"status\": \"ok\"}"

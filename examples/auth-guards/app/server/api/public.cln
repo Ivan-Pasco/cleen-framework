@@ -1,0 +1,4 @@
+// Public endpoint - no authentication required
+// Route: GET /api/public
+
+return "{\"message\": \"This is public\"}"

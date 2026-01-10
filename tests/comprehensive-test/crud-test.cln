@@ -1,0 +1,236 @@
+// CRUD Test - Complete Database and JSON Test
+
+import:
+	frame.data
+	frame.httpserver
+
+functions:
+	// HANDLER 0: Home page
+	string __route_handler_0()
+		string h = "<!DOCTYPE html><html><head><title>CRUD Test</title></head><body>"
+		h = h + "<h1>CRUD Test Application</h1>"
+		h = h + "<ul>"
+		h = h + "<li><a href=\"/api/items\">List items</a></li>"
+		h = h + "<li><a href=\"/test/json\">JSON test</a></li>"
+		h = h + "</ul>"
+		h = h + "</body></html>"
+		return h
+
+	// HANDLER 1: GET /api/items
+	string __route_handler_1()
+		printl("=== GET /api/items ===")
+		string sql = "SELECT id, name, value FROM items ORDER BY id"
+		string result = _db_query(sql, "[]")
+		printl("Result: " + result)
+
+		any data = json.tryTextToData(result)
+		if data == null
+			return "{\"ok\":false,\"error\":\"parse_failed\"}"
+
+		any dataField = data.data
+		if dataField == null
+			return "{\"ok\":false,\"error\":\"no_data\"}"
+
+		any countField = dataField.count
+		any rowsField = dataField.rows
+
+		string resp = "{\"ok\":true,\"count\":"
+		resp = resp + countField.toString()
+		resp = resp + ",\"items\":"
+		resp = resp + json.dataToText(rowsField)
+		resp = resp + "}"
+		return resp
+
+	// HANDLER 2: POST /api/items
+	string __route_handler_2()
+		printl("=== POST /api/items ===")
+		string body = _req_body()
+		printl("Body: " + body)
+
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"invalid_json\"}"
+
+		any nameField = bodyData.name
+		if nameField == null
+			return "{\"ok\":false,\"error\":\"name_required\"}"
+
+		string itemName = nameField.toString()
+		integer itemValue = 0
+
+		any valueField = bodyData.value
+		if valueField != null
+			itemValue = valueField.toInteger()
+
+		string insertParams = buildInsertParams(itemName, itemValue)
+		string sql = "INSERT INTO items (name, value) VALUES (?, ?)"
+		string result = _db_execute(sql, insertParams)
+		printl("Insert: " + result)
+
+		any resultData = json.tryTextToData(result)
+		if resultData == null
+			return "{\"ok\":false,\"error\":\"insert_failed\"}"
+
+		any insertData = resultData.data
+		any insertId = insertData.last_insert_id
+
+		string resp = buildInsertResponse(insertId.toString(), itemName, itemValue)
+		return resp
+
+	// HANDLER 3: GET /api/items/:id
+	string __route_handler_3()
+		printl("=== GET /api/items/:id ===")
+		string id = _req_param("id")
+		printl("ID: " + id)
+
+		string sql = "SELECT id, name, value FROM items WHERE id = ?"
+		string params = "[" + id + "]"
+		string result = _db_query(sql, params)
+
+		any data = json.tryTextToData(result)
+		if data == null
+			return "{\"ok\":false,\"error\":\"parse_failed\"}"
+
+		any dataField = data.data
+		if dataField == null
+			return "{\"ok\":false,\"error\":\"query_failed\"}"
+
+		any countField = dataField.count
+		integer count = countField.toInteger()
+		if count == 0
+			return "{\"ok\":false,\"error\":\"not_found\"}"
+
+		any rowsField = dataField.rows
+		any item = list.get(rowsField, 0)
+
+		string resp = "{\"ok\":true,\"item\":"
+		resp = resp + json.dataToText(item)
+		resp = resp + "}"
+		return resp
+
+	// HANDLER 4: DELETE /api/items/:id
+	string __route_handler_4()
+		printl("=== DELETE /api/items/:id ===")
+		string id = _req_param("id")
+		string sql = "DELETE FROM items WHERE id = ?"
+		string params = "[" + id + "]"
+		string result = _db_execute(sql, params)
+		printl("Delete: " + result)
+		return "{\"ok\":true,\"deleted\":true}"
+
+	// HANDLER 5: GET /test/json
+	string __route_handler_5()
+		printl("=== JSON Test ===")
+		integer passed = 0
+
+		// Test 1: Parse object
+		string j1 = "{\"a\":1,\"b\":\"two\"}"
+		any p1 = json.tryTextToData(j1)
+		if p1 != null
+			passed = passed + 1
+			printl("Test1 PASS: parse object")
+		else
+			printl("Test1 FAIL: parse object")
+
+		// Test 2: Field access (integer)
+		boolean test2ok = testFieldAccess(p1)
+		if test2ok
+			passed = passed + 1
+			printl("Test2 PASS: field access")
+		else
+			printl("Test2 FAIL: field access")
+
+		// Test 3: Array parse
+		string j2 = "[10,20,30]"
+		any p2 = json.tryTextToData(j2)
+		if p2 != null
+			passed = passed + 1
+			printl("Test3 PASS: array parse")
+		else
+			printl("Test3 FAIL: array parse")
+
+		// Test 4: Nested object
+		string j3 = "{\"outer\":{\"inner\":99}}"
+		any p3 = json.tryTextToData(j3)
+		if p3 != null
+			passed = passed + 1
+			printl("Test4 PASS: nested parse")
+		else
+			printl("Test4 FAIL: nested parse")
+
+		// Test 5: dataToText
+		any obj = json.tryTextToData("{\"x\":1}")
+		string txt = json.dataToText(obj)
+		if txt != ""
+			passed = passed + 1
+			printl("Test5 PASS: dataToText")
+		else
+			printl("Test5 FAIL: dataToText")
+
+		string resp = "{\"ok\":true,\"passed\":"
+		resp = resp + passed.toString()
+		resp = resp + ",\"total\":5}"
+		return resp
+
+	// Helper: Test field access
+	boolean testFieldAccess(any parsed)
+		if parsed == null
+			return false
+		any aField = parsed.a
+		if aField == null
+			return false
+		integer aVal = aField.toInteger()
+		if aVal == 1
+			return true
+		return false
+
+	// Helper: Build insert params
+	string buildInsertParams(string name, integer value)
+		string p = "[\""
+		p = p + name
+		p = p + "\","
+		p = p + value.toString()
+		p = p + "]"
+		return p
+
+	// Helper: Build insert response
+	string buildInsertResponse(string id, string name, integer value)
+		string r = "{\"ok\":true,\"id\":"
+		r = r + id
+		r = r + ",\"name\":\""
+		r = r + name
+		r = r + "\",\"value\":"
+		r = r + value.toString()
+		r = r + "}"
+		return r
+
+start()
+	printl("================================")
+	printl("  CRUD Test Application")
+	printl("================================")
+	printl("")
+
+	// Create table
+	printl("Creating items table...")
+	string sql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value INTEGER DEFAULT 0)"
+	string result = _db_execute(sql, "[]")
+	printl("Table: " + result)
+	printl("")
+
+	// Register routes
+	printl("Registering routes...")
+	integer s = 0
+	s = _http_route("GET", "/", 0)
+	printl("  GET  /")
+	s = _http_route("GET", "/api/items", 1)
+	printl("  GET  /api/items")
+	s = _http_route("POST", "/api/items", 2)
+	printl("  POST /api/items")
+	s = _http_route("GET", "/api/items/:id", 3)
+	printl("  GET  /api/items/:id")
+	s = _http_route("DELETE", "/api/items/:id", 4)
+	printl("  DELETE /api/items/:id")
+	s = _http_route("GET", "/test/json", 5)
+	printl("  GET  /test/json")
+	printl("")
+	printl("Server ready on http://localhost:3000")

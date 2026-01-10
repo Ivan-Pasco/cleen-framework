@@ -1,0 +1,45 @@
+// Tests for frame.data plugin
+
+test_model_expansion()
+	result = expand_block("model", "{\"name\": \"User\", \"table\": \"users\"}", "string email\nstring name")
+	assert(result.contains("class User"))
+	assert(result.contains("_db_insert"))
+	assert(result.contains("_db_query"))
+	assert(result.contains("fromRow"))
+
+test_model_generates_find_method()
+	result = expand_block("model", "{\"name\": \"Post\"}", "string title")
+	assert(result.contains("static find(id: integer)"))
+	assert(result.contains("_db_query_one"))
+
+test_model_generates_all_method()
+	result = expand_block("model", "{\"name\": \"Comment\"}", "string content")
+	assert(result.contains("static all()"))
+
+test_model_generates_save_method()
+	result = expand_block("model", "{\"name\": \"Tag\"}", "string name")
+	assert(result.contains("save() -> boolean"))
+	assert(result.contains("_db_update"))
+
+test_transaction_expansion()
+	result = expand_block("transaction", "{}", "user.save()")
+	assert(result.contains("_db_begin_transaction"))
+	assert(result.contains("_db_commit"))
+	assert(result.contains("_db_rollback"))
+
+test_query_expansion()
+	result = expand_block("query", "{\"model\": \"User\"}", "")
+	assert(result.contains("SELECT"))
+	assert(result.contains("_db_query"))
+
+test_model_validation_missing_name()
+	result = validate_block("model", "{}", "")
+	assert(result.contains("name attribute is required"))
+
+test_query_validation_missing_model()
+	result = validate_block("query", "{}", "")
+	assert(result.contains("model attribute is required"))
+
+test_unknown_block_passthrough()
+	result = expand_block("unknown", "{}", "original body")
+	assert(result == "original body")

@@ -1,0 +1,7 @@
+// Post model
+model: name="Post", table="posts"
+	integer id
+	string title
+	integer author_id
+	string author
+	string date

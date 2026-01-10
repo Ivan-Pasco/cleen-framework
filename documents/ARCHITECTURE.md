@@ -2,14 +2,16 @@
 
 **Technical Deep Dive into Frame's Design and Implementation**
 
+**Version:** 2.0
+
 ## Table of Contents
 
 1. [Overview](#overview)
 2. [System Architecture](#system-architecture)
-3. [Compilation Pipeline](#compilation-pipeline)
-4. [Runtime Model](#runtime-model)
-5. [Host Bridge](#host-bridge)
-6. [Module Architecture](#module-architecture)
+3. [Plugin System](#plugin-system)
+4. [Compilation Pipeline](#compilation-pipeline)
+5. [Runtime Model](#runtime-model)
+6. [Host Bridge](#host-bridge)
 7. [Security Model](#security-model)
 8. [Performance Characteristics](#performance-characteristics)
 9. [Extensibility](#extensibility)
@@ -18,7 +20,17 @@
 
 ## Overview
 
-Frame is built on a layered architecture where **Clean Language** source code compiles to **WebAssembly (WASM)** modules that run on any WASI-compatible host. The framework separates concerns into distinct layers while maintaining a unified type system and compilation pipeline.
+Frame 2.0 is built on a layered architecture where **Clean Language** source code compiles to **WebAssembly (WASM)** modules that run on any WASI-compatible host. The framework separates concerns into distinct layers while maintaining a unified type system and compilation pipeline.
+
+### Version 2.0 Architecture Changes
+
+| Aspect | v1 | v2 |
+|--------|-----|-----|
+| **Plugin Language** | Rust crates | Clean Language |
+| **Plugin Format** | Compile-time Rust | WASM modules |
+| **Plugin Execution** | Part of compiler build | Loaded at compile-time |
+| **CLI Tool** | `frame` (Rust binary) | `cleen` (package manager) |
+| **Plugin Location** | `frame-*` crates | `~/.cleen/plugins/` |
 
 ### Core Principles
 
@@ -27,58 +39,185 @@ Frame is built on a layered architecture where **Clean Language** source code co
 - **Type Safety**: End-to-end type checking from database to UI
 - **Sandboxed Execution**: Controlled system access through the Host Bridge
 - **Deterministic Compilation**: Same source always produces same output
+- **Self-Hosting**: Framework plugins written in Clean Language itself
 
 ---
 
 ## System Architecture
 
-### High-Level Layers
+### High-Level Layers (v2)
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Developer Code                        │
-│              (Clean Language .cln files)                 │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                   Frame Compiler                         │
-│  ┌──────────┬──────────┬──────────┬──────────┐          │
-│  │  Parser  │ Semantic │ Type     │   Code   │          │
-│  │          │ Analysis │ Checker  │   Gen    │          │
-│  └──────────┴──────────┴──────────┴──────────┘          │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                WebAssembly Modules                       │
-│     ┌──────────────┬──────────────┬─────────────┐       │
-│     │ server.wasm  │  ui.wasm     │ manifest.   │       │
-│     │ (Backend)    │  (Frontend)  │ json        │       │
-│     └──────────────┴──────────────┴─────────────┘       │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                   Frame Runtime                          │
-│  ┌──────────┬──────────┬──────────┬──────────┐          │
-│  │  WASM    │  Router  │   SSR    │  Host    │          │
-│  │  Loader  │          │  Engine  │  Bridge  │          │
-│  └──────────┴──────────┴──────────┴──────────┘          │
-└─────────────────────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Host Environment                      │
-│   (Node.js, Rust, Deno, Browser, Tauri, Capacitor)      │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                      Developer Code                              │
+│                (Clean Language .cln files)                       │
+│                                                                  │
+│   import:                                                        │
+│       frame.web                                                  │
+│       frame.data                                                 │
+│                                                                  │
+│   server: port=3000                                              │
+│       route: method="GET" path="/users"                          │
+│           return User.all()                                      │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    CLEAN LANGUAGE COMPILER                       │
+│                         (cln binary)                             │
+│                                                                  │
+│   1. Parse source files                                          │
+│   2. Load plugins from ~/.cleen/plugins/                         │
+│   3. Expand framework blocks via plugin WASM                     │
+│   4. Semantic analysis and type checking                         │
+│   5. Generate WebAssembly                                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                       FRAME PLUGINS                              │
+│                  (Clean Language → WASM)                         │
+│                                                                  │
+│   ┌──────────────┬──────────────┬──────────────┬──────────────┐ │
+│   │  frame.web   │  frame.data  │  frame.auth  │  frame.ui    │ │
+│   │  (server,    │  (model,     │  (auth,      │  (component, │ │
+│   │   route)     │   query)     │   protected) │   layout)    │ │
+│   └──────────────┴──────────────┴──────────────┴──────────────┘ │
+│                                                                  │
+│   Location: ~/.cleen/plugins/<name>/<version>/                   │
+│   Format: plugin.toml + plugin.wasm                              │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        HOST BRIDGE                               │
+│                      (Rust crate)                                │
+│                                                                  │
+│   Provides runtime imports to WASM:                              │
+│   ┌──────┬──────┬────────┬────────┬──────┬──────┬──────┐        │
+│   │ HTTP │  DB  │ Crypto │  Time  │ Log  │  Env │  FS  │        │
+│   └──────┴──────┴────────┴────────┴──────┴──────┴──────┘        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     HOST ENVIRONMENT                             │
+│             (Node.js, Rust, Deno, Browser, Tauri)                │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+### Current Implementation Architecture
+
+The following diagram shows the **actual working implementation** as of v0.5.x:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        clean-manager (cleen)                     │
+│  ┌───────────────┐    ┌──────────────┐    ┌─────────────────┐  │
+│  │   Discovery   │───▶│   Codegen    │───▶│  Compile WASM   │  │
+│  │  (find files) │    │ (HTML→Clean) │    │   (cleanc)      │  │
+│  └───────────────┘    └──────────────┘    └─────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      clean-server (runtime)                      │
+│  ┌───────────────┐    ┌──────────────┐    ┌─────────────────┐  │
+│  │  Axum HTTP    │───▶│    Router    │───▶│  WASM Instance  │  │
+│  │   Server      │    │  (matchit)   │    │   (wasmtime)    │  │
+│  └───────────────┘    └──────────────┘    └─────────────────┘  │
+│                              │                     │            │
+│                              ▼                     ▼            │
+│                       ┌──────────────┐    ┌─────────────────┐  │
+│                       │ host-bridge  │◀───│  Bridge Funcs   │  │
+│                       │   (shared)   │    │  (_http_route)  │  │
+│                       └──────────────┘    └─────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Build Flow
+
+1. **Discovery** (`clean-manager/src/core/discovery.rs`)
+   - Scans `app/ui/pages/` → Page routes
+   - Scans `app/ui/components/` → Component functions
+   - Scans `app/server/api/` → API routes
+   - Scans `app/server/models/` → Data models
+
+2. **Code Generation** (`clean-manager/src/core/codegen.rs`)
+   - Converts HTML pages to Clean string concatenation
+   - Expands `<app-header>` → `__component_Header_render()`
+   - Extracts route params from `[slug].html.cln` → `_req_param("slug")`
+   - Generates `start()` function with route registrations
+
+3. **Compilation**
+   - Clean compiler (`cleanc`) compiles generated `.cln` to WASM
+   - WASM includes all handlers as exported functions
+
+4. **Runtime** (`clean-server`)
+   - Loads WASM module, calls `start()` to register routes
+   - Axum handles HTTP requests, matches routes via `matchit`
+   - Calls WASM handler function by index
+   - Returns response string as HTML/JSON
+
+#### Request Processing Flow
+
+```
+GET /blog/hello-world
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│ Axum matches route /blog/:slug              │
+│ Router finds handler_index = 2              │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│ WASM function __route_handler_2() called    │
+│   string slug = _req_param("slug")          │
+│   // slug = "hello-world"                   │
+│   string html = "<!DOCTYPE html>..."        │
+│   html = html + __component_Header_render() │
+│   html = html + "<h1>" + slug + "</h1>"     │
+│   return html                               │
+└─────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────┐
+│ Axum returns Response with HTML body        │
+│ Content-Type: text/html                     │
+└─────────────────────────────────────────────┘
+```
+
+#### Currently Working Features
+
+| Feature | Status | Implementation |
+|---------|--------|----------------|
+| HTTP Server | ✅ Working | Axum on port 3000 |
+| Routing (GET/POST/PUT/DELETE) | ✅ Working | `_http_route(method, path, handler_id)` |
+| Route Parameters | ✅ Working | `/blog/:slug` → `_req_param("slug")` |
+| Request Headers | ✅ Working | `_req_header("name")` |
+| Query Params | ✅ Working | `_req_query("key")` |
+| Request Body | ✅ Working | `_req_body()` |
+| Static Files | ✅ Working | `/public/*` from `public/` folder |
+| SSR Components | ✅ Working | Function call expansion |
+| Database | ✅ Working | `_db_query()`, `_db_execute()` |
+| Session Auth | ✅ Working | `_auth_get_session()` |
+| Protected Routes | ✅ Working | `_http_route_protected()` |
+
+---
 
 ### Component Interaction
 
 ```
 ┌────────────────┐        ┌────────────────┐
-│   Frame CLI    │───────▶│    Compiler    │
+│  cleen CLI     │───────▶│ Plugin Install │
+│  (manager)     │        │ ~/.cleen/      │
+└────────────────┘        └────────────────┘
+                                 │
+                                 ▼
+┌────────────────┐        ┌────────────────┐
+│   cln CLI      │───────▶│    Compiler    │
+│  (compiler)    │        │  + Plugin Load │
 └────────────────┘        └────────────────┘
                                  │
                                  ▼
@@ -109,9 +248,125 @@ Frame is built on a layered architecture where **Clean Language** source code co
 
 ---
 
+## Plugin System
+
+### Plugin Architecture (v2)
+
+Frame 2.0 uses **Clean Language plugins** that compile to WASM. Plugins extend the compiler by transforming DSL blocks into standard Clean code at compile-time.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        SOURCE CODE                               │
+│                                                                  │
+│   import:                                                        │
+│       frame.web                                                  │
+│                                                                  │
+│   server: port=3000                                              │
+│       route: method="GET" path="/hello"                          │
+│           return {"message": "Hello World"}                      │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        COMPILER                                  │
+│                                                                  │
+│   1. Parse import: blocks                                        │
+│   2. Load plugins from ~/.cleen/plugins/                         │
+│   3. Find framework blocks (server:, route:)                     │
+│   4. Call plugin.expand_block("server", attrs, body)             │
+│   5. Replace block with returned Clean code                      │
+│   6. Continue compilation                                        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     EXPANDED CODE                                │
+│                                                                  │
+│   // Generated by frame.web                                      │
+│   start()                                                        │
+│       print("Server starting on localhost:3000")                 │
+│       _http_route("GET", "/hello", (request) -> any              │
+│           return {"message": "Hello World"}                      │
+│       )                                                          │
+│       _http_listen("localhost", 3000)                            │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Plugin Directory Structure
+
+Plugins are installed to `~/.cleen/plugins/<name>/<version>/`:
+
+```
+~/.cleen/plugins/
+├── frame.web/
+│   └── 1.0.0/
+│       ├── plugin.toml       # Plugin manifest
+│       └── plugin.wasm       # Compiled plugin
+├── frame.data/
+│   └── 1.0.0/
+│       ├── plugin.toml
+│       └── plugin.wasm
+├── frame.auth/
+│   └── 1.0.0/
+│       ├── plugin.toml
+│       └── plugin.wasm
+└── frame.ui/
+    └── 1.0.0/
+        ├── plugin.toml
+        └── plugin.wasm
+```
+
+### Plugin Manifest (plugin.toml)
+
+```toml
+[plugin]
+name = "frame.web"
+version = "1.0.0"
+description = "Web framework plugin for Clean Language"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"      # Optional
+get_keywords = "get_keywords"    # Optional - for IDE support
+
+[blocks]
+handles = ["server", "route", "middleware"]
+```
+
+### Plugin API
+
+Every plugin must export an `expand_block` function:
+
+```clean
+expand_block(block_name: string, attributes: string, body: string) -> string
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `block_name` | string | The DSL block identifier (e.g., "server") |
+| `attributes` | string | JSON object of block attributes |
+| `body` | string | Raw content inside the block |
+| **Returns** | string | Clean Language source code |
+
+### Official Frame Plugins
+
+| Plugin | Blocks | Purpose |
+|--------|--------|---------|
+| `frame.web` | server, route, middleware | Web server and routing |
+| `frame.data` | model, query, transaction | ORM and database |
+| `frame.auth` | auth, protected, login | Authentication |
+| `frame.ui` | component, layout, page | UI components and SSR |
+
+---
+
 ## Compilation Pipeline
 
-### Clean to WASM Flow
+### Clean to WASM Flow (v2)
 
 ```
 .cln Source Files
@@ -128,6 +383,21 @@ Frame is built on a layered architecture where **Clean Language** source code co
       │
       ▼
 ┌─────────────────┐
+│ Import Detection│  → Extract plugin requirements (NEW in v2)
+└─────────────────┘
+      │
+      ▼
+┌─────────────────┐
+│ Plugin Loading  │  → Load WASM plugins from ~/.cleen/plugins/ (NEW in v2)
+└─────────────────┘
+      │
+      ▼
+┌─────────────────┐
+│ Block Expansion │  → Transform DSL blocks to Clean code (NEW in v2)
+└─────────────────┘
+      │
+      ▼
+┌─────────────────┐
 │ Semantic        │  → Type checking, scope resolution
 │ Analysis        │    Variable binding, function resolution
 └─────────────────┘
@@ -139,7 +409,7 @@ Frame is built on a layered architecture where **Clean Language** source code co
       │
       ▼
 ┌─────────────────┐
-│ CIR Generation  │  → Clean Intermediate Representation
+│ MIR Generation  │  → Mid-level Intermediate Representation
 └─────────────────┘
       │
       ▼
@@ -153,12 +423,7 @@ Frame is built on a layered architecture where **Clean Language** source code co
 └─────────────────┘
       │
       ▼
-┌─────────────────┐
-│ Module Linking  │  → Combine modules, emit manifest
-└─────────────────┘
-      │
-      ▼
-    .wasm Binary + manifest.json
+    .wasm Binary
 ```
 
 ### Compiler Stages
@@ -169,27 +434,23 @@ Frame is built on a layered architecture where **Clean Language** source code co
 - **Output**: Abstract Syntax Tree (AST)
 - **Features**: Indentation-based blocks, type annotations, function signatures
 
-#### 2. Semantic Analysis
+#### 2. Plugin Expansion (NEW in v2)
+
+- **Input**: AST with framework blocks (server:, model:, etc.)
+- **Process**: Call plugin's `expand_block` function via WASM runtime
+- **Output**: AST with expanded Clean code
+
+#### 3. Semantic Analysis
 
 - **Type Checking**: Strong static typing with inference
 - **Scope Management**: Variable and function resolution
 - **Validation**: Class inheritance, method signatures
 
-#### 3. Code Generation
+#### 4. Code Generation
 
 - **Target**: WebAssembly (WASM) using `wasm-encoder`
 - **Memory**: Linear memory with string pooling
 - **Instructions**: Type-specific WASM instruction generation
-
-#### 4. Module Output
-
-```
-dist/
-├── server.wasm           # Backend logic (API, Auth, Data)
-├── ui.wasm               # Frontend logic (components, hydration)
-├── manifest.json         # Route mappings and metadata
-└── manifest.islands.json # Client hydration manifest
-```
 
 ---
 
@@ -257,25 +518,6 @@ const instance = await WebAssembly.instantiate(wasm, {
 const result = instance.exports.handleRequest(requestData);
 ```
 
-### File-Based Routing
-
-Routes are automatically generated from file structure:
-
-```
-app/api/users.cln       → GET/POST  /api/users
-app/api/users/[id].cln  → GET/PUT   /api/users/:id
-app/pages/index.cln     → GET       /
-app/pages/about.cln     → GET       /about
-```
-
-**Route Resolution**:
-1. Parse incoming request path
-2. Map to file-based route
-3. Extract dynamic parameters
-4. Deserialize query/body to typed Clean input
-5. Execute Clean function
-6. Serialize output to JSON/HTML
-
 ---
 
 ## Host Bridge
@@ -288,23 +530,15 @@ The Host Bridge is the **only** interface between WASM modules and system resour
 ┌──────────────────────────────────────────┐
 │          WASM Module (Clean)             │
 │                                          │
-│  User.find:                              │
-│      where: active == true               │
-│                                          │
-│  ↓ Calls host:db.query                │
+│  User.find(id)                           │
+│  ↓ Calls _db_query_one                   │
 └──────────────────────────────────────────┘
                  │
                  ▼
 ┌──────────────────────────────────────────┐
 │           Host Bridge Interface          │
 │                                          │
-│  {                                       │
-│    "fn": "host:db.query",              │
-│    "args": {                             │
-│      "sql": "SELECT * FROM users...",    │
-│      "params": [true]                    │
-│    }                                     │
-│  }                                       │
+│  _db_query_one(sql, params)              │
 └──────────────────────────────────────────┘
                  │
                  ▼
@@ -314,59 +548,24 @@ The Host Bridge is the **only** interface between WASM modules and system resour
 │                                          │
 │  - Execute SQL via pg/mysql driver       │
 │  - Apply connection pooling              │
-│  - Return rows                           │
+│  - Return result                         │
 └──────────────────────────────────────────┘
 ```
 
-### Bridge Namespaces
+### Bridge Functions
+
+Host Bridge functions are prefixed with `_` to indicate they are runtime imports.
 
 | Namespace | Functions | Purpose |
 |-----------|-----------|---------|
-| `host:http` | `request`, `respond`, `redirect` | HTTP operations |
-| `host:db` | `query`, `tx`, `prepare` | Database access |
-| `host:env` | `get`, `list` | Environment variables |
-| `host:log` | `info`, `warn`, `error` | Structured logging |
-| `host:time` | `now`, `sleep` | Time operations |
-| `host:crypto` | `random`, `hash`, `verify`, `sign` | Cryptographic operations |
-| `host:fs` | `read`, `write`, `list` | Filesystem (desktop/CLI only) |
-| `host:sys` | `exit`, `platform` | System information |
-
-### Message Format
-
-**Request**:
-```json
-{
-  "fn": "host:db.query",
-  "args": {
-    "sql": "SELECT * FROM users WHERE id=$1",
-    "params": [42]
-  }
-}
-```
-
-**Response (Success)**:
-```json
-{
-  "ok": true,
-  "data": {
-    "rows": [
-      {"id": 42, "name": "Alice", "email": "alice@example.com"}
-    ]
-  }
-}
-```
-
-**Response (Error)**:
-```json
-{
-  "ok": false,
-  "err": {
-    "code": "DB_ERROR",
-    "message": "Connection timeout",
-    "details": {"timeout": 5000}
-  }
-}
-```
+| `_http_*` | listen, route, middleware, request | HTTP server and client |
+| `_db_*` | query, query_one, insert, update, delete, transaction | Database operations |
+| `_auth_*` | create_token, verify_token, hash_password, verify_password | Authentication |
+| `_file_*` | read, write, exists, delete | Filesystem (optional) |
+| `_env_*` | get, set | Environment variables |
+| `_log_*` | info, warn, error | Structured logging |
+| `_crypto_*` | random, hash, sign, verify | Cryptographic operations |
+| `_time_*` | now, sleep | Time operations |
 
 ### Security Guarantees
 
@@ -375,148 +574,6 @@ The Host Bridge is the **only** interface between WASM modules and system resour
 - **Validated**: All bridge calls are type-checked at compile time
 - **Auditable**: Bridge calls are logged for security monitoring
 - **Isolated**: Each request runs in a separate execution context
-
----
-
-## Module Architecture
-
-### Frame CLI
-
-```
-frame-cli/
-├── commands/
-│   ├── new.rs          # Project scaffolding
-│   ├── serve.rs        # Development server
-│   ├── build.rs        # Production build
-│   └── db.rs           # Database commands
-├── compiler/
-│   └── adapter.rs      # Clean compiler interface
-├── runtime/
-│   └── host.rs         # Host bridge initialization
-└── main.rs             # Command dispatcher
-```
-
-**Responsibilities**:
-- Parse CLI arguments and flags
-- Invoke Clean compiler with appropriate options
-- Manage development server with file watching
-- Coordinate database migrations
-- Scaffold new projects and plugins
-
-### Frame Server
-
-```
-frame-server/
-├── router/
-│   ├── mapper.rs       # File-based route mapping
-│   └── params.rs       # Parameter extraction
-├── wasm/
-│   ├── loader.rs       # WASM module loading
-│   ├── cache.rs        # Module caching
-│   └── sandbox.rs      # Execution isolation
-├── ssr/
-│   └── renderer.rs     # Server-side rendering
-└── bridge/
-    └── implementation/ # Host bridge adapters
-```
-
-**Responsibilities**:
-- Load and cache WASM modules
-- Route incoming HTTP requests
-- Execute WASM functions in isolated contexts
-- Implement Host Bridge functions
-- Render server-side HTML
-
-### Frame Data (ORM)
-
-```
-frame-data/
-├── models/
-│   ├── parser.rs       # Parse `data` blocks
-│   └── validator.rs    # Validate models
-├── query/
-│   ├── builder.rs      # Query DSL compilation
-│   └── executor.rs     # SQL generation
-├── migrations/
-│   ├── generator.rs    # Generate migrations from diffs
-│   └── runner.rs       # Apply migrations
-└── bridge/
-    └── db.rs           # Database bridge implementation
-```
-
-**Responsibilities**:
-- Parse Clean `data` block syntax
-- Validate models and relationships
-- Generate SQL from declarative queries
-- Create and run database migrations
-- Interface with database drivers via Host Bridge
-
-### Frame UI
-
-```
-frame-ui/
-├── components/
-│   ├── parser.rs       # Parse `component` blocks
-│   └── validator.rs    # Validate component props
-├── ssr/
-│   ├── renderer.rs     # Server-side rendering
-│   └── escaping.rs     # HTML escaping
-├── hydration/
-│   ├── manifest.rs     # Islands manifest generation
-│   └── loader.js       # Client-side loader
-└── csdr/
-    └── dom.rs          # Client-side rendering (optional)
-```
-
-**Responsibilities**:
-- Parse Clean UI components
-- Render components to HTML (SSR)
-- Generate islands manifest for hydration
-- Provide client-side rendering (optional)
-- Manage component lifecycle
-
-### Frame Auth
-
-```
-frame-auth/
-├── session/
-│   ├── manager.rs      # Session lifecycle
-│   └── store.rs        # Session storage
-├── jwt/
-│   ├── encoder.rs      # JWT signing
-│   └── decoder.rs      # JWT verification
-├── roles/
-│   └── guard.rs        # Role-based access control
-└── middleware/
-    └── auth.rs         # Authentication middleware
-```
-
-**Responsibilities**:
-- Manage user sessions (cookies)
-- Sign and verify JWTs
-- Enforce role-based permissions
-- Provide authentication middleware
-
-### Frame Plugins
-
-```
-frame-plugins/
-├── loader/
-│   └── discovery.rs    # Plugin discovery
-├── hooks/
-│   ├── cli.rs          # CLI command hooks
-│   ├── ui.rs           # UI component hooks
-│   ├── server.rs       # Server route hooks
-│   └── data.rs         # ORM lifecycle hooks
-└── sandbox/
-    └── runtime.rs      # Sandboxed plugin execution
-```
-
-**Responsibilities**:
-- Discover and load plugins
-- Execute plugin hooks at appropriate lifecycle stages
-- Sandbox plugin execution
-- Validate plugin permissions
 
 ---
 
@@ -542,7 +599,12 @@ Frame applications are designed to defend against:
                  │
                  ▼
 ┌────────────────────────────────────────────┐
-│         WASM Sandbox (Isolation)           │  ← Memory isolation
+│      Plugin Sandbox (Compile-time)         │  ← WASM isolation (NEW in v2)
+└────────────────────────────────────────────┘
+                 │
+                 ▼
+┌────────────────────────────────────────────┐
+│         WASM Sandbox (Runtime)             │  ← Memory isolation
 └────────────────────────────────────────────┘
                  │
                  ▼
@@ -556,23 +618,17 @@ Frame applications are designed to defend against:
 └────────────────────────────────────────────┘
 ```
 
-### Security Features
+### Plugin Security (NEW in v2)
 
-**Compile-Time**:
-- Type safety eliminates entire classes of bugs
-- SQL injection prevention via parameterized queries
-- XSS prevention via automatic escaping
+Plugins run in a WASM sandbox during compilation:
 
-**Runtime**:
-- WASM sandboxing isolates application code
-- Per-request execution contexts prevent state leakage
-- Host Bridge enforces access control
+- **No filesystem access** (except reading source)
+- **No network access**
+- **No system calls**
+- **Memory isolated** per plugin
+- **Deterministic** execution
 
-**Application**:
-- Built-in CSRF protection
-- Secure session management (HTTP-only, SameSite cookies)
-- JWT signing and verification
-- Role-based access control
+Generated code from plugins goes through full type checking, preventing plugins from bypassing the type system.
 
 ---
 
@@ -583,10 +639,7 @@ Frame applications are designed to defend against:
 - **Incremental**: Only recompile changed modules
 - **Parallel**: Utilize multiple CPU cores
 - **Caching**: Cache compiled WASM modules
-- **Typical Times**:
-  - Small app (< 1000 LOC): < 1 second
-  - Medium app (< 10k LOC): < 5 seconds
-  - Large app (> 10k LOC): < 30 seconds
+- **Plugin overhead**: < 10ms per framework block expansion
 
 ### Runtime
 
@@ -606,172 +659,104 @@ Frame applications are designed to defend against:
 - Per-request overhead: ~100KB
 - Scales linearly with concurrent requests
 
-**Throughput**:
-- Simple endpoints: > 10k req/sec (single core)
-- SSR pages: > 1k req/sec (single core)
-- Database queries: Limited by database, not runtime
-
-### Optimization Strategies
-
-**Compilation**:
-- Use `--release` builds for production (optimizations enabled)
-- Enable WASM SIMD for numeric computations
-- Leverage dead code elimination
-
-**Runtime**:
-- Cache WASM modules aggressively
-- Use connection pooling for databases
-- Enable HTTP caching for GET routes
-- Implement pagination for large result sets
-
-**Frontend**:
-- Default to SSR for fast first paint
-- Hydrate only interactive components
-- Lazy-load non-critical WASM bundles
-- Use CDN for static assets
-
 ---
 
 ## Extensibility
 
-### Plugin Architecture
+### Plugin Development (v2)
 
-Plugins extend Frame without modifying the core:
+Creating plugins in Clean Language:
+
+```bash
+# 1. Create plugin project
+cleen plugin create my-plugin
+
+# 2. Edit src/main.cln
+# Implement expand_block function
+
+# 3. Build plugin
+cleen plugin build
+
+# 4. Install locally
+cleen plugin install ./
+
+# 5. Use in project
+# import:
+#     my-plugin
+```
+
+### Plugin Project Structure
 
 ```
-Plugin Structure
-├── plugin.cln           # Manifest and hook registrations
-├── ui/                  # UI components
-├── server/              # API routes
-├── cli/                 # CLI commands
-└── data/                # ORM hooks
+my-plugin/
+├── plugin.toml           # Manifest
+├── src/
+│   └── main.cln          # Plugin source
+├── tests/
+│   └── test_expand.cln   # Plugin tests
+└── README.md             # Documentation
 ```
 
-### Hook Points
-
-**CLI Hooks**:
-- Add custom commands
-- Extend build process
-- Implement custom generators
-
-**UI Hooks**:
-- Register custom tags/components
-- Add layout templates
-- Implement theming extensions
-
-**Server Hooks**:
-- Add middleware
-- Register routes
-- Implement custom handlers
-
-**Data Hooks**:
-- React to model lifecycle events
-- Transform queries
-- Implement custom validators
-
-### Extension Example
+### Example Plugin
 
 ```clean
-plugin Charts
-    meta:
-        name = "charts"
-        version = "1.0.0"
+// my-plugin/src/main.cln
 
-    hooks:
-        ui: registerTags
-        cli: registerCLI
+expand_block(block_name: string, attributes: string, body: string) -> string
+    if block_name == "myblock"
+        return expand_myblock(attributes, body)
+    return body
 
-functions:
-    registerTags(tags)
-        tags.register("charts-line", "plugins/charts/ui/LineChart.cln")
-        tags.register("charts-bar", "plugins/charts/ui/BarChart.cln")
-
-    registerCLI(cli)
-        cli.command("charts:add")
-            .describe("Add chart component to page")
-            .action(addChart)
+expand_myblock(attrs: string, body: string) -> string
+    return "// Generated by my-plugin\n" + body
 ```
 
 ---
 
-## Platform Adaptations
+## Component Summary (v2)
 
-### Node.js Host
+### What's Included
 
-```javascript
-import { WASI } from 'wasi';
-import http from 'http';
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Host Bridge** | `host-bridge/` | Runtime imports for WASM modules |
+| **frame.web Plugin** | `plugins/frame.web/` | Server and routing DSL |
+| **frame.data Plugin** | `plugins/frame.data/` | ORM and database DSL |
+| **frame.auth Plugin** | `plugins/frame.auth/` | Authentication DSL |
+| **frame.ui Plugin** | `plugins/frame.ui/` | UI components DSL |
 
-const wasi = new WASI({ env: process.env });
-const wasm = await WebAssembly.instantiateStreaming(
-    fetch('server.wasm'),
-    {
-        wasi_snapshot_preview1: wasi.wasiImport,
-        host: nodeBridgeImplementation
-    }
-);
+### What's External
 
-http.createServer((req, res) => {
-    const result = wasm.instance.exports.handleRequest(
-        encodeRequest(req)
-    );
-    decodeResponse(result, res);
-}).listen(8080);
-```
-
-### Rust Host (Tauri Desktop)
-
-```rust
-use wasmtime::*;
-
-let engine = Engine::default();
-let module = Module::from_file(&engine, "server.wasm")?;
-
-let mut store = Store::new(&engine, ());
-let instance = Instance::new(&mut store, &module, &[])?;
-
-// Handle window events
-let handle_event = instance.get_typed_func::<(i32,), i32>(&mut store, "handle_event")?;
-```
-
-### Browser Client
-
-```javascript
-const bridge = {
-    dom: {
-        create: tag => document.createElement(tag),
-        setAttr: (el, k, v) => el.setAttribute(k, v),
-        append: (parent, child) => parent.appendChild(child)
-    }
-};
-
-const { instance } = await WebAssembly.instantiateStreaming(
-    fetch('/ui.wasm'),
-    { bridge }
-);
-
-instance.exports.boot('app', {});
-```
+| Component | Binary | Purpose |
+|-----------|--------|---------|
+| **Clean Compiler** | `cln` | Compiles .cln to .wasm, loads plugins |
+| **Package Manager** | `cleen` | Plugin installation, compiler management |
 
 ---
 
 ## Summary
 
-Frame's architecture provides:
+Frame 2.0's architecture provides:
 
 1. **Portability**: Same code runs everywhere via WASM
 2. **Safety**: Sandboxed execution with typed interfaces
 3. **Performance**: Compiled code with predictable behavior
 4. **Simplicity**: One language, one type system, one compiler
-5. **Extensibility**: Plugin system for custom functionality
+5. **Self-Hosting**: Framework plugins written in Clean Language
+6. **Extensibility**: Plugin system for custom DSL blocks
 
 The architecture is designed for both human developers and AI-assisted development, with deterministic compilation, typed interfaces, and clear module boundaries.
 
 ---
 
 For more details on specific components:
-- [Frame CLI Specification](./specification/02_frame_cli.md)
+- [Compiler Plugins Specification](./specification/10_compiler_plugins.md)
+- [Frame Plugins Specification](./specification/07_frame_plugins.md)
 - [Frame Server Specification](./specification/03_frame_server.md)
 - [Frame Data Specification](./specification/04_frame_data.md)
 - [Frame UI Specification](./specification/05_frame_ui.md)
 - [Host Bridge Contracts](./specification/frame_bridge_contracts.md)
+
+---
+
+**End of Document (v2)**

@@ -1,0 +1,4 @@
+// Hello API endpoint
+// Route: GET /api/hello
+
+return "Hello World"

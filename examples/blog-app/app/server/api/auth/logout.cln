@@ -1,0 +1,4 @@
+// Logout endpoint
+// Route: POST /api/auth/logout
+
+return "{\"message\": \"logged out\"}"

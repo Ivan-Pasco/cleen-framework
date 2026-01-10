@@ -1,0 +1,4 @@
+// Editor posts - requires editor role
+// Route: GET /api/editor/posts
+
+return "{\"message\": \"Editor posts\"}"

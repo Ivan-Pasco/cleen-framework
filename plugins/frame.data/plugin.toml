@@ -1,0 +1,33 @@
+[plugin]
+name = "frame.data"
+version = "1.0.0"
+description = "ORM and database plugin for Clean Language - provides model, query, and transaction DSL blocks"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"
+get_keywords = "get_keywords"
+
+[handles]
+blocks = ["model", "query", "transaction"]
+
+# Bridge function declarations - these are provided by the runtime (clean-server)
+# The compiler reads these to generate correct WASM imports
+# NOTE: Database functions use expanded (ptr, len) pairs even though they start with _
+# This is handled specially in the compiler via expand_strings = true
+[bridge]
+functions = [
+  # Query and Execute - strings passed as (ptr, len) pairs at WASM level
+  { name = "_db_query", params = ["string", "string"], returns = "string", description = "Execute SELECT query, returns JSON result with rows", expand_strings = true },
+  { name = "_db_execute", params = ["string", "string"], returns = "integer", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
+
+  # Transaction Control
+  { name = "_db_begin", params = [], returns = "string", description = "Begin transaction, returns transaction ID" },
+  { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit transaction by ID, returns 0 on success", expand_strings = true },
+  { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback transaction by ID, returns 0 on success", expand_strings = true },
+]

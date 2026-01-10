@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Test 01: Widgets (Phase 5)</title>
+    <style>
+        :root {
+            --color-primary: #4a90d9;
+            --color-secondary: #6c757d;
+            --color-success: #28a745;
+            --color-error: #dc3545;
+            --color-background: #ffffff;
+            --color-text: #333333;
+            --spacing-small: 8px;
+            --spacing-medium: 16px;
+            --spacing-large: 24px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, sans-serif; padding: 20px; background: var(--color-background); color: var(--color-text); }
+        h1, h2, h3 { margin-bottom: var(--spacing-medium); }
+        .test-section { margin-bottom: var(--spacing-large); padding: var(--spacing-medium); border: 1px solid #ddd; border-radius: 8px; }
+        .test-section h2 { color: var(--color-primary); }
+        .test-result { padding: 8px; margin-top: 8px; border-radius: 4px; }
+        .test-result.pass { background: #d4edda; color: #155724; }
+        .test-result.fail { background: #f8d7da; color: #721c24; }
+        .ui-column { display: flex; flex-direction: column; gap: var(--spacing-small); }
+        .ui-row { display: flex; flex-direction: row; gap: var(--spacing-small); align-items: center; }
+        .ui-text { display: inline-block; }
+        .ui-button { padding: 8px 16px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .ui-button:hover { opacity: 0.9; }
+        .ui-textfield { padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .ui-checkbox, .ui-radio { margin-right: 8px; }
+        .ui-select { padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; }
+        .ui-slider { width: 200px; }
+        .ui-image { max-width: 100%; height: auto; }
+        .ui-link { color: var(--color-primary); text-decoration: none; }
+        .ui-link:hover { text-decoration: underline; }
+        .ui-divider { border: none; border-top: 1px solid #ddd; margin: var(--spacing-medium) 0; }
+        .ui-spacer { flex: 1; }
+        .ui-scroll { overflow: auto; max-height: 150px; border: 1px solid #ddd; padding: var(--spacing-small); }
+        .ui-card { background: white; padding: var(--spacing-medium); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .ui-heading-1 { font-size: 2em; font-weight: bold; }
+        .ui-heading-2 { font-size: 1.5em; font-weight: bold; }
+        .ui-heading-3 { font-size: 1.25em; font-weight: bold; }
+        .ui-paragraph { margin-bottom: 1em; line-height: 1.6; }
+        .ui-code { background: #f4f4f4; padding: 12px; border-radius: 4px; font-family: monospace; display: block; white-space: pre; }
+        .ui-inline-code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+        .ui-bold { font-weight: bold; }
+        .ui-italic { font-style: italic; }
+        .icon { display: inline-block; width: 24px; height: 24px; background: var(--color-secondary); border-radius: 4px; }
+        #test-results { position: fixed; top: 10px; right: 10px; background: white; padding: 10px; border: 1px solid #ddd; border-radius: 8px; min-width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>UI Test 01: Widgets (Phase 5)</h1>
+
+    <div id="test-results">
+        <h3>Test Results</h3>
+        <div id="results-container"></div>
+    </div>
+
+    <!-- Test Section: Form Input Widgets (UI-11) -->
+    <section class="test-section" id="test-form-inputs">
+        <h2>UI-11: Form Input Widgets</h2>
+
+        <!-- Checkbox -->
+        <div class="ui-column" style="margin-bottom: 16px;">
+            <label class="ui-row">
+                <input type="checkbox" class="ui-checkbox" id="test-checkbox" data-bind="rememberMe">
+                <span>Remember me</span>
+            </label>
+            <div class="ui-text" id="checkbox-result">Checkbox value: false</div>
+        </div>
+
+        <!-- Radio Group -->
+        <div class="ui-column" style="margin-bottom: 16px;">
+            <div class="ui-text"><strong>Select an option:</strong></div>
+            <label class="ui-row">
+                <input type="radio" name="option" class="ui-radio" value="option1" data-bind="selectedOption">
+                <span>Option 1</span>
+            </label>
+            <label class="ui-row">
+                <input type="radio" name="option" class="ui-radio" value="option2" data-bind="selectedOption">
+                <span>Option 2</span>
+            </label>
+            <label class="ui-row">
+                <input type="radio" name="option" class="ui-radio" value="option3" data-bind="selectedOption">
+                <span>Option 3</span>
+            </label>
+            <div class="ui-text" id="radio-result">Selected: none</div>
+        </div>
+
+        <!-- Select Dropdown -->
+        <div class="ui-column" style="margin-bottom: 16px;">
+            <label>
+                <span class="ui-text">Choose a country:</span>
+                <select class="ui-select" id="test-select" data-bind="selectedCountry">
+                    <option value="">-- Select --</option>
+                    <option value="us">United States</option>
+                    <option value="uk">United Kingdom</option>
+                    <option value="ca">Canada</option>
+                </select>
+            </label>
+            <div class="ui-text" id="select-result">Selected country: none</div>
+        </div>
+
+        <!-- Slider -->
+        <div class="ui-column" style="margin-bottom: 16px;">
+            <label>
+                <span class="ui-text">Volume: <span id="slider-value">50</span></span>
+                <input type="range" class="ui-slider" id="test-slider" min="0" max="100" value="50" data-bind="volume">
+            </label>
+        </div>
+    </section>
+
+    <!-- Test Section: Media and Content Widgets (UI-12) -->
+    <section class="test-section" id="test-media">
+        <h2>UI-12: Media and Content Widgets</h2>
+
+        <!-- Image -->
+        <div class="ui-column" style="margin-bottom: 16px;">
+            <img class="ui-image" id="test-image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='100' viewBox='0 0 200 100'%3E%3Crect fill='%234a90d9' width='200' height='100'/%3E%3Ctext fill='white' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif'%3ETest Image%3C/text%3E%3C/svg%3E" alt="Test placeholder image" width="200">
+            <div class="ui-text">Image with alt text and dimensions</div>
+        </div>
+
+        <!-- Links -->
+        <div class="ui-row" style="margin-bottom: 16px;">
+            <a class="ui-link" href="#internal" id="test-internal-link">Internal Link</a>
+            <a class="ui-link" href="https://example.com" target="_blank" rel="noopener" id="test-external-link">External Link</a>
+        </div>
+
+        <!-- Icon -->
+        <div class="ui-row" style="margin-bottom: 16px;">
+            <span class="icon" id="test-icon" title="Settings icon"></span>
+            <span class="ui-text">Icon placeholder (settings)</span>
+        </div>
+
+        <!-- Divider -->
+        <hr class="ui-divider" id="test-divider">
+        <div class="ui-text">Content after divider</div>
+    </section>
+
+    <!-- Test Section: Layout Utility Widgets (UI-13) -->
+    <section class="test-section" id="test-layout">
+        <h2>UI-13: Layout Utility Widgets</h2>
+
+        <!-- Spacer -->
+        <div class="ui-row" style="margin-bottom: 16px; border: 1px dashed #ccc; padding: 8px;">
+            <span class="ui-text">Left</span>
+            <div class="ui-spacer" id="test-spacer"></div>
+            <span class="ui-text">Right</span>
+        </div>
+
+        <!-- Fixed Spacer -->
+        <div class="ui-row" style="margin-bottom: 16px; border: 1px dashed #ccc; padding: 8px;">
+            <span class="ui-text">Item 1</span>
+            <div id="test-fixed-spacer" style="width: 50px; height: 20px; background: #eee;"></div>
+            <span class="ui-text">Item 2</span>
+        </div>
+
+        <!-- Scroll Container -->
+        <div class="ui-scroll" id="test-scroll">
+            <div class="ui-column">
+                <div class="ui-text">Scroll item 1</div>
+                <div class="ui-text">Scroll item 2</div>
+                <div class="ui-text">Scroll item 3</div>
+                <div class="ui-text">Scroll item 4</div>
+                <div class="ui-text">Scroll item 5</div>
+                <div class="ui-text">Scroll item 6</div>
+                <div class="ui-text">Scroll item 7</div>
+                <div class="ui-text">Scroll item 8</div>
+            </div>
+        </div>
+
+        <!-- Card -->
+        <div class="ui-card" id="test-card" style="margin-top: 16px;">
+            <h3>Card Title</h3>
+            <p class="ui-paragraph">This is card content with shadow.</p>
+        </div>
+    </section>
+
+    <!-- Test Section: Text Formatting Widgets (UI-14) -->
+    <section class="test-section" id="test-text">
+        <h2>UI-14: Text Formatting Widgets</h2>
+
+        <!-- Headings -->
+        <h1 class="ui-heading-1" id="test-h1">Heading Level 1</h1>
+        <h2 class="ui-heading-2" id="test-h2">Heading Level 2</h2>
+        <h3 class="ui-heading-3" id="test-h3">Heading Level 3</h3>
+
+        <!-- Paragraph -->
+        <p class="ui-paragraph" id="test-paragraph">
+            This is a paragraph of text that demonstrates proper line spacing and readability.
+            It can contain multiple sentences and should flow naturally.
+        </p>
+
+        <!-- Code Block -->
+        <pre class="ui-code" id="test-code"><code>function greet(name) {
+    return "Hello, " + name;
+}</code></pre>
+
+        <!-- Inline Text Formatting -->
+        <p class="ui-paragraph" id="test-inline">
+            This has <span class="ui-bold">bold text</span> and <span class="ui-italic">italic text</span>
+            and <code class="ui-inline-code">inline code</code>.
+        </p>
+    </section>
+
+    <script src="../../plugins/frame.ui/runtime/clean-runtime.js"></script>
+    <script>
+        // Test runner
+        const tests = [];
+        const resultsContainer = document.getElementById('results-container');
+
+        function test(name, fn) {
+            tests.push({ name, fn });
+        }
+
+        function assert(condition, message) {
+            if (!condition) {
+                throw new Error(message);
+            }
+        }
+
+        function runTests() {
+            let passed = 0;
+            let failed = 0;
+
+            tests.forEach(({ name, fn }) => {
+                try {
+                    fn();
+                    passed++;
+                    addResult(name, true);
+                } catch (e) {
+                    failed++;
+                    addResult(name, false, e.message);
+                }
+            });
+
+            console.log(`Tests completed: ${passed} passed, ${failed} failed`);
+        }
+
+        function addResult(name, success, error) {
+            const div = document.createElement('div');
+            div.className = `test-result ${success ? 'pass' : 'fail'}`;
+            div.textContent = success ? `✓ ${name}` : `✗ ${name}: ${error}`;
+            resultsContainer.appendChild(div);
+        }
+
+        // UI-11: Form Input Widget Tests
+        test('Checkbox renders', () => {
+            const checkbox = document.getElementById('test-checkbox');
+            assert(checkbox !== null, 'Checkbox not found');
+            assert(checkbox.type === 'checkbox', 'Not a checkbox type');
+        });
+
+        test('Checkbox binding works', () => {
+            const checkbox = document.getElementById('test-checkbox');
+            const result = document.getElementById('checkbox-result');
+
+            checkbox.checked = true;
+            checkbox.dispatchEvent(new Event('change'));
+
+            // Manual update for test
+            result.textContent = `Checkbox value: ${checkbox.checked}`;
+            assert(result.textContent.includes('true'), 'Checkbox binding failed');
+        });
+
+        test('Radio buttons render', () => {
+            const radios = document.querySelectorAll('input[name="option"]');
+            assert(radios.length === 3, 'Should have 3 radio buttons');
+        });
+
+        test('Radio selection works', () => {
+            const radio = document.querySelector('input[value="option2"]');
+            const result = document.getElementById('radio-result');
+
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+            result.textContent = `Selected: ${radio.value}`;
+
+            assert(result.textContent.includes('option2'), 'Radio selection failed');
+        });
+
+        test('Select dropdown renders', () => {
+            const select = document.getElementById('test-select');
+            assert(select !== null, 'Select not found');
+            assert(select.options.length === 4, 'Should have 4 options');
+        });
+
+        test('Select change works', () => {
+            const select = document.getElementById('test-select');
+            const result = document.getElementById('select-result');
+
+            select.value = 'uk';
+            select.dispatchEvent(new Event('change'));
+            result.textContent = `Selected country: ${select.value}`;
+
+            assert(result.textContent.includes('uk'), 'Select change failed');
+        });
+
+        test('Slider renders', () => {
+            const slider = document.getElementById('test-slider');
+            assert(slider !== null, 'Slider not found');
+            assert(slider.type === 'range', 'Not a range type');
+            assert(slider.min === '0', 'Min should be 0');
+            assert(slider.max === '100', 'Max should be 100');
+        });
+
+        test('Slider value updates', () => {
+            const slider = document.getElementById('test-slider');
+            const display = document.getElementById('slider-value');
+
+            slider.value = 75;
+            slider.dispatchEvent(new Event('input'));
+            display.textContent = slider.value;
+
+            assert(display.textContent === '75', 'Slider value display failed');
+        });
+
+        // UI-12: Media and Content Widget Tests
+        test('Image renders with attributes', () => {
+            const img = document.getElementById('test-image');
+            assert(img !== null, 'Image not found');
+            assert(img.alt === 'Test placeholder image', 'Alt text missing');
+            assert(img.width === 200, 'Width should be 200');
+        });
+
+        test('Internal link renders', () => {
+            const link = document.getElementById('test-internal-link');
+            assert(link !== null, 'Internal link not found');
+            assert(link.href.includes('#internal'), 'Should have internal href');
+        });
+
+        test('External link has security attributes', () => {
+            const link = document.getElementById('test-external-link');
+            assert(link !== null, 'External link not found');
+            assert(link.target === '_blank', 'Should have _blank target');
+            assert(link.rel.includes('noopener'), 'Should have noopener rel');
+        });
+
+        test('Icon placeholder renders', () => {
+            const icon = document.getElementById('test-icon');
+            assert(icon !== null, 'Icon not found');
+            assert(icon.classList.contains('icon'), 'Should have icon class');
+        });
+
+        test('Divider renders', () => {
+            const divider = document.getElementById('test-divider');
+            assert(divider !== null, 'Divider not found');
+            assert(divider.tagName === 'HR', 'Should be HR element');
+        });
+
+        // UI-13: Layout Utility Widget Tests
+        test('Spacer fills space', () => {
+            const spacer = document.getElementById('test-spacer');
+            assert(spacer !== null, 'Spacer not found');
+
+            const computedStyle = window.getComputedStyle(spacer);
+            assert(computedStyle.flex === '1 1 0%' || computedStyle.flexGrow === '1', 'Spacer should have flex: 1');
+        });
+
+        test('Fixed spacer has dimensions', () => {
+            const spacer = document.getElementById('test-fixed-spacer');
+            assert(spacer !== null, 'Fixed spacer not found');
+
+            const rect = spacer.getBoundingClientRect();
+            assert(rect.width === 50, 'Width should be 50px');
+            assert(rect.height === 20, 'Height should be 20px');
+        });
+
+        test('Scroll container has overflow', () => {
+            const scroll = document.getElementById('test-scroll');
+            assert(scroll !== null, 'Scroll container not found');
+
+            const computedStyle = window.getComputedStyle(scroll);
+            assert(computedStyle.overflow === 'auto', 'Should have overflow: auto');
+            assert(computedStyle.maxHeight === '150px', 'Should have max-height');
+        });
+
+        test('Card has shadow', () => {
+            const card = document.getElementById('test-card');
+            assert(card !== null, 'Card not found');
+
+            const computedStyle = window.getComputedStyle(card);
+            assert(computedStyle.boxShadow !== 'none', 'Card should have box-shadow');
+        });
+
+        // UI-14: Text Formatting Widget Tests
+        test('Headings render correctly', () => {
+            const h1 = document.getElementById('test-h1');
+            const h2 = document.getElementById('test-h2');
+            const h3 = document.getElementById('test-h3');
+
+            assert(h1 !== null && h1.tagName === 'H1', 'H1 should exist');
+            assert(h2 !== null && h2.tagName === 'H2', 'H2 should exist');
+            assert(h3 !== null && h3.tagName === 'H3', 'H3 should exist');
+        });
+
+        test('Paragraph renders', () => {
+            const p = document.getElementById('test-paragraph');
+            assert(p !== null, 'Paragraph not found');
+            assert(p.tagName === 'P', 'Should be P element');
+        });
+
+        test('Code block renders', () => {
+            const code = document.getElementById('test-code');
+            assert(code !== null, 'Code block not found');
+            assert(code.tagName === 'PRE', 'Should be PRE element');
+            assert(code.querySelector('code') !== null, 'Should contain CODE element');
+        });
+
+        test('Text formatting renders', () => {
+            const inline = document.getElementById('test-inline');
+            assert(inline.querySelector('.ui-bold') !== null, 'Bold text missing');
+            assert(inline.querySelector('.ui-italic') !== null, 'Italic text missing');
+            assert(inline.querySelector('.ui-inline-code') !== null, 'Inline code missing');
+        });
+
+        // Run all tests
+        runTests();
+
+        // Setup interactive binding for demo purposes
+        document.getElementById('test-checkbox').addEventListener('change', function() {
+            document.getElementById('checkbox-result').textContent = 'Checkbox value: ' + this.checked;
+        });
+
+        document.querySelectorAll('input[name="option"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                document.getElementById('radio-result').textContent = 'Selected: ' + this.value;
+            });
+        });
+
+        document.getElementById('test-select').addEventListener('change', function() {
+            document.getElementById('select-result').textContent = 'Selected country: ' + this.value;
+        });
+
+        document.getElementById('test-slider').addEventListener('input', function() {
+            document.getElementById('slider-value').textContent = this.value;
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+// Single post API
+// Route: GET /api/posts/:id
+
+// Note: id is automatically provided by framework for dynamic routes
+return "{\"id\": " + id + ", \"title\": \"Getting Started with Frame\", \"authorId\": 1, \"author\": \"Alice Johnson\", \"date\": \"2025-12-15\"}"

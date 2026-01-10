@@ -1,0 +1,17 @@
+[plugin]
+name = "frame.auth"
+version = "1.0.0"
+description = "Authentication plugin for Clean Language - provides auth, protected, and login DSL blocks"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"
+get_keywords = "get_keywords"
+
+[blocks]
+handles = ["auth", "protected", "login"]

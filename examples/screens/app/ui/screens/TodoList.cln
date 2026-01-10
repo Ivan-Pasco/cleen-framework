@@ -1,0 +1,28 @@
+// TodoList Screen - Interactive todo list component
+// Demonstrates state with text input and list rendering
+
+screen TodoList:
+	state:
+		items: string = ""
+		newItem: string = ""
+		itemCount: integer = 0
+
+	render:
+		ui.column gap 16 padding 20:
+			ui.text "Todo List (" + itemCount.toString() + " items)"
+
+			ui.row gap 8:
+				ui.textField bind newItem
+				ui.button "Add"
+					onClick:
+						items = items + newItem + "\n"
+						itemCount = itemCount + 1
+						newItem = ""
+
+			ui.column gap 4:
+				ui.text items
+
+			ui.button "Clear All"
+				onClick:
+					items = ""
+					itemCount = 0

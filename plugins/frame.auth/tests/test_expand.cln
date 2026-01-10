@@ -1,0 +1,54 @@
+// Tests for frame.auth plugin
+
+test_auth_jwt_expansion()
+	result = expand_block("auth", "{\"strategy\": \"jwt\", \"secret\": \"$JWT_SECRET\"}", "")
+	assert(result.contains("_auth_create_token"))
+	assert(result.contains("_auth_verify_token"))
+	assert(result.contains("_auth_secret"))
+	assert(result.contains("Bearer"))
+
+test_auth_session_expansion()
+	result = expand_block("auth", "{\"strategy\": \"session\", \"secret\": \"secret123\"}", "")
+	assert(result.contains("_create_session"))
+	assert(result.contains("_get_session"))
+	assert(result.contains("httpOnly"))
+
+test_protected_expansion()
+	result = expand_block("protected", "{}", "route: method=\"GET\" path=\"/test\"")
+	assert(result.contains("_http_middleware"))
+	assert(result.contains("_extract_token"))
+	assert(result.contains("Unauthorized"))
+
+test_protected_with_role()
+	result = expand_block("protected", "{\"role\": \"admin\"}", "")
+	assert(result.contains("user.role"))
+	assert(result.contains("admin"))
+	assert(result.contains("Forbidden"))
+
+test_protected_with_permission()
+	result = expand_block("protected", "{\"permission\": \"delete_users\"}", "")
+	assert(result.contains("permissions.contains"))
+	assert(result.contains("delete_users"))
+
+test_login_expansion()
+	result = expand_block("login", "{\"model\": \"User\"}", "")
+	assert(result.contains("_login"))
+	assert(result.contains("_register"))
+	assert(result.contains("_auth_hash_password"))
+	assert(result.contains("User.findBy"))
+
+test_auth_validation_missing_secret()
+	result = validate_block("auth", "{\"strategy\": \"jwt\"}", "")
+	assert(result.contains("secret attribute is required"))
+
+test_auth_validation_invalid_strategy()
+	result = validate_block("auth", "{\"strategy\": \"invalid\", \"secret\": \"test\"}", "")
+	assert(result.contains("must be 'jwt' or 'session'"))
+
+test_login_validation_missing_model()
+	result = validate_block("login", "{}", "")
+	assert(result.contains("model attribute is required"))
+
+test_unknown_block_passthrough()
+	result = expand_block("unknown", "{}", "original body")
+	assert(result == "original body")

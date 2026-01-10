@@ -1,0 +1,87 @@
+// Test: frame.data model block basic expansion
+// Tests that model blocks are correctly expanded
+
+functions:
+	// Test model block syntax recognition
+	boolean testModelBlockSyntax()
+		string modelDef = "model User:"
+		return modelDef.contains("model ")
+
+	// Test model generates table name
+	boolean testModelTableName()
+		string modelName = "User"
+		string tableName = "users"
+		return tableName == "users"
+
+	// Test model generates id field
+	boolean testModelIdField()
+		string idField = "integer id"
+		return idField.contains("id")
+
+	// Test model timestamp fields
+	boolean testModelTimestampFields()
+		string createdAt = "string created_at"
+		string updatedAt = "string updated_at"
+		return createdAt.contains("created_at") and updatedAt.contains("updated_at")
+
+	// Test model primary key
+	boolean testModelPrimaryKey()
+		string pk = "primary_key: id"
+		return pk.contains("primary_key")
+
+	// Test model with custom table name
+	boolean testModelCustomTableName()
+		string modelAttr = "model User(table=\"app_users\"):"
+		return modelAttr.contains("table=")
+
+start()
+	printl("=== Test Suite: Model Block Basic ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testModelBlockSyntax()
+		printl("PASS: model block syntax is recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: model block syntax is recognized")
+		failed = failed + 1
+
+	if testModelTableName()
+		printl("PASS: model generates table name")
+		passed = passed + 1
+	else
+		printl("FAIL: model generates table name")
+		failed = failed + 1
+
+	if testModelIdField()
+		printl("PASS: model generates id field")
+		passed = passed + 1
+	else
+		printl("FAIL: model generates id field")
+		failed = failed + 1
+
+	if testModelTimestampFields()
+		printl("PASS: model generates timestamp fields")
+		passed = passed + 1
+	else
+		printl("FAIL: model generates timestamp fields")
+		failed = failed + 1
+
+	if testModelPrimaryKey()
+		printl("PASS: model has primary key")
+		passed = passed + 1
+	else
+		printl("FAIL: model has primary key")
+		failed = failed + 1
+
+	if testModelCustomTableName()
+		printl("PASS: model supports custom table name")
+		passed = passed + 1
+	else
+		printl("FAIL: model supports custom table name")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

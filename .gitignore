@@ -5,7 +5,8 @@
 
 # Build artifacts
 /build/
-/dist/
+dist/
+**/dist/
 *.wasm
 *.tar.gz
 *.zip

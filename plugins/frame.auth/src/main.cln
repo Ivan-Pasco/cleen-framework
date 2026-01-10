@@ -1,0 +1,85 @@
+// frame.auth plugin - Authentication DSL
+// Provides: auth, protected, login blocks
+// Version: 1.0.0
+
+functions:
+	// Main entry point - called by compiler for each framework block
+	string expand_block(string block_name, string attributes, string body)
+		if block_name == "auth"
+			return expand_auth(attributes, body)
+		if block_name == "protected"
+			return expand_protected(attributes, body)
+		if block_name == "login"
+			return expand_login(attributes, body)
+		return body
+
+	// Validation entry point
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "auth"
+			return validate_auth(attributes)
+		if block_name == "login"
+			return validate_login(attributes)
+		return ""
+
+	// Keywords for IDE
+	string get_keywords()
+		return "[\"auth\", \"protected\", \"login\", \"jwt\", \"session\", \"bearer\", \"role\", \"permission\"]"
+
+	// Auth block expansion
+	string expand_auth(string attrs, string body)
+		string strategy = get_attr(attrs, "strategy", "jwt")
+		string secret = get_attr(attrs, "secret", "AUTH_SECRET")
+		string expiry = get_attr(attrs, "expiry", "3600")
+		string result = "_auth_configure(\"" + strategy + "\", _env_get(\"" + secret + "\"), " + expiry + ")\n" + body + "\n"
+		return result
+
+	// Protected block expansion
+	string expand_protected(string attrs, string body)
+		string role = get_attr(attrs, "role", "")
+		string result = "_http_middleware((request, next) -> any\n\tany user = _auth_verify_request(request)\n\tif user == null\n\t\treturn _http_unauthorized()\n"
+		if role == ""
+			result = result + "\trequest.user = user\n\treturn next(request)\n)\n" + body + "\n"
+			return result
+		result = result + "\tif user.role != \"" + role + "\"\n\t\treturn _http_forbidden()\n\trequest.user = user\n\treturn next(request)\n)\n" + body + "\n"
+		return result
+
+	// Login block expansion
+	string expand_login(string attrs, string body)
+		string model = get_attr(attrs, "model", "User")
+		string result = "any _login(string email, string password)\n\tany user = " + model + ".findBy(\"email\", email)\n\tif user == null\n\t\treturn null\n\tif _auth_verify_password(password, user.password_hash) == false\n\t\treturn null\n\treturn _auth_create_token(user)\n" + body + "\n"
+		return result
+
+	// Validate auth attributes
+	string validate_auth(string attrs)
+		string secret = get_attr(attrs, "secret", "")
+		if secret == ""
+			return "auth: secret attribute is required"
+		return ""
+
+	// Validate login attributes
+	string validate_login(string attrs)
+		string model = get_attr(attrs, "model", "")
+		if model == ""
+			return "login: model attribute is required"
+		return ""
+
+	// Get attribute from attrs string
+	string get_attr(string attrs, string key, string default_val)
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_val
+		return extract_value(attrs, pos)
+
+	// Extract value after key position
+	string extract_value(string json, integer key_pos)
+		integer colon_pos = json.indexOf(":", key_pos)
+		if colon_pos == -1
+			return ""
+		integer quote_start = json.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			return ""
+		integer quote_end = json.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return ""
+		return json.substring(quote_start + 1, quote_end)

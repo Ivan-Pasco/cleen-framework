@@ -1,0 +1,16 @@
+// Single post endpoint
+// Route: GET, PUT, DELETE /api/posts/:id
+
+string method = _req_method()
+// Note: id is automatically provided by framework for dynamic routes
+
+if method == "GET"
+	return "{\"id\": \"" + id + "\"}"
+
+if method == "PUT"
+	return "{\"message\": \"post updated\", \"id\": \"" + id + "\"}"
+
+if method == "DELETE"
+	return "{\"message\": \"post deleted\", \"id\": \"" + id + "\"}"
+
+return "{\"error\": \"method not allowed\"}"

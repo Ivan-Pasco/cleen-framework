@@ -1,0 +1,9 @@
+// Button component
+component: name="Button", client="on"
+
+props:
+	string label
+	string variant
+
+button: class="btn btn-{variant}"
+	{label}

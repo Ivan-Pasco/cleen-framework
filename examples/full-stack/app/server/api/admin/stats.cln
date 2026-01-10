@@ -1,0 +1,4 @@
+// Admin stats endpoint (admin only)
+// Route: GET /api/admin/stats
+
+return "{\"users\": 0, \"posts\": 0, \"comments\": 0}"

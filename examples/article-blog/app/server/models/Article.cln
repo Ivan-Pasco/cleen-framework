@@ -1,0 +1,11 @@
+// Article model
+// Schema for the Article data type
+
+data Article
+	integer id
+	string title
+	string slug
+	string excerpt
+	string content
+	string category
+	integer readTime

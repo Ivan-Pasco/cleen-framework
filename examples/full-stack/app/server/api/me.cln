@@ -1,0 +1,12 @@
+// Current user endpoint
+// Route: GET, PUT /api/me
+
+string method = _req_method()
+
+if method == "GET"
+	return "{\"message\": \"current user\"}"
+
+if method == "PUT"
+	return "{\"message\": \"profile updated\"}"
+
+return "{\"error\": \"method not allowed\"}"
