@@ -24,9 +24,8 @@ get_page_meta = "get_page_meta"
 # IDE keyword support
 get_keywords = "get_keywords"
 
-[blocks]
-# DSL blocks handled by expand_block
-handles = ["component"]
+[handles]
+blocks = ["component", "screen"]
 
 [html]
 # File extensions processed as HTML pages
@@ -38,3 +37,16 @@ directives = ["if", "else", "each", "bind", "client", "slot"]
 # Interpolation syntax
 interpolation_escaped = "{{}}"
 interpolation_raw = "{{{}}}"
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["src/ui", "pages"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln", "*.html"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true

@@ -336,6 +336,54 @@ get_keywords = "get_keywords"    # Optional - for IDE support
 
 [blocks]
 handles = ["server", "route", "middleware"]
+
+[paths]
+owns = ["src/endpoints"]
+auto_create = true
+patterns = ["*.cln"]
+implicit_import = true
+```
+
+### Folder Conventions
+
+Plugins declare **folder ownership** to provide convention-over-configuration semantics. Files in owned folders automatically receive the plugin's context.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PROJECT STRUCTURE                             │
+│                                                                  │
+│   myapp/                                                         │
+│   ├── frame.toml          # Declares: plugins = [...]            │
+│   ├── src/                                                       │
+│   │   ├── ui/             # Owned by frame.ui                    │
+│   │   │   └── Button.cln  # Implicitly a component               │
+│   │   ├── data/           # Owned by frame.data                  │
+│   │   │   └── User.cln    # Implicitly a model                   │
+│   │   ├── endpoints/      # Owned by frame.httpserver            │
+│   │   │   └── users.cln   # Implicitly API routes                │
+│   │   └── auth/           # Owned by frame.auth                  │
+│   │       └── config.cln  # Auth configuration                   │
+│   └── pages/              # Owned by frame.ui                    │
+│       └── index.html      # Page with UI components              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Plugin | Owned Folders | File Types | Purpose |
+|--------|---------------|------------|---------|
+| `frame.ui` | `src/ui/`, `pages/` | `.cln`, `.html` | UI components, pages |
+| `frame.data` | `src/data/` | `.cln` | Data models, queries |
+| `frame.httpserver` | `src/endpoints/` | `.cln` | API routes, middleware |
+| `frame.auth` | `src/auth/` | `.cln` | Auth configuration |
+
+When `implicit_import = true`, files in owned folders don't need explicit import statements:
+
+```clean
+// src/data/User.cln
+// No import needed - frame.data is implicit
+
+model: name="User"
+    string email
+    string name
 ```
 
 ### Plugin API

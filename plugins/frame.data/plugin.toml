@@ -31,3 +31,16 @@ functions = [
   { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit transaction by ID, returns 0 on success", expand_strings = true },
   { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback transaction by ID, returns 0 on success", expand_strings = true },
 ]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["src/data"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true

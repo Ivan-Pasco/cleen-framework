@@ -42,3 +42,16 @@ functions = [
   { name = "_auth_can", params = ["string"], returns = "integer", description = "Check if user has permission", expand_strings = true },
   { name = "_auth_has_any_role", params = ["string"], returns = "integer", description = "Check if user has any of the roles (JSON array)", expand_strings = true },
 ]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["src/endpoints"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true

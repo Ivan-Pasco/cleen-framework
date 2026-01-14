@@ -110,6 +110,12 @@ get_keywords = "get_keywords"     # Optional (for IDE support)
 
 [blocks]
 handles = ["myblock", "another"]  # DSL blocks this plugin handles
+
+[paths]
+owns = ["src/mymodule"]           # Folders this plugin owns
+auto_create = true                # Create folders on plugin import
+patterns = ["*.cln"]              # File patterns in owned folders
+implicit_import = true            # Files in owned folders auto-import this plugin
 ```
 
 ### Manifest Fields
@@ -126,6 +132,10 @@ handles = ["myblock", "another"]  # DSL blocks this plugin handles
 | | validate | No | Name of validation function |
 | | get_keywords | No | Name of keywords function |
 | `[blocks]` | handles | Yes | List of block names |
+| `[paths]` | owns | No | List of folder paths this plugin owns |
+| | auto_create | No | Create folders automatically (default: true) |
+| | patterns | No | File patterns recognized in owned folders |
+| | implicit_import | No | Auto-import plugin for files in owned folders (default: true) |
 
 ---
 
@@ -441,7 +451,134 @@ component: name="Button"
 
 ---
 
-## 7. Security Model
+## 7. Folder Conventions
+
+Plugins can declare **folder ownership** to provide convention-over-configuration semantics. Files placed in a plugin's owned folders automatically receive that plugin's context.
+
+### How Folder Conventions Work
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     PROJECT INITIALIZATION                       │
+│                                                                  │
+│   frame.toml declares:                                          │
+│       plugins = ["frame.ui", "frame.data", "frame.httpserver"]  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     PLUGIN LOADING                               │
+│                                                                  │
+│   For each plugin:                                              │
+│   1. Read plugin.toml [paths] section                           │
+│   2. If auto_create = true, create owned folders                │
+│   3. Register folder → plugin mappings                          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     COMPILATION                                  │
+│                                                                  │
+│   For each source file:                                         │
+│   1. Check if file is in a plugin-owned folder                  │
+│   2. If implicit_import = true, inject plugin import            │
+│   3. Apply plugin's block handlers automatically                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Official Plugin Folder Conventions
+
+| Plugin | Owned Folders | File Types | Purpose |
+|--------|---------------|------------|---------|
+| `frame.ui` | `src/ui/`, `pages/` | `.cln`, `.html` | UI components, pages |
+| `frame.data` | `src/data/` | `.cln` | Data models, queries |
+| `frame.httpserver` | `src/endpoints/` | `.cln` | API routes, middleware |
+| `frame.auth` | `src/auth/` | `.cln` | Auth configuration |
+
+### Project Structure Example
+
+After importing plugins, the framework creates this structure:
+
+```
+myapp/
+├── frame.toml                  # Project manifest
+├── src/
+│   ├── ui/                     # Owned by frame.ui
+│   │   ├── Button.cln          # Implicitly a component
+│   │   ├── Card.cln            # Implicitly a component
+│   │   └── Layout.cln          # Implicitly a component
+│   ├── data/                   # Owned by frame.data
+│   │   ├── User.cln            # Implicitly a model
+│   │   └── Post.cln            # Implicitly a model
+│   ├── endpoints/              # Owned by frame.httpserver
+│   │   ├── users.cln           # Implicitly API routes
+│   │   └── posts.cln           # Implicitly API routes
+│   ├── auth/                   # Owned by frame.auth
+│   │   └── config.cln          # Auth configuration
+│   └── main.cln                # Application entry point
+└── pages/                      # Owned by frame.ui
+    ├── index.html              # Home page
+    └── about.html              # About page
+```
+
+### Implicit Import Behavior
+
+When `implicit_import = true`, files in owned folders don't need explicit imports:
+
+**Without folder conventions** (explicit import required):
+```clean
+// src/data/User.cln
+import:
+    frame.data
+
+model: name="User"
+    string email
+    string name
+```
+
+**With folder conventions** (implicit import):
+```clean
+// src/data/User.cln
+// No import needed - frame.data is implicit for files in src/data/
+
+model: name="User"
+    string email
+    string name
+```
+
+### Folder Priority Rules
+
+When multiple plugins could own the same folder:
+
+1. **Explicit ownership wins**: First plugin to declare `owns` takes priority
+2. **Nested folders are specific**: `src/data/users/` can be owned by a different plugin than `src/data/`
+3. **Pattern matching**: More specific patterns match first (`*.model.cln` before `*.cln`)
+
+### Custom Plugin Folders
+
+Third-party plugins can declare their own folders:
+
+```toml
+# my-analytics-plugin/plugin.toml
+[plugin]
+name = "analytics"
+version = "1.0.0"
+
+[paths]
+owns = ["src/analytics", "src/tracking"]
+auto_create = true
+patterns = ["*.cln"]
+implicit_import = true
+
+[blocks]
+handles = ["track", "event", "metric"]
+```
+
+This creates `src/analytics/` and `src/tracking/` when the plugin is imported.
+
+---
+
+## 8. Security Model
 
 ### Compile-Time Sandbox
 
@@ -469,7 +606,7 @@ Plugins run in a WASM sandbox during compilation:
 
 ---
 
-## 8. Migration from v1
+## 9. Migration from v1
 
 ### Removed Concepts
 
@@ -491,7 +628,7 @@ The following v1 concepts are replaced:
 
 ---
 
-## 9. Testing Plugins
+## 10. Testing Plugins
 
 ### Unit Tests
 
@@ -531,7 +668,7 @@ wasm-validate test.wasm
 
 ---
 
-## 10. Versioning & Compatibility
+## 11. Versioning & Compatibility
 
 ### Semantic Versioning
 
@@ -554,7 +691,7 @@ The compiler refuses to load incompatible plugins.
 
 ---
 
-## 11. AI Development Notes
+## 12. AI Development Notes
 
 This architecture supports AI-assisted development:
 
@@ -570,7 +707,7 @@ When prompting AI:
 
 ---
 
-## 12. File Locations Summary
+## 13. File Locations Summary
 
 | Item | Location |
 |------|----------|

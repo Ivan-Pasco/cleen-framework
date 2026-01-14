@@ -15,3 +15,16 @@ get_keywords = "get_keywords"
 
 [blocks]
 handles = ["auth", "protected", "login"]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["src/auth"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
