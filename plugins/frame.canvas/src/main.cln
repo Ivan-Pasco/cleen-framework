@@ -1,0 +1,228 @@
+// frame.canvas plugin - Canvas Rendering and Animation DSL
+// Provides: canvasScene, draw, onFrame blocks
+// Also provides: canvas.* drawing commands
+// Version: 1.0.0
+
+functions:
+	// Main entry point - called by compiler for each framework block
+	string expand_block(string block_name, string attributes, string body)
+		if block_name == "canvasScene"
+			return expand_canvas_scene(attributes, body)
+		if block_name == "draw"
+			return expand_draw(attributes, body)
+		if block_name == "onFrame"
+			return expand_on_frame(attributes, body)
+		// Handle canvas.* drawing commands
+		if block_name.startsWith("canvas.")
+			return expand_canvas_command(block_name, attributes, body)
+		return body
+
+	// Validation entry point
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "canvasScene"
+			return validate_canvas_scene(attributes)
+		return ""
+
+	// Keywords for IDE
+	string get_keywords()
+		return "[\"canvasScene\", \"draw\", \"onFrame\", \"canvas\", \"clear\", \"circle\", \"rect\", \"line\", \"text\", \"image\", \"save\", \"restore\", \"translate\", \"rotate\", \"scale\", \"color\", \"radius\", \"width\", \"height\", \"stroke\", \"filled\"]"
+
+	// ========================================================================
+	// CANVAS SCENE EXPANSION
+	// ========================================================================
+
+	// Expand canvasScene block - creates canvas context and handlers
+	string expand_canvas_scene(string attrs, string body)
+		string width = get_attr(attrs, "width", "800")
+		string height = get_attr(attrs, "height", "600")
+		string id = get_attr(attrs, "id", "_canvas_0")
+
+		// Generate canvas initialization and body
+		string result = "// Canvas Scene: " + id + "\n"
+		result = result + "integer " + id + " = _canvas_init(" + width + ", " + height + ")\n"
+		result = result + body + "\n"
+		result = result + "_canvas_present(" + id + ")\n"
+		return result
+
+	// Expand draw block - wraps drawing commands
+	string expand_draw(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+
+		// Wrap draw commands with canvas context
+		string result = "// Draw block\n"
+		result = result + body + "\n"
+		return result
+
+	// Expand onFrame block - creates animation loop
+	string expand_on_frame(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string param = get_attr(attrs, "param", "dt")
+
+		// Generate animation frame handler
+		string result = "// Animation frame handler\n"
+		result = result + "_canvas_request_frame(" + canvas_id + ")\n"
+		result = result + "number " + param + " = _canvas_get_delta_time()\n"
+		result = result + body + "\n"
+		return result
+
+	// ========================================================================
+	// CANVAS COMMAND EXPANSION
+	// ========================================================================
+
+	// Expand canvas.* commands to bridge function calls
+	string expand_canvas_command(string command, string attrs, string body)
+		string cmd = command.substring(7, command.length())
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+
+		if cmd == "clear"
+			string color = get_attr(attrs, "color", "")
+			if color == ""
+				return "_canvas_clear(" + canvas_id + ")\n"
+			return "_canvas_clear_color(" + canvas_id + ", \"" + color + "\")\n"
+
+		if cmd == "circle"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string radius = get_attr(attrs, "radius", "10")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			if filled == "true"
+				return "_canvas_circle_filled(" + canvas_id + ", " + x + ", " + y + ", " + radius + ", \"" + color + "\")\n"
+			return "_canvas_circle(" + canvas_id + ", " + x + ", " + y + ", " + radius + ", \"" + color + "\")\n"
+
+		if cmd == "rect"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string w = get_attr(attrs, "width", "100")
+			string h = get_attr(attrs, "height", "100")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			if filled == "true"
+				return "_canvas_rect_filled(" + canvas_id + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + color + "\")\n"
+			return "_canvas_rect(" + canvas_id + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + color + "\")\n"
+
+		if cmd == "line"
+			string x1 = get_attr(attrs, "fromX", "0")
+			string y1 = get_attr(attrs, "fromY", "0")
+			string x2 = get_attr(attrs, "toX", "100")
+			string y2 = get_attr(attrs, "toY", "100")
+			string stroke = get_attr(attrs, "stroke", "1")
+			string color = get_attr(attrs, "color", "black")
+			return "_canvas_line(" + canvas_id + ", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ", " + stroke + ", \"" + color + "\")\n"
+
+		if cmd == "text"
+			string text_val = get_attr(attrs, "value", body)
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string size = get_attr(attrs, "size", "16")
+			string color = get_attr(attrs, "color", "black")
+			return "_canvas_text(" + canvas_id + ", \"" + text_val + "\", " + x + ", " + y + ", " + size + ", \"" + color + "\")\n"
+
+		if cmd == "image"
+			string src = get_attr(attrs, "src", "")
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string w = get_attr(attrs, "width", "100")
+			string h = get_attr(attrs, "height", "100")
+			return "_canvas_image(" + canvas_id + ", \"" + src + "\", " + x + ", " + y + ", " + w + ", " + h + ")\n"
+
+		if cmd == "save"
+			return "_canvas_save(" + canvas_id + ")\n"
+
+		if cmd == "restore"
+			return "_canvas_restore(" + canvas_id + ")\n"
+
+		if cmd == "translate"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			return "_canvas_translate(" + canvas_id + ", " + x + ", " + y + ")\n"
+
+		if cmd == "rotate"
+			string angle = get_attr(attrs, "angle", "0")
+			return "_canvas_rotate(" + canvas_id + ", " + angle + ")\n"
+
+		if cmd == "scale"
+			string x = get_attr(attrs, "x", "1")
+			string y = get_attr(attrs, "y", "1")
+			return "_canvas_scale(" + canvas_id + ", " + x + ", " + y + ")\n"
+
+		// Unknown command - return as-is
+		return body
+
+	// ========================================================================
+	// VALIDATION
+	// ========================================================================
+
+	string validate_canvas_scene(string attrs)
+		// Canvas scene is always valid, uses defaults
+		return ""
+
+	// ========================================================================
+	// HELPER FUNCTIONS
+	// ========================================================================
+
+	// Get attribute from attrs string (JSON format)
+	string get_attr(string attrs, string key, string default_val)
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_val
+		return extract_value(attrs, pos)
+
+	// Extract value after key position
+	string extract_value(string json, integer key_pos)
+		integer colon_pos = json.indexOf(":", key_pos)
+		if colon_pos == -1
+			return ""
+		integer quote_start = json.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			// Try to extract number value
+			return extract_number(json, colon_pos + 1)
+		integer quote_end = json.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return ""
+		return json.substring(quote_start + 1, quote_end)
+
+	// Extract numeric value (for non-string attributes)
+	string extract_number(string json, integer start_pos)
+		string digits = ""
+		integer i = start_pos
+		while i < json.length()
+			string c = json.substring(i, i + 1)
+			if is_digit_char(c)
+				digits = digits + c
+			else
+				if c == " " or c == "\t"
+					i = i + 1
+					continue
+				break
+			i = i + 1
+		return digits
+
+	// Check if character is a digit or numeric punctuation
+	boolean is_digit_char(string c)
+		if c == "0"
+			return true
+		if c == "1"
+			return true
+		if c == "2"
+			return true
+		if c == "3"
+			return true
+		if c == "4"
+			return true
+		if c == "5"
+			return true
+		if c == "6"
+			return true
+		if c == "7"
+			return true
+		if c == "8"
+			return true
+		if c == "9"
+			return true
+		if c == "."
+			return true
+		if c == "-"
+			return true
+		return false

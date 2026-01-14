@@ -374,6 +374,7 @@ Plugins declare **folder ownership** to provide convention-over-configuration se
 | `frame.data` | `src/data/` | `.cln` | Data models, queries |
 | `frame.httpserver` | `src/endpoints/` | `.cln` | API routes, middleware |
 | `frame.auth` | `src/auth/` | `.cln` | Auth configuration |
+| `frame.canvas` | `src/canvas/` | `.cln` | Canvas rendering, animation |
 
 When `implicit_import = true`, files in owned folders don't need explicit import statements:
 
@@ -409,6 +410,7 @@ expand_block(block_name: string, attributes: string, body: string) -> string
 | `frame.data` | model, query, transaction | ORM and database |
 | `frame.auth` | auth, protected, login | Authentication |
 | `frame.ui` | component, layout, page | UI components and SSR |
+| `frame.canvas` | canvasScene, draw, onFrame | Canvas rendering and animation |
 
 ---
 

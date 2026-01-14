@@ -494,6 +494,7 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 | `frame.data` | `src/data/` | `.cln` | Data models, queries |
 | `frame.httpserver` | `src/endpoints/` | `.cln` | API routes, middleware |
 | `frame.auth` | `src/auth/` | `.cln` | Auth configuration |
+| `frame.canvas` | `src/canvas/` | `.cln` | Canvas rendering, animation |
 
 ### Project Structure Example
 
@@ -515,6 +516,9 @@ myapp/
 │   │   └── posts.cln           # Implicitly API routes
 │   ├── auth/                   # Owned by frame.auth
 │   │   └── config.cln          # Auth configuration
+│   ├── canvas/                 # Owned by frame.canvas
+│   │   ├── GameScene.cln       # Implicitly canvas scene
+│   │   └── ChartViz.cln        # Implicitly canvas scene
 │   └── main.cln                # Application entry point
 └── pages/                      # Owned by frame.ui
     ├── index.html              # Home page

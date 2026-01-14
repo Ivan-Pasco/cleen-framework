@@ -1,0 +1,72 @@
+[plugin]
+name = "frame.canvas"
+version = "1.0.0"
+description = "Canvas rendering plugin for Clean Language - provides drawing, animation, and visual effects"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"
+get_keywords = "get_keywords"
+
+[handles]
+blocks = ["canvasScene", "draw", "onFrame"]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["src/canvas"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
+
+# Bridge function declarations - canvas-specific functions provided by the runtime
+# These are the drawing and animation primitives
+[bridge]
+functions = [
+  # Canvas lifecycle
+  { name = "_canvas_init", params = ["integer", "integer"], returns = "integer", description = "Initialize canvas with width and height, returns canvas ID" },
+  { name = "_canvas_clear", params = ["integer"], returns = "integer", description = "Clear the canvas by ID" },
+  { name = "_canvas_clear_color", params = ["integer", "string"], returns = "integer", description = "Clear canvas with specific color", expand_strings = true },
+  { name = "_canvas_present", params = ["integer"], returns = "integer", description = "Present/flush canvas buffer" },
+
+  # Basic shapes
+  { name = "_canvas_circle", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw circle: canvas_id, x, y, radius, color", expand_strings = true },
+  { name = "_canvas_circle_filled", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw filled circle", expand_strings = true },
+  { name = "_canvas_rect", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rectangle: canvas_id, x, y, width, height, color", expand_strings = true },
+  { name = "_canvas_rect_filled", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled rectangle", expand_strings = true },
+  { name = "_canvas_line", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw line: canvas_id, x1, y1, x2, y2, stroke_width, color", expand_strings = true },
+
+  # Text rendering
+  { name = "_canvas_text", params = ["integer", "string", "number", "number", "number", "string"], returns = "integer", description = "Draw text: canvas_id, text, x, y, size, color", expand_strings = true },
+
+  # Images
+  { name = "_canvas_image", params = ["integer", "string", "number", "number", "number", "number"], returns = "integer", description = "Draw image: canvas_id, src, x, y, width, height", expand_strings = true },
+
+  # Transforms
+  { name = "_canvas_save", params = ["integer"], returns = "integer", description = "Save canvas state" },
+  { name = "_canvas_restore", params = ["integer"], returns = "integer", description = "Restore canvas state" },
+  { name = "_canvas_translate", params = ["integer", "number", "number"], returns = "integer", description = "Translate canvas: canvas_id, x, y" },
+  { name = "_canvas_rotate", params = ["integer", "number"], returns = "integer", description = "Rotate canvas: canvas_id, angle_degrees" },
+  { name = "_canvas_scale", params = ["integer", "number", "number"], returns = "integer", description = "Scale canvas: canvas_id, sx, sy" },
+
+  # Animation
+  { name = "_canvas_request_frame", params = ["integer"], returns = "integer", description = "Request animation frame callback, returns frame ID" },
+  { name = "_canvas_cancel_frame", params = ["integer"], returns = "integer", description = "Cancel animation frame by ID" },
+  { name = "_canvas_get_delta_time", params = [], returns = "number", description = "Get time since last frame in seconds" },
+
+  # Input (canvas-specific)
+  { name = "_canvas_on_pointer", params = ["integer", "integer"], returns = "integer", description = "Register pointer event handler: canvas_id, handler_idx" },
+  { name = "_canvas_on_key", params = ["integer", "integer"], returns = "integer", description = "Register key event handler: canvas_id, handler_idx" },
+  { name = "_canvas_pointer_x", params = [], returns = "number", description = "Get current pointer X position" },
+  { name = "_canvas_pointer_y", params = [], returns = "number", description = "Get current pointer Y position" },
+]
