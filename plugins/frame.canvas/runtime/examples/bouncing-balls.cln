@@ -1,0 +1,52 @@
+// Bouncing Ball - Clean Language Canvas Demo
+// Physics-based animation with gravity and bouncing
+
+import:
+	frame.canvas
+
+functions:
+	// Main entry - initialize canvas and start animation
+	void start()
+		integer canvasId = _canvas_init(800, 600)
+		integer frameId = _canvas_request_frame(canvasId)
+		print(frameId)
+
+	// Frame callback - called by runtime each frame
+	void _frame_callback(integer canvas)
+		// Update physics (gravity, velocity, collisions)
+		_physics_update()
+
+		// Get current ball position
+		number ballX = _physics_get_x()
+		number ballY = _physics_get_y()
+
+		// Render the scene
+		render(canvas, ballX, ballY)
+
+	// Render the scene
+	void render(integer canvas, number ballX, number ballY)
+		// Clear background
+		_canvas_clear_color(canvas, "#0f0f23")
+
+		// Ground
+		_canvas_rect_filled(canvas, 0.0, 590.0, 800.0, 10.0, "#1a1a3a")
+
+		// Shadow (dynamic size based on height)
+		number shadowSize = 15.0 + (ballY - 300.0) / 20.0
+		if shadowSize < 5.0
+			shadowSize = 5.0
+		if shadowSize > 40.0
+			shadowSize = 40.0
+		_canvas_circle_filled(canvas, ballX, 583.0, shadowSize, "#000000")
+
+		// Ball
+		_canvas_circle_filled(canvas, ballX, ballY, 30.0, "#ff6b6b")
+
+		// Highlight
+		number highlightX = ballX - 10.0
+		number highlightY = ballY - 10.0
+		_canvas_circle_filled(canvas, highlightX, highlightY, 8.0, "#ffffff")
+
+		// Title
+		_canvas_text(canvas, "Bouncing Ball", 320.0, 40.0, 28.0, "#ffffff")
+		_canvas_text(canvas, "Clean Language + WebAssembly", 260.0, 75.0, 18.0, "#888888")

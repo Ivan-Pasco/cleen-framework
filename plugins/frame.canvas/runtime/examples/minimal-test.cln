@@ -1,0 +1,17 @@
+// Minimal Canvas Test - consume return values
+import:
+	frame.canvas
+
+state:
+	integer canvasId = 0
+	number x = 100.0
+
+functions:
+	void _frame_callback(integer canvasId)
+		integer r1 = _canvas_clear_color(canvasId, "#1a1a2e")
+		integer r2 = _canvas_circle_filled(canvasId, x, 300.0, 50.0, "#ff6b6b")
+		x = x + 0.5
+
+start()
+	canvasId = _canvas_init(800, 600)
+	integer r = _canvas_request_frame(canvasId)

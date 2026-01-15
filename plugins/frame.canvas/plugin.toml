@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.canvas"
-version = "1.0.0"
-description = "Canvas rendering plugin for Clean Language - provides drawing, animation, and visual effects"
+version = "2.0.0"
+description = "Canvas rendering plugin for Clean Language - provides drawing, animation, audio, sprites, input, and visual effects for game development"
 author = "Clean Language Team"
 license = "MIT"
 
@@ -30,43 +30,234 @@ patterns = ["*.cln"]
 implicit_import = true
 
 # Bridge function declarations - canvas-specific functions provided by the runtime
-# These are the drawing and animation primitives
+# These are the drawing, animation, audio, input, and game development primitives
 [bridge]
 functions = [
-  # Canvas lifecycle
+  # ===== Canvas Lifecycle =====
   { name = "_canvas_init", params = ["integer", "integer"], returns = "integer", description = "Initialize canvas with width and height, returns canvas ID" },
   { name = "_canvas_clear", params = ["integer"], returns = "integer", description = "Clear the canvas by ID" },
   { name = "_canvas_clear_color", params = ["integer", "string"], returns = "integer", description = "Clear canvas with specific color", expand_strings = true },
   { name = "_canvas_present", params = ["integer"], returns = "integer", description = "Present/flush canvas buffer" },
+  { name = "_canvas_resize", params = ["integer", "integer", "integer"], returns = "integer", description = "Resize canvas: canvas_id, width, height" },
+  { name = "_canvas_get_width", params = ["integer"], returns = "integer", description = "Get canvas width" },
+  { name = "_canvas_get_height", params = ["integer"], returns = "integer", description = "Get canvas height" },
 
-  # Basic shapes
-  { name = "_canvas_circle", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw circle: canvas_id, x, y, radius, color", expand_strings = true },
+  # ===== Basic Shapes =====
+  { name = "_canvas_circle", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw circle outline: canvas_id, x, y, radius, color", expand_strings = true },
   { name = "_canvas_circle_filled", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw filled circle", expand_strings = true },
-  { name = "_canvas_rect", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rectangle: canvas_id, x, y, width, height, color", expand_strings = true },
+  { name = "_canvas_rect", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rectangle outline: canvas_id, x, y, width, height, color", expand_strings = true },
   { name = "_canvas_rect_filled", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled rectangle", expand_strings = true },
+  { name = "_canvas_rect_rounded", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rounded rect: canvas_id, x, y, w, h, radius, color", expand_strings = true },
+  { name = "_canvas_rect_rounded_filled", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled rounded rect", expand_strings = true },
   { name = "_canvas_line", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw line: canvas_id, x1, y1, x2, y2, stroke_width, color", expand_strings = true },
+  { name = "_canvas_ellipse", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw ellipse: canvas_id, x, y, radiusX, radiusY, color", expand_strings = true },
+  { name = "_canvas_ellipse_filled", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled ellipse", expand_strings = true },
+  { name = "_canvas_triangle", params = ["integer", "number", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw triangle: canvas_id, x1, y1, x2, y2, x3, y3, color", expand_strings = true },
+  { name = "_canvas_triangle_filled", params = ["integer", "number", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled triangle", expand_strings = true },
+  { name = "_canvas_polygon", params = ["integer", "integer", "string"], returns = "integer", description = "Draw polygon: canvas_id, points_ptr, color (points in memory)", expand_strings = true },
+  { name = "_canvas_polygon_filled", params = ["integer", "integer", "string"], returns = "integer", description = "Draw filled polygon", expand_strings = true },
 
-  # Text rendering
+  # ===== Text Rendering =====
   { name = "_canvas_text", params = ["integer", "string", "number", "number", "number", "string"], returns = "integer", description = "Draw text: canvas_id, text, x, y, size, color", expand_strings = true },
+  { name = "_canvas_text_number", params = ["integer", "integer", "number", "number", "number", "string"], returns = "integer", description = "Draw integer as text: canvas_id, number, x, y, size, color", expand_strings = true },
+  { name = "_canvas_text_font", params = ["integer", "string", "number", "number", "number", "string", "string"], returns = "integer", description = "Draw text with font: canvas_id, text, x, y, size, color, font", expand_strings = true },
+  { name = "_canvas_text_align", params = ["integer", "string"], returns = "integer", description = "Set text alignment: canvas_id, align (left/center/right)", expand_strings = true },
+  { name = "_canvas_text_baseline", params = ["integer", "string"], returns = "integer", description = "Set text baseline: canvas_id, baseline (top/middle/bottom)", expand_strings = true },
+  { name = "_canvas_measure_text", params = ["integer", "string", "number"], returns = "number", description = "Measure text width: canvas_id, text, fontSize" },
 
-  # Images
+  # ===== Images =====
   { name = "_canvas_image", params = ["integer", "string", "number", "number", "number", "number"], returns = "integer", description = "Draw image: canvas_id, src, x, y, width, height", expand_strings = true },
+  { name = "_canvas_image_cropped", params = ["integer", "integer", "number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw cropped image: canvas_id, imageId, sx, sy, sw, sh, dx, dy, dw, dh" },
+  { name = "_canvas_image_rotated", params = ["integer", "integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw rotated image: canvas_id, imageId, x, y, w, h, angle" },
 
-  # Transforms
+  # ===== Transforms =====
   { name = "_canvas_save", params = ["integer"], returns = "integer", description = "Save canvas state" },
   { name = "_canvas_restore", params = ["integer"], returns = "integer", description = "Restore canvas state" },
   { name = "_canvas_translate", params = ["integer", "number", "number"], returns = "integer", description = "Translate canvas: canvas_id, x, y" },
   { name = "_canvas_rotate", params = ["integer", "number"], returns = "integer", description = "Rotate canvas: canvas_id, angle_degrees" },
   { name = "_canvas_scale", params = ["integer", "number", "number"], returns = "integer", description = "Scale canvas: canvas_id, sx, sy" },
+  { name = "_canvas_transform", params = ["integer", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Set transform matrix: canvas_id, a, b, c, d, e, f" },
+  { name = "_canvas_reset_transform", params = ["integer"], returns = "integer", description = "Reset transform to identity" },
 
-  # Animation
+  # ===== Animation =====
   { name = "_canvas_request_frame", params = ["integer"], returns = "integer", description = "Request animation frame callback, returns frame ID" },
   { name = "_canvas_cancel_frame", params = ["integer"], returns = "integer", description = "Cancel animation frame by ID" },
   { name = "_canvas_get_delta_time", params = [], returns = "number", description = "Get time since last frame in seconds" },
+  { name = "_canvas_get_time", params = [], returns = "number", description = "Get total elapsed time in seconds" },
+  { name = "_canvas_get_fps", params = [], returns = "number", description = "Get current frames per second" },
 
-  # Input (canvas-specific)
-  { name = "_canvas_on_pointer", params = ["integer", "integer"], returns = "integer", description = "Register pointer event handler: canvas_id, handler_idx" },
-  { name = "_canvas_on_key", params = ["integer", "integer"], returns = "integer", description = "Register key event handler: canvas_id, handler_idx" },
-  { name = "_canvas_pointer_x", params = [], returns = "number", description = "Get current pointer X position" },
-  { name = "_canvas_pointer_y", params = [], returns = "number", description = "Get current pointer Y position" },
+  # ===== Audio - Sound Effects =====
+  { name = "_audio_load_sound", params = ["string"], returns = "integer", description = "Load sound effect, returns sound ID", expand_strings = true },
+  { name = "_audio_play", params = ["integer", "number", "boolean"], returns = "integer", description = "Play sound: soundId, volume (0-1), loop" },
+  { name = "_audio_stop", params = ["integer"], returns = "integer", description = "Stop sound instance" },
+  { name = "_audio_pause", params = ["integer"], returns = "integer", description = "Pause sound instance" },
+  { name = "_audio_resume", params = ["integer"], returns = "integer", description = "Resume paused sound" },
+  { name = "_audio_set_volume", params = ["integer", "number"], returns = "integer", description = "Set sound volume: instanceId, volume" },
+  { name = "_audio_set_pitch", params = ["integer", "number"], returns = "integer", description = "Set sound pitch: instanceId, pitch" },
+  { name = "_audio_set_pan", params = ["integer", "number"], returns = "integer", description = "Set sound pan: instanceId, pan (-1 to 1)" },
+  { name = "_audio_is_playing", params = ["integer"], returns = "integer", description = "Check if sound is playing (returns 1/0)" },
+
+  # ===== Audio - Music =====
+  { name = "_audio_load_music", params = ["string"], returns = "integer", description = "Load music track, returns music ID", expand_strings = true },
+  { name = "_audio_play_music", params = ["integer", "number", "boolean"], returns = "integer", description = "Play music: musicId, volume, loop" },
+  { name = "_audio_stop_music", params = [], returns = "integer", description = "Stop current music" },
+  { name = "_audio_pause_music", params = [], returns = "integer", description = "Pause current music" },
+  { name = "_audio_resume_music", params = [], returns = "integer", description = "Resume paused music" },
+  { name = "_audio_set_music_volume", params = ["number"], returns = "integer", description = "Set music volume (0-1)" },
+  { name = "_audio_fade_music", params = ["number", "number"], returns = "integer", description = "Fade music: targetVolume, durationSeconds" },
+  { name = "_audio_crossfade", params = ["integer", "number", "number"], returns = "integer", description = "Crossfade to new music: musicId, volume, duration" },
+
+  # ===== Audio - Master Control =====
+  { name = "_audio_set_master_volume", params = ["number"], returns = "integer", description = "Set master volume (0-1)" },
+  { name = "_audio_mute_all", params = [], returns = "integer", description = "Mute all audio" },
+  { name = "_audio_unmute_all", params = [], returns = "integer", description = "Unmute all audio" },
+
+  # ===== Sprites =====
+  { name = "_sprite_load_sheet", params = ["string", "integer", "integer"], returns = "integer", description = "Load sprite sheet: path, frameWidth, frameHeight", expand_strings = true },
+  { name = "_sprite_draw", params = ["integer", "integer", "integer", "number", "number"], returns = "integer", description = "Draw sprite: canvasId, sheetId, frameIndex, x, y" },
+  { name = "_sprite_draw_scaled", params = ["integer", "integer", "integer", "number", "number", "number", "number"], returns = "integer", description = "Draw scaled sprite: canvasId, sheetId, frameIndex, x, y, scaleX, scaleY" },
+  { name = "_sprite_draw_rotated", params = ["integer", "integer", "integer", "number", "number", "number"], returns = "integer", description = "Draw rotated sprite: canvasId, sheetId, frameIndex, x, y, angle" },
+  { name = "_sprite_draw_transformed", params = ["integer", "integer", "integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw transformed sprite: canvasId, sheetId, frameIndex, x, y, scaleX, scaleY, angle" },
+  { name = "_sprite_get_frame_count", params = ["integer"], returns = "integer", description = "Get number of frames in sprite sheet" },
+  { name = "_sprite_get_frame_width", params = ["integer"], returns = "integer", description = "Get frame width" },
+  { name = "_sprite_get_frame_height", params = ["integer"], returns = "integer", description = "Get frame height" },
+
+  # ===== Input - Mouse =====
+  { name = "_input_mouse_x", params = [], returns = "number", description = "Get mouse X position" },
+  { name = "_input_mouse_y", params = [], returns = "number", description = "Get mouse Y position" },
+  { name = "_input_mouse_pressed", params = ["integer"], returns = "integer", description = "Check if mouse button pressed: 0=left, 1=middle, 2=right (returns 1/0)" },
+  { name = "_input_mouse_just_pressed", params = ["integer"], returns = "integer", description = "Check if mouse button just pressed this frame (returns 1/0)" },
+  { name = "_input_mouse_just_released", params = ["integer"], returns = "integer", description = "Check if mouse button just released this frame (returns 1/0)" },
+  { name = "_input_mouse_wheel_x", params = [], returns = "number", description = "Get horizontal scroll delta" },
+  { name = "_input_mouse_wheel_y", params = [], returns = "number", description = "Get vertical scroll delta" },
+
+  # ===== Input - Keyboard =====
+  { name = "_input_key_down", params = ["string"], returns = "integer", description = "Check if key is pressed (returns 1/0)", expand_strings = true },
+  { name = "_input_key_just_pressed", params = ["string"], returns = "integer", description = "Check if key just pressed this frame (returns 1/0)", expand_strings = true },
+  { name = "_input_key_just_released", params = ["string"], returns = "integer", description = "Check if key just released this frame (returns 1/0)", expand_strings = true },
+  { name = "_input_get_last_key", params = [], returns = "string", description = "Get last key pressed" },
+  { name = "_input_get_text_input", params = [], returns = "string", description = "Get text input since last frame" },
+
+  # ===== Input - Touch =====
+  { name = "_input_touch_count", params = [], returns = "integer", description = "Get number of active touch points" },
+  { name = "_input_touch_x", params = ["integer"], returns = "number", description = "Get touch X position by index" },
+  { name = "_input_touch_y", params = ["integer"], returns = "number", description = "Get touch Y position by index" },
+  { name = "_input_touch_id", params = ["integer"], returns = "integer", description = "Get touch identifier by index" },
+  { name = "_input_touch_started", params = [], returns = "integer", description = "Check if new touch started this frame (returns 1/0)" },
+  { name = "_input_touch_ended", params = [], returns = "integer", description = "Check if touch ended this frame (returns 1/0)" },
+
+  # ===== Input - Gamepad =====
+  { name = "_input_gamepad_connected", params = ["integer"], returns = "integer", description = "Check if gamepad is connected (returns 1/0)" },
+  { name = "_input_gamepad_button", params = ["integer", "integer"], returns = "integer", description = "Check gamepad button: gamepadIndex, buttonIndex (returns 1/0)" },
+  { name = "_input_gamepad_button_just_pressed", params = ["integer", "integer"], returns = "integer", description = "Check if button just pressed (returns 1/0)" },
+  { name = "_input_gamepad_axis", params = ["integer", "integer"], returns = "number", description = "Get gamepad axis value (-1 to 1)" },
+  { name = "_input_gamepad_left_stick_x", params = ["integer"], returns = "number", description = "Get left stick X" },
+  { name = "_input_gamepad_left_stick_y", params = ["integer"], returns = "number", description = "Get left stick Y" },
+  { name = "_input_gamepad_right_stick_x", params = ["integer"], returns = "number", description = "Get right stick X" },
+  { name = "_input_gamepad_right_stick_y", params = ["integer"], returns = "number", description = "Get right stick Y" },
+  { name = "_input_gamepad_left_trigger", params = ["integer"], returns = "number", description = "Get left trigger value (0-1)" },
+  { name = "_input_gamepad_right_trigger", params = ["integer"], returns = "number", description = "Get right trigger value (0-1)" },
+  { name = "_input_gamepad_vibrate", params = ["integer", "number", "number"], returns = "integer", description = "Vibrate gamepad: gamepadIndex, intensity, duration" },
+
+  # ===== Collision Detection =====
+  { name = "_collision_point_rect", params = ["number", "number", "number", "number", "number", "number"], returns = "integer", description = "Point vs rect: px, py, rx, ry, rw, rh (returns 1/0)" },
+  { name = "_collision_point_circle", params = ["number", "number", "number", "number", "number"], returns = "integer", description = "Point vs circle: px, py, cx, cy, radius (returns 1/0)" },
+  { name = "_collision_circle_circle", params = ["number", "number", "number", "number", "number", "number"], returns = "integer", description = "Circle vs circle: x1, y1, r1, x2, y2, r2 (returns 1/0)" },
+  { name = "_collision_rect_rect", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Rect vs rect: x1, y1, w1, h1, x2, y2, w2, h2 (returns 1/0)" },
+  { name = "_collision_circle_rect", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Circle vs rect: cx, cy, cr, rx, ry, rw, rh (returns 1/0)" },
+  { name = "_collision_line_line", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Line vs line: x1, y1, x2, y2, x3, y3, x4, y4 (returns 1/0)" },
+  { name = "_collision_line_circle", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Line vs circle: x1, y1, x2, y2, cx, cy, r (returns 1/0)" },
+  { name = "_collision_line_rect", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Line vs rect: x1, y1, x2, y2, rx, ry, rw, rh (returns 1/0)" },
+  { name = "_collision_circle_circle_overlap", params = ["number", "number", "number", "number", "number", "number"], returns = "number", description = "Get circle overlap distance (negative if no overlap)" },
+  { name = "_collision_rect_rect_overlap_x", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Get rect X overlap" },
+  { name = "_collision_rect_rect_overlap_y", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Get rect Y overlap" },
+  { name = "_collision_raycast_circle", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Raycast to circle: ox, oy, dx, dy, cx, cy, r - returns distance or -1" },
+  { name = "_collision_raycast_rect", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Raycast to rect: ox, oy, dx, dy, rx, ry, rw, rh - returns distance or -1" },
+
+  # ===== Asset Management =====
+  { name = "_asset_load_image", params = ["string"], returns = "integer", description = "Load image asset, returns ID", expand_strings = true },
+  { name = "_asset_load_sound", params = ["string"], returns = "integer", description = "Load sound asset, returns ID", expand_strings = true },
+  { name = "_asset_load_music", params = ["string"], returns = "integer", description = "Load music asset, returns ID", expand_strings = true },
+  { name = "_asset_queue", params = ["string"], returns = "integer", description = "Queue asset for loading", expand_strings = true },
+  { name = "_asset_load_all", params = [], returns = "integer", description = "Start loading all queued assets" },
+  { name = "_asset_get_progress", params = [], returns = "number", description = "Get loading progress (0-1)" },
+  { name = "_asset_all_loaded", params = [], returns = "integer", description = "Check if all assets loaded (returns 1/0)" },
+  { name = "_asset_is_loaded", params = ["integer"], returns = "integer", description = "Check if specific asset loaded (returns 1/0)" },
+  { name = "_asset_get", params = ["string"], returns = "integer", description = "Get asset ID by name", expand_strings = true },
+  { name = "_asset_unload", params = ["integer"], returns = "integer", description = "Unload specific asset" },
+  { name = "_asset_unload_all", params = [], returns = "integer", description = "Unload all assets" },
+
+  # ===== Camera & Viewport =====
+  { name = "_camera_set_position", params = ["number", "number"], returns = "integer", description = "Set camera position: x, y" },
+  { name = "_camera_get_x", params = [], returns = "number", description = "Get camera X position" },
+  { name = "_camera_get_y", params = [], returns = "number", description = "Get camera Y position" },
+  { name = "_camera_set_zoom", params = ["number"], returns = "integer", description = "Set camera zoom level" },
+  { name = "_camera_get_zoom", params = [], returns = "number", description = "Get camera zoom level" },
+  { name = "_camera_set_rotation", params = ["number"], returns = "integer", description = "Set camera rotation in degrees" },
+  { name = "_camera_apply", params = ["integer"], returns = "integer", description = "Apply camera transform to canvas" },
+  { name = "_camera_reset", params = ["integer"], returns = "integer", description = "Reset camera transform" },
+  { name = "_camera_screen_to_world_x", params = ["number"], returns = "number", description = "Convert screen X to world X" },
+  { name = "_camera_screen_to_world_y", params = ["number"], returns = "number", description = "Convert screen Y to world Y" },
+  { name = "_camera_world_to_screen_x", params = ["number"], returns = "number", description = "Convert world X to screen X" },
+  { name = "_camera_world_to_screen_y", params = ["number"], returns = "number", description = "Convert world Y to screen Y" },
+  { name = "_camera_shake", params = ["number", "number"], returns = "integer", description = "Camera shake: intensity, duration" },
+
+  # ===== Gradients =====
+  { name = "_gradient_create_linear", params = ["number", "number", "number", "number"], returns = "integer", description = "Create linear gradient: x1, y1, x2, y2" },
+  { name = "_gradient_create_radial", params = ["number", "number", "number", "number"], returns = "integer", description = "Create radial gradient: cx, cy, innerRadius, outerRadius" },
+  { name = "_gradient_add_stop", params = ["integer", "number", "string"], returns = "integer", description = "Add color stop: gradientId, offset (0-1), color", expand_strings = true },
+  { name = "_canvas_set_fill_gradient", params = ["integer", "integer"], returns = "integer", description = "Set fill to gradient: canvasId, gradientId" },
+  { name = "_canvas_set_stroke_gradient", params = ["integer", "integer"], returns = "integer", description = "Set stroke to gradient: canvasId, gradientId" },
+
+  # ===== Paths =====
+  { name = "_path_begin", params = ["integer"], returns = "integer", description = "Begin new path on canvas" },
+  { name = "_path_move_to", params = ["integer", "number", "number"], returns = "integer", description = "Move to point: canvasId, x, y" },
+  { name = "_path_line_to", params = ["integer", "number", "number"], returns = "integer", description = "Line to point: canvasId, x, y" },
+  { name = "_path_quadratic_to", params = ["integer", "number", "number", "number", "number"], returns = "integer", description = "Quadratic curve: canvasId, cpx, cpy, x, y" },
+  { name = "_path_bezier_to", params = ["integer", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Bezier curve: canvasId, cp1x, cp1y, cp2x, cp2y, x, y" },
+  { name = "_path_arc", params = ["integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Arc: canvasId, x, y, radius, startAngle, endAngle" },
+  { name = "_path_arc_to", params = ["integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Arc to: canvasId, x1, y1, x2, y2, radius" },
+  { name = "_path_close", params = ["integer"], returns = "integer", description = "Close current path" },
+  { name = "_path_fill", params = ["integer", "string"], returns = "integer", description = "Fill path with color", expand_strings = true },
+  { name = "_path_stroke", params = ["integer", "string", "number"], returns = "integer", description = "Stroke path: canvasId, color, lineWidth", expand_strings = true },
+
+  # ===== Advanced Rendering =====
+  { name = "_canvas_set_blend_mode", params = ["integer", "string"], returns = "integer", description = "Set blend mode: source-over, multiply, screen, overlay, etc.", expand_strings = true },
+  { name = "_canvas_set_alpha", params = ["integer", "number"], returns = "integer", description = "Set global alpha: canvasId, alpha (0-1)" },
+  { name = "_canvas_set_shadow", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Set shadow: canvasId, blur, offsetX, offsetY, color", expand_strings = true },
+  { name = "_canvas_clear_shadow", params = ["integer"], returns = "integer", description = "Clear shadow settings" },
+  { name = "_canvas_set_line_cap", params = ["integer", "string"], returns = "integer", description = "Set line cap: butt, round, square", expand_strings = true },
+  { name = "_canvas_set_line_join", params = ["integer", "string"], returns = "integer", description = "Set line join: miter, round, bevel", expand_strings = true },
+  { name = "_canvas_set_line_dash", params = ["integer", "number", "number"], returns = "integer", description = "Set line dash: canvasId, dashLength, gapLength" },
+  { name = "_canvas_clear_line_dash", params = ["integer"], returns = "integer", description = "Clear line dash (solid lines)" },
+
+  # ===== Easing Functions =====
+  { name = "_ease_linear", params = ["number"], returns = "number", description = "Linear interpolation" },
+  { name = "_ease_in_quad", params = ["number"], returns = "number", description = "Quadratic ease in" },
+  { name = "_ease_out_quad", params = ["number"], returns = "number", description = "Quadratic ease out" },
+  { name = "_ease_in_out_quad", params = ["number"], returns = "number", description = "Quadratic ease in-out" },
+  { name = "_ease_in_cubic", params = ["number"], returns = "number", description = "Cubic ease in" },
+  { name = "_ease_out_cubic", params = ["number"], returns = "number", description = "Cubic ease out" },
+  { name = "_ease_in_out_cubic", params = ["number"], returns = "number", description = "Cubic ease in-out" },
+  { name = "_ease_in_sine", params = ["number"], returns = "number", description = "Sine ease in" },
+  { name = "_ease_out_sine", params = ["number"], returns = "number", description = "Sine ease out" },
+  { name = "_ease_in_out_sine", params = ["number"], returns = "number", description = "Sine ease in-out" },
+  { name = "_ease_in_expo", params = ["number"], returns = "number", description = "Exponential ease in" },
+  { name = "_ease_out_expo", params = ["number"], returns = "number", description = "Exponential ease out" },
+  { name = "_ease_in_out_expo", params = ["number"], returns = "number", description = "Exponential ease in-out" },
+  { name = "_ease_in_elastic", params = ["number"], returns = "number", description = "Elastic ease in" },
+  { name = "_ease_out_elastic", params = ["number"], returns = "number", description = "Elastic ease out" },
+  { name = "_ease_in_out_elastic", params = ["number"], returns = "number", description = "Elastic ease in-out" },
+  { name = "_ease_in_bounce", params = ["number"], returns = "number", description = "Bounce ease in" },
+  { name = "_ease_out_bounce", params = ["number"], returns = "number", description = "Bounce ease out" },
+  { name = "_ease_in_out_bounce", params = ["number"], returns = "number", description = "Bounce ease in-out" },
+  { name = "_ease_in_back", params = ["number"], returns = "number", description = "Back ease in (overshoot)" },
+  { name = "_ease_out_back", params = ["number"], returns = "number", description = "Back ease out (overshoot)" },
+  { name = "_ease_in_out_back", params = ["number"], returns = "number", description = "Back ease in-out (overshoot)" },
+
+  # ===== Scene Management =====
+  { name = "_scene_get_current", params = [], returns = "string", description = "Get current scene name" },
+  { name = "_scene_change", params = ["string"], returns = "integer", description = "Change to scene by name", expand_strings = true },
+  { name = "_scene_push", params = ["string"], returns = "integer", description = "Push scene onto stack", expand_strings = true },
+  { name = "_scene_pop", params = [], returns = "integer", description = "Pop scene from stack" },
 ]

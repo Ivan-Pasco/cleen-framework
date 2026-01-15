@@ -1,0 +1,20 @@
+// Simple Canvas Test - minimal example
+import:
+	frame.canvas
+
+state:
+	integer canvasId = 0
+	number x = 100.0
+	number y = 100.0
+
+functions:
+	void _frame_callback(integer canvasId)
+		_canvas_clear_color(canvasId, "#1a1a2e")
+		_canvas_circle_filled(canvasId, x, y, 50.0, "#ff6b6b")
+		x = x + 1.0
+		if x > 700.0
+			x = 100.0
+
+start()
+	canvasId = _canvas_init(800, 600)
+	_canvas_request_frame(canvasId)

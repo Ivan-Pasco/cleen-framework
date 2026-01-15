@@ -1,0 +1,110 @@
+// Simple Canvas Demo - Clean Language
+// Single frame render (no animation loop issues)
+
+import:
+	frame.canvas
+
+functions:
+	void start()
+		// Initialize canvas
+		integer canvas = _canvas_init(800, 600)
+
+		// Render a static scene
+		render_scene(canvas)
+
+	void render_scene(integer canvas)
+		// Background
+		_canvas_clear_color(canvas, "#1a1a2e")
+
+		// Draw a house
+		draw_house(canvas, 150.0, 350.0)
+
+		// Draw sun
+		_canvas_circle_filled(canvas, 650.0, 100.0, 50.0, "#ffdd44")
+
+		// Draw rays
+		draw_sun_rays(canvas, 650.0, 100.0)
+
+		// Draw grass
+		_canvas_rect_filled(canvas, 0.0, 450.0, 800.0, 150.0, "#228b22")
+
+		// Draw tree
+		draw_tree(canvas, 550.0, 350.0)
+
+		// Draw clouds
+		draw_cloud(canvas, 200.0, 80.0)
+		draw_cloud(canvas, 450.0, 120.0)
+
+		// Title
+		_canvas_text(canvas, "Clean Language Canvas", 280.0, 550.0, 28.0, "#ffffff")
+		_canvas_text(canvas, "100% compiled to WebAssembly", 290.0, 580.0, 16.0, "#888888")
+
+	void draw_house(integer canvas, number x, number y)
+		// House body
+		_canvas_rect_filled(canvas, x, y, 150.0, 100.0, "#8b4513")
+
+		// Roof
+		_canvas_save(canvas)
+		_canvas_translate(canvas, x + 75.0, y - 50.0)
+		draw_triangle(canvas, 0.0, 0.0, 100.0, "#a52a2a")
+		_canvas_restore(canvas)
+
+		// Door
+		_canvas_rect_filled(canvas, x + 55.0, y + 40.0, 40.0, 60.0, "#654321")
+
+		// Window left
+		_canvas_rect_filled(canvas, x + 15.0, y + 20.0, 30.0, 30.0, "#87ceeb")
+		_canvas_rect(canvas, x + 15.0, y + 20.0, 30.0, 30.0, "#333333")
+
+		// Window right
+		_canvas_rect_filled(canvas, x + 105.0, y + 20.0, 30.0, 30.0, "#87ceeb")
+		_canvas_rect(canvas, x + 105.0, y + 20.0, 30.0, 30.0, "#333333")
+
+	void draw_triangle(integer canvas, number cx, number cy, number size, string color)
+		// Draw triangle as three lines (simplified)
+		number half = size / 2.0
+		_canvas_line(canvas, cx - half, cy + half, cx + half, cy + half, 3.0, color)
+		_canvas_line(canvas, cx - half, cy + half, cx, cy - half, 3.0, color)
+		_canvas_line(canvas, cx + half, cy + half, cx, cy - half, 3.0, color)
+
+	void draw_tree(integer canvas, number x, number y)
+		// Trunk
+		_canvas_rect_filled(canvas, x - 15.0, y, 30.0, 100.0, "#8b4513")
+
+		// Leaves (circles)
+		_canvas_circle_filled(canvas, x, y - 30.0, 50.0, "#228b22")
+		_canvas_circle_filled(canvas, x - 35.0, y, 40.0, "#2e8b2e")
+		_canvas_circle_filled(canvas, x + 35.0, y, 40.0, "#2e8b2e")
+
+	void draw_cloud(integer canvas, number x, number y)
+		_canvas_circle_filled(canvas, x, y, 30.0, "#ffffff")
+		_canvas_circle_filled(canvas, x + 35.0, y, 35.0, "#ffffff")
+		_canvas_circle_filled(canvas, x + 70.0, y, 30.0, "#ffffff")
+		_canvas_circle_filled(canvas, x + 35.0, y - 20.0, 25.0, "#ffffff")
+
+	void draw_sun_rays(integer canvas, number x, number y)
+		// Draw 8 rays
+		number i = 0.0
+		while i < 8.0
+			number angle = i * 45.0 * 3.14159 / 180.0
+			number x1 = x + 60.0 * cos_approx(angle)
+			number y1 = y + 60.0 * sin_approx(angle)
+			number x2 = x + 90.0 * cos_approx(angle)
+			number y2 = y + 90.0 * sin_approx(angle)
+			_canvas_line(canvas, x1, y1, x2, y2, 3.0, "#ffdd44")
+			i = i + 1.0
+
+	// Approximate cos for simple cases
+	number cos_approx(number angle)
+		// Taylor series approximation
+		number a2 = angle * angle
+		number a4 = a2 * a2
+		return 1.0 - a2 / 2.0 + a4 / 24.0
+
+	// Approximate sin for simple cases
+	number sin_approx(number angle)
+		// Taylor series approximation
+		number a2 = angle * angle
+		number a3 = a2 * angle
+		number a5 = a3 * a2
+		return angle - a3 / 6.0 + a5 / 120.0

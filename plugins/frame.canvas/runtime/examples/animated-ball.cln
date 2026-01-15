@@ -1,0 +1,37 @@
+// Animated Bouncing Ball - Clean Language Canvas Demo
+
+import:
+	frame.canvas
+
+functions:
+	// Main entry - initialize canvas and start animation
+	void start()
+		integer canvasId = _canvas_init(800, 600)
+		integer frameId = _canvas_request_frame(canvasId)
+		print(frameId)
+
+	// Frame callback - called by runtime each frame
+	void _frame_callback(integer canvas)
+		number dt = _canvas_get_delta_time()
+		renderScene(canvas)
+
+	// Render the scene
+	void renderScene(integer canvas)
+		// Clear background
+		_canvas_clear_color(canvas, "#0f0f23")
+
+		// Ground
+		_canvas_rect_filled(canvas, 0.0, 590.0, 800.0, 10.0, "#1a1a3a")
+
+		// Shadow
+		_canvas_circle_filled(canvas, 400.0, 583.0, 15.0, "#000000")
+
+		// Ball at center
+		_canvas_circle_filled(canvas, 400.0, 300.0, 30.0, "#ff6b6b")
+
+		// Highlight
+		_canvas_circle_filled(canvas, 390.0, 290.0, 8.0, "#ffffff")
+
+		// Title
+		_canvas_text(canvas, "Bouncing Ball Demo", 280.0, 40.0, 28.0, "#ffffff")
+		_canvas_text(canvas, "Clean Language + WASM", 280.0, 75.0, 18.0, "#888888")
