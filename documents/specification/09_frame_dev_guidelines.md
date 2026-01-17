@@ -39,21 +39,50 @@ functions:
         return u.role == "admin"
 
 3) Project Structure
-app/
-  pages/          # route-aligned pages
-  components/     # reusable UI widgets
-  api/            # server endpoints
-config/
-  app.cln
-  ui.cln
-  data.cln
-  auth.cln
-db/
-  schema.cln
-  migrations/
-public/
-dist/
-docs/specification/
+
+Frame uses a clean architecture-based folder structure:
+
+```
+myapp/
+├── app.cln                 # Main entry point
+├── project.toml            # Project configuration
+│
+└── app/
+    ├── ui/                 # Presentation Layer (frame.ui)
+    │   ├── pages/          # Route-level pages/screens
+    │   ├── components/     # Reusable UI pieces
+    │   ├── layouts/        # Page layouts
+    │   └── styles/         # Theme, global styles, tokens
+    │
+    ├── backend/            # Application Layer (frame.httpserver)
+    │   ├── api/            # Endpoints / route handlers
+    │   ├── services/       # Business logic / use-cases
+    │   └── middleware/     # Auth, logging, rate limit
+    │
+    ├── data/               # Persistence Layer (frame.data)
+    │   ├── models/         # DB models / record types
+    │   ├── queries/        # SQL / query builders
+    │   ├── migrations/     # Schema migrations
+    │   └── repositories/   # Data access functions
+    │
+    ├── shared/             # Cross-Cutting (safe for UI + backend)
+    │   ├── types/          # DTOs, shared structs
+    │   ├── validation/     # Shared validation rules
+    │   └── utils/          # Pure helpers (no IO)
+    │
+    └── config/             # Configuration (frame.auth)
+        └── auth.cln        # Auth, roles, session config
+
+├── public/                 # Static assets
+├── dist/                   # Compiled WASM output
+└── docs/specification/     # Documentation
+```
+
+Plugin Folder Ownership:
+- frame.ui → app/ui/**
+- frame.httpserver → app/backend/**
+- frame.data → app/data/**
+- frame.auth → app/config/
 
 4) Clean Language Conventions
 

@@ -617,27 +617,148 @@ For each task:
 
 ---
 
+## Known Clean Language Compiler Bugs
+
+These bugs were discovered during Frame development and affect the compilation of Frame applications.
+
+### Compiler Return Value Bug 🔴 CRITICAL
+
+**File**: Clean Language Compiler (`clean-language-compiler/src/codegen/`)
+
+**Issue**: When a function call returns a value but the return value is not used (stored in a variable), the compiler does not emit code to drop the value from the WASM stack. This causes a WASM validation error: "type mismatch in return".
+
+**Example problematic code**:
+```clean
+void draw()
+    _canvas_clear(canvasId)  // Returns integer but not used
+```
+
+**Workaround**: Always assign return values to a variable:
+```clean
+void draw()
+    integer _r = _canvas_clear(canvasId)  // Must capture return value
+```
+
+**Status**: ⬜ Not Started
+
+---
+
+### Nested If-Else Generates Unreachable 🔴 CRITICAL
+
+**File**: Clean Language Compiler (`clean-language-compiler/src/codegen/`)
+
+**Issue**: When a void function contains nested if-else statements, the compiler generates `unreachable` instructions after else blocks, causing runtime traps.
+
+**Example problematic code**:
+```clean
+void updateGame()
+    if ballY > 600.0
+        lives = lives - 1
+        if lives <= 0
+            gameOver = true
+        else
+            resetBall()  // Compiler generates 'unreachable' after this
+```
+
+**Workaround**: Replace `else` with separate `if` statement:
+```clean
+void updateGame()
+    if ballY > 600.0
+        lives = lives - 1
+        if lives <= 0
+            gameOver = true
+        if lives > 0
+            resetBall()  // Works correctly
+```
+
+**Status**: ⬜ Not Started
+
+---
+
+## Plugin-Based Implementation Progress
+
+The Frame Framework uses a plugin-based architecture where framework features are implemented as Clean Language plugins. These plugins are compiled along with user code and expand DSL blocks into standard Clean code at compile time.
+
+### Completed Plugin Updates (2025-01-15)
+
+#### ✅ frame.data (v2.0.0) - ORM Plugin
+- Implemented `data` keyword for model definitions
+- Added field constraint parsing (`:pk`, `:auto`, `:unique`, `:default=`)
+- Implemented `where:`, `order:`, `limit:`, `link:` sub-blocks
+- Added `Model.find:`, `Model.first:`, `Model.count:` query methods
+- Added `Model.insert:`, `Model.update:`, `Model.delete:` mutation methods
+- Implemented `Data.tx:` transaction blocks
+- Added `db.query:` and `db.queryAs()` for raw SQL
+- Full bridge declarations for database operations
+
+#### ✅ frame.httpserver (v2.0.0) - HTTP Server Plugin
+- Implemented `endpoints:` block parsing with GET/POST/PUT/DELETE/PATCH
+- Added `guard:` sub-block for authorization
+- Added `returns:` sub-block for OpenAPI hints
+- Added `cache:` sub-block for caching
+- Added `handle:` sub-block for handler logic
+- Implemented response helpers: `json()`, `html()`, `redirect()`, `notFound()`, `badRequest()`, `unauthorized()`, `forbidden()`
+- Implemented request helpers: `req.params.*`, `req.query.*`, `req.headers`, `req.json()`, `req.form`, `req.body`
+- Full bridge declarations for HTTP operations
+
+#### ✅ frame.auth (v2.0.0) - Authentication Plugin
+- Implemented `auth:` config block with `session:`, `jwt:`, `roles:` sub-blocks
+- Added session management: `session_create()`, `session_setCookie()`, `session_get()`, `session_destroy()`
+- Added JWT operations: `jwt_sign()`, `jwt_verify()`, `jwt_refresh()`
+- Implemented password hashing: `hashPassword()`, `verifyPassword()`
+- Added role/permission checking: `can()`, `hasRole()`, `isAuthenticated()`
+- Implemented CSRF token generation and validation
+- Full bridge declarations for crypto, session, and JWT operations
+
+#### ✅ frame.ui (v2.1.0) - UI Plugin
+- Implemented HTML page processing with `component`, `screen`, `page` blocks
+- Added directives: `if`, `else`, `each`, `bind`, `client`, `slot`, `show`, `validate`
+- Implemented event handling: `onclick`, `oninput`, `onchange`, `onsubmit`, etc.
+- Added event modifiers: `.prevent`, `.stop`, `.once`, `.enter`, `.escape`
+- Implemented hydration modes: `off`, `on`, `visible`, `idle`, `only`
+- Added slot support for component composition
+- Full bridge declarations for UI operations
+
+#### ✅ frame.canvas (v2.0.0) - Canvas/Game Plugin
+Already comprehensive - includes:
+- Canvas drawing (shapes, text, images, gradients, paths)
+- Animation (requestAnimationFrame, delta time, FPS)
+- Audio (sound effects, music, volume control)
+- Sprites (sprite sheets, transformations)
+- Input (mouse, keyboard, touch, gamepad)
+- Collision detection (all shape combinations, raycast)
+- Asset management (loading, caching, progress)
+- Camera/viewport
+- Easing functions (all common types)
+- Scene management
+
+---
+
 ## Current Focus
 
 **Phase 1 - Foundation & Core Infrastructure**
 
-The Host Bridge is the foundation of the entire framework. All other modules depend on it.
+The plugins provide the DSL layer. The Host Bridge runtime is implemented in `clean-server` (separate repository) and provides the actual bridge functions that the plugins declare.
+
+**Plugin Architecture:**
+- Plugins live in `/plugins/` directory
+- Each plugin has `plugin.toml` (metadata, bridge declarations) and `src/main.cln` (expansion logic)
+- Plugins declare bridge functions that the runtime must provide
+- The compiler reads plugin.toml to know which blocks to handle and what imports to generate
 
 **Next Steps:**
-1. Start with HTTP Bridge implementation
-2. Follow with Database Bridge
-3. Complete all bridge namespaces
-4. Write comprehensive tests for each bridge
+1. Verify plugins compile correctly with updated compiler
+2. Implement bridge functions in clean-server runtime
+3. Create example applications using the plugins
+4. Write integration tests
 
 **Estimated Timeline:**
-- Phase 1: 4-6 weeks
-- Phase 2-4: 8-12 weeks
-- Phase 5-6: 6-8 weeks
-- Phase 7-8: 4-6 weeks
-- Phase 9-12: 6-8 weeks
+- Plugin verification: 1-2 days
+- Runtime implementation: 4-6 weeks
+- Examples & tests: 2-3 weeks
 
-**Total Estimated Time**: 6-9 months for v1.0
+**Total Estimated Time for v1.0**: 2-3 months (reduced due to plugin-based architecture)
 
 ---
 
-**Last Updated**: 2025-01-05
+**Last Updated**: 2025-01-15

@@ -1,0 +1,75 @@
+// Authentication Endpoints
+// Register, login, logout, and session management
+
+plugins:
+	frame.httpserver
+
+endpoints:
+	// User registration - public
+	POST /auth/register:
+		returns: User
+		handle:
+			string body = req.body
+			string email = _json_get(body, "email")
+			string password = _json_get(body, "password")
+			string name = _json_get(body, "name")
+
+			if email == "" or password == ""
+				return badRequest("Email and password are required")
+
+			// Check if user exists
+			User? existing = User.first:
+				where:
+					email == email
+
+			if existing != null
+				return badRequest("Email already registered")
+
+			// Hash password and create user
+			string hash = hashPassword(password)
+			User.insert:
+				email = email
+				password_hash = hash
+				name = name
+
+			return json({ "ok": true, "message": "User registered" })
+
+	// User login - public
+	POST /auth/login:
+		handle:
+			string body = req.body
+			string email = _json_get(body, "email")
+			string password = _json_get(body, "password")
+
+			User? user = User.first:
+				where:
+					email == email
+
+			if user == null
+				return badRequest("Invalid credentials")
+
+			if not verifyPassword(password, user.password_hash)
+				return badRequest("Invalid credentials")
+
+			// Create session
+			string claims = "{\"userId\":" + user.id.toString() + ",\"email\":\"" + user.email + "\",\"role\":\"" + user.role + "\"}"
+			string sessionId = session_create(user.id, claims)
+			session_setCookie(sessionId)
+
+			return json({ "ok": true, "user": { "id": user.id, "email": user.email, "name": user.name } })
+
+	// User logout - requires auth
+	POST /auth/logout:
+		guard:
+			authenticated
+		handle:
+			session_destroy()
+			return json({ "ok": true, "message": "Logged out" })
+
+	// Get current user - requires auth
+	GET /auth/me:
+		guard:
+			authenticated
+		handle:
+			string session = session_get()
+			return json({ "ok": true, "user": session })

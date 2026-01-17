@@ -1,0 +1,9 @@
+// Health Check Endpoint
+// Public endpoint for service health monitoring
+
+plugins:
+	frame.httpserver
+
+endpoints:
+	GET /health:
+		return json({ "status": "ok", "timestamp": _time_now() })

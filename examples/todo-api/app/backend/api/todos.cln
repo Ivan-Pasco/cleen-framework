@@ -1,0 +1,156 @@
+// Todo Endpoints
+// CRUD operations for todo items
+
+plugins:
+	frame.httpserver
+
+endpoints:
+	// List todos - requires auth
+	GET /todos:
+		guard:
+			authenticated
+		returns: list<Todo>
+		handle:
+			string session = session_get()
+			integer userId = _json_get(session, "userId").toInteger()
+
+			list<Todo> todos = Todo.find:
+				where:
+					owner.id == userId
+				order:
+					created_at desc
+
+			return json({ "ok": true, "data": todos })
+
+	// Get single todo - requires auth
+	GET /todos/:id:
+		guard:
+			authenticated
+		returns: Todo
+		handle:
+			integer todoId = req.params.id.toInteger()
+			string session = session_get()
+			integer userId = _json_get(session, "userId").toInteger()
+
+			Todo? todo = Todo.first:
+				where:
+					id == todoId
+					owner.id == userId
+
+			if todo == null
+				return notFound()
+
+			return json({ "ok": true, "data": todo })
+
+	// Create todo - requires auth
+	POST /todos:
+		guard:
+			authenticated
+		returns: Todo
+		handle:
+			string session = session_get()
+			integer userId = _json_get(session, "userId").toInteger()
+
+			string body = req.body
+			string title = _json_get(body, "title")
+			string description = _json_get(body, "description")
+			integer priority = _json_get(body, "priority").toInteger()
+
+			if title == ""
+				return badRequest("Title is required")
+
+			Todo.insert:
+				title = title
+				description = description
+				priority = priority
+				owner = userId
+
+			return json({ "ok": true, "message": "Todo created" })
+
+	// Update todo - requires auth
+	PUT /todos/:id:
+		guard:
+			authenticated
+		handle:
+			integer todoId = req.params.id.toInteger()
+			string session = session_get()
+			integer userId = _json_get(session, "userId").toInteger()
+
+			// Verify ownership
+			Todo? existing = Todo.first:
+				where:
+					id == todoId
+					owner.id == userId
+
+			if existing == null
+				return notFound()
+
+			string body = req.body
+			string title = _json_get(body, "title")
+			string description = _json_get(body, "description")
+			boolean completed = _json_get(body, "completed") == "true"
+			integer priority = _json_get(body, "priority").toInteger()
+
+			Todo.update:
+				set:
+					title = title
+					description = description
+					completed = completed
+					priority = priority
+					updated_at = now()
+				where:
+					id == todoId
+
+			return json({ "ok": true, "message": "Todo updated" })
+
+	// Delete todo - requires auth
+	DELETE /todos/:id:
+		guard:
+			authenticated
+		handle:
+			integer todoId = req.params.id.toInteger()
+			string session = session_get()
+			integer userId = _json_get(session, "userId").toInteger()
+
+			// Verify ownership
+			Todo? existing = Todo.first:
+				where:
+					id == todoId
+					owner.id == userId
+
+			if existing == null
+				return notFound()
+
+			Todo.delete:
+				where:
+					id == todoId
+
+			return json({ "ok": true, "message": "Todo deleted" })
+
+	// Toggle todo completion - requires auth
+	PATCH /todos/:id/toggle:
+		guard:
+			authenticated
+		handle:
+			integer todoId = req.params.id.toInteger()
+			string session = session_get()
+			integer userId = _json_get(session, "userId").toInteger()
+
+			Todo? todo = Todo.first:
+				where:
+					id == todoId
+					owner.id == userId
+
+			if todo == null
+				return notFound()
+
+			boolean newStatus = not todo.completed
+
+			Todo.update:
+				set:
+					completed = newStatus
+					updated_at = now()
+				where:
+					id == todoId
+
+			return json({ "ok": true, "completed": newStatus })

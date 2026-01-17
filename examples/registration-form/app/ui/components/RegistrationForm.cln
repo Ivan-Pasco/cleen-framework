@@ -1,0 +1,97 @@
+// Registration Form Screen
+// Pure Clean Language frontend with DOM interactions
+
+plugins:
+	frame.ui
+
+screen RegistrationForm
+	state:
+		userName: string = ""
+		userEmail: string = ""
+		userPassword: string = ""
+		passwordStrength: integer = 0
+		errorMessage: string = ""
+		isSubmitting: boolean = false
+		showSuccess: boolean = false
+
+	functions:
+		integer calculateStrength(string password)
+			integer strength = 0
+			if password.length() >= 8
+				strength = strength + 1
+			if password.length() >= 12
+				strength = strength + 1
+			return strength
+
+		string getStrengthLabel(integer strength)
+			if strength >= 3
+				return "Strong"
+			if strength >= 2
+				return "Medium"
+			if strength >= 1
+				return "Weak"
+			return ""
+
+		boolean validateForm()
+			if userName.length() < 2
+				errorMessage = "Name must be at least 2 characters"
+				return false
+			if userEmail.indexOf("@") < 0
+				errorMessage = "Please enter a valid email address"
+				return false
+			if userPassword.length() < 8
+				errorMessage = "Password must be at least 8 characters"
+				return false
+			errorMessage = ""
+			return true
+
+		submitForm()
+			if validateForm()
+				isSubmitting = true
+				showSuccess = true
+
+	render:
+		ui.column class="page-container":
+			ui.column class="hero-section":
+				ui.text "EST. 2026" class="eyebrow"
+				ui.column class="hero-title":
+					ui.text "Join the" class="title-line"
+					ui.text "Revolution" class="title-accent"
+				ui.text "Experience the future of web development with Clean Language." class="hero-subtitle"
+
+			ui.column class="form-section":
+				ui.column class="form-container":
+					if showSuccess
+						ui.column class="success-message":
+							ui.text "Welcome Aboard!" class="success-title"
+							ui.text "Your account has been created." class="success-text"
+					else
+						ui.column class="form-header":
+							ui.text "Create Account" class="form-title"
+							ui.text "Start building extraordinary applications today" class="form-desc"
+
+						if errorMessage.length() > 0
+							ui.text errorMessage class="error-message"
+
+						ui.column class="registration-form":
+							ui.column class="form-group":
+								ui.text "FULL NAME" class="form-label"
+								ui.textField bind=userName placeholder="Enter your name" class="form-input"
+
+							ui.column class="form-group":
+								ui.text "EMAIL ADDRESS" class="form-label"
+								ui.textField bind=userEmail placeholder="your@email.com" class="form-input"
+
+							ui.column class="form-group":
+								ui.text "PASSWORD" class="form-label"
+								ui.passwordField bind=userPassword placeholder="Minimum 8 characters" class="form-input"
+
+							ui.column class="form-actions":
+								ui.button class="submit-btn":
+									onClick:
+										submitForm()
+									ui.text "Create Account" class="btn-text"
+
+			ui.row class="page-footer":
+				ui.text "CLEAN" class="footer-logo"
+				ui.text "The Language of Tomorrow" class="footer-tagline"

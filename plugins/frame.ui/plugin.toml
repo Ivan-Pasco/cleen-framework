@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.ui"
-version = "2.0.0"
-description = "HTML-first UI framework plugin - processes HTML pages with custom tags and component definitions"
+version = "2.1.0"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
 
@@ -25,28 +25,122 @@ get_page_meta = "get_page_meta"
 get_keywords = "get_keywords"
 
 [handles]
-blocks = ["component", "screen"]
+blocks = ["component", "screen", "page"]
 
 [html]
 # File extensions processed as HTML pages
-extensions = [".html"]
+extensions = [".html", ".html.cln"]
 
 # Directives recognized in HTML
-directives = ["if", "else", "each", "bind", "client", "slot"]
+directives = ["if", "else", "each", "bind", "client", "slot", "show", "validate"]
+
+# Event attributes recognized (with modifiers like .prevent, .stop)
+events = ["onclick", "oninput", "onchange", "onsubmit", "onfocus", "onblur", "onkeydown", "onkeyup", "onmouseenter", "onmouseleave"]
+
+# Event modifiers
+event_modifiers = ["prevent", "stop", "once", "enter", "escape", "space"]
 
 # Interpolation syntax
 interpolation_escaped = "{{}}"
 interpolation_raw = "{{{}}}"
 
+# Hydration modes
+hydration_modes = ["off", "on", "visible", "idle", "only"]
+
+# Bridge function declarations - UI runtime functions
+[bridge]
+functions = [
+  # HTML Rendering
+  { name = "_html_escape", params = ["string"], returns = "string", description = "Escape HTML entities in string", expand_strings = true },
+  { name = "_html_raw", params = ["string"], returns = "string", description = "Return raw HTML without escaping", expand_strings = true },
+
+  # Component Registry
+  { name = "_ui_register_component", params = ["string", "string"], returns = "integer", description = "Register component: tag name, class name", expand_strings = true },
+  { name = "_ui_get_component", params = ["string"], returns = "string", description = "Get component class by tag name", expand_strings = true },
+
+  # Slot Management
+  { name = "_ui_set_slot", params = ["string", "string"], returns = "integer", description = "Set slot content: slot name, content", expand_strings = true },
+  { name = "_ui_get_slot", params = ["string"], returns = "string", description = "Get slot content by name", expand_strings = true },
+
+  # Event Handler Registration (for client-side hydration)
+  { name = "_ui_on_event", params = ["string", "string", "integer"], returns = "integer", description = "Register event handler: selector, event type, handler idx", expand_strings = true },
+
+  # State Management (for hydration)
+  { name = "_ui_set_state", params = ["string", "string"], returns = "integer", description = "Set component state: component id, state JSON", expand_strings = true },
+  { name = "_ui_get_state", params = ["string"], returns = "string", description = "Get component state by ID", expand_strings = true },
+
+  # DOM Manipulation (for client-side updates)
+  { name = "_ui_update_element", params = ["string", "string"], returns = "integer", description = "Update element content: selector, new content", expand_strings = true },
+  { name = "_ui_update_attr", params = ["string", "string", "string"], returns = "integer", description = "Update element attribute: selector, attr name, value", expand_strings = true },
+
+  # Form Binding
+  { name = "_ui_bind_input", params = ["string", "string"], returns = "integer", description = "Bind input to state: selector, state path", expand_strings = true },
+
+  # Validation
+  { name = "_ui_validate", params = ["string", "string"], returns = "string", description = "Validate value against rule: value, rule type - returns error or empty", expand_strings = true },
+]
+
+[language]
+# Block-level keywords that start a declaration
+blocks = ["component", "screen", "page", "styles"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "state", description = "Component state declaration", context = "block" },
+  { name = "props", description = "Component props declaration", context = "block" },
+  { name = "render", description = "Component render function", context = "block" },
+  { name = "handlers", description = "Event handlers block", context = "block" },
+  { name = "computed", description = "Computed properties", context = "block" },
+  { name = "variables", description = "CSS variables declaration", context = "block" },
+  { name = "global", description = "Global CSS styles", context = "block" },
+  { name = "if", description = "Conditional rendering directive", context = "directive" },
+  { name = "else", description = "Else clause for conditional", context = "directive" },
+  { name = "each", description = "Loop rendering directive", context = "directive" },
+  { name = "bind", description = "Two-way data binding", context = "directive" },
+  { name = "client", description = "Hydration mode attribute", context = "attribute" },
+  { name = "slot", description = "Slot for content projection", context = "directive" },
+  { name = "show", description = "Conditional visibility", context = "directive" },
+  { name = "validate", description = "Form validation directive", context = "directive" },
+]
+
+# Custom types provided by the plugin
+types = [
+  { name = "Component", description = "UI component type" },
+  { name = "Props", description = "Component properties type" },
+  { name = "State", description = "Component state type" },
+]
+
+# Built-in functions/expressions
+functions = [
+  { name = "rawHtml", signature = "rawHtml(content)", description = "Render unescaped HTML (use with caution)" },
+  { name = "escape", signature = "escape(text)", description = "Escape HTML entities" },
+  { name = "slot", signature = "slot(name?)", description = "Render slot content" },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "component ", insert = "component ${1:Name}:\n\tstate:\n\t\t${2:field}: ${3:value}\n\n\trender:\n\t\t${4:// template}" },
+  { trigger = "styles ", insert = "styles ${1:Name}:\n\tvariables:\n\t\t${2:color-primary}: \"${3:#3b82f6}\"" },
+  { trigger = "state:", insert = "state:\n\t${1:field}: ${2:value}" },
+  { trigger = "render:", insert = "render:\n\t${1:// template}" },
+]
+
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["src/ui", "pages"]
+owns = ["app/ui", "app/ui/pages", "app/ui/components", "app/ui/layouts", "app/ui/styles"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
 
 # File patterns recognized in owned folders
-patterns = ["*.cln", "*.html"]
+patterns = ["*.cln", "*.html", "*.html.cln"]
 
 # Files in owned folders automatically import this plugin
 implicit_import = true
+
+[templates]
+# Starter files created when plugin is added to a project
+files = [
+  { path = "app/ui/pages/index.html.cln", template = "index.html.cln" },
+  { path = "app/ui/styles/theme.cln", template = "theme.cln" },
+]

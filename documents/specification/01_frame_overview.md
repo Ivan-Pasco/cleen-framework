@@ -203,20 +203,59 @@ See [10_compiler_plugins.md](./10_compiler_plugins.md) for full details.
 
 ## 6. Project Structure (v2)
 
+Frame uses a clean architecture-based folder structure with clear separation of concerns:
+
 ```
 myapp/
-├── app/
-│   ├── api/            # Backend routes (using frame.web)
-│   ├── pages/          # Frontend pages (using frame.ui)
-│   └── components/     # Reusable UI widgets
-├── db/
-│   ├── schema.cln      # ORM models (using frame.data)
-│   └── migrations/     # Generated SQL migrations
-├── config/
-│   └── app.cln         # App configuration
-├── public/             # Static assets
-└── dist/               # Compiled WASM output
+├── app.cln                 # Main entry point with imports
+├── project.toml            # Project configuration
+│
+└── app/
+    ├── ui/                 # Presentation Layer (frame.ui)
+    │   ├── pages/          # Route-level pages/screens
+    │   ├── components/     # Reusable UI pieces
+    │   ├── layouts/        # Page layouts
+    │   └── styles/         # Theme, global styles, tokens
+    │
+    ├── backend/            # Application Layer (frame.httpserver)
+    │   ├── api/            # Endpoints / controllers / route handlers
+    │   ├── services/       # Business use-cases (orchestration)
+    │   └── middleware/     # Auth, logging, rate limit, etc.
+    │
+    ├── data/               # Persistence Layer (frame.data)
+    │   ├── models/         # DB models / record types
+    │   ├── queries/        # SQL / query builders
+    │   ├── migrations/     # Schema migrations
+    │   └── repositories/   # Data access functions
+    │
+    ├── shared/             # Cross-Cutting (safe for UI and backend)
+    │   ├── types/          # DTOs, shared structs, contracts
+    │   ├── validation/     # Shared validation rules
+    │   └── utils/          # Pure helpers (no IO, no DB, no secrets)
+    │
+    └── config/             # Configuration (frame.auth)
+        └── auth.cln        # Auth, roles, session config
+
+├── public/                 # Static assets
+└── dist/                   # Compiled WASM output
 ```
+
+### Folder Ownership by Plugin
+
+| Plugin | Owned Folders |
+|--------|---------------|
+| `frame.ui` | `app/ui/`, `app/ui/pages/`, `app/ui/components/`, `app/ui/layouts/`, `app/ui/styles/` |
+| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.auth` | `app/config/` |
+
+### Folder Creation
+
+Folders are auto-created by the CLI when:
+1. Creating a new project: `cleen project create myapp --plugins=...`
+2. Adding a plugin: `cleen plugin add frame.data`
+
+See [02_frame_cli.md](./02_frame_cli.md) for details on scaffolding.
 
 ---
 

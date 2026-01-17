@@ -1,0 +1,36 @@
+// Admin Endpoints
+// User management for administrators
+
+plugins:
+	frame.httpserver
+
+endpoints:
+	// Admin only: List all users
+	GET /admin/users:
+		guard:
+			role == "admin"
+		returns: list<User>
+		handle:
+			list<User> users = User.find:
+				order:
+					created_at desc
+
+			return json({ "ok": true, "data": users })
+
+	// Admin only: Delete user
+	DELETE /admin/users/:id:
+		guard:
+			role == "admin"
+		handle:
+			integer userId = req.params.id.toInteger()
+
+			User.delete:
+				where:
+					id == userId
+
+			// Also delete user's todos
+			Todo.delete:
+				where:
+					owner.id == userId
+
+			return json({ "ok": true, "message": "User deleted" })

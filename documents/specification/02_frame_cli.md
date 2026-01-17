@@ -83,9 +83,184 @@ Frame CLI bridged the developer experience between Clean Language source code an
 
 ```bash
 # v2 workflow
-cleen plugin install frame.web frame.data frame.auth
-cleen project create myapp
+cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui,frame.auth
 cd myapp
+```
+
+#### Plugin-Based Folder Scaffolding
+
+When creating a project with `cleen project create`, the CLI reads each plugin's `plugin.toml` and auto-creates folders based on the `[paths]` configuration:
+
+```toml
+# Example from plugin.toml
+[paths]
+owns = ["app/backend", "app/backend/api", "app/backend/services"]
+auto_create = true
+```
+
+**Scaffolding Process:**
+
+1. CLI parses `--plugins` flag (or reads from `project.toml`)
+2. For each plugin, reads `plugin.toml` from the plugin registry
+3. If `auto_create = true`, creates all folders listed in `owns`
+4. Creates starter files from plugin templates
+5. Generates `app.cln` with plugins and imports
+
+**Example Output:**
+
+```bash
+$ cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui,frame.auth
+
+Creating project 'myapp'...
+
+  Creating folders...
+  [frame.data] Creating app/data/models/
+  [frame.data] Creating app/data/queries/
+  [frame.data] Creating app/data/migrations/
+  [frame.data] Creating app/data/repositories/
+  [frame.httpserver] Creating app/backend/api/
+  [frame.httpserver] Creating app/backend/services/
+  [frame.httpserver] Creating app/backend/middleware/
+  [frame.ui] Creating app/ui/pages/
+  [frame.ui] Creating app/ui/components/
+  [frame.ui] Creating app/ui/layouts/
+  [frame.ui] Creating app/ui/styles/
+  [frame.auth] Creating app/config/
+
+  Creating files...
+  [core] Creating app.cln
+  [core] Creating project.toml
+  [frame.auth] Creating app/config/auth.cln
+  [frame.auth] Creating app/config/project.cln
+  [frame.ui] Creating app/ui/pages/index.html.cln
+  [frame.ui] Creating app/ui/styles/theme.cln
+  [frame.httpserver] Creating app/backend/api/health.cln
+
+Project created successfully!
+
+myapp/
+├── app.cln                          # Main entry point
+├── project.toml                     # Project manifest
+└── app/
+    ├── config/
+    │   ├── project.cln              # Project settings
+    │   └── auth.cln                 # Auth configuration
+    ├── data/
+    │   ├── models/
+    │   ├── queries/
+    │   ├── migrations/
+    │   └── repositories/
+    ├── backend/
+    │   ├── api/
+    │   │   └── health.cln           # Health check endpoint
+    │   ├── services/
+    │   └── middleware/
+    └── ui/
+        ├── pages/
+        │   └── index.html.cln       # Home page
+        ├── components/
+        ├── layouts/
+        └── styles/
+            └── theme.cln            # Default theme
+```
+
+#### Starter File Templates
+
+Plugins can provide starter file templates in their `[templates]` section:
+
+```toml
+# plugin.toml
+[templates]
+files = [
+  { path = "app/config/auth.cln", template = "auth_config.cln" },
+  { path = "app/backend/api/health.cln", template = "health_endpoint.cln" },
+]
+```
+
+The CLI reads templates from `~/.cleen/plugins/<name>/<version>/templates/` and copies them to the project.
+
+#### Adding Plugins to Existing Project
+
+When adding a plugin to an existing project, folders are created on-demand:
+
+```bash
+$ cleen plugin add frame.data
+
+Installing frame.data@2.0.0...
+  Creating app/data/
+  Creating app/data/models/
+  Creating app/data/queries/
+  Creating app/data/migrations/
+  Creating app/data/repositories/
+
+Plugin installed. Add to your app.cln:
+  plugins:
+      frame.data
+```
+
+#### Implicit Plugin Import
+
+Files in plugin-owned folders can optionally skip the `plugins:` declaration if `implicit_import = true` in plugin.toml:
+
+```toml
+# plugin.toml
+[paths]
+owns = ["app/data/models"]
+implicit_import = true
+```
+
+```clean
+// app/data/models/User.cln
+// No need for 'plugins: frame.data' - it's implicit
+
+data User
+    integer id : pk, auto
+    string email : unique
+```
+
+#### Shared Folder (Cross-Cutting)
+
+The `app/shared/` folder is not owned by any plugin - it's for code that can be safely used by both UI and backend:
+
+```bash
+$ cleen project create myapp --with-shared
+
+# Creates additional folders:
+myapp/
+└── app/
+    └── shared/
+        ├── types/       # DTOs, shared structs, contracts
+        ├── validation/  # Shared validation rules
+        └── utils/       # Pure helpers (no IO, no DB, no secrets)
+```
+
+**Rules for shared code:**
+- No plugin-specific imports
+- No I/O operations (database, file system, network)
+- No secrets or environment variables
+- Pure functions only
+
+```clean
+// app/shared/types/CreateUserDTO.cln
+// Safe to import from both UI and backend
+
+type CreateUserDTO
+    string name
+    string email
+    string password
+```
+
+```clean
+// app/shared/validation/email.cln
+// Validation rules usable everywhere
+
+functions:
+    boolean isValidEmail(string email)
+        if email.length() < 3
+            return false
+        if email.indexOf("@") < 0
+            return false
+        return true
 ```
 
 ### Development

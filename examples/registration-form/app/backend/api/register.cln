@@ -1,0 +1,26 @@
+// Register endpoint
+// Route: POST /api/register
+
+plugins:
+	frame.httpserver
+
+endpoints:
+	POST /api/register:
+		handle:
+			string name = _json_get(req.body, "name")
+			string email = _json_get(req.body, "email")
+			string password = _json_get(req.body, "password")
+
+			// Validate inputs
+			if name.length() < 2
+				return json({ "ok": false, "error": "Name must be at least 2 characters" })
+
+			if email.indexOf("@") < 0
+				return json({ "ok": false, "error": "Invalid email address" })
+
+			if password.length() < 8
+				return json({ "ok": false, "error": "Password must be at least 8 characters" })
+
+			// In production, hash password and save to database
+			// For demo, just return success
+			return json({ "ok": true, "user": { "name": name, "email": email } })

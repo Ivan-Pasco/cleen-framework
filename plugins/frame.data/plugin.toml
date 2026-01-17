@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.data"
-version = "1.0.0"
-description = "ORM and database plugin for Clean Language - provides model, query, and transaction DSL blocks"
+version = "2.0.0"
+description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
 author = "Clean Language Team"
 license = "MIT"
 
@@ -14,12 +14,25 @@ validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
-blocks = ["model", "query", "transaction"]
+# Model definitions
+blocks = ["data"]
+
+# CRUD operations (these are expression-level, handled by compiler calling expand functions)
+expressions = [
+  "*.find:",
+  "*.first:",
+  "*.count:",
+  "*.insert:",
+  "*.update:",
+  "*.delete:",
+  "*.migrate",
+  "Data.tx:",
+  "db.query:",
+  "db.queryAs"
+]
 
 # Bridge function declarations - these are provided by the runtime (clean-server)
 # The compiler reads these to generate correct WASM imports
-# NOTE: Database functions use expanded (ptr, len) pairs even though they start with _
-# This is handled specially in the compiler via expand_strings = true
 [bridge]
 functions = [
   # Query and Execute - strings passed as (ptr, len) pairs at WASM level
@@ -30,17 +43,69 @@ functions = [
   { name = "_db_begin", params = [], returns = "string", description = "Begin transaction, returns transaction ID" },
   { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit transaction by ID, returns 0 on success", expand_strings = true },
   { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback transaction by ID, returns 0 on success", expand_strings = true },
+
+  # Connection Management
+  { name = "_db_connect", params = ["string"], returns = "integer", description = "Connect to database, returns connection ID", expand_strings = true },
+  { name = "_db_close", params = ["integer"], returns = "integer", description = "Close database connection" },
+
+  # Schema and Migrations
+  { name = "_db_create_table", params = ["string", "string"], returns = "integer", description = "Create table: name, schema JSON", expand_strings = true },
+  { name = "_db_drop_table", params = ["string"], returns = "integer", description = "Drop table by name", expand_strings = true },
+  { name = "_db_table_exists", params = ["string"], returns = "integer", description = "Check if table exists (1=yes, 0=no)", expand_strings = true },
+  { name = "_db_get_schema", params = ["string"], returns = "string", description = "Get table schema as JSON", expand_strings = true },
+]
+
+[language]
+# Block-level keywords that start a declaration
+blocks = ["data"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "find", description = "Query records from a model", context = "expression" },
+  { name = "first", description = "Get first matching record", context = "expression" },
+  { name = "count", description = "Count matching records", context = "expression" },
+  { name = "insert", description = "Insert new record(s)", context = "expression" },
+  { name = "update", description = "Update existing record(s)", context = "expression" },
+  { name = "delete", description = "Delete record(s)", context = "expression" },
+  { name = "migrate", description = "Run database migration", context = "expression" },
+  { name = "where", description = "Filter query conditions", context = "block" },
+  { name = "order", description = "Sort query results", context = "block" },
+  { name = "limit", description = "Limit number of results", context = "block" },
+  { name = "offset", description = "Skip number of results", context = "block" },
+  { name = "include", description = "Include related models", context = "block" },
+]
+
+# Custom types provided by the plugin
+types = [
+  { name = "Model", description = "Base type for data models" },
+  { name = "Query", description = "Database query builder" },
+  { name = "Transaction", description = "Database transaction context" },
+]
+
+# Built-in functions/expressions
+functions = [
+  { name = "Data.tx", signature = "Data.tx: block", description = "Execute block in transaction" },
+  { name = "db.query", signature = "db.query: sql, params", description = "Execute raw SQL query" },
+  { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model" },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "data ", insert = "data ${1:ModelName}:\n\t${2:field}: ${3:type}" },
+  { trigger = ".find:", insert = "find:\n\twhere:\n\t\t${1:condition}" },
+  { trigger = ".insert:", insert = "insert:\n\t${1:field}: ${2:value}" },
+  { trigger = "Data.tx:", insert = "Data.tx:\n\t${1:// transaction code}" },
 ]
 
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["src/data"]
+owns = ["app/data", "app/data/models", "app/data/queries", "app/data/migrations", "app/data/repositories"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
 
 # File patterns recognized in owned folders
-patterns = ["*.cln"]
+patterns = ["*.cln", "*.sql"]
 
 # Files in owned folders automatically import this plugin
 implicit_import = true

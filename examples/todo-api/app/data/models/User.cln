@@ -1,0 +1,14 @@
+// User Model
+// Authentication and user profile data
+
+plugins:
+	frame.data
+
+data User
+	integer id : pk, auto
+	string email : unique
+	string password_hash
+	string name
+	string role = "user"
+	datetime created_at : default=now()
+	datetime updated_at

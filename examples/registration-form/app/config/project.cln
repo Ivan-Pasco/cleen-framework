@@ -1,0 +1,18 @@
+// Registration Form Example
+// Configuration file
+
+plugins:
+	frame.httpserver
+
+config:
+	name: "registration-form"
+	version: "1.0.0"
+	description: "Registration form demonstrating Clean Language UI components with state management and form validation"
+
+server:
+	port: 3000
+	host: "localhost"
+
+build:
+	output: "dist"
+	target: "web"

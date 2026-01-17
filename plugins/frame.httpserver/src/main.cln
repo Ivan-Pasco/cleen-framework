@@ -1,7 +1,11 @@
-// frame.web plugin - Web server DSL
-// Provides: server, endpoints blocks
-// Version: 2.2.0
-// Requires: compiler v0.17.1+, clean-server v1.1.0+
+// frame.httpserver plugin - HTTP Server DSL
+// Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
+// Version: 2.0.0
+// Implements: Frame Server Specification v1.2
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
 
 functions:
 	string expand(string block_name, string attributes, string body)
@@ -12,155 +16,579 @@ functions:
 		return body
 
 	string validate(string block_name, string attributes, string body)
+		if block_name == "endpoints"
+			return validate_endpoints(body)
 		return ""
 
 	string get_keywords()
-		return "[\"server\", \"endpoints\"]"
+		return "[\"server\", \"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"json\", \"html\", \"redirect\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"status\", \"header\", \"req\"]"
 
+// ============================================================================
+// SERVER BLOCK EXPANSION
+// ============================================================================
+
+functions:
 	string expand_server(string attrs)
+		string port = get_attr(attrs, "port", "3000")
 		string result = "start()\n"
-		result = result + "\tprintl(\"Server starting\")\n"
-		result = result + "\t_http_listen(3000)\n"
+		result = result + "\tprintl(\"Server starting on port " + port + "\")\n"
+		result = result + "\t_http_listen(" + port + ")\n"
 		return result
 
+// ============================================================================
+// ENDPOINTS BLOCK EXPANSION
+// ============================================================================
+
+functions:
 	string expand_endpoints(string body)
-		string handlers = "functions:\n"
+		string handlers = ""
 		string routes = ""
-		integer idx = 0
+		integer handler_idx = 0
 
-		// Parse GET routes
+		// Generate response helper functions first
+		string helpers = generate_response_helpers()
+
+		// Parse each endpoint (METHOD /path:)
 		string text = body
-		integer pos = text.indexOf("GET /")
-		while pos != -1
-			string path = extract_path(text, pos, 4)
-			string handler_body = extract_handler(text, pos)
-			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
-			handlers = handlers + handler_body + "\n"
-			routes = routes + "\tstatus = _http_route(\"GET\", \"" + path + "\", " + idx.toString() + ")\n"
-			idx = idx + 1
-			text = text.substring(pos + 5, text.length())
-			pos = text.indexOf("GET /")
+		integer pos = 0
 
-		// Parse POST routes
-		text = body
-		pos = text.indexOf("POST /")
-		while pos != -1
-			string path = extract_path(text, pos, 5)
-			string handler_body = extract_handler(text, pos)
-			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
-			handlers = handlers + handler_body + "\n"
-			routes = routes + "\tstatus = _http_route(\"POST\", \"" + path + "\", " + idx.toString() + ")\n"
-			idx = idx + 1
-			text = text.substring(pos + 6, text.length())
-			pos = text.indexOf("POST /")
+		while pos < text.length()
+			// Find next HTTP method
+			string method = ""
+			string method_upper = ""
+			integer method_pos = -1
 
-		// Parse PUT routes
-		text = body
-		pos = text.indexOf("PUT /")
-		while pos != -1
-			string path = extract_path(text, pos, 4)
-			string handler_body = extract_handler(text, pos)
-			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
-			handlers = handlers + handler_body + "\n"
-			routes = routes + "\tstatus = _http_route(\"PUT\", \"" + path + "\", " + idx.toString() + ")\n"
-			idx = idx + 1
-			text = text.substring(pos + 5, text.length())
-			pos = text.indexOf("PUT /")
+			// Check for each method
+			integer get_pos = text.indexOf("GET /", pos)
+			integer post_pos = text.indexOf("POST /", pos)
+			integer put_pos = text.indexOf("PUT /", pos)
+			integer delete_pos = text.indexOf("DELETE /", pos)
+			integer patch_pos = text.indexOf("PATCH /", pos)
 
-		// Parse DELETE routes
-		text = body
-		pos = text.indexOf("DELETE /")
-		while pos != -1
-			string path = extract_path(text, pos, 7)
-			string handler_body = extract_handler(text, pos)
-			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
-			handlers = handlers + handler_body + "\n"
-			routes = routes + "\tstatus = _http_route(\"DELETE\", \"" + path + "\", " + idx.toString() + ")\n"
-			idx = idx + 1
-			text = text.substring(pos + 8, text.length())
-			pos = text.indexOf("DELETE /")
+			// Find the earliest method
+			method_pos = find_min_positive(get_pos, post_pos, put_pos, delete_pos, patch_pos)
 
-		// Parse PATCH routes
-		text = body
-		pos = text.indexOf("PATCH /")
-		while pos != -1
-			string path = extract_path(text, pos, 6)
-			string handler_body = extract_handler(text, pos)
-			handlers = handlers + "\tstring __route_handler_" + idx.toString() + "()\n"
-			handlers = handlers + handler_body + "\n"
-			routes = routes + "\tstatus = _http_route(\"PATCH\", \"" + path + "\", " + idx.toString() + ")\n"
-			idx = idx + 1
-			text = text.substring(pos + 7, text.length())
-			pos = text.indexOf("PATCH /")
+			if method_pos == -1
+				break
+
+			// Determine which method it is
+			if method_pos == get_pos
+				method = "GET"
+				method_upper = "GET"
+			if method_pos == post_pos
+				method = "POST"
+				method_upper = "POST"
+			if method_pos == put_pos
+				method = "PUT"
+				method_upper = "PUT"
+			if method_pos == delete_pos
+				method = "DELETE"
+				method_upper = "DELETE"
+			if method_pos == patch_pos
+				method = "PATCH"
+				method_upper = "PATCH"
+
+			// Extract path (from after method to colon)
+			integer path_start = method_pos + method.length() + 1
+			integer colon_pos = text.indexOf(":", path_start)
+			if colon_pos == -1
+				break
+
+			string path = text.substring(path_start, colon_pos).trim()
+
+			// Find endpoint body (until next endpoint or end)
+			integer body_start = colon_pos + 1
+			integer next_endpoint = find_next_endpoint(text, body_start)
+			integer body_end = next_endpoint
+			if body_end == -1
+				body_end = text.length()
+
+			string endpoint_body = text.substring(body_start, body_end)
+
+			// Parse sub-blocks
+			string guard_block = extract_subblock(endpoint_body, "guard:")
+			string returns_block = extract_subblock(endpoint_body, "returns:")
+			string cache_block = extract_subblock(endpoint_body, "cache:")
+			string handle_block = extract_subblock(endpoint_body, "handle:")
+
+			// Determine handler code
+			string handler_code = ""
+			if handle_block.length() > 0
+				handler_code = handle_block
+			else
+				// Remove sub-blocks from body to get handler code
+				handler_code = remove_subblocks(endpoint_body)
+
+			// Transform handler code (convert req.params, req.query, etc.)
+			handler_code = transform_handler_code(handler_code, path)
+
+			// Generate handler function
+			string handler_name = "__route_" + method.toLowerCase() + "_" + path_to_func_name(path) + "_" + handler_idx.toString()
+
+			handlers = handlers + "\n\tstring " + handler_name + "()\n"
+
+			// Add guard check if present
+			if guard_block.length() > 0
+				handlers = handlers + generate_guard_check(guard_block)
+
+			// Add handler code
+			handlers = handlers + indent_code(handler_code, 2)
+			handlers = handlers + "\n"
+
+			// Generate route registration
+			if guard_block.length() > 0
+				// Protected route
+				string role = extract_role_from_guard(guard_block)
+				routes = routes + "\tstatus = _http_route_protected(\"" + method_upper + "\", \"" + path + "\", " + handler_idx.toString() + ", \"" + role + "\")\n"
+			else
+				// Regular route
+				routes = routes + "\tstatus = _http_route(\"" + method_upper + "\", \"" + path + "\", " + handler_idx.toString() + ")\n"
+
+			handler_idx = handler_idx + 1
+			pos = body_end
 
 		// Build startup code
-		string startup = "start()\n"
+		string startup = "\nstart()\n"
 		startup = startup + "\tinteger status = 0\n"
-		startup = startup + "\tprintl(\"Registering routes...\")\n"
+		startup = startup + "\tprintl(\"Registering " + handler_idx.toString() + " routes...\")\n"
 		startup = startup + routes
-		startup = startup + "\tprintl(\"Routes registered\")\n"
+		startup = startup + "\tprintl(\"Server ready\")\n"
 
-		return handlers + startup
+		return helpers + "\nfunctions:" + handlers + startup
 
-	string extract_path(string text, integer pos, integer method_len)
-		string after = text.substring(pos + method_len + 1, text.length())
-		integer colon = after.indexOf(":")
-		if colon == -1
-			return "/"
-		string path = after.substring(0, colon)
-		return path.trim()
+// ============================================================================
+// RESPONSE HELPER GENERATION
+// ============================================================================
 
-	string extract_handler(string text, integer pos)
-		integer colon = text.indexOf(":", pos)
-		if colon == -1
-			return "\t\treturn \"\""
-		string after_colon = text.substring(colon + 1, text.length())
-		integer next_route = find_next_route(after_colon)
-		string handler_code = ""
-		if next_route == -1
-			handler_code = after_colon.trim()
-		else
-			handler_code = after_colon.substring(0, next_route).trim()
-		if handler_code.length() == 0
-			return "\t\treturn \"\""
-		return "\t\t" + handler_code
+functions:
+	string generate_response_helpers()
+		string result = "functions:\n"
 
-	integer find_next_route(string text)
-		integer get_pos = text.indexOf("GET /")
-		integer post_pos = text.indexOf("POST /")
-		integer put_pos = text.indexOf("PUT /")
-		integer del_pos = text.indexOf("DELETE /")
-		integer patch_pos = text.indexOf("PATCH /")
-		integer min_pos = -1
-		if get_pos != -1
-			if min_pos == -1
-				min_pos = get_pos
-			else
-				if get_pos < min_pos
-					min_pos = get_pos
-		if post_pos != -1
-			if min_pos == -1
-				min_pos = post_pos
-			else
-				if post_pos < min_pos
-					min_pos = post_pos
-		if put_pos != -1
-			if min_pos == -1
-				min_pos = put_pos
-			else
-				if put_pos < min_pos
-					min_pos = put_pos
-		if del_pos != -1
-			if min_pos == -1
-				min_pos = del_pos
-			else
-				if del_pos < min_pos
-					min_pos = del_pos
-		if patch_pos != -1
-			if min_pos == -1
-				min_pos = patch_pos
-			else
-				if patch_pos < min_pos
-					min_pos = patch_pos
-		return min_pos
+		// json() helper
+		result = result + "\tstring json(any data)\n"
+		result = result + "\t\treturn _http_respond(200, \"application/json\", _json_encode(data))\n\n"
 
+		// json() with status
+		result = result + "\tstring json_status(any data, integer status_code)\n"
+		result = result + "\t\treturn _http_respond(status_code, \"application/json\", _json_encode(data))\n\n"
+
+		// html() helper
+		result = result + "\tstring html(string content)\n"
+		result = result + "\t\treturn _http_respond(200, \"text/html\", content)\n\n"
+
+		// redirect() helper
+		result = result + "\tstring redirect(string url)\n"
+		result = result + "\t\treturn _http_redirect(302, url)\n\n"
+
+		// redirect() with status
+		result = result + "\tstring redirect_status(string url, integer status_code)\n"
+		result = result + "\t\treturn _http_redirect(status_code, url)\n\n"
+
+		// notFound() helper
+		result = result + "\tstring notFound()\n"
+		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"Resource not found\\\"}}\")\n\n"
+
+		// notFound() with message
+		result = result + "\tstring notFoundMsg(string message)\n"
+		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"\" + message + \"\\\"}}\")\n\n"
+
+		// badRequest() helper
+		result = result + "\tstring badRequest(string message)\n"
+		result = result + "\t\treturn _http_respond(400, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"\" + message + \"\\\"}}\")\n\n"
+
+		// unauthorized() helper
+		result = result + "\tstring unauthorized()\n"
+		result = result + "\t\treturn _http_respond(401, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"AUTH_ERROR\\\",\\\"message\\\":\\\"Authentication required\\\"}}\")\n\n"
+
+		// forbidden() helper
+		result = result + "\tstring forbidden()\n"
+		result = result + "\t\treturn _http_respond(403, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"PERMISSION_DENIED\\\",\\\"message\\\":\\\"Access denied\\\"}}\")\n\n"
+
+		// status() helper - returns status code for chaining
+		result = result + "\tinteger status(integer code)\n"
+		result = result + "\t\treturn code\n\n"
+
+		// header() helper
+		result = result + "\tstring header(string name, string value)\n"
+		result = result + "\t\treturn _http_set_header(name, value)\n\n"
+
+		return result
+
+// ============================================================================
+// GUARD PROCESSING
+// ============================================================================
+
+functions:
+	string generate_guard_check(string guard_block)
+		string result = ""
+
+		// Check for role requirement
+		if guard_block.indexOf("role in") != -1
+			// Extract roles array
+			integer bracket_start = guard_block.indexOf("[")
+			integer bracket_end = guard_block.indexOf("]")
+			if bracket_start != -1 and bracket_end != -1
+				string roles = guard_block.substring(bracket_start, bracket_end + 1)
+				result = result + "\t\tif _auth_has_any_role(\"" + roles + "\") == 0\n"
+				result = result + "\t\t\treturn forbidden()\n"
+
+		// Check for simple role requirement
+		if guard_block.indexOf("role ==") != -1
+			integer eq_pos = guard_block.indexOf("role ==")
+			string role = guard_block.substring(eq_pos + 8, guard_block.length()).trim()
+			// Remove quotes if present
+			if role.startsWith("\"")
+				role = role.substring(1, role.length())
+			if role.endsWith("\"")
+				role = role.substring(0, role.length() - 1)
+			result = result + "\t\tif _auth_require_role(\"" + role + "\") == 0\n"
+			result = result + "\t\t\treturn forbidden()\n"
+
+		// Check for authentication requirement
+		if guard_block.indexOf("authenticated") != -1 or guard_block.indexOf("auth") != -1
+			result = result + "\t\tif _auth_require_auth() == 0\n"
+			result = result + "\t\t\treturn unauthorized()\n"
+
+		return result
+
+	string extract_role_from_guard(string guard_block)
+		// Extract first role for protected route registration
+		integer bracket_start = guard_block.indexOf("[")
+		integer bracket_end = guard_block.indexOf("]")
+		if bracket_start != -1 and bracket_end != -1
+			string roles = guard_block.substring(bracket_start + 1, bracket_end)
+			integer comma_pos = roles.indexOf(",")
+			if comma_pos != -1
+				roles = roles.substring(0, comma_pos)
+			// Clean up quotes
+			roles = roles.trim()
+			if roles.startsWith("\"")
+				roles = roles.substring(1, roles.length())
+			if roles.endsWith("\"")
+				roles = roles.substring(0, roles.length() - 1)
+			return roles
+		return ""
+
+// ============================================================================
+// HANDLER CODE TRANSFORMATION
+// ============================================================================
+
+functions:
+	string transform_handler_code(string code, string path)
+		string result = code
+
+		// Transform req.params.* to _req_param("*")
+		result = transform_req_params(result, path)
+
+		// Transform req.query.* to _req_query("*")
+		result = transform_req_query(result)
+
+		// Transform req.headers to object
+		result = result.replace("req.headers", "_req_headers()")
+
+		// Transform req.json(Type) to _json_decode(_req_body())
+		result = transform_req_json(result)
+
+		// Transform req.form to _req_form()
+		result = result.replace("req.form", "_req_form()")
+
+		// Transform req.body to _req_body()
+		result = result.replace("req.body", "_req_body()")
+
+		// Transform req.method to _req_method()
+		result = result.replace("req.method", "_req_method()")
+
+		// Transform req.path to _req_path()
+		result = result.replace("req.path", "_req_path()")
+
+		// Transform req.ip to _req_ip()
+		result = result.replace("req.ip", "_req_ip()")
+
+		// Transform json(data), status(code) pattern
+		result = transform_json_status(result)
+
+		return result
+
+	string transform_req_params(string code, string path)
+		string result = code
+
+		// Find all req.params.* patterns and replace with _req_param("*")
+		integer pos = 0
+		while pos < result.length()
+			integer param_pos = result.indexOf("req.params.", pos)
+			if param_pos == -1
+				break
+
+			// Find end of param name
+			integer name_start = param_pos + 11
+			integer name_end = name_start
+			while name_end < result.length()
+				string ch = result.substring(name_end, name_end + 1)
+				if not is_identifier_char(ch)
+					break
+				name_end = name_end + 1
+
+			string param_name = result.substring(name_start, name_end)
+			string replacement = "_req_param(\"" + param_name + "\")"
+
+			result = result.substring(0, param_pos) + replacement + result.substring(name_end, result.length())
+			pos = param_pos + replacement.length()
+
+		return result
+
+	string transform_req_query(string code)
+		string result = code
+
+		// Find all req.query.* patterns and replace with _req_query("*")
+		integer pos = 0
+		while pos < result.length()
+			integer query_pos = result.indexOf("req.query.", pos)
+			if query_pos == -1
+				break
+
+			// Find end of param name
+			integer name_start = query_pos + 10
+			integer name_end = name_start
+			while name_end < result.length()
+				string ch = result.substring(name_end, name_end + 1)
+				if not is_identifier_char(ch)
+					break
+				name_end = name_end + 1
+
+			string param_name = result.substring(name_start, name_end)
+			string replacement = "_req_query(\"" + param_name + "\")"
+
+			result = result.substring(0, query_pos) + replacement + result.substring(name_end, result.length())
+			pos = query_pos + replacement.length()
+
+		return result
+
+	string transform_req_json(string code)
+		string result = code
+
+		// Find req.json(Type) and replace with cast
+		integer pos = 0
+		while pos < result.length()
+			integer json_pos = result.indexOf("req.json(", pos)
+			if json_pos == -1
+				break
+
+			integer paren_end = result.indexOf(")", json_pos + 9)
+			if paren_end == -1
+				break
+
+			string type_name = result.substring(json_pos + 9, paren_end)
+			string replacement = "_json_decode_as_" + type_name + "(_req_body())"
+
+			result = result.substring(0, json_pos) + replacement + result.substring(paren_end + 1, result.length())
+			pos = json_pos + replacement.length()
+
+		return result
+
+	string transform_json_status(string code)
+		string result = code
+
+		// Transform "return json(data), status(code)" to "return json_status(data, code)"
+		integer pos = 0
+		while pos < result.length()
+			integer pattern_pos = result.indexOf("json(", pos)
+			if pattern_pos == -1
+				break
+
+			// Find closing paren
+			integer data_start = pattern_pos + 5
+			integer paren_count = 1
+			integer data_end = data_start
+			while data_end < result.length() and paren_count > 0
+				string ch = result.substring(data_end, data_end + 1)
+				if ch == "("
+					paren_count = paren_count + 1
+				if ch == ")"
+					paren_count = paren_count - 1
+				data_end = data_end + 1
+
+			// Check if followed by ", status("
+			string after_json = result.substring(data_end, result.length()).trim()
+			if after_json.startsWith(", status(")
+				string data_expr = result.substring(data_start, data_end - 1)
+				integer status_start = result.indexOf("status(", data_end) + 7
+				integer status_end = result.indexOf(")", status_start)
+				string status_code = result.substring(status_start, status_end)
+
+				string replacement = "json_status(" + data_expr + ", " + status_code + ")"
+				integer full_end = status_end + 1
+				result = result.substring(0, pattern_pos) + replacement + result.substring(full_end, result.length())
+				pos = pattern_pos + replacement.length()
+			else
+				pos = data_end
+
+		return result
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+functions:
+	integer find_min_positive(integer a, integer b, integer c, integer d, integer e)
+		integer min_val = -1
+		if a >= 0
+			if min_val == -1 or a < min_val
+				min_val = a
+		if b >= 0
+			if min_val == -1 or b < min_val
+				min_val = b
+		if c >= 0
+			if min_val == -1 or c < min_val
+				min_val = c
+		if d >= 0
+			if min_val == -1 or d < min_val
+				min_val = d
+		if e >= 0
+			if min_val == -1 or e < min_val
+				min_val = e
+		return min_val
+
+	integer find_next_endpoint(string text, integer start_idx)
+		integer get_pos = text.indexOf("GET /", start_idx)
+		integer post_pos = text.indexOf("POST /", start_idx)
+		integer put_pos = text.indexOf("PUT /", start_idx)
+		integer delete_pos = text.indexOf("DELETE /", start_idx)
+		integer patch_pos = text.indexOf("PATCH /", start_idx)
+		return find_min_positive(get_pos, post_pos, put_pos, delete_pos, patch_pos)
+
+	string path_to_func_name(string path)
+		string result = ""
+		integer i = 0
+		while i < path.length()
+			string ch = path.substring(i, i + 1)
+			if ch == "/"
+				result = result + "_"
+			else if ch == ":"
+				result = result + "p"
+			else if is_identifier_char(ch)
+				result = result + ch
+			i = i + 1
+		return result
+
+	boolean is_identifier_char(string ch)
+		if ch >= "a" and ch <= "z"
+			return true
+		if ch >= "A" and ch <= "Z"
+			return true
+		if ch >= "0" and ch <= "9"
+			return true
+		if ch == "_"
+			return true
+		return false
+
+	string extract_subblock(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + block_name.length()
+
+		// Find the end of this sub-block
+		integer end_pos = body.length()
+		integer search_pos = content_start
+
+		while search_pos < body.length()
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				string after_newline = body.substring(search_pos + 1, body.length()).trim()
+				if after_newline.startsWith("guard:") or after_newline.startsWith("returns:") or after_newline.startsWith("cache:") or after_newline.startsWith("handle:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return body.substring(content_start, end_pos).trim()
+
+	string remove_subblocks(string body)
+		string result = body
+
+		// Remove guard: block
+		result = remove_block(result, "guard:")
+		// Remove returns: block
+		result = remove_block(result, "returns:")
+		// Remove cache: block
+		result = remove_block(result, "cache:")
+		// Remove handle: block (handle is special - it's used for the code)
+		// Don't remove it here as it's extracted separately
+
+		return result.trim()
+
+	string remove_block(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return body
+
+		// Find end of block
+		integer end_pos = body.length()
+		integer search_pos = start_pos + block_name.length()
+
+		while search_pos < body.length()
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				string after_newline = body.substring(search_pos + 1, body.length()).trim()
+				if after_newline.startsWith("guard:") or after_newline.startsWith("returns:") or after_newline.startsWith("cache:") or after_newline.startsWith("handle:") or after_newline.startsWith("GET ") or after_newline.startsWith("POST ") or after_newline.startsWith("PUT ") or after_newline.startsWith("DELETE ") or after_newline.startsWith("PATCH ")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return body.substring(0, start_pos) + body.substring(end_pos, body.length())
+
+	string indent_code(string code, integer levels)
+		string indent = ""
+		integer i = 0
+		while i < levels
+			indent = indent + "\t"
+			i = i + 1
+
+		string result = ""
+		string lines = code
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end)
+			if line.trim().length() > 0
+				result = result + indent + line.trim() + "\n"
+
+			line_start = line_end + 1
+
+		return result
+
+	string get_attr(string attrs, string key, string default_val)
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_val
+		return extract_value(attrs, pos)
+
+	string extract_value(string json, integer key_pos)
+		integer colon_pos = json.indexOf(":", key_pos)
+		if colon_pos == -1
+			return ""
+		integer quote_start = json.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			return ""
+		integer quote_end = json.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return ""
+		return json.substring(quote_start + 1, quote_end)
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+functions:
+	string validate_endpoints(string body)
+		// Validate that each endpoint has a return statement
+		string errors = ""
+
+		// Basic validation for now
+		if body.trim().length() == 0
+			errors = "endpoints: block is empty"
+
+		return errors

@@ -1,0 +1,153 @@
+// Clean Language Dashboard - State & Logic Only
+// HTML is in template.html, loader.js handles rendering
+
+plugins:
+	frame.ui
+
+state:
+	integer count = 0
+	integer clicks = 0
+	integer progress = 25
+	boolean darkMode = true
+	string statusMsg = "Welcome to the dashboard!"
+	integer activeTab = 0
+	string userName = ""
+	boolean showGreeting = false
+
+functions:
+	// Getters for template binding
+	integer get_count()
+		return count
+
+	integer get_clicks()
+		return clicks
+
+	integer get_progress()
+		return progress
+
+	boolean get_darkMode()
+		return darkMode
+
+	string get_statusMsg()
+		return statusMsg
+
+	integer get_activeTab()
+		return activeTab
+
+	string get_userName()
+		return userName
+
+	boolean get_showGreeting()
+		return showGreeting
+
+	string get_theme()
+		if darkMode
+			return "dark"
+		return "light"
+
+	string get_countColor()
+		if count < -5
+			return "#dc2626"
+		if count < 0
+			return "#ef4444"
+		if count == 0
+			return "#6b7280"
+		if count <= 5
+			return "#3b82f6"
+		if count <= 15
+			return "#8b5cf6"
+		return "#10b981"
+
+	// Event Handlers
+	handle_event_increment()
+		count = count + 1
+		clicks = clicks + 1
+		if count == 10
+			statusMsg = "Nice! You reached 10!"
+		if count == 25
+			statusMsg = "Quarter century! 25!"
+		if count == 50
+			statusMsg = "On fire! 50!"
+		if count == 100
+			statusMsg = "LEGENDARY! 100!"
+
+	handle_event_decrement()
+		count = count - 1
+		clicks = clicks + 1
+		if count == -10
+			statusMsg = "Brrr! -10 reached!"
+
+	handle_event_reset()
+		count = 0
+		clicks = clicks + 1
+		statusMsg = "Counter reset to zero"
+
+	handle_event_progUp()
+		progress = progress + 10
+		clicks = clicks + 1
+		if progress > 100
+			progress = 100
+		if progress == 100
+			statusMsg = "Progress complete!"
+
+	handle_event_progDown()
+		progress = progress - 10
+		clicks = clicks + 1
+		if progress < 0
+			progress = 0
+
+	handle_event_toggleTheme()
+		darkMode = not darkMode
+		clicks = clicks + 1
+		if darkMode
+			statusMsg = "Dark mode enabled"
+		else
+			statusMsg = "Light mode enabled"
+
+	handle_event_tab0()
+		activeTab = 0
+		clicks = clicks + 1
+
+	handle_event_tab1()
+		activeTab = 1
+		clicks = clicks + 1
+
+	handle_event_tab2()
+		activeTab = 2
+		clicks = clicks + 1
+
+	handle_event_tab3()
+		activeTab = 3
+		clicks = clicks + 1
+
+	handle_event_greet()
+		clicks = clicks + 1
+		if userName.length() > 0
+			showGreeting = true
+			statusMsg = "Hello " + userName + "!"
+		else
+			statusMsg = "Please enter your name"
+			showGreeting = false
+
+	handle_event_moreParticles()
+		clicks = clicks + 1
+
+	handle_event_fewerParticles()
+		clicks = clicks + 1
+
+	handle_event_resetCanvas()
+		clicks = clicks + 1
+
+	// Setters for data binding
+	set_userName(string value)
+		userName = value
+
+start()
+	count = 0
+	clicks = 0
+	progress = 25
+	darkMode = true
+	statusMsg = "Welcome to the dashboard!"
+	activeTab = 0
+	userName = ""
+	showGreeting = false

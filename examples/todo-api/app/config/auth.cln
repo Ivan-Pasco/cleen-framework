@@ -1,0 +1,22 @@
+// Todo API - Authentication Configuration
+// Demonstrates frame.auth plugin with session and role configuration
+
+plugins:
+	frame.auth
+
+auth:
+	session:
+		cookie = "todo.sid"
+		sameSite = "Lax"
+		secure = true
+		httpOnly = true
+		path = "/"
+		timeoutMinutes = 60
+
+	jwt:
+		enabled = false
+
+	roles:
+		admin: ["users:read", "users:write", "todos:read", "todos:write", "todos:delete"]
+		user: ["todos:read", "todos:write"]
+		guest: []

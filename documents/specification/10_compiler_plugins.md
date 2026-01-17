@@ -35,9 +35,9 @@ This document describes the **new compiler plugin architecture** where plugins a
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        CLEAN LANGUAGE SOURCE                             │
-│                         (with import: block)                             │
+│                         (with plugins: block)                            │
 │                                                                          │
-│   import:                                                                │
+│   plugins:                                                               │
 │       frame.web                                                          │
 │       frame.data                                                         │
 │                                                                          │
@@ -51,7 +51,7 @@ This document describes the **new compiler plugin architecture** where plugins a
 │                           COMPILER                                       │
 │                                                                          │
 │   1. Parse source file                                                   │
-│   2. Extract import: blocks → ["frame.web", "frame.data"]               │
+│   2. Extract plugins: blocks → ["frame.web", "frame.data"]              │
 │   3. Load plugins from ~/.cleen/plugins/                                 │
 │   4. For each framework block (server:, route:, model:):                │
 │      → Call plugin.expand_block(name, attrs, body)                      │
@@ -119,6 +119,19 @@ functions = [
   { name = "_http_route", params = ["string", "string", "integer"], returns = "integer", description = "Register route handler" },
   { name = "_req_body", params = [], returns = "string", description = "Get request body" },
 ]
+
+[paths]
+# Folders owned by this plugin - auto-created by CLI
+owns = ["app/backend", "app/backend/api", "app/backend/services", "app/backend/middleware"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
 ```
 
 > **Note:** The `[bridge]` section is required for all plugins. It declares Host Bridge functions that the generated code will call at runtime. The compiler uses these declarations to generate WASM imports, and the runtime provides implementations.
@@ -174,17 +187,19 @@ get_attr(json: string, key: string, default_val: string) -> string
 
 ## 4. Compilation Flow
 
-### Step 1: Import Detection
+### Step 1: Plugin Detection
 
-The compiler parses `import:` blocks to identify required plugins:
+The compiler parses `plugins:` blocks to identify required plugins:
 
 ```clean
-import:
+plugins:
     frame.web
     frame.data
 ```
 
 This tells the compiler to load `frame.web` and `frame.data` plugins.
+
+> **Note:** The `plugins:` block is specifically for loading framework plugins. File imports use `import "path/to/file.cln"` syntax instead.
 
 ### Step 2: Plugin Loading
 
@@ -540,7 +555,237 @@ These functions are implemented by the **clean-server** runtime and linked when 
 
 ---
 
-## 7. Plugin Development Workflow
+## 7. Plugin Paths Configuration
+
+Plugins can define folder ownership through the `[paths]` section in `plugin.toml`. This enables automatic folder scaffolding and implicit imports.
+
+### 7.1 Paths Schema
+
+```toml
+[paths]
+# Folders owned by this plugin - auto-created by CLI
+owns = ["app/backend", "app/backend/api", "app/backend/services"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `owns` | array | ✅ | - | Folders owned by this plugin |
+| `auto_create` | boolean | ❌ | `false` | Create folders on plugin install |
+| `patterns` | array | ❌ | `["*.cln"]` | File patterns recognized |
+| `implicit_import` | boolean | ❌ | `false` | Auto-import plugin in owned folders |
+
+### 7.2 Official Plugin Folder Ownership
+
+| Plugin | Owned Folders |
+|--------|---------------|
+| `frame.ui` | `app/ui/`, `app/ui/pages/`, `app/ui/components/`, `app/ui/layouts/`, `app/ui/styles/` |
+| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.auth` | `app/config/` |
+
+### 7.3 Folder Creation
+
+Folders are created by the CLI at these points:
+
+1. **Project Creation**: `cleen project create myapp --plugins=frame.data,frame.httpserver`
+2. **Plugin Installation**: `cleen plugin add frame.data`
+
+Example output:
+```bash
+$ cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui
+
+Creating project 'myapp'...
+  [frame.data] Creating app/data/
+  [frame.data] Creating app/data/models/
+  [frame.data] Creating app/data/queries/
+  [frame.data] Creating app/data/migrations/
+  [frame.data] Creating app/data/repositories/
+  [frame.httpserver] Creating app/backend/
+  [frame.httpserver] Creating app/backend/api/
+  [frame.httpserver] Creating app/backend/services/
+  [frame.httpserver] Creating app/backend/middleware/
+  [frame.ui] Creating app/ui/
+  [frame.ui] Creating app/ui/pages/
+  [frame.ui] Creating app/ui/components/
+  [frame.ui] Creating app/ui/layouts/
+  [frame.ui] Creating app/ui/styles/
+
+Project created successfully!
+```
+
+### 7.4 Implicit Imports
+
+When `implicit_import = true`, files in owned folders don't need explicit `plugins:` declarations:
+
+```clean
+// app/data/models/User.cln
+// No need for 'plugins: frame.data' - it's implicit because
+// the file is in app/data/models/ which is owned by frame.data
+
+data User
+    integer id : pk, auto
+    string email : unique
+    string name
+```
+
+The compiler detects the file is in a plugin-owned folder and automatically applies the plugin.
+
+---
+
+## 8. Language Server Integration
+
+Plugins can provide language definitions for IDE support (syntax highlighting, autocompletion, diagnostics) through the `[language]` section in `plugin.toml`.
+
+### 8.1 Language Schema
+
+```toml
+[language]
+# Keywords introduced by this plugin
+keywords = ["data", "endpoints", "component"]
+
+# Block definitions with their syntax
+blocks = [
+  { name = "data", attributes = ["name"], body = "fields", description = "Define a data model" },
+  { name = "endpoints", attributes = [], body = "routes", description = "Define HTTP endpoints" },
+]
+
+# Field/property modifiers
+modifiers = [
+  { name = "pk", description = "Primary key" },
+  { name = "auto", description = "Auto-increment" },
+  { name = "unique", description = "Unique constraint" },
+]
+
+# Types introduced by this plugin
+types = ["datetime", "uuid"]
+
+# Completions for specific contexts
+completions = [
+  { context = "block_name", items = ["data", "endpoints"] },
+  { context = "field_type", items = ["integer", "string", "boolean", "datetime"] },
+  { context = "field_modifier", items = ["pk", "auto", "unique", "default"] },
+]
+
+# Snippets for autocompletion
+snippets = [
+  { trigger = "data", body = "data ${1:ModelName}\n\tinteger id : pk, auto\n\t${0}", description = "Create a data model" },
+  { trigger = "endpoint", body = "${1:GET} /${2:path}:\n\thandle:\n\t\t${0}", description = "Create an endpoint" },
+]
+
+# Diagnostics rules
+diagnostics = [
+  { pattern = "data without pk", severity = "warning", message = "Data model should have a primary key" },
+]
+```
+
+### 8.2 Language Schema Reference
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `keywords` | array | Keywords introduced by the plugin |
+| `blocks` | array | Block definitions with syntax rules |
+| `modifiers` | array | Field/property modifiers |
+| `types` | array | Custom types introduced |
+| `completions` | array | Context-aware completion items |
+| `snippets` | array | Code snippets for autocompletion |
+| `diagnostics` | array | Custom diagnostic rules |
+
+### 8.3 Language Server Discovery Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         LANGUAGE SERVER                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  1. DETECT PROJECT                                                       │
+│     - Read project.toml → get plugins list                              │
+│     - OR scan app.cln → parse plugins: block                            │
+│     - OR check file path → implicit plugin from folder ownership        │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  2. LOAD PLUGIN DEFINITIONS                                              │
+│     For each active plugin:                                              │
+│     - Find plugin at ~/.cleen/plugins/<name>/<version>/                 │
+│     - Read plugin.toml                                                   │
+│     - Extract [language] section                                         │
+│     - Cache definitions per project                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  3. MERGE DEFINITIONS                                                    │
+│     - Base Clean Language definitions (always active)                   │
+│     - + Plugin keywords, blocks, types, modifiers                       │
+│     - + Plugin completions, snippets, diagnostics                       │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  4. PROVIDE LSP FEATURES                                                 │
+│     - textDocument/completion    → merged completions                   │
+│     - textDocument/hover         → plugin documentation                 │
+│     - textDocument/diagnostic    → plugin-specific errors               │
+│     - textDocument/definition    → go to plugin source                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 8.4 Project Plugin Detection
+
+The language server detects active plugins using these methods (in order):
+
+1. **project.toml** (recommended)
+   ```toml
+   [project]
+   name = "myapp"
+
+   [plugins]
+   frame.data = "2.0.0"
+   frame.httpserver = "2.0.0"
+   frame.ui = "2.1.0"
+   ```
+
+2. **app.cln plugins: block**
+   ```clean
+   plugins:
+       frame.data
+       frame.httpserver
+   ```
+
+3. **Folder ownership** (implicit)
+   - File in `app/data/models/` → frame.data is active
+   - File in `app/backend/api/` → frame.httpserver is active
+
+### 8.5 Caching Strategy
+
+```
+~/.cleen/cache/
+└── lsp/
+    └── <project-hash>/
+        ├── plugins.json      # List of active plugins
+        └── definitions.json  # Merged language definitions
+```
+
+The cache is invalidated when:
+- project.toml changes
+- app.cln plugins: block changes
+- A plugin is installed/updated/removed
+
+---
+
+## 9. Plugin Development Workflow
 
 ### Creating a New Plugin
 
@@ -561,7 +806,7 @@ cleen plugin install ./
 
 # 5. Use in project
 # Add to your .cln file:
-# import:
+# plugins:
 #     my-plugin
 ```
 
@@ -600,7 +845,7 @@ Handles web server DSL blocks.
 
 **Example:**
 ```clean
-import:
+plugins:
     frame.web
 
 server: port=3000
@@ -620,7 +865,7 @@ Handles database/ORM DSL blocks.
 
 **Example:**
 ```clean
-import:
+plugins:
     frame.data
 
 model: name="User" table="users"
@@ -637,7 +882,7 @@ Handles authentication DSL blocks.
 
 **Example:**
 ```clean
-import:
+plugins:
     frame.auth
 
 auth: strategy="jwt" secret="$JWT_SECRET"
@@ -655,7 +900,7 @@ Handles UI component DSL blocks.
 
 **Example:**
 ```clean
-import:
+plugins:
     frame.ui
 
 component: name="Button"

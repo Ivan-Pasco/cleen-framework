@@ -16,9 +16,86 @@ get_keywords = "get_keywords"
 [handles]
 blocks = ["canvasScene", "draw", "onFrame"]
 
+[language]
+# Block-level keywords that start a declaration
+blocks = ["canvasScene", "draw", "onFrame"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "canvas", description = "Canvas instance reference", context = "expression" },
+  { name = "width", description = "Canvas width configuration", context = "config" },
+  { name = "height", description = "Canvas height configuration", context = "config" },
+  { name = "fps", description = "Target frames per second", context = "config" },
+  { name = "background", description = "Background color", context = "config" },
+  { name = "assets", description = "Asset preloading block", context = "block" },
+  { name = "init", description = "Initialization block", context = "block" },
+  { name = "update", description = "Update loop block", context = "block" },
+  { name = "render", description = "Render loop block", context = "block" },
+]
+
+# Custom types provided by the plugin
+types = [
+  { name = "Canvas", description = "Canvas rendering context" },
+  { name = "Sprite", description = "Sprite sheet reference" },
+  { name = "Sound", description = "Sound effect reference" },
+  { name = "Music", description = "Music track reference" },
+  { name = "Image", description = "Image asset reference" },
+]
+
+# Built-in functions/expressions
+functions = [
+  # Drawing
+  { name = "canvas.clear", signature = "canvas.clear(color?)", description = "Clear canvas with optional color" },
+  { name = "canvas.circle", signature = "canvas.circle(x, y, radius, color)", description = "Draw circle outline" },
+  { name = "canvas.circleFilled", signature = "canvas.circleFilled(x, y, radius, color)", description = "Draw filled circle" },
+  { name = "canvas.rect", signature = "canvas.rect(x, y, w, h, color)", description = "Draw rectangle outline" },
+  { name = "canvas.rectFilled", signature = "canvas.rectFilled(x, y, w, h, color)", description = "Draw filled rectangle" },
+  { name = "canvas.line", signature = "canvas.line(x1, y1, x2, y2, width, color)", description = "Draw line" },
+  { name = "canvas.text", signature = "canvas.text(text, x, y, size, color)", description = "Draw text" },
+  { name = "canvas.image", signature = "canvas.image(src, x, y, w, h)", description = "Draw image" },
+  # Sprites
+  { name = "sprite.load", signature = "sprite.load(path, frameW, frameH)", description = "Load sprite sheet" },
+  { name = "sprite.draw", signature = "sprite.draw(sheet, frame, x, y)", description = "Draw sprite frame" },
+  # Audio
+  { name = "audio.loadSound", signature = "audio.loadSound(path)", description = "Load sound effect" },
+  { name = "audio.play", signature = "audio.play(sound, volume?, loop?)", description = "Play sound" },
+  { name = "audio.loadMusic", signature = "audio.loadMusic(path)", description = "Load music track" },
+  { name = "audio.playMusic", signature = "audio.playMusic(music, volume?, loop?)", description = "Play music" },
+  # Input
+  { name = "input.mouseX", signature = "input.mouseX()", description = "Get mouse X position" },
+  { name = "input.mouseY", signature = "input.mouseY()", description = "Get mouse Y position" },
+  { name = "input.mousePressed", signature = "input.mousePressed(button)", description = "Check mouse button" },
+  { name = "input.keyDown", signature = "input.keyDown(key)", description = "Check if key is pressed" },
+  { name = "input.keyJustPressed", signature = "input.keyJustPressed(key)", description = "Check if key just pressed" },
+  # Animation
+  { name = "deltaTime", signature = "deltaTime()", description = "Get time since last frame" },
+  { name = "time", signature = "time()", description = "Get total elapsed time" },
+  { name = "fps", signature = "fps()", description = "Get current FPS" },
+  # Collision
+  { name = "collision.circleCircle", signature = "collision.circleCircle(x1, y1, r1, x2, y2, r2)", description = "Circle vs circle collision" },
+  { name = "collision.rectRect", signature = "collision.rectRect(x1, y1, w1, h1, x2, y2, w2, h2)", description = "Rectangle vs rectangle collision" },
+  { name = "collision.pointRect", signature = "collision.pointRect(px, py, rx, ry, rw, rh)", description = "Point vs rectangle collision" },
+  # Camera
+  { name = "camera.setPosition", signature = "camera.setPosition(x, y)", description = "Set camera position" },
+  { name = "camera.setZoom", signature = "camera.setZoom(level)", description = "Set camera zoom" },
+  { name = "camera.shake", signature = "camera.shake(intensity, duration)", description = "Camera shake effect" },
+  # Easing
+  { name = "ease.linear", signature = "ease.linear(t)", description = "Linear interpolation" },
+  { name = "ease.inQuad", signature = "ease.inQuad(t)", description = "Quadratic ease in" },
+  { name = "ease.outQuad", signature = "ease.outQuad(t)", description = "Quadratic ease out" },
+  { name = "ease.inOutQuad", signature = "ease.inOutQuad(t)", description = "Quadratic ease in-out" },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "canvasScene ", insert = "canvasScene ${1:Name}:\n\twidth: ${2:800}\n\theight: ${3:600}\n\n\tinit:\n\t\t${4:// initialization}\n\n\tupdate:\n\t\t${5:// game logic}\n\n\trender:\n\t\t${6:// drawing}" },
+  { trigger = "draw:", insert = "draw:\n\tcanvas.clear(\"${1:#000000}\")\n\t${2:// drawing code}" },
+  { trigger = "onFrame:", insert = "onFrame:\n\t${1:// per-frame code}" },
+]
+
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["src/canvas"]
+owns = ["app/canvas", "app/canvas/scenes", "app/canvas/sprites", "app/canvas/audio"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -28,6 +105,12 @@ patterns = ["*.cln"]
 
 # Files in owned folders automatically import this plugin
 implicit_import = true
+
+[templates]
+# Starter files created when plugin is added to a project
+files = [
+  { path = "app/canvas/scenes/main.cln", template = "main.cln" },
+]
 
 # Bridge function declarations - canvas-specific functions provided by the runtime
 # These are the drawing, animation, audio, input, and game development primitives

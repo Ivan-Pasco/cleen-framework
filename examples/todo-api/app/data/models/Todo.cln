@@ -1,0 +1,16 @@
+// Todo Model
+// Todo item with user relationship
+
+plugins:
+	frame.data
+
+data Todo
+	integer id : pk, auto
+	string title
+	string description = ""
+	boolean completed = false
+	integer priority = 0
+	User owner
+	datetime created_at : default=now()
+	datetime updated_at
+	datetime due_date

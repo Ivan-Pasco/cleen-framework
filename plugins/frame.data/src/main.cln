@@ -1,81 +1,599 @@
 // frame.data plugin - ORM and Database DSL
-// Provides: model, query, transaction blocks
-// Version: 1.0.0
+// Provides: data models, CRUD operations, transactions, queries
+// Version: 2.0.0
+// Implements: Frame Data Specification v1.2
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
 
 functions:
 	// Main entry point - called by compiler for each framework block
 	string expand_block(string block_name, string attributes, string body)
-		if block_name == "model"
-			return expand_model(attributes, body)
-		if block_name == "query"
-			return expand_query(attributes, body)
-		if block_name == "transaction"
-			return expand_transaction(attributes, body)
+		// Handle 'data' model definitions
+		if block_name == "data"
+			return expand_data_model(attributes, body)
+
+		// Handle Data.tx: transaction blocks
+		if block_name == "Data.tx"
+			return expand_transaction(body)
+
+		// Handle db.query: raw queries
+		if block_name == "db.query"
+			return expand_raw_query(body)
+
+		// Handle db.queryAs: typed raw queries
+		if block_name.startsWith("db.queryAs")
+			return expand_typed_query(block_name, body)
+
 		return body
 
 	// Validation entry point
 	string validate_block(string block_name, string attributes, string body)
-		if block_name == "model"
-			return validate_model(attributes)
-		if block_name == "query"
-			return validate_query(attributes)
+		if block_name == "data"
+			return validate_data_model(attributes, body)
 		return ""
 
-	// Keywords for IDE
+	// Keywords for IDE support
 	string get_keywords()
-		return "[\"model\", \"query\", \"transaction\", \"find\", \"where\", \"order\", \"limit\", \"save\", \"delete\"]"
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"insert\", \"update\", \"delete\", \"where\", \"order\", \"limit\", \"link\", \"set\", \"Data.tx\", \"db.query\", \"db.queryAs\", \"cascade\"]"
 
-	// Model block expansion
-	string expand_model(string attrs, string body)
-		string name = get_attr(attrs, "name", "Model")
-		string table = get_attr(attrs, "table", name)
-		string result = "class " + name + "\n\tinteger id\n\t" + body + "\n\tfunctions:\n\t\tboolean save()\n\t\t\tif this.id == 0\n\t\t\t\tthis.id = _db_insert(\"" + table + "\", this)\n\t\t\t\treturn this.id > 0\n\t\t\treturn _db_update(\"" + table + "\", this.id, this)\n\t\tboolean delete()\n\t\t\tif this.id == 0\n\t\t\t\treturn false\n\t\t\treturn _db_delete(\"" + table + "\", this.id)\n"
+// ============================================================================
+// DATA MODEL EXPANSION
+// ============================================================================
+
+functions:
+	// Expand 'data ModelName' block into a class with ORM methods
+	string expand_data_model(string model_name, string body)
+		string table_name = to_snake_case(model_name)
+		string fields_code = parse_fields(body)
+		string field_names = extract_field_names(body)
+
+		// Generate the class with static ORM methods
+		string result = "class " + model_name + "\n"
+		result = result + fields_code
+		result = result + "\n\tfunctions:\n"
+
+		// Generate save() method
+		result = result + "\t\tboolean save()\n"
+		result = result + "\t\t\tif this.id == 0\n"
+		result = result + "\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
+		result = result + "\t\t\t\tstring params = __to_params()\n"
+		result = result + "\t\t\t\tstring result = _db_query(sql, params)\n"
+		result = result + "\t\t\t\tthis.id = __extract_id(result)\n"
+		result = result + "\t\t\t\treturn this.id > 0\n"
+		result = result + "\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
+		result = result + "\t\t\tstring params = __to_update_params()\n"
+		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
+		result = result + "\t\t\treturn affected > 0\n"
+
+		// Generate delete() method
+		result = result + "\n\t\tboolean delete()\n"
+		result = result + "\t\t\tif this.id == 0\n"
+		result = result + "\t\t\t\treturn false\n"
+		result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
+		result = result + "\t\t\tstring params = \"[\" + this.id.toString() + \"]\"\n"
+		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
+		result = result + "\t\t\treturn affected > 0\n"
+
+		// Generate private helper methods
+		result = result + generate_helper_methods(model_name, field_names)
+
+		// Generate static methods
+		result = result + generate_static_methods(model_name, table_name)
+
 		return result
 
-	// Query block expansion
-	string expand_query(string attrs, string body)
-		string model = get_attr(attrs, "model", "")
-		if model == ""
-			return body
-		string result = "_db_query(\"SELECT * FROM " + model + "\", [])\n" + body + "\n"
+	// Parse field definitions from body
+	string parse_fields(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_code = parse_field_line(line)
+				if field_code.length() > 0
+					result = result + "\t" + field_code + "\n"
+
+			line_start = line_end + 1
+
 		return result
 
-	// Transaction block expansion
-	string expand_transaction(string attrs, string body)
-		string result = "_db_begin_transaction()\n" + body + "\n_db_commit()\n"
+	// Parse a single field line like "string email : unique" or "boolean active = true"
+	string parse_field_line(string line)
+		// Check for constraints (colon separator)
+		integer colon_pos = line.indexOf(" : ")
+		string field_part = line
+		string constraints = ""
+
+		if colon_pos != -1
+			field_part = line.substring(0, colon_pos).trim()
+			constraints = line.substring(colon_pos + 3, line.length()).trim()
+
+		// Check for default value (equals separator)
+		integer equals_pos = field_part.indexOf(" = ")
+		string default_val = ""
+
+		if equals_pos != -1
+			default_val = field_part.substring(equals_pos + 3, field_part.length()).trim()
+			field_part = field_part.substring(0, equals_pos).trim()
+
+		// Parse type and name
+		integer space_pos = field_part.indexOf(" ")
+		if space_pos == -1
+			return ""
+
+		string field_type = field_part.substring(0, space_pos).trim()
+		string field_name = field_part.substring(space_pos + 1, field_part.length()).trim()
+
+		// Generate field declaration
+		string result = field_type + " " + field_name
+		if default_val.length() > 0
+			result = result + " = " + default_val
+
 		return result
 
-	// Validate model attributes
-	string validate_model(string attrs)
-		string name = get_attr(attrs, "name", "")
-		if name == ""
-			return "model: name attribute is required"
+	// Extract field names as comma-separated list
+	string extract_field_names(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_name = extract_field_name_from_line(line)
+				if field_name.length() > 0
+					if result.length() > 0
+						result = result + ","
+					result = result + field_name
+
+			line_start = line_end + 1
+
+		return result
+
+	// Extract field name from a line
+	string extract_field_name_from_line(string line)
+		// Remove constraints
+		integer colon_pos = line.indexOf(" : ")
+		if colon_pos != -1
+			line = line.substring(0, colon_pos)
+
+		// Remove default value
+		integer equals_pos = line.indexOf(" = ")
+		if equals_pos != -1
+			line = line.substring(0, equals_pos)
+
+		// Get the name (second word)
+		line = line.trim()
+		integer space_pos = line.indexOf(" ")
+		if space_pos == -1
+			return ""
+
+		return line.substring(space_pos + 1, line.length()).trim()
+
+// ============================================================================
+// STATIC METHOD GENERATION (find, first, count, insert, update, delete)
+// ============================================================================
+
+functions:
+	// Generate static ORM methods
+	string generate_static_methods(string model_name, string table_name)
+		string result = "\n"
+
+		// The compiler will handle Model.find:, Model.first:, etc. as special syntax
+		// These generate calls to __orm_find, __orm_first, __orm_count, etc.
+		// The actual SQL generation happens at the call site
+
+		return result
+
+	// Generate helper methods for serialization
+	string generate_helper_methods(string model_name, string field_names)
+		string result = "\n"
+
+		result = result + "\t\tstring __field_list()\n"
+		result = result + "\t\t\treturn \"" + field_names.replace(",", ", ") + "\"\n"
+
+		result = result + "\n\t\tstring __placeholder_list()\n"
+		result = result + "\t\t\treturn __generate_placeholders(" + count_fields(field_names).toString() + ")\n"
+
+		result = result + "\n\t\tstring __generate_placeholders(integer count)\n"
+		result = result + "\t\t\tstring result = \"\"\n"
+		result = result + "\t\t\tinteger i = 1\n"
+		result = result + "\t\t\twhile i <= count\n"
+		result = result + "\t\t\t\tif i > 1\n"
+		result = result + "\t\t\t\t\tresult = result + \", \"\n"
+		result = result + "\t\t\t\tresult = result + \"$\" + i.toString()\n"
+		result = result + "\t\t\t\ti = i + 1\n"
+		result = result + "\t\t\treturn result\n"
+
+		return result
+
+	// Count comma-separated fields
+	integer count_fields(string field_names)
+		if field_names.length() == 0
+			return 0
+		integer count = 1
+		integer pos = 0
+		while pos < field_names.length()
+			if field_names.substring(pos, pos + 1) == ","
+				count = count + 1
+			pos = pos + 1
+		return count
+
+// ============================================================================
+// CRUD EXPRESSION EXPANSION
+// ============================================================================
+
+functions:
+	// Expand Model.find: block
+	string expand_find(string model_name, string body)
+		string table_name = to_snake_case(model_name)
+		string where_clause = extract_subblock(body, "where:")
+		string order_clause = extract_subblock(body, "order:")
+		string limit_clause = extract_subblock(body, "limit:")
+		string link_clause = extract_subblock(body, "link:")
+
+		string sql = "SELECT * FROM " + table_name
+
+		// Handle link clause (joins)
+		if link_clause.length() > 0
+			sql = sql + " " + parse_link_clause(link_clause, table_name)
+
+		// Handle where clause
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		// Handle order clause
+		if order_clause.length() > 0
+			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
+
+		// Handle limit
+		if limit_clause.length() > 0
+			sql = sql + " LIMIT " + limit_clause.trim()
+
+		return "_db_query(\"" + sql + "\", \"[]\")"
+
+	// Expand Model.first: block
+	string expand_first(string model_name, string body)
+		string find_expr = expand_find(model_name, body)
+		// Add LIMIT 1 if not present
+		if find_expr.indexOf("LIMIT") == -1
+			integer close_quote = find_expr.lastIndexOf("\"")
+			find_expr = find_expr.substring(0, close_quote) + " LIMIT 1" + find_expr.substring(close_quote, find_expr.length())
+		return "__parse_first(" + find_expr + ")"
+
+	// Expand Model.count: block
+	string expand_count(string model_name, string body)
+		string table_name = to_snake_case(model_name)
+		string where_clause = extract_subblock(body, "where:")
+
+		string sql = "SELECT COUNT(*) as count FROM " + table_name
+
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		return "__parse_count(_db_query(\"" + sql + "\", \"[]\"))"
+
+	// Expand Model.insert: block
+	string expand_insert(string model_name, string body)
+		string table_name = to_snake_case(model_name)
+		string fields = ""
+		string values = ""
+		string params = "["
+		integer param_idx = 1
+
+		// Parse field assignments
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer eq_pos = line.indexOf(" = ")
+				if eq_pos != -1
+					string field_name = line.substring(0, eq_pos).trim()
+					string field_value = line.substring(eq_pos + 3, line.length()).trim()
+
+					if fields.length() > 0
+						fields = fields + ", "
+						values = values + ", "
+						params = params + ", "
+
+					fields = fields + field_name
+					values = values + "$" + param_idx.toString()
+					params = params + format_param_value(field_value)
+					param_idx = param_idx + 1
+
+			line_start = line_end + 1
+
+		params = params + "]"
+
+		string sql = "INSERT INTO " + table_name + " (" + fields + ") VALUES (" + values + ") RETURNING *"
+		return "_db_query(\"" + sql + "\", " + params + ")"
+
+	// Expand Model.update: block
+	string expand_update(string model_name, string body)
+		string table_name = to_snake_case(model_name)
+		string set_clause = extract_subblock(body, "set:")
+		string where_clause = extract_subblock(body, "where:")
+
+		if set_clause.length() == 0
+			return "// ERROR: update requires set: block"
+
+		string sql = "UPDATE " + table_name + " SET " + parse_set_clause(set_clause)
+
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		return "_db_execute(\"" + sql + "\", \"[]\")"
+
+	// Expand Model.delete: block
+	string expand_delete(string model_name, string body)
+		string table_name = to_snake_case(model_name)
+		string where_clause = extract_subblock(body, "where:")
+
+		string sql = "DELETE FROM " + table_name
+
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		return "_db_execute(\"" + sql + "\", \"[]\")"
+
+// ============================================================================
+// TRANSACTION EXPANSION
+// ============================================================================
+
+functions:
+	// Expand Data.tx: block
+	string expand_transaction(string body)
+		string result = "string __tx_id = _db_begin()\n"
+		result = result + "boolean __tx_success = true\n"
+		result = result + "try\n"
+		result = result + "\t" + body.replace("\n", "\n\t") + "\n"
+		result = result + "\t_db_commit(__tx_id)\n"
+		result = result + "catch any __tx_error\n"
+		result = result + "\t_db_rollback(__tx_id)\n"
+		result = result + "\t__tx_success = false\n"
+		result = result + "\tthrow __tx_error\n"
+		return result
+
+// ============================================================================
+// RAW QUERY EXPANSION
+// ============================================================================
+
+functions:
+	// Expand db.query: block
+	string expand_raw_query(string body)
+		string sql = extract_subblock(body, "sql:")
+		string params = extract_subblock(body, "params:")
+
+		if params.length() == 0
+			params = "[]"
+
+		return "_db_query(" + sql + ", " + params + ")"
+
+	// Expand db.queryAs(Type): block
+	string expand_typed_query(string block_name, string body)
+		// Extract type from db.queryAs(Type)
+		integer paren_start = block_name.indexOf("(")
+		integer paren_end = block_name.indexOf(")")
+		string type_name = ""
+		if paren_start != -1 and paren_end != -1
+			type_name = block_name.substring(paren_start + 1, paren_end)
+
+		string raw = expand_raw_query(body)
+		return "__parse_as_" + type_name + "(" + raw + ")"
+
+// ============================================================================
+// CLAUSE PARSERS
+// ============================================================================
+
+functions:
+	// Extract a sub-block from body (e.g., "where:", "order:")
+	string extract_subblock(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + block_name.length()
+
+		// Find the end of this sub-block (next sub-block or end of body)
+		string subblock_markers = ",where:,order:,limit:,link:,set:,sql:,params:,"
+		integer end_pos = body.length()
+
+		integer search_pos = content_start
+		while search_pos < body.length()
+			// Check for any sub-block marker
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				string after_newline = body.substring(search_pos + 1, body.length()).trim()
+				// Check if next line starts a new sub-block
+				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("link:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return body.substring(content_start, end_pos).trim()
+
+	// Parse where: clause into SQL
+	string parse_where_clause(string where_body)
+		string result = ""
+		string lines = where_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + " AND "
+				result = result + parse_condition(line)
+
+			line_start = line_end + 1
+
+		return result
+
+	// Parse a single condition (e.g., "active == true" -> "active = true")
+	string parse_condition(string condition)
+		// Convert Clean operators to SQL
+		string result = condition
+		result = result.replace(" == ", " = ")
+		result = result.replace(" != ", " <> ")
+		result = result.replace(" and ", " AND ")
+		result = result.replace(" or ", " OR ")
+		return result
+
+	// Parse order: clause into SQL
+	string parse_order_clause(string order_body)
+		string result = ""
+		string lines = order_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				// Handle "field desc" or "field asc" or just "field"
+				result = result + line.toUpperCase()
+
+			line_start = line_end + 1
+
+		return result
+
+	// Parse set: clause into SQL (for UPDATE)
+	string parse_set_clause(string set_body)
+		string result = ""
+		string lines = set_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				// Convert "field = value" to SQL
+				result = result + line
+
+			line_start = line_end + 1
+
+		return result
+
+	// Parse link: clause into JOIN statements
+	string parse_link_clause(string link_body, string base_table)
+		string result = ""
+		string lines = link_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				// Parse "ModelName field == otherField"
+				integer space_pos = line.indexOf(" ")
+				if space_pos != -1
+					string join_model = line.substring(0, space_pos)
+					string join_table = to_snake_case(join_model)
+					string join_condition = line.substring(space_pos + 1, line.length()).trim()
+
+					// Replace == with =
+					join_condition = join_condition.replace(" == ", " = ")
+
+					// Replace "id" with "base_table.id"
+					if join_condition.indexOf(base_table + ".") == -1
+						join_condition = join_condition.replace(" id", " " + base_table + ".id")
+						join_condition = join_condition.replace("id ", base_table + ".id ")
+
+					result = result + "JOIN " + join_table + " ON " + join_condition + " "
+
+			line_start = line_end + 1
+
+		return result
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+functions:
+	// Convert PascalCase to snake_case (for table names)
+	string to_snake_case(string name)
+		string result = ""
+		integer i = 0
+		while i < name.length()
+			string ch = name.substring(i, i + 1)
+			string lower = ch.toLowerCase()
+			if ch != lower and i > 0
+				result = result + "_"
+			result = result + lower
+			i = i + 1
+		return result
+
+	// Format a parameter value for JSON array
+	string format_param_value(string value)
+		// Check if it's a string literal
+		if value.startsWith("\"") and value.endsWith("\"")
+			return value
+		// Check if it's a number
+		if is_numeric(value)
+			return value
+		// Check if it's a boolean
+		if value == "true" or value == "false"
+			return value
+		// Otherwise it's a variable reference
+		return "\" + " + value + ".toString() + \""
+
+	// Check if string is numeric
+	boolean is_numeric(string s)
+		if s.length() == 0
+			return false
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch != "0" and ch != "1" and ch != "2" and ch != "3" and ch != "4" and ch != "5" and ch != "6" and ch != "7" and ch != "8" and ch != "9" and ch != "." and ch != "-"
+				return false
+			i = i + 1
+		return true
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+functions:
+	// Validate data model definition
+	string validate_data_model(string model_name, string body)
+		if model_name.length() == 0
+			return "data: model name is required"
+
+		// Check for at least one field
+		if body.trim().length() == 0
+			return "data " + model_name + ": at least one field is required"
+
 		return ""
-
-	// Validate query attributes
-	string validate_query(string attrs)
-		string model = get_attr(attrs, "model", "")
-		if model == ""
-			return "query: model attribute is required"
-		return ""
-
-	// Get attribute from attrs string
-	string get_attr(string attrs, string key, string default_val)
-		string pattern = "\"" + key + "\""
-		integer pos = attrs.indexOf(pattern)
-		if pos == -1
-			return default_val
-		return extract_value(attrs, pos)
-
-	// Extract value after key position
-	string extract_value(string json, integer key_pos)
-		integer colon_pos = json.indexOf(":", key_pos)
-		if colon_pos == -1
-			return ""
-		integer quote_start = json.indexOf("\"", colon_pos + 1)
-		if quote_start == -1
-			return ""
-		integer quote_end = json.indexOf("\"", quote_start + 1)
-		if quote_end == -1
-			return ""
-		return json.substring(quote_start + 1, quote_end)

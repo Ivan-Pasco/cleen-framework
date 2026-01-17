@@ -1,0 +1,17 @@
+// Category Model
+// For organizing todos
+
+plugins:
+	frame.data
+
+data Category
+	integer id : pk, auto
+	string name
+	string color = "#3B82F6"
+	User owner
+
+// Junction table for many-to-many: Todo <-> Category
+data TodoCategory
+	integer id : pk, auto
+	Todo todo
+	Category category
