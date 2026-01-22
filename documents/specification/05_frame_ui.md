@@ -21,7 +21,7 @@
 ## 2. Architecture Overview
 
 ```
-app/ui/pages/*.html.cln      (HTML with Clean Language processing)
+app/ui/pages/*.html      (HTML with Clean Language processing)
         │
         ▼ parse
 app/ui/components/*.cln      (Clean components define custom tags)
@@ -39,11 +39,11 @@ HTML + loader.js             (Browser receives rendered page)
 
 | Extension | Purpose |
 |-----------|---------|
-| `.html.cln` | HTML pages that need Clean Language processing (data binding, components, etc.) |
+| `.html` | HTML pages that need Clean Language processing (data binding, components, etc.) |
 | `.html` | Static HTML files served as-is without processing |
 | `.cln` | Clean Language source files (components, logic, etc.) |
 
-The `.html.cln` extension indicates that the file contains HTML that should be processed by the Clean Language compiler. This allows:
+The `.html` extension indicates that the file contains HTML that should be processed by the Clean Language compiler. This allows:
 - Clear distinction between static and dynamic pages
 - Standard HTML tooling support (editors, linters, formatters)
 - IDEs can recognize the file as HTML for syntax highlighting
@@ -56,16 +56,16 @@ Clean Framework uses automatic file discovery. Place files in the `app/` folder:
 app/
   ui/                         # Frontend (browser-facing)
     pages/                    # HTML page routes
-      index.html.cln          # → /
-      about.html.cln          # → /about
+      index.html          # → /
+      about.html          # → /about
       blog/
-        index.html.cln        # → /blog
-        [slug].html.cln       # → /blog/:slug
+        index.html        # → /blog
+        [slug].html       # → /blog/:slug
     components/               # Custom HTML elements
       Header.cln              # → <app-header>
       UserCard.cln            # → <user-card>
     layouts/                  # Page wrappers
-      main.html.cln
+      main.html
     public/                   # Static assets (CSS, images, JS)
       css/
       images/
@@ -87,12 +87,12 @@ frame scan            # Preview discovered routes/components
 
 ## 3. Page Structure (HTML)
 
-Pages are `.html.cln` files in `app/ui/pages/`. File paths map to URL routes.
+Pages are `.html` files in `app/ui/pages/`. File paths map to URL routes.
 
 ### 3.1 Basic Page
 
 ```html
-<!-- app/ui/pages/index.html.cln → / -->
+<!-- app/ui/pages/index.html → / -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -116,11 +116,11 @@ Pages are `.html.cln` files in `app/ui/pages/`. File paths map to URL routes.
 
 | File Path | URL Route |
 |-----------|-----------|
-| `app/ui/pages/index.html.cln` | `/` |
-| `app/ui/pages/about.html.cln` | `/about` |
-| `app/ui/pages/blog/index.html.cln` | `/blog` |
-| `app/ui/pages/blog/[slug].html.cln` | `/blog/:slug` |
-| `app/ui/pages/users/[id]/posts.html.cln` | `/users/:id/posts` |
+| `app/ui/pages/index.html` | `/` |
+| `app/ui/pages/about.html` | `/about` |
+| `app/ui/pages/blog/index.html` | `/blog` |
+| `app/ui/pages/blog/[slug].html` | `/blog/:slug` |
+| `app/ui/pages/users/[id]/posts.html` | `/users/:id/posts` |
 
 ### 3.3 Page Metadata
 
@@ -241,7 +241,7 @@ Use double curly braces for dynamic values:
 Data for pages comes from a companion `.cln` file or inline `<script type="text/clean">`:
 
 ```html
-<!-- app/ui/pages/profile.html.cln -->
+<!-- app/ui/pages/profile.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -424,7 +424,7 @@ Page-level `client` attribute overrides component default.
 ### 8.1 Layout Definition
 
 ```html
-<!-- app/ui/layouts/main.html.cln -->
+<!-- app/ui/layouts/main.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -447,7 +447,7 @@ Page-level `client` attribute overrides component default.
 ### 8.2 Using Layouts
 
 ```html
-<!-- app/ui/pages/about.html.cln -->
+<!-- app/ui/pages/about.html -->
 <page layout="main"></page>
 
 <h1>About Us</h1>
@@ -457,7 +457,7 @@ Page-level `client` attribute overrides component default.
 ### 8.3 Named Slots
 
 ```html
-<!-- app/ui/layouts/dashboard.html.cln -->
+<!-- app/ui/layouts/dashboard.html -->
 <div class="dashboard">
     <aside>
         <slot name="sidebar"></slot>
@@ -469,7 +469,7 @@ Page-level `client` attribute overrides component default.
 ```
 
 ```html
-<!-- app/ui/pages/dashboard.html.cln -->
+<!-- app/ui/pages/dashboard.html -->
 <page layout="dashboard"></page>
 
 <slot name="sidebar">
@@ -784,7 +784,7 @@ document.querySelectorAll('[data-hydrate]').forEach(el => {
 ### 15.1 Simple Page
 
 ```html
-<!-- app/ui/pages/index.html.cln -->
+<!-- app/ui/pages/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -809,7 +809,7 @@ document.querySelectorAll('[data-hydrate]').forEach(el => {
 ### 15.2 Dynamic Page with Data
 
 ```html
-<!-- app/ui/pages/blog/[slug].html.cln -->
+<!-- app/ui/pages/blog/[slug].html -->
 <page layout="main"></page>
 
 <script type="text/clean">
@@ -878,7 +878,7 @@ If migrating from Clean-first syntax:
 
 | v1 (Clean DSL) | v2 (HTML-first) |
 |----------------|-----------------|
-| `page:` blocks | `.html.cln` files |
+| `page:` blocks | `.html` files |
 | `component:` with layout | `.cln` with `render()` |
 | Clean templating | HTML + `{{}}` |
 | `render()` returns Widget | `render()` returns string |

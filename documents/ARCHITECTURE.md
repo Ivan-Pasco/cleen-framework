@@ -146,7 +146,7 @@ The following diagram shows the **actual working implementation** as of v0.5.x:
 2. **Code Generation** (`clean-manager/src/core/codegen.rs`)
    - Converts HTML pages to Clean string concatenation
    - Expands `<app-header>` → `__component_Header_render()`
-   - Extracts route params from `[slug].html.cln` → `_req_param("slug")`
+   - Extracts route params from `[slug].html` → `_req_param("slug")`
    - Generates `start()` function with route registrations
 
 3. **Compilation**

@@ -191,8 +191,8 @@ my-app/
     users.cln
     orders.cln
   pages/              # used by UI/HTML plugins (example)
-    home.html.cln
-    about.html.cln
+    home.html
+    about.html
   components/         # used by UI component plugins (example)
     header.cln
     footer.cln
@@ -235,7 +235,7 @@ Examples:
   - `data/` → data models and relations.
 
 **Behavior:**
-- The plugin declares: *“I own folder `pages/` and file patterns `*.html.cln`.”*
+- The plugin declares: *“I own folder `pages/` and file patterns `*.html`.”*
 - The framework automatically:
   - Finds those files.
   - Routes them to the plugin for processing.
@@ -247,25 +247,25 @@ Because plugins are location aware, a developer can simply create files in the r
 
 ```text
 pages/
-  home.html.cln
-  contact.html.cln
+  home.html
+  contact.html
 ```
 
-No need to manually register these pages. For example, `frame.ui` can treat each `*.html.cln` as a route or a named template, depending on its rules.
+No need to manually register these pages. For example, `frame.ui` can treat each `*.html` as a route or a named template, depending on its rules.
 
 This means:
 
 - **No boilerplate imports** like "registerPage(home)".
 - Just create the file and let the plugin + framework do the registration.
 
-### 7.5. Example: `.html.cln` processing
+### 7.5. Example: `.html` processing
 
 For UI/HTML-oriented plugins, we define a special extension convention:
 
-- Files ending in `.html.cln` contain **HTML with custom tags**.
+- Files ending in `.html` contain **HTML with custom tags**.
 - These tags are processed **before the file is retrieved/served**.
 
-Example file: `pages/home.html.cln`
+Example file: `pages/home.html`
 
 ```html
 <html>
@@ -285,7 +285,7 @@ Example file: `pages/home.html.cln`
 
 The plugin pipeline might:
 
-1. Parse the `.html.cln` file.
+1. Parse the `.html` file.
 2. Process custom tags such as `<AppHeader />`, `<If ...>`, or `{{ user.name }}`.
 3. Convert this into Clean or template code that can be compiled and rendered at runtime.
 
@@ -342,7 +342,7 @@ listUsers:
     // This block will be expanded by the web plugin into normal Clean code.
 ```
 
-**`pages/home.html.cln` (HTML + custom tags owned by `frame.ui`)**
+**`pages/home.html` (HTML + custom tags owned by `frame.ui`)**
 
 ```html
 <html>
@@ -364,7 +364,7 @@ In this example:
 - `configuration.cln` declares the project, compiler, plugins and framework.
 - `main.cln` defines `start`, the entrypoint block executed by the framework runtime.
 - `api/users.cln` is discovered by `frame.web` and turned into real endpoint registration code.
-- `pages/home.html.cln` is discovered by `frame.ui` and compiled into a renderable page template.
+- `pages/home.html` is discovered by `frame.ui` and compiled into a renderable page template.
 
 Developers do not need extra boilerplate; they only need to respect the folder structure and file conventions.
 

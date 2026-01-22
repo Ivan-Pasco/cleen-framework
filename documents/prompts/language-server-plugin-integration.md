@@ -15,7 +15,7 @@ project-name/
 ├── app.cln                 # Application entry point
 ├── app/
 │   ├── ui/                 # frame.ui plugin
-│   │   ├── pages/          # HTML pages (.html.cln)
+│   │   ├── pages/          # HTML pages (.html)
 │   │   ├── components/     # Component definitions (.cln)
 │   │   ├── layouts/        # Layout templates
 │   │   └── styles/         # Theme and CSS
@@ -268,9 +268,9 @@ The `frame.ui` plugin handles multiple file types:
 |-----------|------------|
 | `.cln` | Standard Clean Language file |
 | `.html` | Pure HTML (no processing) |
-| `.html.cln` | HTML with Clean directives and custom components |
+| `.html` | HTML with Clean directives and custom components |
 
-For `.html.cln` files:
+For `.html` files:
 - Provide HTML completions
 - Add custom tag completions from component registry
 - Support directive attributes (`if`, `each`, `bind`, `client`)
@@ -364,5 +364,5 @@ For `.html.cln` files:
 - [ ] File ownership is correctly determined
 - [ ] Implicit imports work in owned folders
 - [ ] Cache invalidates on plugin.toml changes
-- [ ] `.html.cln` files get correct language features
+- [ ] `.html` files get correct language features
 - [ ] TextMate grammar updates with plugin changes

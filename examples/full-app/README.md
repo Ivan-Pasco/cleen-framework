@@ -8,12 +8,12 @@ A complete full-stack task management application with multiple pages, component
 app/
 ├── ui/
 │   ├── pages/
-│   │   ├── index.html.cln        → GET /
-│   │   ├── dashboard.html.cln    → GET /dashboard
-│   │   ├── tasks.html.cln        → GET /tasks
-│   │   ├── projects.html.cln     → GET /projects
-│   │   ├── settings.html.cln     → GET /settings
-│   │   └── login.html.cln        → GET /login
+│   │   ├── index.html        → GET /
+│   │   ├── dashboard.html    → GET /dashboard
+│   │   ├── tasks.html        → GET /tasks
+│   │   ├── projects.html     → GET /projects
+│   │   ├── settings.html     → GET /settings
+│   │   └── login.html        → GET /login
 │   ├── components/
 │   │   ├── header.cln            → <app-header>
 │   │   ├── sidebar.cln           → <app-sidebar>

@@ -8,7 +8,7 @@ The `clean-extension` at `/Users/earcandy/Documents/Dev/Clean Language/clean-ext
 
 | Feature | Current State | Required State |
 |---------|---------------|----------------|
-| File extensions | `.cln`, `.test.cln` | + `.html.cln` |
+| File extensions | `.cln`, `.test.cln` | + `.html` |
 | Plugin blocks | None | `plugins:`, `import:` |
 | Framework blocks | None | `data`, `endpoints`, `component`, `auth`, `canvasScene`, etc. |
 | Plugin keywords | None | `where`, `order`, `guard`, `state`, `render`, etc. |
@@ -28,7 +28,7 @@ The `clean-extension` at `/Users/earcandy/Documents/Dev/Clean Language/clean-ext
     "extensions": [
       ".cln",
       ".test.cln",
-      ".html.cln"
+      ".html"
     ],
     "aliases": [
       "Clean Language",
@@ -135,7 +135,7 @@ The `clean-extension` at `/Users/earcandy/Documents/Dev/Clean Language/clean-ext
 }
 ```
 
-### Add HTML directive attributes (for .html.cln files)
+### Add HTML directive attributes (for .html files)
 
 ```json
 {
@@ -499,7 +499,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 ## 5. HTML.cln Language Support
 
-For `.html.cln` files, the extension should provide:
+For `.html` files, the extension should provide:
 
 1. **HTML base syntax** - Standard HTML highlighting
 2. **Clean interpolation** - `{{expression}}` and `{{{rawExpression}}}`
@@ -533,7 +533,7 @@ Files in these folders should show the correct plugin context in the status bar 
 ### Files to Update
 
 1. **package.json**
-   - Add `.html.cln` extension
+   - Add `.html` extension
    - Update keywords
 
 2. **syntaxes/clean.tmLanguage.json**
@@ -676,12 +676,12 @@ The extension should provide IDE integration for `cln` (compiler) and `cleen` (p
 "menus": {
   "editor/title": [
     {
-      "when": "resourceExtname == .cln || resourceExtname == .html.cln",
+      "when": "resourceExtname == .cln || resourceExtname == .html",
       "command": "clean.build",
       "group": "navigation@1"
     },
     {
-      "when": "resourceExtname == .cln || resourceExtname == .html.cln",
+      "when": "resourceExtname == .cln || resourceExtname == .html",
       "command": "clean.serve",
       "group": "navigation@2"
     }
@@ -1336,7 +1336,7 @@ Add default keyboard shortcuts in package.json:
 After updates, verify:
 
 - [ ] `.cln` files highlight correctly
-- [ ] `.html.cln` files highlight HTML + Clean interpolation
+- [ ] `.html` files highlight HTML + Clean interpolation
 - [ ] `plugins:` block highlights plugin names
 - [ ] `import:` block highlights file paths as strings
 - [ ] Framework blocks (`data:`, `endpoints:`, etc.) highlight correctly

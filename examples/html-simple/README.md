@@ -8,8 +8,8 @@ A simple example demonstrating HTML page serving with Clean Framework.
 app/
 └── ui/
     ├── pages/
-    │   ├── index.html.cln    → GET /
-    │   └── about.html.cln    → GET /about
+    │   ├── index.html    → GET /
+    │   └── about.html    → GET /about
     └── public/
         └── css/
             └── style.css

@@ -9,11 +9,11 @@ blog-demo/
   app/
     ui/
       pages/                    # HTML routes (auto-discovered)
-        index.html.cln          # → GET /
-        about.html.cln          # → GET /about
+        index.html          # → GET /
+        about.html          # → GET /about
         blog/
-          index.html.cln        # → GET /blog
-          [slug].html.cln       # → GET /blog/:slug
+          index.html        # → GET /blog
+          [slug].html       # → GET /blog/:slug
       components/               # Custom elements (auto-discovered)
         Header.cln              # → <app-header>
         Footer.cln              # → <app-footer>
@@ -45,10 +45,10 @@ cleen server run dist/app.wasm --port 3000
 
 | Route | File | Description |
 |-------|------|-------------|
-| `GET /` | `app/ui/pages/index.html.cln` | Home page |
-| `GET /about` | `app/ui/pages/about.html.cln` | About page |
-| `GET /blog` | `app/ui/pages/blog/index.html.cln` | Blog listing |
-| `GET /blog/:slug` | `app/ui/pages/blog/[slug].html.cln` | Single post |
+| `GET /` | `app/ui/pages/index.html` | Home page |
+| `GET /about` | `app/ui/pages/about.html` | About page |
+| `GET /blog` | `app/ui/pages/blog/index.html` | Blog listing |
+| `GET /blog/:slug` | `app/ui/pages/blog/[slug].html` | Single post |
 | `GET /api/posts` | `app/server/api/posts.cln` | Posts JSON API |
 
 ## Components

@@ -62,42 +62,101 @@ Key Clean Language rules for Frame:
 3. **WORKING CODE ONLY**: All code must be production-ready and functional.
 4. **REFERENCE SPECIFICATIONS**: Always consult the relevant specification document before implementing.
 
+### Folder Conventions (CRITICAL)
+
+**Files are ONLY recognized and processed by plugins based on their folder location.**
+
+A file outside its expected folder will NOT be compiled by the appropriate plugin. This is the core architectural principle.
+
+#### Standard Project Structure
+
+```
+app/
+├── pages/              # frame.ui → SSR pages (standard HTML)
+│   ├── index.html
+│   ├── about.html
+│   └── blog/
+│       └── [slug].html
+│
+├── components/         # frame.ui → Reusable UI components
+│   ├── Header.cln
+│   └── Footer.cln
+│
+├── api/                # frame.httpserver → API endpoints
+│   ├── users.cln
+│   └── posts.cln
+│
+├── data/               # frame.data → Data models/ORM
+│   ├── User.cln
+│   └── Post.cln
+│
+├── auth/               # frame.auth → Auth configuration
+│   └── config.cln
+│
+├── canvas/             # frame.canvas → Canvas applications
+│   └── game.cln
+│
+└── public/             # Static assets (served as-is)
+    ├── css/
+    │   └── style.css
+    ├── js/
+    └── images/
+```
+
+#### File Extensions by Content Type
+
+| Content Type | Extension | Folder | Editor Support |
+|-------------|-----------|--------|----------------|
+| SSR Pages | `.html` | `pages/` | Full (any HTML editor) |
+| Stylesheets | `.css` | `public/css/` | Full (any CSS editor) |
+| Components | `.cln` | `components/` | Clean Language |
+| API Endpoints | `.cln` | `api/` | Clean Language |
+| Data Models | `.cln` | `data/` | Clean Language |
+| Auth Config | `.cln` | `auth/` | Clean Language |
+| Canvas Apps | `.cln` | `canvas/` | Clean Language |
+
+#### Key Rules
+
+1. **Standard HTML for pages** - Use `.html` extension for SSR pages. This ensures full editor support (syntax highlighting, Emmet, autocomplete, Prettier).
+
+2. **Standard CSS for styles** - Use `.css` extension in `public/css/`. No inline `<style>` tags in HTML pages. Styles must be in separate CSS files.
+
+3. **Clean templating in HTML** - Use `{{ variable }}` for interpolation and `cl-*` attributes for directives:
+   ```html
+   <h1>Welcome, {{ user.name }}</h1>
+   <ul cl-each="post in posts">
+       <li>{{ post.title }}</li>
+   </ul>
+   <div cl-if="user.isAdmin">Admin Panel</div>
+   ```
+
+4. **Folder = Plugin** - The folder determines which plugin processes the file:
+   - `pages/home.html` → processed by frame.ui as a page
+   - `api/users.cln` → processed by frame.httpserver as an endpoint
+   - `data/User.cln` → processed by frame.data as a model
+   - Files outside these folders are NOT processed by plugins
+
+5. **No CSS in HTML** - Inline styles are prohibited. All CSS must be in `public/css/` and linked via `<link>` tags.
+
 ### Examples and Demos Policy
 
-**CRITICAL**: All examples, demos, and tests MUST use 100% Clean Language.
+**CRITICAL**: All examples and tests MUST follow the folder conventions above.
 
-1. **NO STANDALONE JAVASCRIPT**: Never create JavaScript-only demos or simulations. JavaScript simulations present false statements about framework capabilities and lead to failures when actual compilation is attempted.
+1. **NO STANDALONE JAVASCRIPT**: Never create JavaScript-only demos or simulations. JavaScript simulations present false statements about framework capabilities.
 
-2. **NO HTML/JS TEST HARNESSES**: Do not create browser-based test files using JavaScript to "simulate" plugin behavior. These do not test actual functionality.
+2. **NO HTML/JS TEST HARNESSES**: Do not create browser-based test files using JavaScript to "simulate" plugin behavior.
 
-3. **CLEAN LANGUAGE ONLY**: Every example must:
-   - Be written entirely in Clean Language (`.cln` files)
+3. **REAL COMPILATION ONLY**: All examples must:
+   - Follow the folder structure above
+   - Use correct file extensions (`.html` for pages, `.css` for styles, `.cln` for logic)
    - Compile successfully with the Clean Language compiler
-   - Comply with the [Clean Language Specification](/Users/earcandy/Documents/Dev/Clean Language/clean-language-compiler/documentation/Clean_Language_Specification.md)
-   - Use actual plugin syntax, not simulated equivalents
+   - Be placed in the correct folder for their plugin
 
-4. **REAL COMPILATION TESTS**: Tests must compile Clean Language code through the actual compiler pipeline and verify the generated WASM output.
-
-5. **WHY THIS MATTERS**:
+4. **WHY THIS MATTERS**:
    - JavaScript simulations can pass while actual compilation fails
-   - Simulations don't validate real syntax or semantics
-   - They create false confidence in untested functionality
-   - They diverge from actual framework behavior over time
-
-**Correct approach**:
-```clean
-// examples/canvas-demo.cln
-canvas "demo" width=400 height=300:
-    fill_rect(10, 10, 50, 30, "#4ecdc4")
-    fill_circle(100, 50, 25, "#ff6b6b")
-    draw_text("Hello", 20, 100)
-```
-
-**Incorrect approach** (NEVER DO THIS):
-```javascript
-// DO NOT create JavaScript simulations like this
-function simulateCanvasFillRect(x, y, w, h) { ... }
-```
+   - Files in wrong folders won't be processed correctly
+   - Incorrect extensions break editor support
+   - Tests must validate real plugin behavior, not simulations
 
 ### Module-Specific Rules
 

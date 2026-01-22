@@ -8,11 +8,11 @@ A comprehensive HTML-first example with components, layouts, and multiple pages.
 app/
 └── ui/
     ├── pages/
-    │   ├── index.html.cln        → GET /
-    │   ├── dashboard.html.cln    → GET /dashboard
+    │   ├── index.html        → GET /
+    │   ├── dashboard.html    → GET /dashboard
     │   └── blog/
-    │       ├── index.html.cln    → GET /blog
-    │       └── [slug].html.cln   → GET /blog/:slug
+    │       ├── index.html    → GET /blog
+    │       └── [slug].html   → GET /blog/:slug
     ├── components/
     │   ├── Header.cln            → <app-header>
     │   ├── Footer.cln            → <app-footer>
@@ -22,7 +22,7 @@ app/
     │   ├── CommentForm.cln       → <comment-form>
     │   └── ShareButton.cln       → <share-button>
     ├── layouts/
-    │   └── main.html.cln
+    │   └── main.html
     └── public/
         └── css/
             └── main.css

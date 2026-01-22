@@ -30,21 +30,21 @@ HTML page routes. Files become GET routes returning HTML.
 
 | File | Route |
 |------|-------|
-| `index.html.cln` | `/` |
-| `about.html.cln` | `/about` |
-| `contact.html.cln` | `/contact` |
-| `blog/index.html.cln` | `/blog` |
-| `blog/[slug].html.cln` | `/blog/:slug` |
-| `users/[id]/profile.html.cln` | `/users/:id/profile` |
+| `index.html` | `/` |
+| `about.html` | `/about` |
+| `contact.html` | `/contact` |
+| `blog/index.html` | `/blog` |
+| `blog/[slug].html` | `/blog/:slug` |
+| `users/[id]/profile.html` | `/users/:id/profile` |
 
 **Naming Rules:**
-- Files must end with `.html.cln`
-- `index.html.cln` maps to the folder path
-- `[param].html.cln` creates a dynamic route parameter
+- Files must end with `.html`
+- `index.html` maps to the folder path
+- `[param].html` creates a dynamic route parameter
 
 **Example page:**
 ```cln
-// app/ui/pages/blog/[slug].html.cln
+// app/ui/pages/blog/[slug].html
 
 // Parameter 'slug' is auto-extracted from URL
 string html = "<html>
@@ -94,13 +94,13 @@ Page wrappers. Used with the `layout` attribute on pages.
 
 | File | Layout Name |
 |------|-------------|
-| `main.html.cln` | `main` |
-| `admin.html.cln` | `admin` |
-| `blog.html.cln` | `blog` |
+| `main.html` | `main` |
+| `admin.html` | `admin` |
+| `blog.html` | `blog` |
 
 **Example layout:**
 ```cln
-// app/ui/layouts/main.html.cln
+// app/ui/layouts/main.html
 
 return "<html>
 <head>
@@ -215,15 +215,15 @@ Utility modules available everywhere.
 Use `[param]` in filenames:
 
 ```
-pages/users/[id].html.cln         → /users/:id
-pages/blog/[slug]/edit.html.cln   → /blog/:slug/edit
+pages/users/[id].html         → /users/:id
+pages/blog/[slug]/edit.html   → /blog/:slug/edit
 api/articles/[id]/comments.cln    → /api/articles/:id/comments
 ```
 
 Parameters are automatically available as variables:
 
 ```cln
-// pages/users/[id].html.cln
+// pages/users/[id].html
 // 'id' variable is automatically set from URL
 
 string html = "<h1>User " + id + "</h1>"
@@ -235,8 +235,8 @@ return html
 `index` files map to folder paths:
 
 ```
-pages/index.html.cln              → /
-pages/blog/index.html.cln         → /blog
+pages/index.html              → /
+pages/blog/index.html         → /blog
 api/users/index.cln               → /api/users
 ```
 

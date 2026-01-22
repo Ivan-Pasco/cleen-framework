@@ -19,7 +19,7 @@ screens/
 ├── app/
 │   └── ui/
 │       ├── pages/
-│       │   └── index.html.cln    # HTML page with embedded screens
+│       │   └── index.html    # HTML page with embedded screens
 │       └── screens/
 │           ├── Counter.cln       # Counter screen definition
 │           └── TodoList.cln      # TodoList screen definition

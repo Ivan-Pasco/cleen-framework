@@ -29,7 +29,7 @@ my-app/
   app/
     ui/
       pages/
-        index.html.cln     # Home page (/)
+        index.html     # Home page (/)
       components/          # Reusable UI components
       layouts/             # Page layouts
       public/              # Static files (CSS, images)
@@ -42,7 +42,7 @@ my-app/
 
 ## Your First Page
 
-Edit `app/ui/pages/index.html.cln`:
+Edit `app/ui/pages/index.html`:
 
 ```cln
 // Home page
@@ -74,7 +74,7 @@ Open http://localhost:3000 in your browser.
 
 ## Add More Pages
 
-Create `app/ui/pages/about.html.cln`:
+Create `app/ui/pages/about.html`:
 
 ```cln
 string html = "<html>
@@ -91,7 +91,7 @@ Rebuild and the `/about` route is automatically available.
 
 ## Dynamic Routes
 
-Create `app/ui/pages/blog/[slug].html.cln` for dynamic URLs:
+Create `app/ui/pages/blog/[slug].html` for dynamic URLs:
 
 ```cln
 // The slug parameter is automatically extracted from the URL
@@ -167,7 +167,7 @@ Models are auto-discovered and available in your pages and API endpoints.
 
 | Folder | Purpose |
 |--------|---------|
-| `app/ui/pages/` | HTML routes (.html.cln) |
+| `app/ui/pages/` | HTML routes (.html) |
 | `app/ui/components/` | Custom elements (.cln) |
 | `app/server/api/` | JSON endpoints (.cln) |
 | `app/server/models/` | Database schemas (.cln) |
@@ -175,8 +175,8 @@ Models are auto-discovered and available in your pages and API endpoints.
 
 | File Pattern | Route |
 |--------------|-------|
-| `pages/index.html.cln` | `/` |
-| `pages/about.html.cln` | `/about` |
-| `pages/blog/[slug].html.cln` | `/blog/:slug` |
+| `pages/index.html` | `/` |
+| `pages/about.html` | `/about` |
+| `pages/blog/[slug].html` | `/blog/:slug` |
 | `api/users.cln` | `/api/users` |
 | `api/users/[id].cln` | `/api/users/:id` |

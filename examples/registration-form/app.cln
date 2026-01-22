@@ -12,5 +12,5 @@ import:
 	"app/config/project.cln"
 	"app/ui/styles/theme.cln"
 	"app/ui/components/RegistrationForm.cln"
-	"app/ui/pages/index.html.cln"
+	"app/ui/pages/index.html"
 	"app/backend/api/register.cln"

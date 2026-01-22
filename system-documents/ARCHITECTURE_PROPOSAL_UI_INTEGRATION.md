@@ -31,7 +31,7 @@ This proposal integrates Clean UI (declarative widget system) with the existing 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           SOURCE FILES                                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  HTML Pages (.html.cln)          │  Clean UI Screens (.cln)                 │
+│  HTML Pages (.html)          │  Clean UI Screens (.cln)                 │
 │  ┌─────────────────────────┐     │  ┌─────────────────────────┐             │
 │  │ <html>                  │     │  │ screen "Dashboard":     │             │
 │  │   <app-header>          │     │  │   state:                │             │
@@ -141,7 +141,7 @@ functions:
 HTML pages can embed Clean UI screens using `<screen>`:
 
 ```html
-<!-- app/ui/pages/dashboard.html.cln -->
+<!-- app/ui/pages/dashboard.html -->
 <!DOCTYPE html>
 <html>
 <head><title>Dashboard</title></head>

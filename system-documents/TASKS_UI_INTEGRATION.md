@@ -20,7 +20,7 @@
 
 **Flow:**
 ```
-Screen Definition (.cln)          HTML Page (.html.cln)
+Screen Definition (.cln)          HTML Page (.html)
         │                                  │
         ▼                                  ▼
 ┌─────────────────────────────────────────────────────────────┐
@@ -310,7 +310,7 @@ string getState()
 
 **Files created:**
 - `examples/screens/config.cln` - Framework configuration
-- `examples/screens/app/ui/pages/index.html.cln` - HTML page with multiple screen embeddings
+- `examples/screens/app/ui/pages/index.html` - HTML page with multiple screen embeddings
 - `examples/screens/app/ui/screens/Counter.cln` - Counter screen with +/- buttons
 - `examples/screens/app/ui/screens/TodoList.cln` - TodoList screen with input
 - `examples/screens/README.md` - Comprehensive documentation

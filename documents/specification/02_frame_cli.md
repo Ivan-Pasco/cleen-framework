@@ -132,7 +132,7 @@ Creating project 'myapp'...
   [core] Creating project.toml
   [frame.auth] Creating app/config/auth.cln
   [frame.auth] Creating app/config/project.cln
-  [frame.ui] Creating app/ui/pages/index.html.cln
+  [frame.ui] Creating app/ui/pages/index.html
   [frame.ui] Creating app/ui/styles/theme.cln
   [frame.httpserver] Creating app/backend/api/health.cln
 
@@ -157,7 +157,7 @@ myapp/
     │   └── middleware/
     └── ui/
         ├── pages/
-        │   └── index.html.cln       # Home page
+        │   └── index.html       # Home page
         ├── components/
         ├── layouts/
         └── styles/

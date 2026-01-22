@@ -29,7 +29,7 @@ blocks = ["component", "screen", "page"]
 
 [html]
 # File extensions processed as HTML pages
-extensions = [".html", ".html.cln"]
+extensions = [".html"]
 
 # Directives recognized in HTML
 directives = ["if", "else", "each", "bind", "client", "slot", "show", "validate"]
@@ -133,7 +133,7 @@ owns = ["app/ui", "app/ui/pages", "app/ui/components", "app/ui/layouts", "app/ui
 auto_create = true
 
 # File patterns recognized in owned folders
-patterns = ["*.cln", "*.html", "*.html.cln"]
+patterns = ["*.cln", "*.html"]
 
 # Files in owned folders automatically import this plugin
 implicit_import = true
@@ -141,6 +141,6 @@ implicit_import = true
 [templates]
 # Starter files created when plugin is added to a project
 files = [
-  { path = "app/ui/pages/index.html.cln", template = "index.html.cln" },
+  { path = "app/ui/pages/index.html", template = "index.html" },
   { path = "app/ui/styles/theme.cln", template = "theme.cln" },
 ]

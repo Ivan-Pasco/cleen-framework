@@ -794,7 +794,7 @@ For standard UI elements (buttons, forms, text inputs), use **frame.ui** compone
 ### Example: Game with HUD
 
 ```html
-<!-- pages/game.html.cln -->
+<!-- pages/game.html -->
 <!DOCTYPE html>
 <html>
 <head>

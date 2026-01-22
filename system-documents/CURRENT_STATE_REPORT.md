@@ -26,11 +26,11 @@
 
 **Location:** `clean-manager/src/core/codegen.rs`
 
-- HTML pages in `app/ui/pages/*.html.cln`
+- HTML pages in `app/ui/pages/*.html`
 - Components in `app/ui/components/*.cln`
 - File-based routing (automatic discovery)
 - Component tag expansion (`<app-header>` → function call)
-- Route parameter extraction (`[slug].html.cln` → `_req_param("slug")`)
+- Route parameter extraction (`[slug].html` → `_req_param("slug")`)
 - Variable interpolation (`{{slug}}` → string concatenation)
 
 **Evidence:**

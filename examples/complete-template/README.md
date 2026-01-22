@@ -8,7 +8,7 @@ A minimal starter template for Clean Framework projects.
 app/
 ├── ui/
 │   ├── pages/           # HTML routes
-│   │   └── index.html.cln
+│   │   └── index.html
 │   ├── components/      # Reusable components
 │   │   └── Header.cln
 │   └── public/          # Static assets
@@ -36,12 +36,12 @@ frame serve
 
 | File | Route | Type |
 |------|-------|------|
-| `app/ui/pages/index.html.cln` | `/` | HTML |
+| `app/ui/pages/index.html` | `/` | HTML |
 | `app/server/api/hello.cln` | `/api/hello` | JSON |
 
 ## Customization
 
-1. **Add pages**: Create `.html.cln` files in `app/ui/pages/`
+1. **Add pages**: Create `.html` files in `app/ui/pages/`
 2. **Add components**: Create `.cln` files in `app/ui/components/`
 3. **Add API routes**: Create `.cln` files in `app/server/api/`
 4. **Add styles**: Put CSS in `app/ui/public/css/`
