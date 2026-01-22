@@ -1,0 +1,119 @@
+// User API endpoints - frame.httpserver plugin
+// Location: app/api/ tells the compiler these are HTTP endpoints
+
+use frame.httpserver
+use frame.auth
+use app.data.User
+
+endpoints:
+	// Register a new user
+	POST "/api/users/register":
+		body:
+			email: string
+			username: string
+			password: string
+			password_confirm: string
+
+		returns: json
+
+		handle:
+			// Validate passwords match
+			if password != password_confirm:
+				return badRequest("Passwords do not match")
+
+			// Check if email already exists
+			User existing = User.findByEmail(email)
+			if existing != null:
+				return badRequest("Email already registered")
+
+			// Check if username already exists
+			User existingUsername = User.findByUsername(username)
+			if existingUsername != null:
+				return badRequest("Username already taken")
+
+			// Create the user
+			User user = User.createUser(email, username, password)
+
+			// Create session for auto-login
+			string sessionId = auth.createSession(user.id.toString())
+
+			return json:
+				success: true
+				message: "Registration successful"
+				user:
+					id: user.id
+					email: user.email
+					username: user.username
+
+	// Get all users (for dashboard)
+	GET "/api/users":
+		returns: json
+
+		handle:
+			list<User> users = User.getActiveUsers()
+
+			list<any> userList = []
+			for user in users:
+				userList.append:
+					id: user.id
+					email: user.email
+					username: user.username
+					created_at: user.created_at.toString()
+
+			return json:
+				success: true
+				users: userList
+				count: userList.length()
+
+	// Get single user by ID
+	GET "/api/users/:id":
+		params:
+			id: integer
+
+		returns: json
+
+		handle:
+			User user = User.find:
+				where:
+					id == id
+				limit: 1
+
+			if user == null:
+				return notFound("User not found")
+
+			return json:
+				success: true
+				user:
+					id: user.id
+					email: user.email
+					username: user.username
+					created_at: user.created_at.toString()
+					is_active: user.is_active
+
+	// Login endpoint
+	POST "/api/users/login":
+		body:
+			email: string
+			password: string
+
+		returns: json
+
+		handle:
+			User user = User.findByEmail(email)
+
+			if user == null:
+				return unauthorized("Invalid email or password")
+
+			boolean valid = auth.verifyPassword(password, user.password_hash)
+
+			if !valid:
+				return unauthorized("Invalid email or password")
+
+			string sessionId = auth.createSession(user.id.toString())
+
+			return json:
+				success: true
+				message: "Login successful"
+				user:
+					id: user.id
+					username: user.username

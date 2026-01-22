@@ -140,23 +140,80 @@ app/
 
 ### Examples and Demos Policy
 
-**CRITICAL**: All examples and tests MUST follow the folder conventions above.
+## ABSOLUTE PROHIBITION - READ CAREFULLY
 
-1. **NO STANDALONE JAVASCRIPT**: Never create JavaScript-only demos or simulations. JavaScript simulations present false statements about framework capabilities.
+**NEVER, UNDER ANY CIRCUMSTANCES, CREATE JAVASCRIPT CODE TO SIMULATE CLEAN LANGUAGE BEHAVIOR.**
 
-2. **NO HTML/JS TEST HARNESSES**: Do not create browser-based test files using JavaScript to "simulate" plugin behavior.
+This is a HARD RULE with NO EXCEPTIONS. Violations include:
 
-3. **REAL COMPILATION ONLY**: All examples must:
-   - Follow the folder structure above
-   - Use correct file extensions (`.html` for pages, `.css` for styles, `.cln` for logic)
-   - Compile successfully with the Clean Language compiler
-   - Be placed in the correct folder for their plugin
+- Writing `<script>` tags in HTML files that simulate what Clean would do
+- Creating "demo" or "preview" JavaScript that mimics plugin functionality
+- Adding JavaScript "for now" or "temporarily" until the compiler works
+- Using localStorage, fetch simulations, or any JS to fake database/auth/canvas behavior
+- Creating "working mockups" or "visual previews" with JavaScript logic
 
-4. **WHY THIS MATTERS**:
-   - JavaScript simulations can pass while actual compilation fails
-   - Files in wrong folders won't be processed correctly
-   - Incorrect extensions break editor support
-   - Tests must validate real plugin behavior, not simulations
+### What To Do Instead
+
+1. **If the compiler/server can't run the code yet**:
+   - Create ONLY the `.cln` source files with correct syntax
+   - Create ONLY static `.html` templates WITHOUT any `<script>` tags
+   - Document what the example WILL do when compiled, don't simulate it
+
+2. **If asked to create a "working demo"**:
+   - REFUSE if it requires JavaScript simulation
+   - Explain that demos must compile and run on actual Clean infrastructure
+   - Offer to implement the missing compiler/server functionality instead
+
+3. **If asked to "make it work in the browser"**:
+   - REFUSE if it means adding JavaScript
+   - Static HTML/CSS only - no dynamic behavior without Clean compilation
+
+### Valid Example Structure
+
+```
+example/
+├── app.cln                 # Clean config (NO JS)
+├── app/
+│   ├── pages/
+│   │   └── index.html      # Static HTML, NO <script> tags
+│   ├── data/
+│   │   └── User.cln        # Clean model (NO JS)
+│   └── api/
+│       └── users.cln       # Clean endpoints (NO JS)
+└── public/
+    └── css/
+        └── style.css       # CSS only (NO JS)
+```
+
+### Invalid - NEVER DO THIS
+
+```html
+<!-- WRONG - This violates the directive -->
+<script>
+  // Simulating Clean behavior with JavaScript
+  const users = JSON.parse(localStorage.getItem('users'));
+  function loadUsers() { ... }
+</script>
+```
+
+### Why This Rule Exists
+
+1. JavaScript simulations LIE about framework capabilities
+2. They create FALSE CONFIDENCE in untested code
+3. They DIVERGE from actual behavior over time
+4. They WASTE TIME building throwaway code
+5. They DELAY actual compiler/server implementation
+6. They CONFUSE users about what Clean Language actually does
+
+### Enforcement
+
+Before creating ANY file, ask yourself:
+- Does this file contain `<script>` tags? → **STOP, DON'T CREATE IT**
+- Does this file contain JavaScript logic? → **STOP, DON'T CREATE IT**
+- Am I "simulating" or "mocking" Clean behavior? → **STOP, DON'T CREATE IT**
+- Could this be misunderstood as "working" when it's not? → **STOP, DON'T CREATE IT**
+
+**If in doubt, create .cln files only and leave HTML as pure static templates.**
 
 ### Module-Specific Rules
 

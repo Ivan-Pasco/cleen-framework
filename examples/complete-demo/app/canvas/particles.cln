@@ -1,0 +1,107 @@
+// Particle animation - frame.canvas plugin
+// Location: app/canvas/ tells the compiler this is a canvas application
+
+use frame.canvas
+
+// Particle class for the animation
+class Particle:
+	number x
+	number y
+	number vx
+	number vy
+	number radius
+	number alpha
+	integer r
+	integer g
+	integer b
+
+canvas particles width=800 height=400:
+	// Animation state
+	state:
+		particles: list<Particle> = []
+		mouse_x: number = 400
+		mouse_y: number = 200
+		particle_count: integer = 100
+
+	// Initialize particles
+	init:
+		for i in range(0, particle_count):
+			Particle p = Particle:
+				x: random(0, 800)
+				y: random(0, 400)
+				vx: random(-1, 1)
+				vy: random(-1, 1)
+				radius: random(2, 6)
+				alpha: random(0.3, 0.9)
+				r: random(100, 255)
+				g: random(150, 255)
+				b: random(200, 255)
+			particles.append(p)
+
+	// Update loop - called every frame
+	update:
+		// Update mouse position
+		mouse_x = canvas.mouseX()
+		mouse_y = canvas.mouseY()
+
+		// Update each particle
+		for p in particles:
+			// Move particle
+			p.x = p.x + p.vx
+			p.y = p.y + p.vy
+
+			// Mouse attraction
+			number dx = mouse_x - p.x
+			number dy = mouse_y - p.y
+			number dist = math.sqrt(dx * dx + dy * dy)
+
+			if dist < 150:
+				number force = (150 - dist) / 150
+				p.vx = p.vx + (dx / dist) * force * 0.02
+				p.vy = p.vy + (dy / dist) * force * 0.02
+
+			// Apply friction
+			p.vx = p.vx * 0.99
+			p.vy = p.vy * 0.99
+
+			// Bounce off edges
+			if p.x < 0 or p.x > 800:
+				p.vx = -p.vx
+				p.x = math.clamp(p.x, 0, 800)
+
+			if p.y < 0 or p.y > 400:
+				p.vy = -p.vy
+				p.y = math.clamp(p.y, 0, 400)
+
+	// Render loop - called every frame after update
+	render:
+		// Clear with dark background
+		canvas.clear("#0d1117")
+
+		// Draw connections between nearby particles
+		for i in range(0, particles.length()):
+			Particle p1 = particles[i]
+
+			for j in range(i + 1, particles.length()):
+				Particle p2 = particles[j]
+				number dx = p2.x - p1.x
+				number dy = p2.y - p1.y
+				number dist = math.sqrt(dx * dx + dy * dy)
+
+				if dist < 100:
+					number lineAlpha = (100 - dist) / 100 * 0.3
+					canvas.setStrokeColor(78, 205, 196, lineAlpha)
+					canvas.line(p1.x, p1.y, p2.x, p2.y)
+
+		// Draw particles
+		for p in particles:
+			canvas.setFillColor(p.r, p.g, p.b, p.alpha)
+			canvas.fillCircle(p.x, p.y, p.radius)
+
+			// Glow effect
+			canvas.setFillColor(p.r, p.g, p.b, p.alpha * 0.3)
+			canvas.fillCircle(p.x, p.y, p.radius * 2)
+
+		// Draw mouse indicator
+		canvas.setStrokeColor(255, 255, 255, 0.3)
+		canvas.strokeCircle(mouse_x, mouse_y, 150)

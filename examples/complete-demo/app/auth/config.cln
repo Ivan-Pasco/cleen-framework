@@ -1,0 +1,35 @@
+// Authentication configuration - frame.auth plugin
+// Location: app/auth/ tells the compiler this is auth configuration
+
+use frame.auth
+
+auth:
+	// Session-based authentication
+	session:
+		secret: env("SESSION_SECRET", "dev-secret-change-in-production")
+		cookie_name: "session_id"
+		expires: 24h
+		http_only: true
+		same_site: "lax"
+		secure: env("NODE_ENV") == "production"
+
+	// Password hashing configuration
+	password:
+		algorithm: "bcrypt"
+		rounds: 12
+
+	// CSRF protection
+	csrf:
+		enabled: true
+		token_name: "_csrf"
+		header_name: "X-CSRF-Token"
+
+	// Protected routes
+	protected:
+		paths:
+			- "/dashboard"
+			- "/api/users"
+		redirect_to: "/register"
+		exclude:
+			- "/api/users/register"
+			- "/api/users/login"
