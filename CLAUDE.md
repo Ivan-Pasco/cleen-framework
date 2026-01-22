@@ -62,6 +62,43 @@ Key Clean Language rules for Frame:
 3. **WORKING CODE ONLY**: All code must be production-ready and functional.
 4. **REFERENCE SPECIFICATIONS**: Always consult the relevant specification document before implementing.
 
+### Examples and Demos Policy
+
+**CRITICAL**: All examples, demos, and tests MUST use 100% Clean Language.
+
+1. **NO STANDALONE JAVASCRIPT**: Never create JavaScript-only demos or simulations. JavaScript simulations present false statements about framework capabilities and lead to failures when actual compilation is attempted.
+
+2. **NO HTML/JS TEST HARNESSES**: Do not create browser-based test files using JavaScript to "simulate" plugin behavior. These do not test actual functionality.
+
+3. **CLEAN LANGUAGE ONLY**: Every example must:
+   - Be written entirely in Clean Language (`.cln` files)
+   - Compile successfully with the Clean Language compiler
+   - Comply with the [Clean Language Specification](/Users/earcandy/Documents/Dev/Clean Language/clean-language-compiler/documentation/Clean_Language_Specification.md)
+   - Use actual plugin syntax, not simulated equivalents
+
+4. **REAL COMPILATION TESTS**: Tests must compile Clean Language code through the actual compiler pipeline and verify the generated WASM output.
+
+5. **WHY THIS MATTERS**:
+   - JavaScript simulations can pass while actual compilation fails
+   - Simulations don't validate real syntax or semantics
+   - They create false confidence in untested functionality
+   - They diverge from actual framework behavior over time
+
+**Correct approach**:
+```clean
+// examples/canvas-demo.cln
+canvas "demo" width=400 height=300:
+    fill_rect(10, 10, 50, 30, "#4ecdc4")
+    fill_circle(100, 50, 25, "#ff6b6b")
+    draw_text("Hello", 20, 100)
+```
+
+**Incorrect approach** (NEVER DO THIS):
+```javascript
+// DO NOT create JavaScript simulations like this
+function simulateCanvasFillRect(x, y, w, h) { ... }
+```
+
 ### Module-Specific Rules
 
 #### Frame CLI (`frame-cli/`)
