@@ -2,7 +2,7 @@
 resolver = "2"
 members = []
 
-# NOTE: All Rust crates have been replaced:
+# NOTE: All Rust crates have been replaced with Clean Language plugins:
 # - frame-cli      -> replaced by `cleen` (external package manager)
 # - frame-server   -> replaced by `clean-server` (separate repo, installed via `cleen server install`)
 # - frame-runtime  -> replaced by `clean-server` (separate repo)
@@ -13,7 +13,13 @@ members = []
 # - frame-plugins  -> deleted (old Rust plugin system)
 # - frame-compiler-plugins -> deleted (replaced by Clean plugins)
 #
-# See plugins/ directory for the new Clean Language plugin sources.
+# See plugins/ directory for the new Clean Language plugin sources:
+#   - plugins/frame.data/      - ORM and database DSL
+#   - plugins/frame.httpserver/ - HTTP server and API endpoints
+#   - plugins/frame.auth/       - Authentication and authorization
+#   - plugins/frame.ui/         - UI components and SSR rendering
+#   - plugins/frame.canvas/     - Canvas graphics and games
+#
 # See https://github.com/Ivan-Pasco/clean-server for the server runtime.
 
 [workspace.package]
@@ -24,40 +30,5 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/clean-language/frame"
 homepage = "https://cleanlanguage.org"
 
-[workspace.dependencies]
-# Shared dependencies across all Frame modules
-tokio = { version = "1.35", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-anyhow = "1.0"
-thiserror = "1.0"
-async-trait = "0.1"
-tracing = "0.1"
-tracing-subscriber = "0.3"
-
-# WebAssembly runtime
-wasmtime = "16.0"
-wasm-encoder = "0.40"
-
-# HTTP and networking
-axum = "0.7"
-hyper = "1.0"
-tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
-
-# Database
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "mysql", "sqlite", "json", "chrono", "uuid"] }
-uuid = { version = "1.6", features = ["v4", "serde"] }
-chrono = { version = "0.4", features = ["serde"] }
-
-# CLI
-clap = { version = "4.4", features = ["derive", "cargo"] }
-
-# HTTP client - force rustls-tls for cross-compilation compatibility (no OpenSSL)
-reqwest = { version = "0.11", default-features = false, features = ["json", "gzip", "brotli", "rustls-tls", "stream"] }
-
-# URL parsing
-url = "2.5"
-
-# Force vendored OpenSSL for cross-compilation (builds from source, no system deps)
-openssl = { version = "0.10", features = ["vendored"] }
+# No workspace dependencies needed - all Rust crates have been migrated to Clean Language plugins.
+# The plugins are compiled to WASM by the Clean Language compiler.

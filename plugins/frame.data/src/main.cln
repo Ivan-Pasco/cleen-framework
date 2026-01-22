@@ -217,6 +217,93 @@ functions:
 		result = result + "\t\t\t\ti = i + 1\n"
 		result = result + "\t\t\treturn result\n"
 
+		// Generate __to_params() - serializes all fields (except id) to JSON array for INSERT
+		result = result + "\n\t\tstring __to_params()\n"
+		result = result + "\t\t\tstring params = \"[\"\n"
+		result = result + generate_field_serialization(field_names, false)
+		result = result + "\t\t\tparams = params + \"]\"\n"
+		result = result + "\t\t\treturn params\n"
+
+		// Generate __to_update_params() - serializes id first, then other fields for UPDATE
+		result = result + "\n\t\tstring __to_update_params()\n"
+		result = result + "\t\t\tstring params = \"[\" + this.id.toString()\n"
+		result = result + generate_field_serialization(field_names, true)
+		result = result + "\t\t\tparams = params + \"]\"\n"
+		result = result + "\t\t\treturn params\n"
+
+		// Generate __update_set() - generates "field1 = $2, field2 = $3, ..."
+		result = result + "\n\t\tstring __update_set()\n"
+		result = result + "\t\t\treturn \"" + generate_update_set_sql(field_names) + "\"\n"
+
+		// Generate __extract_id() - extracts id from query result JSON
+		result = result + "\n\t\tinteger __extract_id(string result)\n"
+		result = result + "\t\t\tinteger id_pos = result.indexOf(\"\\\"id\\\":\")\n"
+		result = result + "\t\t\tif id_pos == -1\n"
+		result = result + "\t\t\t\treturn 0\n"
+		result = result + "\t\t\tinteger value_start = id_pos + 5\n"
+		result = result + "\t\t\tinteger value_end = value_start\n"
+		result = result + "\t\t\twhile value_end < result.length()\n"
+		result = result + "\t\t\t\tstring ch = result.substring(value_end, value_end + 1)\n"
+		result = result + "\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
+		result = result + "\t\t\t\t\tbreak\n"
+		result = result + "\t\t\t\tvalue_end = value_end + 1\n"
+		result = result + "\t\t\treturn parseInt(result.substring(value_start, value_end))\n"
+
+		return result
+
+	// Generate field serialization code (for INSERT and UPDATE params)
+	// Serializes all fields to a JSON params array format
+	// All values are converted via toString() - the database driver handles type coercion
+	string generate_field_serialization(string field_names, boolean skip_first)
+		string result = ""
+		string fields = field_names
+		integer pos = 0
+		boolean first_added = false
+
+		while pos < fields.length()
+			// Find end of current field name
+			integer comma_pos = fields.indexOf(",", pos)
+			if comma_pos == -1
+				comma_pos = fields.length()
+
+			string field = fields.substring(pos, comma_pos).trim()
+
+			// Skip 'id' field for INSERT params
+			if field != "id"
+				if skip_first or first_added
+					// Add comma separator and value
+					result = result + "\t\t\tparams = params + \", \" + this." + field + ".toString()\n"
+				else
+					result = result + "\t\t\tparams = params + this." + field + ".toString()\n"
+				first_added = true
+
+			pos = comma_pos + 1
+
+		return result
+
+	// Generate UPDATE SET clause SQL
+	string generate_update_set_sql(string field_names)
+		string result = ""
+		string fields = field_names
+		integer pos = 0
+		integer param_idx = 2
+
+		while pos < fields.length()
+			integer comma_pos = fields.indexOf(",", pos)
+			if comma_pos == -1
+				comma_pos = fields.length()
+
+			string field = fields.substring(pos, comma_pos).trim()
+
+			// Skip 'id' field
+			if field != "id"
+				if result.length() > 0
+					result = result + ", "
+				result = result + field + " = $" + param_idx.toString()
+				param_idx = param_idx + 1
+
+			pos = comma_pos + 1
+
 		return result
 
 	// Count comma-separated fields

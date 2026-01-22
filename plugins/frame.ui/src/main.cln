@@ -37,26 +37,18 @@ functions:
 
 	// Process component definition blocks (Clean syntax)
 	string expand_block(string block_name, string attributes, string body)
-		printl("[DEBUG] expand_block called")
-		printl("[DEBUG] block_name: " + block_name)
-		printl("[DEBUG] body length: " + body.length().toString())
 
 		if block_name == "component"
 			return expand_component(attributes, body)
 
 		// Check if this is a screen block (block_name is "screen ScreenName")
-		printl("[DEBUG] checking screen prefix")
 		if block_name.startsWith("screen ")
-			printl("[DEBUG] is screen block")
 			// Split the operations to debug corruption issue
 			integer name_start = 7
 			integer name_end = block_name.length()
-			printl("[DEBUG] extracting substring from " + name_start.toString() + " to " + name_end.toString())
 			string temp_name = block_name.substring(name_start, name_end)
-			printl("[DEBUG] temp_name after substring: '" + temp_name + "'")
 			// Skip trim for now - it may be causing issues
 			string screen_name = temp_name
-			printl("[DEBUG] screen_name: '" + screen_name + "'")
 			return expand_screen(screen_name, body)
 
 		return body
@@ -112,25 +104,20 @@ functions:
 functions:
 	// Strip leading and trailing spaces without using broken trim()
 	string strip_spaces(string s)
-		printl("[DEBUG strip_spaces] input: '" + s + "' len=" + s.length().toString())
 		// Strip leading spaces
 		integer lead_count = 0
 		while s.length() > 0 and s.substring(0, 1) == " "
 			s = s.substring(1, s.length())
 			lead_count = lead_count + 1
 			if lead_count > 100
-				printl("[DEBUG strip_spaces] INFINITE LOOP - BREAKING")
 				break
-		printl("[DEBUG strip_spaces] after leading strip: '" + s + "'")
 		// Strip trailing spaces
 		integer trail_count = 0
 		while s.length() > 0 and s.substring(s.length() - 1, s.length()) == " "
 			s = s.substring(0, s.length() - 1)
 			trail_count = trail_count + 1
 			if trail_count > 100
-				printl("[DEBUG strip_spaces] INFINITE LOOP - BREAKING")
 				break
-		printl("[DEBUG strip_spaces] after trailing strip: '" + s + "'")
 		return s
 
 // ============================================================================
@@ -1059,35 +1046,25 @@ functions:
 	// Split a string into lines by newline characters
 	// Returns a list of strings, one per line
 	list<string> split_lines(string content)
-		printl("[DEBUG split_lines] content length: " + content.length().toString())
 		integer first_newline = content.indexOf("\n")
-		printl("[DEBUG split_lines] first newline at: " + first_newline.toString())
 		if content.length() > 0
 			string first_char = content.substring(0, 1)
-			printl("[DEBUG split_lines] first char code: " + first_char.charCodeAt(0).toString())
 
 		list<string> result = []
 		string remaining = content
 
-		printl("[DEBUG split_lines] entering loop, remaining length: " + remaining.length().toString())
 		while remaining.length() > 0
-			printl("[DEBUG split_lines] loop iteration, remaining: " + remaining.length().toString())
 			integer newline = remaining.indexOf("\n")
-			printl("[DEBUG split_lines] newline pos: " + newline.toString())
 			if newline == -1
 				// No more newlines - add remaining content as last line
-				printl("[DEBUG split_lines] no newline, pushing remaining")
 				result.push(remaining)
 				remaining = ""
 			else
 				// Add line before newline and continue
 				string line = remaining.substring(0, newline)
-				printl("[DEBUG split_lines] found line length: " + line.length().toString())
 				result.push(line)
 				remaining = remaining.substring(newline + 1, remaining.length())
-				printl("[DEBUG split_lines] new remaining length: " + remaining.length().toString())
 
-		printl("[DEBUG split_lines] loop done, result count: " + result.length().toString())
 		return result
 
 	// Count the number of leading tab characters in a line
@@ -1115,30 +1092,24 @@ functions:
 	// lines: array of lines in the block
 	// end_index: index after the last line of the block
 	string parse_block(list<string> lines, integer start_index, integer base_indent)
-		printl("[DEBUG parse_block] start_index=" + start_index.toString() + " base_indent=" + base_indent.toString())
 		list<string> block_lines = []
 		integer index = start_index
 		boolean done = false
 
 		while index < lines.length() and done == false
 			string line = lines[index]
-			printl("[DEBUG parse_block] index=" + index.toString() + " line_len=" + line.length().toString())
 
 			// Skip empty lines within block
 			if line.trim().length() == 0
-				printl("[DEBUG parse_block] empty line, adding")
 				block_lines.push(line)
 				index = index + 1
 			else
 				integer indent = get_indent_level(line)
-				printl("[DEBUG parse_block] indent=" + indent.toString() + " need > " + base_indent.toString())
 				// Check if still in block (indent > base_indent)
 				if indent > base_indent
-					printl("[DEBUG parse_block] adding line to block")
 					block_lines.push(line)
 					index = index + 1
 				else
-					printl("[DEBUG parse_block] indent not greater, done")
 					done = true
 
 		string result = "{\"lines\":["
@@ -1205,26 +1176,18 @@ functions:
 	// Returns the block name without colon, or empty string if not a block start
 	string get_block_name(string line)
 		string trimmed = line.trim()
-		printl("[DEBUG get_block_name] trimmed: " + trimmed)
-		printl("[DEBUG get_block_name] trimmed length: " + trimmed.length().toString())
 
 		// Must end with colon and have no other content after it
 		if trimmed.endsWith(":")
-			printl("[DEBUG get_block_name] ends with colon")
 			// Check there's no "=" before the colon (not a key=value:)
 			integer eq_pos = trimmed.indexOf("=")
-			printl("[DEBUG get_block_name] eq_pos: " + eq_pos.toString())
 			if eq_pos == -1
 				// Remove the trailing colon and trim any spaces before it
 				string name = trimmed.substring(0, trimmed.length() - 1)
-				printl("[DEBUG get_block_name] name before trim: " + name)
 				string result = name.trim()
-				printl("[DEBUG get_block_name] returning: " + result)
 				return result
 		else
-			printl("[DEBUG get_block_name] does NOT end with colon")
 
-		printl("[DEBUG get_block_name] returning empty string!")
 		return ""
 
 	// Check if a line is a widget line (starts with "ui." after trimming)
@@ -1372,43 +1335,23 @@ functions:
 	// Main entry point for screen expansion
 	// Parses screen body and generates Clean code
 	string expand_screen(string name, string body)
-		printl("[DEBUG] expand_screen called for: " + name)
-		printl("[DEBUG] body length: " + body.length().toString())
 
 		// Parse the screen body into state, render, and lifecycle sections
-		printl("[DEBUG] calling parse_screen_body")
 		string parsed = parse_screen_body(body)
-		printl("[DEBUG] parse_screen_body returned")
-		printl("[DEBUG] parsed length: " + parsed.length().toString())
-		printl("[DEBUG] parsed JSON: " + parsed)
 
 		// Extract state variables
-		printl("[DEBUG] extracting state_json")
 		string state_json = extract_json_field(parsed, "state")
-		printl("[DEBUG] state_json: " + state_json)
 
 		// Extract render block content
-		printl("[DEBUG] extracting render_content")
 		string render_content = extract_json_field(parsed, "render")
-		printl("[DEBUG] render_content length: " + render_content.length().toString())
 
 		// Extract lifecycle hooks
-		printl("[DEBUG] extracting lifecycle hooks")
-		printl("[DEBUG] render_content BEFORE on_mount: " + render_content)
 		string on_mount = extract_json_field(parsed, "onMount")
-		printl("[DEBUG] on_mount extracted")
-		printl("[DEBUG] render_content AFTER on_mount: " + render_content)
 		string on_unmount = extract_json_field(parsed, "onUnmount")
-		printl("[DEBUG] on_unmount extracted")
-		printl("[DEBUG] render_content AFTER on_unmount: " + render_content)
 		string on_update = extract_json_field(parsed, "onUpdate")
-		printl("[DEBUG] on_update extracted, now calling generate_screen_class_full")
-		printl("[DEBUG] render_content FINAL: " + render_content)
-		printl("[DEBUG] render_content FINAL length: " + render_content.length().toString())
 
 		// Generate the screen class
 		string result = generate_screen_class_full(name, state_json, render_content, on_mount, on_unmount, on_update)
-		printl("[DEBUG] generate_screen_class_full returned")
 
 		// Generate module-level render function that exports the screen's render
 		result = result + "\n// Module-level screen instance\n"
@@ -1422,20 +1365,14 @@ functions:
 
 	// Generate Clean class code for a screen with lifecycle hooks
 	string generate_screen_class_full(string name, string state_json, string render_content, string on_mount, string on_unmount, string on_update)
-		printl("[DEBUG] generate_screen_class_full called for: " + name)
-		printl("[DEBUG] state_json: " + state_json)
 		// Clean Language requires classes to be inside a classes: block
 		string result = "classes:\n"
 		result = result + "\tclass __Screen_" + name + "\n"
-		printl("[DEBUG] created initial result string")
 
 		// Parse state variables from JSON
-		printl("[DEBUG] about to call json_to_object_list")
 		list<string> state_vars = json_to_object_list(state_json)
-		printl("[DEBUG] json_to_object_list returned, count: " + state_vars.length().toString())
 
 		// Add state fields
-		printl("[DEBUG] about to iterate state_vars")
 		integer i = 0
 		while i < state_vars.length()
 			string var_json = state_vars[i]
@@ -1452,19 +1389,14 @@ functions:
 			result = result + "\n"
 
 			i = i + 1
-		printl("[DEBUG] finished state_vars loop")
 
 		result = result + "\n"
-		printl("[DEBUG] added newline to result")
 
 		// Add functions block
 		result = result + "\t\tfunctions:\n"
-		printl("[DEBUG] added functions block header")
 
 		// Generate SSR render function
-		printl("[DEBUG] about to call generate_ssr_render")
 		result = result + generate_ssr_render(name, state_json, render_content)
-		printl("[DEBUG] generate_ssr_render returned")
 
 		// Generate hydration function with lifecycle hooks
 		result = result + generate_hydration_function_full(name, state_json, render_content, on_mount, on_unmount, on_update)
@@ -1477,7 +1409,6 @@ functions:
 	// Parse screen body into structured data (no list<string> to avoid memory corruption)
 	// Returns JSON: {"state": [...], "render": "...", "onMount": "...", "onUnmount": "...", "onUpdate": "..."}
 	string parse_screen_body(string body)
-		printl("[DEBUG] parse_screen_body called, body len=" + body.length().toString())
 
 		string state_json = "[]"
 		string render_content = ""
@@ -1487,11 +1418,9 @@ functions:
 
 		// Find state: block
 		integer state_pos = body.indexOf("state")
-		printl("[DEBUG] state_pos=" + state_pos.toString())
 		if state_pos != -1
 			// Find the next line after state:
 			integer nl_after_state = body.indexOf("\n", state_pos)
-			printl("[DEBUG] nl_after_state=" + nl_after_state.toString())
 			if nl_after_state != -1
 				// Find end of state block - could be functions:, render:, or end
 				integer func_pos = body.indexOf("functions")
@@ -1504,18 +1433,13 @@ functions:
 					state_end = render_pos
 				// Extract state content
 				string state_content = body.substring(nl_after_state + 1, state_end)
-				printl("[DEBUG] state_content len=" + state_content.length().toString())
-				printl("[DEBUG] state_content: " + state_content)
 				// Parse the state variable declarations
 				state_json = parse_state_from_string(state_content)
-				printl("[DEBUG] state_json: " + state_json)
 
 		// Find render: block
 		integer render_pos = body.indexOf("render")
-		printl("[DEBUG] render_pos=" + render_pos.toString())
 		if render_pos != -1
 			integer nl_after_render = body.indexOf("\n", render_pos)
-			printl("[DEBUG] nl_after_render=" + nl_after_render.toString())
 			if nl_after_render != -1
 				// Find end of render block
 				integer onmount_pos = body.indexOf("onMount")
@@ -1523,30 +1447,22 @@ functions:
 				if render_end == -1
 					render_end = body.length()
 				render_content = body.substring(nl_after_render + 1, render_end)
-				printl("[DEBUG] render_content len=" + render_content.length().toString())
-				printl("[DEBUG] render_content: " + render_content)
 
 		string result = "{\"state\":" + state_json + ",\"render\":" + "\"" + escape_json_string(render_content) + "\""
 		result = result + ",\"onMount\":\"" + escape_json_string(on_mount_content) + "\""
 		result = result + ",\"onUnmount\":\"" + escape_json_string(on_unmount_content) + "\""
 		result = result + ",\"onUpdate\":\"" + escape_json_string(on_update_content) + "\"}"
-		printl("[DEBUG] parse_screen_body result: " + result)
 		return result
 
 	// Helper function to parse state from string content
 	string parse_state_from_string(string content)
-		printl("[DEBUG] parse_state_from_string called, content len=" + content.length().toString())
-		printl("[DEBUG parse_state] raw content: '" + content + "'")
 		string result = "["
 		boolean first = true
 
 		// Simple line-by-line parsing using indexOf for newlines
 		string remaining = content
-		printl("[DEBUG parse_state] remaining len=" + remaining.length().toString())
 		while remaining.length() > 0
-			printl("[DEBUG parse_state] loop iteration")
 			integer nl_pos = remaining.indexOf("\n")
-			printl("[DEBUG parse_state] nl_pos=" + nl_pos.toString())
 			string line = ""
 			if nl_pos == -1
 				line = remaining
@@ -1557,36 +1473,26 @@ functions:
 
 			// Tokenizer already removes indentation, so use line directly
 			string trimmed = line
-			printl("[DEBUG parse_state] trimmed: '" + trimmed + "' len=" + trimmed.length().toString())
 
 			// Skip empty lines
 			if trimmed.length() > 0
-				printl("[DEBUG parse_state] line not empty")
 				// Parse as a typed variable
 				integer colon_pos = trimmed.indexOf(":")
-				printl("[DEBUG parse_state] colon_pos: " + colon_pos.toString())
 				if colon_pos > 0
 					string var_name = strip_spaces(trimmed.substring(0, colon_pos))
-					printl("[DEBUG parse_state] var_name: '" + var_name + "'")
 					string var_rest = strip_spaces(trimmed.substring(colon_pos + 1, trimmed.length()))
 					integer var_rest_len = var_rest.length()
-					printl("[DEBUG parse_state] var_rest: '" + var_rest + "' len=" + var_rest_len.toString())
 					// Find type and optional default value
 					integer eq_pos = var_rest.indexOf("=")
-					printl("[DEBUG parse_state] eq_pos: " + eq_pos.toString())
 					string var_type = ""
 					string var_default = ""
 					if eq_pos != -1
-						printl("[DEBUG parse_state] extracting type and default")
 						// Use stored length for substring
 						var_type = strip_spaces(var_rest.substring(0, eq_pos))
-						printl("[DEBUG parse_state] var_type: '" + var_type + "'")
 						if eq_pos + 1 < var_rest_len
 							var_default = strip_spaces(var_rest.substring(eq_pos + 1, var_rest_len))
-							printl("[DEBUG parse_state] var_default: '" + var_default + "'")
 					else
 						var_type = var_rest
-					printl("[DEBUG parse_state] final var_type: '" + var_type + "' var_default: '" + var_default + "'")
 
 					// Add to result
 					if first == false
@@ -1595,36 +1501,13 @@ functions:
 					result = result + "{\"name\":\"" + escape_json_string(var_name) + "\""
 					result = result + ",\"type\":\"" + escape_json_string(var_type) + "\""
 					result = result + ",\"default\":\"" + escape_json_string(var_default) + "\"}"
-					printl("[DEBUG parse_state] added var to result")
 
 		result = result + "]"
-		printl("[DEBUG] parse_state_from_string result: " + result)
 		return result
 
-	// DEPRECATED: Original parse_screen_body using list<string>
-	string parse_screen_body_old(string body)
-		string result = "{\"state\":[],\"render\":\"\",\"onMount\":\"\",\"onUnmount\":\"\",\"onUpdate\":\"\"}"
-		return result
-
-	// DEPRECATED: Original block_name logic
-	string parse_screen_body_list_based(string body)
-		// Skip for now due to list corruption
-		return "{\"state\":[],\"render\":\"\",\"onMount\":\"\",\"onUnmount\":\"\",\"onUpdate\":\"\"}"
-
-	// Placeholder - will be deleted
-	string placeholder_old_block_name(string body)
-		string state_json = "[]"
-		string render_content = ""
-		string on_mount_content = ""
-		string on_unmount_content = ""
-		string on_update_content = ""
-
-		// Old broken code removed
-		// parse_block was causing corruption
-
-		string result = "{\"state\":[]}"
-		return result
-
+	
+	
+	
 	// Extract lifecycle action code from lines
 	string extract_lifecycle_action(string lines_json)
 		list<string> lines = json_to_string_list(lines_json)
@@ -1775,48 +1658,33 @@ functions:
 	// Extract a field value from JSON string
 	// Simple JSON field extraction (not a full parser)
 	string extract_json_field(string json, string field)
-		printl("[DEBUG extract_json_field] json length: " + json.length().toString())
-		printl("[DEBUG extract_json_field] field: " + field)
 		string pattern = "\"" + field + "\":"
-		printl("[DEBUG extract_json_field] pattern: " + pattern)
 		integer pos = json.indexOf(pattern)
-		printl("[DEBUG extract_json_field] pos: " + pos.toString())
 		if pos == -1
 			return ""
 
 		integer value_start = pos + pattern.length()
-		printl("[DEBUG extract_json_field] value_start: " + value_start.toString())
 
 		// Skip whitespace
-		printl("[DEBUG extract_json_field] skipping whitespace")
 		while value_start < json.length() and json.substring(value_start, value_start + 1) == " "
 			value_start = value_start + 1
 
-		printl("[DEBUG extract_json_field] after whitespace, value_start: " + value_start.toString())
-
 		if value_start >= json.length()
-			printl("[DEBUG extract_json_field] value_start >= json.length(), returning empty")
 			return ""
 
-		printl("[DEBUG extract_json_field] getting first_char")
 		string first_char = json.substring(value_start, value_start + 1)
-		printl("[DEBUG extract_json_field] first_char: " + first_char)
 
 		// Handle different value types
 		integer first_code = first_char.charCodeAt(0)
-		printl("[DEBUG extract_json_field] first_code: " + first_code.toString())
 
 		// Check for string (quote = 34)
 		if first_code == 34
-			printl("[DEBUG extract_json_field] is string")
 			// Use indexOf to find quotes, then check if escaped
 			integer end_pos = find_unescaped_quote(json, value_start + 1)
-			printl("[DEBUG] find_unescaped_quote returned end_pos=" + end_pos.toString())
 			if end_pos == -1
 				return ""
 			// Extract the string content and unescape it
 			string raw_value = json.substring(value_start + 1, end_pos)
-			printl("[DEBUG] raw_value length=" + raw_value.length().toString())
 			// Unescape JSON escape sequences - order matters!
 			string result = raw_value.replace("\\\\", "\x01")
 			result = result.replace("\\\"", "\"")
@@ -1827,20 +1695,14 @@ functions:
 			return result
 
 		// Check for array ([ = 91)
-		printl("[DEBUG extract_json_field] checking if array")
 		if first_code == 91
 			// Simple array extraction - find matching ]
-			printl("[DEBUG extract_json_field] handling array")
 			// Find the closing bracket by scanning for ]
 			integer close_pos = json.indexOf("]", value_start)
-			printl("[DEBUG] close_pos=" + close_pos.toString())
 			if close_pos == -1
-				printl("[DEBUG] no closing bracket found")
 				return "[]"
-			printl("[DEBUG extract_json_field] returning array")
 			return json.substring(value_start, close_pos + 1)
 
-		printl("[DEBUG extract_json_field] not an array, checking for object")
 		// Check for object ({ = 123)
 		if first_code == 123
 			// Object value - find matching brace
@@ -1856,7 +1718,6 @@ functions:
 				end_pos = end_pos + 1
 			return json.substring(value_start, end_pos)
 
-		printl("[DEBUG] handling number/boolean value")
 		// Find end of value - store start position separately to avoid aliasing
 		integer saved_start = value_start + 0
 		integer end_pos = value_start + 0
@@ -1884,9 +1745,7 @@ functions:
 											if code4 != 44 and code4 != 125 and code4 != 93
 												end_pos = end_pos + 1
 
-		printl("[DEBUG] saved_start=" + saved_start.toString() + " end_pos=" + end_pos.toString())
 		string result = json.substring(saved_start, end_pos)
-		printl("[DEBUG] result='" + result + "'")
 		return result.trim()
 
 	// Convert JSON array string to list<string>
@@ -1952,7 +1811,6 @@ functions:
 
 	// Convert JSON array of objects to list<string> (each string is JSON object)
 	list<string> json_to_object_list(string json_array)
-		printl("[DEBUG json_to_object_list] input: " + json_array)
 		list<string> result = []
 
 		if json_array.length() < 2
@@ -1960,7 +1818,6 @@ functions:
 
 		// Remove outer brackets (don't use broken .trim())
 		string content = strip_spaces(json_array.substring(1, json_array.length() - 1))
-		printl("[DEBUG json_to_object_list] content: " + content)
 
 		if content.length() == 0
 			return result
@@ -1968,9 +1825,7 @@ functions:
 		// Find objects
 		integer pos = 0
 		integer content_len = content.length()
-		printl("[DEBUG json_to_object_list] content_len=" + content_len.toString())
 		while pos < content_len
-			printl("[DEBUG json_to_object_list] outer loop, pos=" + pos.toString())
 			// Skip whitespace and commas
 			while pos < content_len
 				string ch = content.substring(pos, pos + 1)
@@ -1979,21 +1834,16 @@ functions:
 				pos = pos + 1
 
 			if pos >= content_len
-				printl("[DEBUG json_to_object_list] reached end of content")
 				break
 
 			integer char_code = content.charCodeAt(pos)
-			printl("[DEBUG json_to_object_list] char_code at pos " + pos.toString() + ": " + char_code.toString())
 			// Check if this is an opening brace (ASCII 123)
 			boolean is_brace = char_code == 123
-			printl("[DEBUG json_to_object_list] is_brace=" + is_brace.toString())
 			if is_brace
-				printl("[DEBUG json_to_object_list] ENTERING BRACE BLOCK, content_len=" + content_len.toString())
 				// Find matching closing brace
 				integer depth = 1
 				integer end_pos = pos + 1
 				integer loop_count = 0
-				printl("[DEBUG json_to_object_list] starting brace loop, end_pos=" + end_pos.toString() + " depth=" + depth.toString())
 				// Avoid compound condition in while - use break instead
 				while end_pos < content_len
 					if depth == 0
@@ -2006,25 +1856,18 @@ functions:
 					end_pos = end_pos + 1
 					loop_count = loop_count + 1
 					if loop_count > 1000
-						printl("[DEBUG json_to_object_list] EXCEEDED LOOP LIMIT")
 						break
-				printl("[DEBUG json_to_object_list] after loop: depth=" + depth.toString() + " end_pos=" + end_pos.toString())
 				string obj = content.substring(pos, end_pos)
-				printl("[DEBUG json_to_object_list] obj extracted, len=" + obj.length().toString())
 				result.push(obj)
-				printl("[DEBUG json_to_object_list] pushed, result.length=" + result.length().toString())
 				pos = end_pos
 			else
 				pos = pos + 1
 
-		printl("[DEBUG json_to_object_list] returning " + result.length().toString() + " objects")
 		return result
 
 	// Generate SSR render function for a screen
 	// This will be fully implemented in UI-05
 	string generate_ssr_render(string name, string state_json, string render_content)
-		printl("[DEBUG generate_ssr_render] name=" + name)
-		printl("[DEBUG generate_ssr_render] render_content=" + render_content)
 		string result = "\t\t\tstring render()\n"
 		result = result + "\t\t\t\tstring html = \"\"\n"
 
@@ -2032,18 +1875,12 @@ functions:
 		// Handle both JSON array format and plain string (single line)
 		list<string> lines = []
 		if render_content.startsWith("[")
-			printl("[DEBUG generate_ssr_render] render_content is JSON array")
 			lines = json_to_string_list(render_content)
 		else
 			// Split by newlines using custom function
-			printl("[DEBUG generate_ssr_render] using split_lines")
 			lines = split_lines(render_content)
-			printl("[DEBUG generate_ssr_render] split_lines returned " + lines.length().toString() + " lines")
 
-		printl("[DEBUG generate_ssr_render] lines count=" + lines.length().toString())
-		printl("[DEBUG generate_ssr_render] calling render_ui_tree")
 		result = result + render_ui_tree(lines, 0, 0)
-		printl("[DEBUG generate_ssr_render] render_ui_tree returned")
 
 		result = result + "\t\t\t\treturn html\n\n"
 		return result
@@ -2669,42 +2506,29 @@ functions:
 	// base_indent: indentation level to expect
 	// Returns Clean code that builds html variable
 	string render_ui_tree(list<string> lines, integer start_index, integer base_indent)
-		printl("[DEBUG render_ui_tree] start_index=" + start_index.toString() + " base_indent=" + base_indent.toString())
-		printl("[DEBUG render_ui_tree] lines.length()=" + lines.length().toString())
 		string result = ""
 		integer event_counter = 0
 
 		integer i = start_index
 		while i < lines.length()
-			printl("[DEBUG render_ui_tree] processing line i=" + i.toString())
 			string line = lines[i]
-			printl("[DEBUG render_ui_tree] line=" + line)
 			string trimmed = line.trim()
-			printl("[DEBUG render_ui_tree] trimmed=" + trimmed)
 
 			// Skip empty lines
 			if trimmed.length() == 0
-				printl("[DEBUG render_ui_tree] empty line, skipping")
 				i = i + 1
 			else
 				integer line_indent = get_indent_level(line)
-				printl("[DEBUG render_ui_tree] line_indent=" + line_indent.toString())
 
 				// Check if we've exited the current indent level
 				if line_indent <= base_indent and i > start_index
-					printl("[DEBUG render_ui_tree] indent check - breaking")
 					break
 
 				// Check if this is a widget line
-				printl("[DEBUG render_ui_tree] checking is_widget_line")
 				if is_widget_line(line)
-					printl("[DEBUG render_ui_tree] is widget line")
 					string widget_name = get_widget_name(line)
-					printl("[DEBUG render_ui_tree] widget_name=" + widget_name)
 					string widget_props = get_widget_props(line)
-					printl("[DEBUG render_ui_tree] widget_props=" + widget_props)
 					boolean has_children = widget_has_children(line)
-					printl("[DEBUG render_ui_tree] has_children=" + has_children.toString())
 
 					// Find children if widget has them
 					list<string> child_lines = []
@@ -2726,9 +2550,7 @@ functions:
 									break
 
 					// Generate code for this widget
-					printl("[DEBUG render_ui_tree] calling render_ui_widget")
 					string widget_result = render_ui_widget(widget_name, widget_props, child_lines, event_counter)
-					printl("[DEBUG render_ui_tree] render_ui_widget returned: " + widget_result)
 					result = result + extract_json_field(widget_result, "code")
 
 					// Update event counter
@@ -2749,19 +2571,11 @@ functions:
 	// Render a single UI widget to Clean code
 	// Returns JSON: {"code": "...", "event_counter": n}
 	string render_ui_widget(string widget_name, string props_string, list<string> child_lines, integer event_counter)
-		printl("[DEBUG render_ui_widget] widget_name=" + widget_name)
-		printl("[DEBUG render_ui_widget] props_string=" + props_string)
-		printl("[DEBUG render_ui_widget] child_lines.length()=" + child_lines.length().toString())
-		printl("[DEBUG render_ui_widget] event_counter=" + event_counter.toString())
 		string code = ""
-		printl("[DEBUG render_ui_widget] calling parse_widget_props")
 		string props_json = parse_widget_props(props_string)
-		printl("[DEBUG render_ui_widget] props_json=" + props_json)
 
 		// Get widget HTML tag and styles
-		printl("[DEBUG render_ui_widget] getting html_tag")
 		string html_tag = get_widget_html_tag(widget_name)
-		printl("[DEBUG render_ui_widget] html_tag=" + html_tag)
 		string html_class = "ui-" + widget_name
 		string html_style = get_widget_base_style(widget_name)
 
