@@ -1,0 +1,33 @@
+// Simple API demo - demonstrates current plugin capabilities
+// Note: body/params declarations require compiler update (see cross-component prompt)
+plugins:
+	frame.httpserver
+
+endpoints Api:
+	// Health check endpoint
+	GET "/api/health":
+		returns: json
+
+		handle:
+			return jsonResponse("ok")
+
+	// Static greeting endpoint
+	GET "/api/hello":
+		returns: json
+
+		handle:
+			return jsonResponse("Hello, World!")
+
+	// HTML response endpoint
+	GET "/api/page":
+		returns: html
+
+		handle:
+			return htmlResponse("<h1>Welcome</h1>")
+
+	// Error example
+	GET "/api/error":
+		returns: json
+
+		handle:
+			return badRequest("Example error message")
