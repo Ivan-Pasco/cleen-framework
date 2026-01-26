@@ -29,6 +29,7 @@ functions = [
 
   # Request Context - Path Parameters
   { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name (e.g., :id)", expand_strings = true },
+  { name = "_req_param_int", params = ["string"], returns = "integer", description = "Get path parameter as integer by name", expand_strings = true },
 
   # Request Context - Query Parameters
   { name = "_req_query", params = ["string"], returns = "string", description = "Get query parameter by name", expand_strings = true },
@@ -39,6 +40,7 @@ functions = [
 
   # Request Context - Body
   { name = "_req_body", params = [], returns = "string", description = "Get request body as string" },
+  { name = "_req_body_field", params = ["string"], returns = "string", description = "Get form field by name from request body", expand_strings = true },
   { name = "_req_form", params = [], returns = "string", description = "Get form data as JSON object" },
 
   # Request Context - Metadata
