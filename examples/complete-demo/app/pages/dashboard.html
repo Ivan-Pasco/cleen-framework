@@ -8,11 +8,11 @@
 </head>
 <body>
 	<nav class="navbar">
-		<a href="index.html" class="logo">Clean Framework</a>
+		<a href="/" class="logo">Clean Framework</a>
 		<div class="nav-links">
-			<a href="index.html">Home</a>
-			<a href="register.html">Register</a>
-			<a href="dashboard.html" class="active">Dashboard</a>
+			<a href="/">Home</a>
+			<a href="/register">Register</a>
+			<a href="/dashboard" class="active">Dashboard</a>
 		</div>
 	</nav>
 
@@ -42,14 +42,14 @@
 		<section class="card">
 			<div class="card-header">
 				<h2>Registered Users</h2>
-				<button class="btn btn-small" cl-on:click="refreshUsers">Refresh</button>
+				<button class="btn btn-small" cl-action="refreshUsers">Refresh</button>
 			</div>
 
 			<div class="loading" cl-if="isLoading">Loading users...</div>
 
 			<div class="empty-state" cl-if="!isLoading && users.length == 0">
 				<p>No users registered yet.</p>
-				<a href="register.html" class="btn btn-primary">Be the first!</a>
+				<a href="/register" class="btn btn-primary">Be the first!</a>
 			</div>
 
 			<table class="data-table" cl-if="!isLoading && users.length > 0">
@@ -92,10 +92,5 @@
 	<footer class="footer">
 		<p>Clean Framework Demo - Database + Auth + Canvas</p>
 	</footer>
-
-	<!-- NO JAVASCRIPT - All functionality handled by Clean Language plugins at runtime -->
-	<!-- Data fetching: frame.data queries the database -->
-	<!-- UI updates: frame.ui handles reactive rendering -->
-	<!-- Animation: frame.canvas renders the particle system -->
 </body>
 </html>

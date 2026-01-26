@@ -1,16 +1,13 @@
 // Registration Form Example
 // A complete frontend example using Frame Framework plugins
-//
-// Plugins used:
-// - frame.ui: UI components with state management and form validation
-// - frame.httpserver: API endpoint for form submission
-//
-// Run with: frame serve
-// Build with: frame build --target=web
 
-import:
-	"app/config/project.cln"
-	"app/ui/styles/theme.cln"
-	"app/ui/components/RegistrationForm.cln"
-	"app/ui/pages/index.html"
-	"app/backend/api/register.cln"
+plugins:
+	frame.ui
+	frame.httpserver
+
+config:
+	name: "Registration Form"
+	version: "1.0.0"
+
+server port=3000:
+	static: "./public"

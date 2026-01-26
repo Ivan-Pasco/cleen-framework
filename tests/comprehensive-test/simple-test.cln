@@ -1,7 +1,7 @@
 // Simple Test - Database and JSON
 // Tests endpoints, database queries, and JSON conversion
 
-import:
+plugins:
 	frame.data
 	frame.httpserver
 

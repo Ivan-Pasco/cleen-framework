@@ -1,46 +1,24 @@
 // Complete Demo Application
 // Demonstrates: Database, Auth, UI, and Canvas plugins working together
 
-use frame.data
-use frame.httpserver
-use frame.auth
-use frame.ui
-use frame.canvas
+plugins:
+	frame.data
+	frame.httpserver
+	frame.auth
+	frame.ui
+	frame.canvas
 
-app "Complete Demo":
+// Application configuration
+config:
 	name: "Clean Framework Complete Demo"
 	version: "1.0.0"
-	description: "Full-stack demo with database, auth, forms, and animations"
+	port: 3000
 
-	// Server configuration
-	server:
-		port: env("PORT", 3000)
-		host: "0.0.0.0"
+// Server startup
+server port=3000:
+	static: "./public"
 
-	// Database configuration
-	database:
-		driver: "sqlite"
-		path: "./data/app.db"
-		auto_migrate: true
-
-	// Static files
-	static:
-		path: "/public"
-		folder: "./public"
-
-	// Plugins to load
-	plugins:
-		- frame.data
-		- frame.httpserver
-		- frame.auth
-		- frame.ui
-		- frame.canvas
-
-	// Application lifecycle
-	onStart:
-		log.info("Starting Complete Demo application...")
-		log.info("Database: SQLite at ./data/app.db")
-		log.info("Server: http://localhost:3000")
-
-	onStop:
-		log.info("Shutting down application...")
+start()
+	printl("Starting Complete Demo application...")
+	printl("Database: SQLite at ./data/app.db")
+	printl("Server: http://localhost:3000")

@@ -1,7 +1,8 @@
 // Particle animation - frame.canvas plugin
 // Location: app/canvas/ tells the compiler this is a canvas application
 
-use frame.canvas
+plugins:
+	frame.canvas
 
 // Particle class for the animation
 class Particle:

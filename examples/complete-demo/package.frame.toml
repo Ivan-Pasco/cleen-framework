@@ -1,0 +1,8 @@
+[package]
+name = "complete-demo"
+version = "1.0.0"
+description = "Full-stack Clean Framework demo with database, auth, forms, and animations"
+
+[dependencies]
+
+[dev-dependencies]

@@ -1,7 +1,8 @@
 // User data model - frame.data plugin
 // Location: app/data/ tells the compiler this is a data model
 
-use frame.data
+plugins:
+	frame.data
 
 data User:
 	fields:
@@ -20,39 +21,3 @@ data User:
 	indexes:
 		idx_email: email
 		idx_username: username
-
-functions:
-	// Find user by email
-	User findByEmail(string email):
-		User result = User.find:
-			where:
-				email == email
-			limit: 1
-		return result
-
-	// Find user by username
-	User findByUsername(string username):
-		User result = User.find:
-			where:
-				username == username
-			limit: 1
-		return result
-
-	// Get all active users
-	list<User> getActiveUsers():
-		list<User> users = User.find:
-			where:
-				is_active == true
-			order:
-				created_at desc
-		return users
-
-	// Create new user with hashed password
-	User createUser(string email, string username, string password):
-		string hashed = auth.hashPassword(password)
-		User user = User:
-			email: email
-			username: username
-			password_hash: hashed
-		user.save()
-		return user

@@ -1,7 +1,7 @@
 // Comprehensive Test: Endpoints + Database + JSON
 // Tests all major framework capabilities
 
-import:
+plugins:
 	frame.data
 	frame.httpserver
 

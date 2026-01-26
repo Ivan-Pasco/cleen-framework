@@ -1,12 +1,10 @@
-// User API endpoints - frame.httpserver plugin
-// Location: app/api/ tells the compiler these are HTTP endpoints
+// Main API entry point
+// API endpoints for user management
 
 plugins:
 	frame.httpserver
-	frame.auth
-	frame.data
 
-endpoints Users:
+endpoints Api:
 	// Register a new user
 	POST "/api/users/register":
 		body:
@@ -25,7 +23,7 @@ endpoints Users:
 				success: true
 				message: "Registration successful"
 
-	// Get all users (for dashboard)
+	// Get all users
 	GET "/api/users":
 		returns: json
 
@@ -35,7 +33,7 @@ endpoints Users:
 				users: []
 				count: 0
 
-	// Get single user by ID
+	// Get single user
 	GET "/api/users/:id":
 		params:
 			id: integer
@@ -47,10 +45,10 @@ endpoints Users:
 				success: true
 				user:
 					id: id
-					email: "demo@example.com"
 					username: "demo"
+					email: "demo@example.com"
 
-	// Login endpoint
+	// Login
 	POST "/api/users/login":
 		body:
 			email: string
@@ -62,3 +60,18 @@ endpoints Users:
 			return json:
 				success: true
 				message: "Login successful"
+
+	// Health check
+	GET "/api/health":
+		returns: json
+
+		handle:
+			return json:
+				status: "ok"
+
+	// Home page
+	GET "/":
+		returns: html
+
+		handle:
+			return html("<h1>Clean Framework Demo</h1><p>Welcome!</p>")

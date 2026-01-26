@@ -1,7 +1,7 @@
 // Article Blog - The Inkwell (Database Version)
 // A refined editorial magazine experience with database backend
 
-import:
+plugins:
 	frame.data
 	frame.httpserver
 

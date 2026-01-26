@@ -8,10 +8,10 @@
 </head>
 <body>
 	<nav class="navbar">
-		<a href="index.html" class="logo">Clean Framework</a>
+		<a href="/" class="logo">Clean Framework</a>
 		<div class="nav-links">
-			<a href="index.html">Home</a>
-			<a href="dashboard.html">Dashboard</a>
+			<a href="/">Home</a>
+			<a href="/dashboard">Dashboard</a>
 		</div>
 	</nav>
 
@@ -23,7 +23,7 @@
 			</div>
 
 			<!-- Form processed by frame.ui plugin with cl-* directives -->
-			<form class="form" cl-on:submit.prevent="handleSubmit">
+			<form class="form" action="/api/users/register" method="POST" cl-form="register">
 				<div class="form-group">
 					<label for="username">Username</label>
 					<input
@@ -102,12 +102,9 @@
 			</form>
 
 			<p class="form-footer">
-				Already have an account? <a href="index.html">Sign in</a>
+				Already have an account? <a href="/">Sign in</a>
 			</p>
 		</div>
 	</main>
-
-	<!-- NO JAVASCRIPT - Form handling done by frame.ui plugin at runtime -->
-	<!-- Client-side logic defined in Clean Language, compiled to WASM -->
 </body>
 </html>

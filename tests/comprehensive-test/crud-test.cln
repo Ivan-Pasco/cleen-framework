@@ -1,6 +1,6 @@
 // CRUD Test - Complete Database and JSON Test
 
-import:
+plugins:
 	frame.data
 	frame.httpserver
 

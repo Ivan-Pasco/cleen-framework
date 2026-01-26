@@ -1,22 +1,14 @@
 // Todo API - Main Application Entry Point
 // A complete REST API example using Frame Framework plugins
-//
-// Plugins used:
-// - frame.data: ORM with data models (User, Todo, Category)
-// - frame.httpserver: HTTP endpoints with guards
-// - frame.auth: Session-based authentication with roles
-//
-// Run with: frame serve
-// Build with: frame build --target=server
 
-import:
-	"app/data/models/User.cln"
-	"app/data/models/Todo.cln"
-	"app/data/models/Category.cln"
-	"app/config/auth.cln"
-	"app/backend/api/health.cln"
-	"app/backend/api/auth.cln"
-	"app/backend/api/todos.cln"
-	"app/backend/api/admin.cln"
+plugins:
+	frame.data
+	frame.httpserver
+	frame.auth
 
-server: port=3000
+config:
+	name: "Todo API"
+	version: "1.0.0"
+
+server port=3000:
+	static: "./public"
