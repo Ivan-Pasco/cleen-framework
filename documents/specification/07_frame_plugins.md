@@ -550,6 +550,50 @@ model: name="User"
     string name
 ```
 
+### Compiler Auto-Detection (v2.1)
+
+The Clean Language compiler (v0.15.0+) now automatically detects plugins based on file paths. This feature works independently of plugin.toml declarations and provides a fallback for projects without explicit plugin configuration.
+
+**Auto-Detection Rules:**
+
+| File Path Pattern | Auto-Loaded Plugins |
+|-------------------|---------------------|
+| `/api/`, `/backend/api/`, `/server/api/`, `/endpoints/` | `frame.httpserver`, `frame.data`, `frame.auth` |
+| `/data/`, `/models/`, `/server/models/` | `frame.data` |
+| `/auth/`, `/config/auth/` | `frame.auth` |
+| `/canvas/` | `frame.canvas` |
+| `/ui/`, `/components/`, `/screens/` | `frame.ui` |
+
+**How It Works:**
+
+1. The compiler examines the source file's path
+2. Matches against known folder patterns
+3. Automatically loads relevant plugins
+4. Merges with any explicitly declared plugins
+
+**Example - Zero-Configuration API:**
+
+```clean
+// File: app/api/users.cln
+// No plugins: block needed!
+// Auto-detected: frame.httpserver, frame.data, frame.auth
+
+functions:
+    string __route_handler_0()
+        string result = _db_query("SELECT * FROM users", "[]")
+        return "{\"ok\":true,\"data\":" + result + "}"
+
+start:
+    integer s = _http_route("GET", "/users", 0)
+    printl("Users API ready")
+```
+
+**Precedence:**
+
+1. Explicit `plugins:` block declarations take highest priority
+2. Auto-detected plugins are merged (not replaced)
+3. Plugin.toml `implicit_import` settings are respected when available
+
 ### Folder Priority Rules
 
 When multiple plugins could own the same folder:

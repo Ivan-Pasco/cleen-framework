@@ -130,11 +130,21 @@ app/
    <div cl-if="user.isAdmin">Admin Panel</div>
    ```
 
-4. **Folder = Plugin** - The folder determines which plugin processes the file:
-   - `pages/home.html` → processed by frame.ui as a page
-   - `api/users.cln` → processed by frame.httpserver as an endpoint
-   - `data/User.cln` → processed by frame.data as a model
-   - Files outside these folders are NOT processed by plugins
+4. **Folder = Plugin (Auto-Detection)** - The compiler automatically detects and loads plugins based on file location. No explicit `plugins:` block is required:
+   - `api/users.cln` → auto-loads `frame.httpserver`, `frame.data`, `frame.auth`
+   - `data/User.cln` → auto-loads `frame.data`
+   - `auth/config.cln` → auto-loads `frame.auth`
+   - `canvas/game.cln` → auto-loads `frame.canvas`
+   - `components/Button.cln` → auto-loads `frame.ui`
+
+   **Auto-Detection Rules:**
+   | Path Pattern | Auto-Loaded Plugins |
+   |--------------|---------------------|
+   | `/api/`, `/backend/api/`, `/endpoints/` | httpserver + data + auth |
+   | `/data/`, `/models/` | data |
+   | `/auth/` | auth |
+   | `/canvas/` | canvas |
+   | `/ui/`, `/components/` | ui |
 
 5. **No CSS in HTML** - Inline styles are prohibited. All CSS must be in `public/css/` and linked via `<link>` tags.
 
@@ -502,3 +512,49 @@ Track these metrics:
 **Remember**: Frame is not just a framework—it's a unified programming model. Every decision should align with the Clean Language philosophy of simplicity, type safety, and transparency.
 
 For detailed implementation guidance, always refer to the specification documents linked above.
+
+## Cross-Component Work Policy
+
+**CRITICAL: AI Instance Separation of Concerns**
+
+When working in this component and discovering errors, bugs, or required changes in **another component** (different folder in the Clean Language project), you must **NOT** directly fix or modify code in that other component.
+
+Instead:
+
+1. **Document the issue** by creating a prompt/task description
+2. **Save the prompt** in a file that can be executed by the AI instance working in the correct folder
+3. **Location for cross-component prompts**: Save prompts in `../system-documents/cross-component-prompts/` at the project root
+
+### Prompt Format for Cross-Component Issues
+
+```
+Component: [target component name, e.g., clean-language-compiler]
+Issue Type: [bug/feature/enhancement/compatibility]
+Priority: [critical/high/medium/low]
+Description: [Detailed description of the issue discovered]
+Context: [Why this was discovered while working in the current component]
+Suggested Fix: [If known, describe the potential solution]
+Files Affected: [List of files in the target component that need changes]
+```
+
+### Why This Rule Exists
+
+- Each component has its own context, dependencies, and testing requirements
+- AI instances are optimized for their specific component's codebase
+- Cross-component changes without proper context can introduce bugs
+- This maintains clear boundaries and accountability
+- Ensures changes are properly tested in the target component's environment
+
+### What You CAN Do
+
+- Read files from other components to understand interfaces
+- Document compatibility issues found
+- Create detailed prompts for the correct AI instance
+- Update your component to work with existing interfaces
+
+### What You MUST NOT Do
+
+- Directly edit code in other components
+- Make changes to other components' configuration files
+- Modify shared resources without coordination
+- Skip the prompt creation step for cross-component issues

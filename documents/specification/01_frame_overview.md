@@ -249,6 +249,20 @@ myapp/
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/config/` |
 
+### Plugin Auto-Detection (v2.1)
+
+The compiler automatically detects and loads plugins based on file paths. Files placed in standard folders don't need explicit `plugins:` declarations:
+
+| Folder Pattern | Auto-Detected Plugins |
+|----------------|----------------------|
+| `/api/`, `/backend/api/`, `/endpoints/` | `frame.httpserver` + `frame.data` + `frame.auth` |
+| `/data/`, `/models/` | `frame.data` |
+| `/auth/` | `frame.auth` |
+| `/canvas/` | `frame.canvas` |
+| `/ui/`, `/components/` | `frame.ui` |
+
+This means a file at `app/backend/api/users.cln` automatically has access to HTTP, database, and auth bridge functions without any imports.
+
 ### Folder Creation
 
 Folders are auto-created by the CLI when:
