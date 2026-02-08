@@ -42,7 +42,7 @@ functions:
 		string getCall = "session.get(\"key\")"
 		return getCall.contains(".get(")
 
-start()
+start:
 	printl("=== Test Suite: Session Basic ===")
 	printl("")
 

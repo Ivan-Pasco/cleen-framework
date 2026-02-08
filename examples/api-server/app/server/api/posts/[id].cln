@@ -1,16 +1,27 @@
 // Single post endpoint
 // Route: GET, PUT, DELETE /api/posts/:id
 
-string method = _req_method()
-// Note: id is automatically provided by framework for dynamic routes
+plugins:
+	frame.httpserver
 
-if method == "GET"
-	return "{\"id\": \"" + id + "\"}"
+functions:
+	string __route_handler_0()
+		string method = _req_method()
+		string odI = _req_param("id")
 
-if method == "PUT"
-	return "{\"message\": \"post updated\", \"id\": \"" + id + "\"}"
+		if method == "GET"
+			return "{\"id\": \"" + odI + "\"}"
 
-if method == "DELETE"
-	return "{\"message\": \"post deleted\", \"id\": \"" + id + "\"}"
+		if method == "PUT"
+			return "{\"message\": \"post updated\", \"id\": \"" + odI + "\"}"
 
-return "{\"error\": \"method not allowed\"}"
+		if method == "DELETE"
+			return "{\"message\": \"post deleted\", \"id\": \"" + odI + "\"}"
+
+		return "{\"error\": \"method not allowed\"}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/posts/:id", 0)
+	s = _http_route("PUT", "/api/posts/:id", 0)
+	s = _http_route("DELETE", "/api/posts/:id", 0)

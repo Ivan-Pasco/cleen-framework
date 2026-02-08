@@ -1,28 +1,38 @@
 // TodoList Screen - Interactive todo list component
 // Demonstrates state with text input and list rendering
 
-screen TodoList:
-	state:
-		items: string = ""
-		newItem: string = ""
-		itemCount: integer = 0
+plugins:
+	frame.ui
 
-	render:
-		ui.column gap 16 padding 20:
-			ui.text "Todo List (" + itemCount.toString() + " items)"
+state:
+	string items = ""
+	string newItem = ""
+	integer itemCount = 0
 
-			ui.row gap 8:
-				ui.textField bind newItem
-				ui.button "Add"
-					onClick:
-						items = items + newItem + "\n"
-						itemCount = itemCount + 1
-						newItem = ""
+functions:
+	string render()
+		string html = "<div class=\"todo-container\">"
+		html = html + "<h2>Todo List (" + itemCount.toString() + " items)</h2>"
+		html = html + "<div class=\"todo-input\">"
+		html = html + "<input type=\"text\" id=\"newItemInput\" placeholder=\"Add new item...\">"
+		html = html + "<button onclick=\"addItem()\">Add</button>"
+		html = html + "</div>"
+		html = html + "<div class=\"todo-items\">"
+		html = html + "<pre>" + items + "</pre>"
+		html = html + "</div>"
+		html = html + "<button onclick=\"clearAll()\">Clear All</button>"
+		html = html + "</div>"
+		return html
 
-			ui.column gap 4:
-				ui.text items
+	void addItem()
+		if newItem != ""
+			items = items + newItem + "\n"
+			itemCount = itemCount + 1
+			newItem = ""
 
-			ui.button "Clear All"
-				onClick:
-					items = ""
-					itemCount = 0
+	void clearAll()
+		items = ""
+		itemCount = 0
+
+start:
+	printl("TodoList screen loaded")

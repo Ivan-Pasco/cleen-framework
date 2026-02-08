@@ -2,10 +2,19 @@
 // Route: GET /api/todos - List all todos
 // Route: POST /api/todos - Create a todo
 
-string method = _req_method()
+plugins:
+	frame.httpserver
 
-if method == "POST"
-	return "{\"message\": \"Todo created\"}"
+functions:
+	string __route_handler_0()
+		string method = _req_method()
 
-// Default: GET - list todos
-return "[]"
+		if method == "POST"
+			return "{\"message\": \"Todo created\"}"
+
+		return "[]"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/todos", 0)
+	s = _http_route("POST", "/api/todos", 0)

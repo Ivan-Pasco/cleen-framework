@@ -1,5 +1,14 @@
 // Single comment API
 // Route: DELETE /api/comments/:id
 
-// Note: id is automatically provided by framework for dynamic routes
-return "{\"message\": \"comment deleted\", \"id\": \"" + id + "\"}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		string odI = _req_param("id")
+		return "{\"message\": \"comment deleted\", \"id\": \"" + odI + "\"}"
+
+start:
+	integer s = 0
+	s = _http_route("DELETE", "/api/comments/:id", 0)

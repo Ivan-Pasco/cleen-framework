@@ -4,13 +4,9 @@
 plugins:
 	frame.data
 
-data Todo
-	integer id : pk, auto
-	string title
-	string description = ""
-	boolean completed = false
-	integer priority = 0
-	User owner
-	datetime created_at : default=now()
-	datetime updated_at
-	datetime due_date
+functions:
+	string getTodoSchema()
+		return "CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT DEFAULT '', completed INTEGER DEFAULT 0, priority INTEGER DEFAULT 0, owner_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME, due_date DATETIME)"
+
+start:
+	printl("Todo model loaded")

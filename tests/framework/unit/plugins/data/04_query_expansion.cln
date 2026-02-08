@@ -45,7 +45,7 @@ functions:
 		string findBlock = "find:\n\treturn all users matching criteria"
 		return findBlock.contains("find:")
 
-start()
+start:
 	printl("=== Test Suite: Query Block Expansion ===")
 	printl("")
 

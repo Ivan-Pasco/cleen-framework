@@ -42,7 +42,7 @@ functions:
 		string method = "User.exists(id)"
 		return method.contains(".exists(")
 
-start()
+start:
 	printl("=== Test Suite: Model CRUD Methods ===")
 	printl("")
 

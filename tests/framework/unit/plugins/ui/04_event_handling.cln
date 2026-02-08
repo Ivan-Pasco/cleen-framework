@@ -42,7 +42,7 @@ functions:
 		string htmlStr = "html(<button onClick={handleClick}>+</button>)"
 		return htmlStr.contains("onClick=")
 
-start()
+start:
 	printl("=== Test Suite: Event Handling ===")
 	printl("")
 

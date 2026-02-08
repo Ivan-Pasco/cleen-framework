@@ -39,7 +39,7 @@ functions:
 		boolean hasB = htmlStr.contains("b")
 		return hasA and hasB
 
-start()
+start:
 	printl("=== Test Suite: HTML Interpolation ===")
 	printl("")
 

@@ -1,21 +1,18 @@
 // Database Schema - Task Management Application
-// Placeholder models (full ORM support coming soon)
+// Model definitions
 
-// User model
-data User
-	integer id
-	string email
-	string name
+plugins:
+	frame.data
 
-// Project model
-data Project
-	integer id
-	string name
-	string description
+functions:
+	string getUserSchema()
+		return "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, name TEXT)"
 
-// Task model
-data Task
-	integer id
-	string title
-	string description
-	string status
+	string getProjectSchema()
+		return "CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT)"
+
+	string getTaskSchema()
+		return "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'pending', project_id INTEGER, assignee_id INTEGER)"
+
+start:
+	printl("Schema definitions loaded")

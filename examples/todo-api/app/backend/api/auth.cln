@@ -3,73 +3,110 @@
 
 plugins:
 	frame.httpserver
+	frame.data
 
-endpoints:
-	// User registration - public
-	POST /auth/register:
-		returns: User
-		handle:
-			string body = req.body
-			string email = _json_get(body, "email")
-			string password = _json_get(body, "password")
-			string name = _json_get(body, "name")
+functions:
+	// POST /auth/register - User registration (public)
+	string __route_handler_0()
+		string body = _req_body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"Invalid JSON\"}"
 
-			if email == "" or password == ""
-				return badRequest("Email and password are required")
+		any emailField = bodyData.email
+		any passwordField = bodyData.password
+		any nameField = bodyData.name
 
-			// Check if user exists
-			User? existing = User.first:
-				where:
-					email == email
+		if emailField == null
+			return "{\"ok\":false,\"error\":\"Email required\"}"
+		if passwordField == null
+			return "{\"ok\":false,\"error\":\"Password required\"}"
 
-			if existing != null
-				return badRequest("Email already registered")
+		string email = emailField.toString()
+		string password = passwordField.toString()
+		string name = ""
+		if nameField != null
+			name = nameField.toString()
 
-			// Hash password and create user
-			string hash = hashPassword(password)
-			User.insert:
-				email = email
-				password_hash = hash
-				name = name
+		// Check if user exists
+		string checkSql = "SELECT id FROM users WHERE email = ?"
+		string checkParams = "[\"" + email + "\"]"
+		string checkResult = _db_query(checkSql, checkParams)
+		any checkData = json.tryTextToData(checkResult)
+		if checkData != null
+			any dataObj = checkData.data
+			if dataObj != null
+				any countField = dataObj.count
+				integer count = countField.toInteger()
+				if count > 0
+					return "{\"ok\":false,\"error\":\"Email already registered\"}"
 
-			return json({ "ok": true, "message": "User registered" })
+		// Insert new user (password should be hashed in production)
+		string insertSql = "INSERT INTO users (email, password_hash, name, role) VALUES (?, ?, ?, 'user')"
+		string insertParams = "[\"" + email + "\",\"" + password + "\",\"" + name + "\"]"
+		integer insertResult = _db_execute(insertSql, insertParams)
 
-	// User login - public
-	POST /auth/login:
-		handle:
-			string body = req.body
-			string email = _json_get(body, "email")
-			string password = _json_get(body, "password")
+		return "{\"ok\":true,\"message\":\"User registered\"}"
 
-			User? user = User.first:
-				where:
-					email == email
+	// POST /auth/login - User login (public)
+	string __route_handler_1()
+		string body = _req_body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"Invalid JSON\"}"
 
-			if user == null
-				return badRequest("Invalid credentials")
+		any emailField = bodyData.email
+		any passwordField = bodyData.password
 
-			if not verifyPassword(password, user.password_hash)
-				return badRequest("Invalid credentials")
+		if emailField == null
+			return "{\"ok\":false,\"error\":\"Email required\"}"
+		if passwordField == null
+			return "{\"ok\":false,\"error\":\"Password required\"}"
 
-			// Create session
-			string claims = "{\"userId\":" + user.id.toString() + ",\"email\":\"" + user.email + "\",\"role\":\"" + user.role + "\"}"
-			string sessionId = session_create(user.id, claims)
-			session_setCookie(sessionId)
+		string email = emailField.toString()
+		string password = passwordField.toString()
 
-			return json({ "ok": true, "user": { "id": user.id, "email": user.email, "name": user.name } })
+		// Find user
+		string sql = "SELECT id, email, name, role FROM users WHERE email = ? AND password_hash = ?"
+		string params = "[\"" + email + "\",\"" + password + "\"]"
+		string result = _db_query(sql, params)
 
-	// User logout - requires auth
-	POST /auth/logout:
-		guard:
-			authenticated
-		handle:
-			session_destroy()
-			return json({ "ok": true, "message": "Logged out" })
+		any data = json.tryTextToData(result)
+		if data == null
+			return "{\"ok\":false,\"error\":\"Invalid credentials\"}"
 
-	// Get current user - requires auth
-	GET /auth/me:
-		guard:
-			authenticated
-		handle:
-			string session = session_get()
-			return json({ "ok": true, "user": session })
+		any dataObj = data.data
+		any countField = dataObj.count
+		integer count = countField.toInteger()
+		if count == 0
+			return "{\"ok\":false,\"error\":\"Invalid credentials\"}"
+
+		any rows = dataObj.rows
+		any user = list.get(rows, 0)
+
+		return "{\"ok\":true,\"user\":" + json.dataToText(user) + "}"
+
+	// POST /auth/logout - User logout (requires auth)
+	string __route_handler_2()
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return "{\"ok\":false,\"error\":\"Not logged in\"}"
+
+		return "{\"ok\":true,\"message\":\"Logged out\"}"
+
+	// GET /auth/me - Get current user (requires auth)
+	string __route_handler_3()
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return "{\"ok\":false,\"error\":\"Not authenticated\"}"
+
+		string session = _auth_get_session()
+		return "{\"ok\":true,\"user\":" + session + "}"
+
+start:
+	integer s = 0
+	s = _http_route("POST", "/auth/register", 0)
+	s = _http_route("POST", "/auth/login", 1)
+	s = _http_route("POST", "/auth/logout", 2)
+	s = _http_route("GET", "/auth/me", 3)
+	printl("Auth endpoints registered")

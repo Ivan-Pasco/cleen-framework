@@ -8,7 +8,7 @@ functions:
 		html = html + "</body></html>"
 		return html
 
-start()
+start:
 	printl("Simple test app starting...")
 	integer status = 0
 	status = _http_route("GET", "/", 0)

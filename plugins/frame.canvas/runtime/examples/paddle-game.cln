@@ -127,6 +127,6 @@ functions:
 			_r = _canvas_text(canvasId, "Press SPACE to restart", 290.0, 330.0, 20.0, "#ffffff")
 
 // Start function - entry point
-start()
+start:
 	canvasId = _canvas_init(CANVAS_WIDTH, CANVAS_HEIGHT)
 	_r = _canvas_request_frame(canvasId)

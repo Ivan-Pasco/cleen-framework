@@ -56,7 +56,7 @@ functions:
 	string __route_handler_10()
 		return "status:healthy,service:blog"
 
-start()
+start:
 	printl("Starting Blog Application...")
 	integer status = 0
 

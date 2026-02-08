@@ -72,7 +72,7 @@ functions:
 		string response = "matching posts"
 		return search == "keyword" and response.contains("matching")
 
-start()
+start:
 	printl("=== E2E Test: Blog Application ===")
 	printl("")
 

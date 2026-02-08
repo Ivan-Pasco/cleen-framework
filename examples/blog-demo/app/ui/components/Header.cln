@@ -2,15 +2,15 @@
 // Tag: <app-header>
 
 component:
-    string render()
-        string h = "<header class=\"site-header\">"
-        h = h + "<nav>"
-        h = h + "<a href=\"/\" class=\"logo\">Blog Demo</a>"
-        h = h + "<div class=\"nav-links\">"
-        h = h + "<a href=\"/\">Home</a>"
-        h = h + "<a href=\"/blog\">Blog</a>"
-        h = h + "<a href=\"/about\">About</a>"
-        h = h + "</div>"
-        h = h + "</nav>"
-        h = h + "</header>"
-        return h
+	string render()
+		string h = "<header class=\"site-header\">"
+		h = h + "<nav>"
+		h = h + "<a href=\"/\" class=\"logo\">Blog Demo</a>"
+		h = h + "<div class=\"nav-links\">"
+		h = h + "<a href=\"/\">Home</a>"
+		h = h + "<a href=\"/blog\">Blog</a>"
+		h = h + "<a href=\"/about\">About</a>"
+		h = h + "</div>"
+		h = h + "</nav>"
+		h = h + "</header>"
+		return h

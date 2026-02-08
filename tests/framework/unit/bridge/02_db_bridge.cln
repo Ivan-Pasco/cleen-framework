@@ -38,7 +38,7 @@ functions:
 		string connError = "DB_CONNECTION_ERROR"
 		return dbError == "DB_ERROR"
 
-start()
+start:
 	printl("=== Test Suite: Database Bridge ===")
 	printl("")
 

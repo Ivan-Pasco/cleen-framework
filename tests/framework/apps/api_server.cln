@@ -76,7 +76,7 @@ functions:
 		string path = _req_path()
 		return "error:NOT_FOUND,message:Route not found,path:" + path
 
-start()
+start:
 	printl("Starting API Server...")
 	integer status = 0
 

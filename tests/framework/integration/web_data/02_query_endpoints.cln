@@ -37,7 +37,7 @@ functions:
 		string response = "returns users array"
 		return response.contains("array")
 
-start()
+start:
 	printl("=== Integration Test: Query Endpoints ===")
 	printl("")
 

@@ -37,7 +37,7 @@ functions:
 		string island = "island:\n\tcomponent Counter(client=\"on\"):"
 		return island.contains("island:")
 
-start()
+start:
 	printl("=== Test Suite: Hydration Modes ===")
 	printl("")
 

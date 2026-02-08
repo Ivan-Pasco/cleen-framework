@@ -76,7 +76,7 @@ functions:
 		integer statusCode = 200
 		return method == "PUT" and statusCode == 200
 
-start()
+start:
 	printl("=== E2E Test: Authentication Flow ===")
 	printl("")
 

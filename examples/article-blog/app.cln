@@ -362,7 +362,7 @@ functions:
 	string brace(string content)
 		return "\{" + content + "\}"
 
-start()
+start:
 	printl("================================")
 	printl("  The Inkwell - Article Blog")
 	printl("================================")

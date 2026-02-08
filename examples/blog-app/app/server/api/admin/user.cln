@@ -1,4 +1,13 @@
 // Admin user management endpoint
 // Route: DELETE /api/admin/user
 
-return "{\"message\": \"user deleted\"}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		return "{\"message\": \"user deleted\"}"
+
+start:
+	integer s = 0
+	s = _http_route("DELETE", "/api/admin/user", 0)

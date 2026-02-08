@@ -51,7 +51,7 @@ functions:
 		string field = "string name(min=-1)"
 		return field.contains("min=-1")
 
-start()
+start:
 	printl("=== Test Suite: Data Validation Errors ===")
 	printl("")
 

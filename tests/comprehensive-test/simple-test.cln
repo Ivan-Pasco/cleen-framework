@@ -130,7 +130,7 @@ functions:
 		resp = resp + "}"
 		return resp
 
-start()
+start:
 	printl("================================")
 	printl("  Comprehensive Test")
 	printl("================================")

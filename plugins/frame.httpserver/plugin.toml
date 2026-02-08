@@ -54,8 +54,8 @@ functions = [
   { name = "_http_set_header", params = ["string", "string"], returns = "string", description = "Set response header: name, value", expand_strings = true },
 
   # JSON Encoding/Decoding
-  { name = "_json_encode", params = ["any"], returns = "string", description = "Encode value to JSON string" },
-  { name = "_json_decode", params = ["string"], returns = "any", description = "Decode JSON string to value", expand_strings = true },
+  { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true },
+  { name = "_json_decode", params = ["string"], returns = "string", description = "Decode JSON string to value", expand_strings = true },
 
   # Authentication - Session
   { name = "_auth_get_session", params = [], returns = "string", description = "Get current session as JSON" },

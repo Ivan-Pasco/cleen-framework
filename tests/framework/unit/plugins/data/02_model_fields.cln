@@ -42,7 +42,7 @@ functions:
 		string field = "string email(unique)"
 		return field.contains("unique")
 
-start()
+start:
 	printl("=== Test Suite: Model Field Types ===")
 	printl("")
 

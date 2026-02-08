@@ -12,6 +12,6 @@ functions:
 		integer r2 = _canvas_circle_filled(canvasId, x, 300.0, 50.0, "#ff6b6b")
 		x = x + 0.5
 
-start()
+start:
 	canvasId = _canvas_init(800, 600)
 	integer r = _canvas_request_frame(canvasId)

@@ -2,5 +2,14 @@
 // Route: GET /api/main
 // Returns API information
 
-string json = "{\"name\": \"TaskFlow API\", \"version\": \"1.0.0\", \"status\": \"ready\"}"
-return json
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		string json = "{\"name\": \"TaskFlow API\", \"version\": \"1.0.0\", \"status\": \"ready\"}"
+		return json
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/main", 0)

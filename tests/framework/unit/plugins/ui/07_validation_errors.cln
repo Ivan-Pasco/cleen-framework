@@ -47,7 +47,7 @@ functions:
 		string compB = "component B:\n\treturn html(\"<A />\")"
 		return compA.contains("<B />") and compB.contains("<A />")
 
-start()
+start:
 	printl("=== Test Suite: UI Validation Errors ===")
 	printl("")
 

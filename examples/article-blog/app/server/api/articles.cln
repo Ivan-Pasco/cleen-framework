@@ -2,10 +2,18 @@
 // Route: GET /api/articles
 // Returns JSON array of articles
 
-string json = "["
-json = json + "{\"id\": 1, \"slug\": \"getting-started-with-clean\", \"title\": \"Getting Started with Clean\", \"excerpt\": \"Learn the basics of Clean Language\", \"category\": \"Tutorial\", \"readTime\": 5},"
-json = json + "{\"id\": 2, \"slug\": \"web-development-trends\", \"title\": \"Web Development Trends\", \"excerpt\": \"The latest trends in web development\", \"category\": \"Technology\", \"readTime\": 8},"
-json = json + "{\"id\": 3, \"slug\": \"building-apis\", \"title\": \"Building APIs with Frame\", \"excerpt\": \"Create RESTful APIs using Frame\", \"category\": \"Tutorial\", \"readTime\": 10}"
-json = json + "]"
+plugins:
+	frame.httpserver
 
-return json
+functions:
+	string __route_handler_0()
+		string json = "["
+		json = json + "{\"id\": 1, \"slug\": \"getting-started-with-clean\", \"title\": \"Getting Started with Clean\", \"excerpt\": \"Learn the basics of Clean Language\", \"category\": \"Tutorial\", \"readTime\": 5},"
+		json = json + "{\"id\": 2, \"slug\": \"web-development-trends\", \"title\": \"Web Development Trends\", \"excerpt\": \"The latest trends in web development\", \"category\": \"Technology\", \"readTime\": 8},"
+		json = json + "{\"id\": 3, \"slug\": \"building-apis\", \"title\": \"Building APIs with Frame\", \"excerpt\": \"Create RESTful APIs using Frame\", \"category\": \"Tutorial\", \"readTime\": 10}"
+		json = json + "]"
+		return json
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/articles", 0)

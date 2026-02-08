@@ -37,7 +37,7 @@ functions:
 		string unixCall = "_time_unix()"
 		return unixCall.contains("_time_unix")
 
-start()
+start:
 	printl("=== Test Suite: Time Bridge ===")
 	printl("")
 

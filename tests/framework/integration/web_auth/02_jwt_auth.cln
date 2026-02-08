@@ -36,7 +36,7 @@ functions:
 		string action = "invalidate token"
 		return action.contains("invalidate")
 
-start()
+start:
 	printl("=== Integration Test: JWT Auth Flow ===")
 	printl("")
 

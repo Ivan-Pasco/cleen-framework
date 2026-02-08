@@ -32,7 +32,7 @@ functions:
 		string config = "plugins configured in frame.toml"
 		return config.contains("configured")
 
-start()
+start:
 	printl("=== Integration Test: Multi-Plugin ===")
 	printl("")
 

@@ -204,7 +204,7 @@ functions:
 		r = r + "}"
 		return r
 
-start()
+start:
 	printl("================================")
 	printl("  CRUD Test Application")
 	printl("================================")

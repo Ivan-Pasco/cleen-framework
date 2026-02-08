@@ -42,7 +42,7 @@ functions:
 		string verifyCall = "_crypto_bcrypt_verify(password, hash)"
 		return verifyCall.contains("bcrypt_verify")
 
-start()
+start:
 	printl("=== Test Suite: Crypto Bridge ===")
 	printl("")
 

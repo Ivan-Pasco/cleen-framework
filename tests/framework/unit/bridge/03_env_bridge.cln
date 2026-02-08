@@ -34,7 +34,7 @@ functions:
 		string defaultValue = "default"
 		return defaultValue == "default"
 
-start()
+start:
 	printl("=== Test Suite: Environment Bridge ===")
 	printl("")
 

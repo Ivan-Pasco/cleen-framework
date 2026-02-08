@@ -42,7 +42,7 @@ functions:
 		string errorCode = "WEAK_PASSWORD"
 		return errorCode == "WEAK_PASSWORD"
 
-start()
+start:
 	printl("=== Test Suite: Auth Validation Errors ===")
 	printl("")
 

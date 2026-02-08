@@ -40,7 +40,7 @@ functions:
 		string structuredCall = "_log_structured(level, message, fields)"
 		return structuredCall.contains("_log_structured")
 
-start()
+start:
 	printl("=== Test Suite: Log Bridge ===")
 	printl("")
 

@@ -42,7 +42,7 @@ functions:
 		string emptyCheck = "if items length greater than 0"
 		return emptyCheck.contains("length")
 
-start()
+start:
 	printl("=== Test Suite: Conditional Rendering ===")
 	printl("")
 

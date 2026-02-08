@@ -45,7 +45,7 @@ functions:
 		integer serverError = 500
 		return ok == 200 and notFound == 404
 
-start()
+start:
 	printl("=== Test Suite: HTTP Bridge ===")
 	printl("")
 

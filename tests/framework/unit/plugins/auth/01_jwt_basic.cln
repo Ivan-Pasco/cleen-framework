@@ -49,7 +49,7 @@ functions:
 		string refreshCall = "Auth.refreshToken(token)"
 		return refreshCall.contains("refreshToken")
 
-start()
+start:
 	printl("=== Test Suite: JWT Basic ===")
 	printl("")
 

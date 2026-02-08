@@ -1,4 +1,13 @@
 // Register endpoint
 // Route: POST /api/auth/register
 
-return "{\"message\": \"registered\"}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		return "{\"message\": \"registered\"}"
+
+start:
+	integer s = 0
+	s = _http_route("POST", "/api/auth/register", 0)

@@ -2,11 +2,11 @@
 // Tag: <app-footer>
 
 component:
-    string render()
-        string f = "<footer class=\"site-footer\">"
-        f = f + "<div class=\"footer-content\">"
-        f = f + "<p>Built with Clean Framework</p>"
-        f = f + "<p><a href=\"https://github.com/Ivan-Pasco/cleen-framework\">View on GitHub</a></p>"
-        f = f + "</div>"
-        f = f + "</footer>"
-        return f
+	string render()
+		string f = "<footer class=\"site-footer\">"
+		f = f + "<div class=\"footer-content\">"
+		f = f + "<p>Built with Clean Framework</p>"
+		f = f + "<p><a href=\"https://github.com/Ivan-Pasco/cleen-framework\">View on GitHub</a></p>"
+		f = f + "</div>"
+		f = f + "</footer>"
+		return f

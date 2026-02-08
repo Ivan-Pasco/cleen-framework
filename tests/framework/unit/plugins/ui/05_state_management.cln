@@ -37,7 +37,7 @@ functions:
 		string reset = "resetState()"
 		return reset.contains("resetState()")
 
-start()
+start:
 	printl("=== Test Suite: State Management ===")
 	printl("")
 

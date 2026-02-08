@@ -82,18 +82,14 @@ functions:
 
 		string insertSql = "INSERT INTO items (name, description, price, quantity) VALUES (?, ?, ?, ?)"
 		string insertParams = buildParams4(itemName, itemDesc, itemPrice, itemQty)
-		string insertResult = _db_execute(insertSql, insertParams)
-		printl("Insert: " + insertResult)
+		integer insertResult = _db_execute(insertSql, insertParams)
+		printl("Insert: " + insertResult.toString())
 
-		any insertData = json.tryTextToData(insertResult)
-		if insertData == null
+		if insertResult < 1
 			return "{\"ok\":false,\"error\":\"Insert failed\"}"
 
-		any insertDataObj = insertData.data
-		any lastId = insertDataObj.last_insert_id
-
 		string resp = "{\"ok\":true,\"id\":"
-		resp = resp + lastId.toString()
+		resp = resp + insertResult.toString()
 		resp = resp + "}"
 		return resp
 
@@ -143,8 +139,8 @@ functions:
 
 		string deleteSql = "DELETE FROM items WHERE id = ?"
 		string deleteParams = "[" + itemId + "]"
-		string deleteResult = _db_execute(deleteSql, deleteParams)
-		printl("Delete: " + deleteResult)
+		integer deleteResult = _db_execute(deleteSql, deleteParams)
+		printl("Delete: " + deleteResult.toString())
 
 		return "{\"ok\":true,\"message\":\"Deleted\"}"
 
@@ -223,9 +219,8 @@ functions:
 
 		// Test 1: Create table
 		string createSql = "CREATE TABLE IF NOT EXISTS test_items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)"
-		string createResult = _db_execute(createSql, "[]")
-		any createData = json.tryTextToData(createResult)
-		boolean test1 = createData != null
+		integer createResult = _db_execute(createSql, "[]")
+		boolean test1 = createResult >= 0
 		printl("Test1 (create): " + test1.toString())
 		if test1
 			passed = passed + 1
@@ -233,9 +228,8 @@ functions:
 		// Test 2: Insert
 		string insertSql = "INSERT INTO test_items (name) VALUES (?)"
 		string insertParams = "[\"TestItem\"]"
-		string insertResult = _db_execute(insertSql, insertParams)
-		any insertData = json.tryTextToData(insertResult)
-		boolean test2 = insertData != null
+		integer insertResult = _db_execute(insertSql, insertParams)
+		boolean test2 = insertResult > 0
 		printl("Test2 (insert): " + test2.toString())
 		if test2
 			passed = passed + 1
@@ -252,9 +246,8 @@ functions:
 		// Test 4: Update
 		string updateSql = "UPDATE test_items SET name = ? WHERE name = ?"
 		string updateParams = "[\"Updated\",\"TestItem\"]"
-		string updateResult = _db_execute(updateSql, updateParams)
-		any updateData = json.tryTextToData(updateResult)
-		boolean test4 = updateData != null
+		integer updateResult = _db_execute(updateSql, updateParams)
+		boolean test4 = updateResult >= 0
 		printl("Test4 (update): " + test4.toString())
 		if test4
 			passed = passed + 1
@@ -262,9 +255,8 @@ functions:
 		// Test 5: Delete
 		string deleteSql = "DELETE FROM test_items WHERE name = ?"
 		string deleteParams = "[\"Updated\"]"
-		string deleteResult = _db_execute(deleteSql, deleteParams)
-		any deleteData = json.tryTextToData(deleteResult)
-		boolean test5 = deleteData != null
+		integer deleteResult = _db_execute(deleteSql, deleteParams)
+		boolean test5 = deleteResult >= 0
 		printl("Test5 (delete): " + test5.toString())
 		if test5
 			passed = passed + 1
@@ -289,7 +281,7 @@ functions:
 		p = p + "]"
 		return p
 
-start()
+start:
 	printl("================================")
 	printl("  Comprehensive Framework Test")
 	printl("================================")
@@ -298,8 +290,8 @@ start()
 	// Initialize database
 	printl("Initializing database...")
 	string createSql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, price REAL DEFAULT 0, quantity INTEGER DEFAULT 0)"
-	string createResult = _db_execute(createSql, "[]")
-	printl("Table: " + createResult)
+	integer createResult = _db_execute(createSql, "[]")
+	printl("Table: " + createResult.toString())
 	printl("")
 
 	printl("Registering routes...")

@@ -1,5 +1,14 @@
 // Single user API
 // Route: GET /api/users/:id
 
-// Note: id is automatically provided by framework for dynamic routes
-return "{\"id\": " + id + ", \"name\": \"Alice Johnson\", \"email\": \"alice@example.com\", \"role\": \"admin\", \"active\": true}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		string odI = _req_param("id")
+		return "{\"id\": " + odI + ", \"name\": \"Alice Johnson\", \"email\": \"alice@example.com\", \"role\": \"admin\", \"active\": true}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/users/:id", 0)

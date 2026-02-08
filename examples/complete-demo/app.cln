@@ -18,7 +18,7 @@ config:
 server port=3000:
 	static: "./public"
 
-start()
+start:
 	printl("Starting Complete Demo application...")
 	printl("Database: SQLite at ./data/app.db")
 	printl("Server: http://localhost:3000")

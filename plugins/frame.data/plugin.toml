@@ -34,25 +34,12 @@ expressions = [
 # Bridge function declarations - these are provided by the runtime (clean-server)
 # The compiler reads these to generate correct WASM imports
 [bridge]
+# Note: Only functions currently implemented in clean-server are listed here
+# Additional functions (transactions, schema ops) will be added when server supports them
 functions = [
   # Query and Execute - strings passed as (ptr, len) pairs at WASM level
   { name = "_db_query", params = ["string", "string"], returns = "string", description = "Execute SELECT query, returns JSON result with rows", expand_strings = true },
   { name = "_db_execute", params = ["string", "string"], returns = "integer", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
-
-  # Transaction Control
-  { name = "_db_begin", params = [], returns = "string", description = "Begin transaction, returns transaction ID" },
-  { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit transaction by ID, returns 0 on success", expand_strings = true },
-  { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback transaction by ID, returns 0 on success", expand_strings = true },
-
-  # Connection Management
-  { name = "_db_connect", params = ["string"], returns = "integer", description = "Connect to database, returns connection ID", expand_strings = true },
-  { name = "_db_close", params = ["integer"], returns = "integer", description = "Close database connection" },
-
-  # Schema and Migrations
-  { name = "_db_create_table", params = ["string", "string"], returns = "integer", description = "Create table: name, schema JSON", expand_strings = true },
-  { name = "_db_drop_table", params = ["string"], returns = "integer", description = "Drop table by name", expand_strings = true },
-  { name = "_db_table_exists", params = ["string"], returns = "integer", description = "Check if table exists (1=yes, 0=no)", expand_strings = true },
-  { name = "_db_get_schema", params = ["string"], returns = "string", description = "Get table schema as JSON", expand_strings = true },
 ]
 
 [language]

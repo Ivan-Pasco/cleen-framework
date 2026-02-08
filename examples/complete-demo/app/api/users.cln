@@ -1,64 +1,189 @@
-// User API endpoints - frame.httpserver plugin
-// Location: app/api/ tells the compiler these are HTTP endpoints
+// User API with Database Operations
+// Pure Clean Language - compiles to WASM
 
 plugins:
 	frame.httpserver
-	frame.auth
 	frame.data
 
-endpoints Users:
-	// Register a new user
-	POST "/api/users/register":
-		body:
-			email: string
-			username: string
-			password: string
-			password_confirm: string
+functions:
+	// GET /api/users - List all users
+	string __route_handler_0()
+		printl("=== GET /api/users ===")
+		string sql = "SELECT id, email, username, created_at, is_active FROM users ORDER BY id DESC LIMIT 50"
+		string result = _db_query(sql, "[]")
+		printl("Query result: " + result)
 
-		returns: json
+		any data = json.tryTextToData(result)
+		if data == null
+			return "{\"ok\":false,\"error\":\"Database query failed\"}"
 
-		handle:
-			if password != password_confirm
-				return badRequest("Passwords do not match")
+		any dataObj = data.data
+		if dataObj == null
+			return "{\"ok\":false,\"error\":\"No data returned\"}"
 
-			return json:
-				success: true
-				message: "Registration successful"
+		any rowCount = dataObj.count
+		any rows = dataObj.rows
 
-	// Get all users (for dashboard)
-	GET "/api/users":
-		returns: json
+		string resp = "{\"ok\":true,\"count\":"
+		resp = resp + rowCount.toString()
+		resp = resp + ",\"users\":"
+		resp = resp + json.dataToText(rows)
+		resp = resp + "}"
+		return resp
 
-		handle:
-			return json:
-				success: true
-				users: []
-				count: 0
+	// POST /api/users - Create new user
+	string __route_handler_1()
+		printl("=== POST /api/users ===")
+		string body = _req_body()
+		printl("Request body: " + body)
 
-	// Get single user by ID
-	GET "/api/users/:id":
-		params:
-			id: integer
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"Invalid JSON\"}"
 
-		returns: json
+		any emailField = bodyData.email
+		any usernameField = bodyData.username
+		any passwordField = bodyData.password
 
-		handle:
-			return json:
-				success: true
-				user:
-					id: id
-					email: "demo@example.com"
-					username: "demo"
+		if emailField == null
+			return "{\"ok\":false,\"error\":\"Email is required\"}"
+		if usernameField == null
+			return "{\"ok\":false,\"error\":\"Username is required\"}"
+		if passwordField == null
+			return "{\"ok\":false,\"error\":\"Password is required\"}"
 
-	// Login endpoint
-	POST "/api/users/login":
-		body:
-			email: string
-			password: string
+		string email = emailField.toString()
+		string username = usernameField.toString()
+		string password = passwordField.toString()
 
-		returns: json
+		// Store password (demo only - production should use proper hashing)
+		string sql = "INSERT INTO users (email, username, password_hash, is_active) VALUES (?, ?, ?, 1)"
+		string params = "[\"" + email + "\",\"" + username + "\",\"" + password + "\"]"
+		integer insertId = _db_execute(sql, params)
+		printl("Insert ID: " + insertId.toString())
 
-		handle:
-			return json:
-				success: true
-				message: "Login successful"
+		if insertId < 1
+			return "{\"ok\":false,\"error\":\"Insert failed\"}"
+
+		string resp = "{\"ok\":true,\"id\":"
+		resp = resp + insertId.toString()
+		resp = resp + ",\"email\":\""
+		resp = resp + email
+		resp = resp + "\",\"username\":\""
+		resp = resp + username
+		resp = resp + "\"}"
+		return resp
+
+	// GET /api/users/:id - Get single user
+	string __route_handler_2()
+		printl("=== GET /api/users/:id ===")
+		string odI = _req_param("id")
+		printl("User ID: " + odI)
+
+		if odI == ""
+			return "{\"ok\":false,\"error\":\"User ID required\"}"
+
+		string sql = "SELECT id, email, username, created_at, is_active FROM users WHERE id = ?"
+		string params = "[" + odI + "]"
+		string result = _db_query(sql, params)
+
+		any data = json.tryTextToData(result)
+		if data == null
+			return "{\"ok\":false,\"error\":\"Query failed\"}"
+
+		any dataObj = data.data
+		any rowCount = dataObj.count
+		integer count = rowCount.toInteger()
+
+		if count == 0
+			return "{\"ok\":false,\"error\":\"User not found\"}"
+
+		any rows = dataObj.rows
+		any user = list.get(rows, 0)
+
+		string resp = "{\"ok\":true,\"user\":"
+		resp = resp + json.dataToText(user)
+		resp = resp + "}"
+		return resp
+
+	// DELETE /api/users/:id - Delete user
+	string __route_handler_3()
+		printl("=== DELETE /api/users/:id ===")
+		string odI = _req_param("id")
+
+		string sql = "DELETE FROM users WHERE id = ?"
+		string params = "[" + odI + "]"
+		integer deleteResult = _db_execute(sql, params)
+		printl("Delete result: " + deleteResult.toString())
+
+		return "{\"ok\":true,\"message\":\"User deleted\"}"
+
+	// POST /api/users/login - User login
+	string __route_handler_4()
+		printl("=== POST /api/users/login ===")
+		string body = _req_body()
+
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"Invalid JSON\"}"
+
+		any emailField = bodyData.email
+		any passwordField = bodyData.password
+
+		if emailField == null
+			return "{\"ok\":false,\"error\":\"Email required\"}"
+		if passwordField == null
+			return "{\"ok\":false,\"error\":\"Password required\"}"
+
+		string email = emailField.toString()
+		string password = passwordField.toString()
+
+		string sql = "SELECT id, email, username FROM users WHERE email = ? AND password_hash = ? AND is_active = 1"
+		string params = "[\"" + email + "\",\"" + password + "\"]"
+		string result = _db_query(sql, params)
+
+		any data = json.tryTextToData(result)
+		if data == null
+			return "{\"ok\":false,\"error\":\"Query failed\"}"
+
+		any dataObj = data.data
+		any rowCount = dataObj.count
+		integer count = rowCount.toInteger()
+
+		if count == 0
+			return "{\"ok\":false,\"error\":\"Invalid credentials\"}"
+
+		any rows = dataObj.rows
+		any user = list.get(rows, 0)
+
+		string resp = "{\"ok\":true,\"user\":"
+		resp = resp + json.dataToText(user)
+		resp = resp + "}"
+		return resp
+
+start:
+	printl("================================")
+	printl("  User API - Complete Demo")
+	printl("================================")
+	printl("")
+
+	printl("Initializing database...")
+	string createSql = "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, is_active INTEGER DEFAULT 1)"
+	integer createResult = _db_execute(createSql, "[]")
+	printl("Table created: " + createResult.toString())
+	printl("")
+
+	printl("Registering routes...")
+	integer s = 0
+	s = _http_route("GET", "/api/users", 0)
+	printl("  GET    /api/users")
+	s = _http_route("POST", "/api/users", 1)
+	printl("  POST   /api/users")
+	s = _http_route("GET", "/api/users/:id", 2)
+	printl("  GET    /api/users/:id")
+	s = _http_route("DELETE", "/api/users/:id", 3)
+	printl("  DELETE /api/users/:id")
+	s = _http_route("POST", "/api/users/login", 4)
+	printl("  POST   /api/users/login")
+	printl("")
+	printl("User API ready!")

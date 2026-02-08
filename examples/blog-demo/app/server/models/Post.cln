@@ -1,12 +1,12 @@
 // Post model
 // Table: posts
 
-data Post
-    integer id
-    string slug
-    string title
-    string excerpt
-    string content
-    string author
-    integer read_time
-    string created_at
+plugins:
+	frame.data
+
+functions:
+	string getPostSchema()
+		return "CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE, title TEXT NOT NULL, excerpt TEXT, content TEXT, author TEXT, read_time INTEGER DEFAULT 5, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
+
+start:
+	printl("Post model loaded")

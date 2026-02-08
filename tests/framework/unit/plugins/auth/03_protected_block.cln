@@ -39,7 +39,7 @@ functions:
 		boolean hasB = nested.contains("/b")
 		return hasA and hasB
 
-start()
+start:
 	printl("=== Test Suite: Protected Block ===")
 	printl("")
 

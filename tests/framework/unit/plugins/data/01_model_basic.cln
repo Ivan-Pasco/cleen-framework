@@ -34,7 +34,7 @@ functions:
 		string modelAttr = "model User(table=\"app_users\"):"
 		return modelAttr.contains("table=")
 
-start()
+start:
 	printl("=== Test Suite: Model Block Basic ===")
 	printl("")
 

@@ -4,11 +4,12 @@
 plugins:
 	frame.data
 
-data User
-	integer id : pk, auto
-	string email : unique
-	string password_hash
-	string name
-	string role = "user"
-	datetime created_at : default=now()
-	datetime updated_at
+// Note: This is a model definition file
+// The actual table is created in the main app startup
+
+functions:
+	string getUserSchema()
+		return "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, name TEXT, role TEXT DEFAULT 'user', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME)"
+
+start:
+	printl("User model loaded")

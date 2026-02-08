@@ -1,4 +1,13 @@
 // User API
 // Route: GET /api/user
 
-return "{\"user\": {}}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		return "{\"user\": {}}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/user", 0)

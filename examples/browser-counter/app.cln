@@ -142,7 +142,7 @@ functions:
 	set_userName(string value)
 		userName = value
 
-start()
+start:
 	count = 0
 	clicks = 0
 	progress = 25

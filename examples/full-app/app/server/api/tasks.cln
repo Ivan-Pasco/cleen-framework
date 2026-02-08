@@ -2,11 +2,19 @@
 // Route: GET /api/tasks
 // Returns JSON array of tasks
 
-string json = "["
-json = json + "{\"id\": 1, \"title\": \"Design mockups\", \"status\": \"in_progress\", \"project_id\": 1},"
-json = json + "{\"id\": 2, \"title\": \"Setup database\", \"status\": \"done\", \"project_id\": 1},"
-json = json + "{\"id\": 3, \"title\": \"Write API docs\", \"status\": \"todo\", \"project_id\": 2},"
-json = json + "{\"id\": 4, \"title\": \"Deploy staging\", \"status\": \"todo\", \"project_id\": 2}"
-json = json + "]"
+plugins:
+	frame.httpserver
 
-return json
+functions:
+	string __route_handler_0()
+		string json = "["
+		json = json + "{\"id\": 1, \"title\": \"Design mockups\", \"status\": \"in_progress\", \"project_id\": 1},"
+		json = json + "{\"id\": 2, \"title\": \"Setup database\", \"status\": \"done\", \"project_id\": 1},"
+		json = json + "{\"id\": 3, \"title\": \"Write API docs\", \"status\": \"todo\", \"project_id\": 2},"
+		json = json + "{\"id\": 4, \"title\": \"Deploy staging\", \"status\": \"todo\", \"project_id\": 2}"
+		json = json + "]"
+		return json
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/tasks", 0)

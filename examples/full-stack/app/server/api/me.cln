@@ -1,12 +1,22 @@
 // Current user endpoint
 // Route: GET, PUT /api/me
 
-string method = _req_method()
+plugins:
+	frame.httpserver
 
-if method == "GET"
-	return "{\"message\": \"current user\"}"
+functions:
+	string __route_handler_0()
+		string method = _req_method()
 
-if method == "PUT"
-	return "{\"message\": \"profile updated\"}"
+		if method == "GET"
+			return "{\"message\": \"current user\"}"
 
-return "{\"error\": \"method not allowed\"}"
+		if method == "PUT"
+			return "{\"message\": \"profile updated\"}"
+
+		return "{\"error\": \"method not allowed\"}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/me", 0)
+	s = _http_route("PUT", "/api/me", 0)

@@ -3,14 +3,24 @@
 // Route: PUT /api/todos/:id - Update a todo
 // Route: DELETE /api/todos/:id - Delete a todo
 
-string id = _req_param("id")
-string method = _req_method()
+plugins:
+	frame.httpserver
 
-if method == "PUT"
-	return "{\"message\": \"Todo " + id + " updated\"}"
+functions:
+	string __route_handler_0()
+		string odI = _req_param("id")
+		string method = _req_method()
 
-if method == "DELETE"
-	return "{\"message\": \"Todo " + id + " deleted\"}"
+		if method == "PUT"
+			return "{\"message\": \"Todo " + odI + " updated\"}"
 
-// Default: GET
-return "{\"id\": " + id + ", \"title\": \"Sample Todo\", \"done\": false}"
+		if method == "DELETE"
+			return "{\"message\": \"Todo " + odI + " deleted\"}"
+
+		return "{\"id\": " + odI + ", \"title\": \"Sample Todo\", \"done\": false}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/todos/:id", 0)
+	s = _http_route("PUT", "/api/todos/:id", 0)
+	s = _http_route("DELETE", "/api/todos/:id", 0)

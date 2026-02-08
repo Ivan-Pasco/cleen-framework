@@ -34,7 +34,7 @@ functions:
 		string isoLevel = "Data.tx(isolation=\"serializable\"):"
 		return isoLevel.contains("isolation=")
 
-start()
+start:
 	printl("=== Test Suite: Transaction Support ===")
 	printl("")
 

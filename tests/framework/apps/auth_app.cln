@@ -60,7 +60,7 @@ functions:
 	string __route_handler_8()
 		return "status:healthy,service:auth"
 
-start()
+start:
 	printl("Starting Auth Service...")
 	integer status = 0
 

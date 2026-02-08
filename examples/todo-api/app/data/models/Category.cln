@@ -4,14 +4,12 @@
 plugins:
 	frame.data
 
-data Category
-	integer id : pk, auto
-	string name
-	string color = "#3B82F6"
-	User owner
+functions:
+	string getCategorySchema()
+		return "CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color TEXT DEFAULT '#3B82F6', owner_id INTEGER)"
 
-// Junction table for many-to-many: Todo <-> Category
-data TodoCategory
-	integer id : pk, auto
-	Todo todo
-	Category category
+	string getTodoCategorySchema()
+		return "CREATE TABLE IF NOT EXISTS todo_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, todo_id INTEGER NOT NULL, category_id INTEGER NOT NULL)"
+
+start:
+	printl("Category model loaded")

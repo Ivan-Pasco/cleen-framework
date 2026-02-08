@@ -34,7 +34,7 @@ functions:
 		string flow = "transaction creates user and profile"
 		return flow.contains("transaction")
 
-start()
+start:
 	printl("=== Integration Test: Full Stack ===")
 	printl("")
 

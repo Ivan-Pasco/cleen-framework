@@ -1,4 +1,13 @@
 // Comments endpoint
 // Route: POST /api/comments
 
-return "{\"message\": \"comment created\"}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		return "{\"message\": \"comment created\"}"
+
+start:
+	integer s = 0
+	s = _http_route("POST", "/api/comments", 0)

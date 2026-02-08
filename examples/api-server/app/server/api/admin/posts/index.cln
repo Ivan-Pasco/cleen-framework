@@ -2,4 +2,13 @@
 // Route: GET /api/admin/posts
 // Requires: admin role
 
-return "{\"posts\": []}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		return "{\"posts\": []}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/admin/posts", 0)

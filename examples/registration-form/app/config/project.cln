@@ -3,16 +3,11 @@
 
 plugins:
 	frame.httpserver
+	frame.ui
 
-config:
-	name: "registration-form"
-	version: "1.0.0"
-	description: "Registration form demonstrating Clean Language UI components with state management and form validation"
+functions:
+	string getConfig()
+		return "{\"name\":\"registration-form\",\"version\":\"1.0.0\",\"port\":3000}"
 
-server:
-	port: 3000
-	host: "localhost"
-
-build:
-	output: "dist"
-	target: "web"
+start:
+	printl("Registration form configuration loaded")

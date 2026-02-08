@@ -3,34 +3,42 @@
 
 plugins:
 	frame.httpserver
+	frame.data
 
-endpoints:
-	// Admin only: List all users
-	GET /admin/users:
-		guard:
-			role == "admin"
-		returns: list<User>
-		handle:
-			list<User> users = User.find:
-				order:
-					created_at desc
+functions:
+	// GET /admin/users - List all users (admin only)
+	string __route_handler_0()
+		integer isAdmin = _auth_require_role("admin")
+		if isAdmin == 0
+			return "{\"ok\":false,\"error\":\"Admin access required\"}"
 
-			return json({ "ok": true, "data": users })
+		string sql = "SELECT id, email, name, role, created_at FROM users ORDER BY created_at DESC"
+		string result = _db_query(sql, "[]")
+		return "{\"ok\":true,\"data\":" + result + "}"
 
-	// Admin only: Delete user
-	DELETE /admin/users/:id:
-		guard:
-			role == "admin"
-		handle:
-			integer userId = req.params.id.toInteger()
+	// DELETE /admin/users/:id - Delete user (admin only)
+	string __route_handler_1()
+		integer isAdmin = _auth_require_role("admin")
+		if isAdmin == 0
+			return "{\"ok\":false,\"error\":\"Admin access required\"}"
 
-			User.delete:
-				where:
-					id == userId
+		string odI = _req_param("id")
+		if odI == ""
+			return "{\"ok\":false,\"error\":\"User ID required\"}"
 
-			// Also delete user's todos
-			Todo.delete:
-				where:
-					owner.id == userId
+		// Delete user's todos first
+		string deleteTodosSql = "DELETE FROM todos WHERE owner_id = ?"
+		string params = "[" + odI + "]"
+		integer deleteTodosResult = _db_execute(deleteTodosSql, params)
 
-			return json({ "ok": true, "message": "User deleted" })
+		// Delete user
+		string deleteUserSql = "DELETE FROM users WHERE id = ?"
+		integer deleteUserResult = _db_execute(deleteUserSql, params)
+
+		return "{\"ok\":true,\"message\":\"User deleted\"}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/admin/users", 0)
+	s = _http_route("DELETE", "/admin/users/:id", 1)
+	printl("Admin endpoints registered")

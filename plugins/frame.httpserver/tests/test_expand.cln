@@ -4,7 +4,7 @@ test_server_expansion()
 	result = expand_block("server", "{\"port\": \"3000\"}", "// body")
 	assert(result.contains("_http_listen"))
 	assert(result.contains("3000"))
-	assert(result.contains("start()"))
+	assert(result.contains("start:"))
 
 test_route_expansion()
 	result = expand_block("route", "{\"method\": \"GET\", \"path\": \"/hello\"}", "return {}")

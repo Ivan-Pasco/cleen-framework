@@ -1,19 +1,14 @@
 // Screens Example - Clean Framework
 // Demonstrates the islands architecture with interactive screens
 
-config:
-	name: "screens-example"
-	version: "1.0.0"
-	description: "Example demonstrating Clean UI screens with islands architecture"
-
 plugins:
-	frame.ui: "1.0.0"
-	frame.server: "1.0.0"
+	frame.ui
+	frame.httpserver
 
-server:
-	port: 3000
-	host: "localhost"
+functions:
+	string getConfig()
+		return "{\"name\":\"screens-example\",\"version\":\"1.0.0\",\"port\":3000}"
 
-build:
-	output: "dist"
-	target: "server"
+start:
+	printl("Screens example configuration loaded")
+	printl("Server port: 3000")

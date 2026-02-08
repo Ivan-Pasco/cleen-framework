@@ -31,7 +31,7 @@ functions:
 functions:
 	string expand_server(string attrs)
 		string port = get_attr(attrs, "port", "3000")
-		string result = "start()\n"
+		string result = "start:\n"
 		result = result + "\tprintl(\"Server starting on port " + port + "\")\n"
 		result = result + "\t_http_listen(" + port + ")\n"
 		return result
@@ -140,7 +140,7 @@ functions:
 					// Advance remaining
 					remaining = from_method.substring(colon_pos + skip_chars, from_method.length())
 
-		result = result + "start()\n"
+		result = result + "start:\n"
 		result = result + "\tprintl(\"Registered " + handler_idx.toString() + " handlers\")\n"
 		return result
 

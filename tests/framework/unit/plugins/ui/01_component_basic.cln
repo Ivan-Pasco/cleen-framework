@@ -37,7 +37,7 @@ functions:
 		string state = "state:\n\tinteger count = 0"
 		return state.contains("state:")
 
-start()
+start:
 	printl("=== Test Suite: Component Block Basic ===")
 	printl("")
 

@@ -38,7 +38,7 @@ functions:
 		boolean hasRole = guards.contains("hasRole")
 		return hasAuth and hasRole
 
-start()
+start:
 	printl("=== Integration Test: Protected Routes ===")
 	printl("")
 

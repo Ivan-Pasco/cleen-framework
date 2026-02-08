@@ -1,5 +1,5 @@
 // Simple Canvas Test - minimal example
-import:
+plugins:
 	frame.canvas
 
 state:
@@ -15,6 +15,6 @@ functions:
 		if x > 700.0
 			x = 100.0
 
-start()
+start:
 	canvasId = _canvas_init(800, 600)
 	_canvas_request_frame(canvasId)

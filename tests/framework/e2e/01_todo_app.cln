@@ -58,7 +58,7 @@ functions:
 		string errorCode = "VALIDATION_ERROR"
 		return statusCode == 400 and errorCode.contains("VALIDATION")
 
-start()
+start:
 	printl("=== E2E Test: Todo Application ===")
 	printl("")
 

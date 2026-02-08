@@ -2,4 +2,13 @@
 // Route: GET /api/admin/users
 // Requires: admin role
 
-return "{\"users\": []}"
+plugins:
+	frame.httpserver
+
+functions:
+	string __route_handler_0()
+		return "{\"users\": []}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/admin/users", 0)

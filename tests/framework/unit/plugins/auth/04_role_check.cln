@@ -42,7 +42,7 @@ functions:
 		integer forbiddenCode = 403
 		return forbiddenCode == 403
 
-start()
+start:
 	printl("=== Test Suite: Role Check ===")
 	printl("")
 

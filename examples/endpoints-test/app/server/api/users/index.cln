@@ -2,9 +2,19 @@
 // Route: GET /api/users - List users
 // Route: POST /api/users - Create user
 
-string method = _req_method()
+plugins:
+	frame.httpserver
 
-if method == "POST"
-	return "user created"
+functions:
+	string __route_handler_0()
+		string method = _req_method()
 
-return "user list"
+		if method == "POST"
+			return "user created"
+
+		return "user list"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/users", 0)
+	s = _http_route("POST", "/api/users", 0)

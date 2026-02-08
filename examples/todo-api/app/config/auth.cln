@@ -1,22 +1,20 @@
 // Todo API - Authentication Configuration
-// Demonstrates frame.auth plugin with session and role configuration
+// Demonstrates frame.auth plugin with session configuration
 
 plugins:
 	frame.auth
 
-auth:
-	session:
-		cookie = "todo.sid"
-		sameSite = "Lax"
-		secure = true
-		httpOnly = true
-		path = "/"
-		timeoutMinutes = 60
+// Note: Auth configuration is handled by the server at runtime
+// This file documents the expected auth settings
 
-	jwt:
-		enabled = false
+functions:
+	string getAuthConfig()
+		string config = "{"
+		config = config + "\"session\":{\"cookie\":\"todo.sid\",\"sameSite\":\"Lax\",\"secure\":true,\"httpOnly\":true,\"path\":\"/\",\"timeoutMinutes\":60},"
+		config = config + "\"jwt\":{\"enabled\":false},"
+		config = config + "\"roles\":{\"admin\":[\"users:read\",\"users:write\",\"todos:read\",\"todos:write\",\"todos:delete\"],\"user\":[\"todos:read\",\"todos:write\"],\"guest\":[]}"
+		config = config + "}"
+		return config
 
-	roles:
-		admin: ["users:read", "users:write", "todos:read", "todos:write", "todos:delete"]
-		user: ["todos:read", "todos:write"]
-		guest: []
+start:
+	printl("Auth configuration loaded")

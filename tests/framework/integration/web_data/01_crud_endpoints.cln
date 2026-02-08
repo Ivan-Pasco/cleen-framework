@@ -42,7 +42,7 @@ functions:
 		integer expectedStatus = 404
 		return expectedStatus == 404
 
-start()
+start:
 	printl("=== Integration Test: CRUD Endpoints ===")
 	printl("")
 

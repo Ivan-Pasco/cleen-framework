@@ -4,22 +4,14 @@
 plugins:
 	frame.auth
 
-auth:
-	// Session-based authentication
-	session:
-		secret: "dev-secret-change-in-production"
-		cookie_name: "session_id"
-		expires: "24h"
-		http_only: true
-		same_site: "lax"
+functions:
+	string getAuthConfig()
+		string config = "{"
+		config = config + "\"session\":{\"secret\":\"dev-secret-change-in-production\",\"cookie_name\":\"session_id\",\"expires\":\"24h\",\"http_only\":true,\"same_site\":\"lax\"},"
+		config = config + "\"password\":{\"algorithm\":\"bcrypt\",\"rounds\":12},"
+		config = config + "\"csrf\":{\"enabled\":true,\"token_name\":\"_csrf\",\"header_name\":\"X-CSRF-Token\"}"
+		config = config + "}"
+		return config
 
-	// Password hashing configuration
-	password:
-		algorithm: "bcrypt"
-		rounds: 12
-
-	// CSRF protection
-	csrf:
-		enabled: true
-		token_name: "_csrf"
-		header_name: "X-CSRF-Token"
+start:
+	printl("Auth configuration loaded")
