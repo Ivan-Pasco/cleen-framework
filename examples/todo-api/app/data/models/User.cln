@@ -1,9 +1,6 @@
 // User Model
 // Authentication and user profile data
 
-plugins:
-	frame.data
-
 // Note: This is a model definition file
 // The actual table is created in the main app startup
 

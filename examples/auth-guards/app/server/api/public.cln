@@ -1,9 +1,6 @@
 // Public endpoint - no authentication required
 // Route: GET /api/public
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		return "{\"message\": \"This is public\"}"

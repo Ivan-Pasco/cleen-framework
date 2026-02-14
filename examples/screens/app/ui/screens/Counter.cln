@@ -1,8 +1,5 @@
 // Counter Screen - Interactive counter component
-// Demonstrates basic state and event handling
-
-plugins:
-	frame.ui
+// Demonstrates basic state and event handling with bridge functions
 
 state:
 	integer count = 0
@@ -11,22 +8,28 @@ state:
 functions:
 	string render()
 		string html = "<div class=\"counter-container\">"
-		html = html + "<p class=\"counter-label\">" + label + ": " + count.toString() + "</p>"
+		html = html + "<p class=\"counter-label\" id=\"counter-display\">" + label + ": " + count.toString() + "</p>"
 		html = html + "<div class=\"counter-buttons\">"
-		html = html + "<button onclick=\"decrement()\">-</button>"
-		html = html + "<button onclick=\"increment()\">+</button>"
-		html = html + "<button onclick=\"resetCount()\">Reset</button>"
+		html = html + "<button class=\"btn-decrement\">-</button>"
+		html = html + "<button class=\"btn-increment\">+</button>"
+		html = html + "<button class=\"btn-reset\">Reset</button>"
 		html = html + "</div></div>"
 		return html
 
-	void increment()
+	handle_event_0()
 		count = count + 1
+		integer s = _ui_update_element("#counter-display", label + ": " + count.toString())
 
-	void decrement()
+	handle_event_1()
 		count = count - 1
+		integer s = _ui_update_element("#counter-display", label + ": " + count.toString())
 
-	void resetCount()
+	handle_event_2()
 		count = 0
+		integer s = _ui_update_element("#counter-display", label + ": " + count.toString())
 
 start:
-	printl("Counter screen loaded")
+	integer s = 0
+	s = _ui_on_event(".btn-increment", "click", 0)
+	s = _ui_on_event(".btn-decrement", "click", 1)
+	s = _ui_on_event(".btn-reset", "click", 2)

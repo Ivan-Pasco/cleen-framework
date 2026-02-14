@@ -1,7 +1,7 @@
 // ShareButton Component
 // Social media share buttons
 
-component:
+component: tag="share-button"
 	string render()
 		string html = "<div class=\"share-buttons\">"
 		html = html + "<a href=\"#\" class=\"share-btn share-btn-twitter\" aria-label=\"Share on Twitter\">"

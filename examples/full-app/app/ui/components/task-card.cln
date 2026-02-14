@@ -1,6 +1,6 @@
 // Task Card Component
 
-component:
+component: tag="task-card"
 	string render()
 		string html = "<div class=\"task-card\">"
 		html = html + "<h4>Sample Task</h4>"

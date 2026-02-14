@@ -1,10 +1,6 @@
 // Todo Endpoints
 // CRUD operations for todo items
 
-plugins:
-	frame.httpserver
-	frame.data
-
 functions:
 	// GET /todos - List todos (requires auth)
 	string __route_handler_0()

@@ -1,9 +1,6 @@
 // Admin stats endpoint
 // Route: GET /api/admin/stats
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		return "{\"users\": 0, \"posts\": 0, \"comments\": 0}"

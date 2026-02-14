@@ -1,9 +1,6 @@
 // Admin user detail - requires admin role
 // Route: GET /api/admin/users/:id
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string odI = _req_param("id")

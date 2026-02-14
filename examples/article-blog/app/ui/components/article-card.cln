@@ -1,6 +1,6 @@
 // Article Card Component
 
-component:
+component: tag="article-card"
 	string render()
 		string card = "<article class=\"article-card\">"
 		card = card + "<div class=\"card-image\">"

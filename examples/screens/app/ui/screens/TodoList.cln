@@ -1,38 +1,40 @@
 // TodoList Screen - Interactive todo list component
 // Demonstrates state with text input and list rendering
 
-plugins:
-	frame.ui
-
 state:
 	string items = ""
-	string newItem = ""
 	integer itemCount = 0
 
 functions:
 	string render()
 		string html = "<div class=\"todo-container\">"
-		html = html + "<h2>Todo List (" + itemCount.toString() + " items)</h2>"
+		html = html + "<h2 id=\"todo-title\">Todo List (" + itemCount.toString() + " items)</h2>"
 		html = html + "<div class=\"todo-input\">"
-		html = html + "<input type=\"text\" id=\"newItemInput\" placeholder=\"Add new item...\">"
-		html = html + "<button onclick=\"addItem()\">Add</button>"
+		html = html + "<input type=\"text\" class=\"todo-input-field\" placeholder=\"Add new item...\">"
+		html = html + "<button class=\"btn-add\">Add</button>"
 		html = html + "</div>"
-		html = html + "<div class=\"todo-items\">"
+		html = html + "<div class=\"todo-items\" id=\"todo-list\">"
 		html = html + "<pre>" + items + "</pre>"
 		html = html + "</div>"
-		html = html + "<button onclick=\"clearAll()\">Clear All</button>"
+		html = html + "<button class=\"btn-clear\">Clear All</button>"
 		html = html + "</div>"
 		return html
 
-	void addItem()
+	handle_event_0()
+		string newItem = _ui_event_value()
 		if newItem != ""
 			items = items + newItem + "\n"
 			itemCount = itemCount + 1
-			newItem = ""
+			integer s = _ui_update_element("#todo-title", "Todo List (" + itemCount.toString() + " items)")
+			s = _ui_update_element("#todo-list", "<pre>" + items + "</pre>")
 
-	void clearAll()
+	handle_event_1()
 		items = ""
 		itemCount = 0
+		integer s = _ui_update_element("#todo-title", "Todo List (0 items)")
+		s = _ui_update_element("#todo-list", "<pre></pre>")
 
 start:
-	printl("TodoList screen loaded")
+	integer s = 0
+	s = _ui_on_event(".btn-add", "click", 0)
+	s = _ui_on_event(".btn-clear", "click", 1)

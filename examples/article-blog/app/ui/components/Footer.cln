@@ -1,6 +1,6 @@
 // Footer Component
 
-component:
+component: tag="site-footer"
 	string render()
 		string f = "<footer class=\"site-footer\">"
 		f = f + "<div class=\"container\">"

@@ -1,9 +1,6 @@
 // Post publish - requires post.publish permission
 // Route: GET /api/posts/publish
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		return "{\"message\": \"Post published\"}"

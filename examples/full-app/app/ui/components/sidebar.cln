@@ -1,6 +1,6 @@
 // Sidebar Component - Project Navigation
 
-component:
+component: tag="app-sidebar"
 	string render()
 		string html = "<aside class=\"sidebar\">"
 		html = html + "<div class=\"sidebar-header\">"

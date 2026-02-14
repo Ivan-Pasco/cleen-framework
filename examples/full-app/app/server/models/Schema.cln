@@ -1,9 +1,6 @@
 // Database Schema - Task Management Application
 // Model definitions
 
-plugins:
-	frame.data
-
 functions:
 	string getUserSchema()
 		return "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, name TEXT)"

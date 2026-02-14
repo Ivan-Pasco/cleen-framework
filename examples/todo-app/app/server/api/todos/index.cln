@@ -2,9 +2,6 @@
 // Route: GET /api/todos - List all todos
 // Route: POST /api/todos - Create a todo
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string method = _req_method()

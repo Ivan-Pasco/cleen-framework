@@ -1,9 +1,6 @@
 // Register endpoint
 // Route: POST /api/register
 
-plugins:
-	frame.httpserver
-
 functions:
 	// POST /api/register - User registration
 	string __route_handler_0()

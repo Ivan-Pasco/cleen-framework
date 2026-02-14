@@ -1,9 +1,6 @@
 // Registration Form Theme
 // Art deco inspired dark theme with gold accents
 
-plugins:
-	frame.ui
-
 styles Theme:
 	variables:
 		color-bg: "#0a0a0f"

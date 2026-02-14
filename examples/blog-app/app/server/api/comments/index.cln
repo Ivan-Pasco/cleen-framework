@@ -1,9 +1,6 @@
 // Comments API
 // Route: GET, POST /api/comments
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string method = _req_method()

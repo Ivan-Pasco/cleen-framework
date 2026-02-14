@@ -1,9 +1,6 @@
 // Login endpoint
 // Route: POST /api/login
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		return "{\"message\": \"login endpoint\"}"

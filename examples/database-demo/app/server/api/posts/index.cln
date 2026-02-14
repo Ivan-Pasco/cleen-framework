@@ -1,9 +1,6 @@
 // Posts API
 // Route: GET /api/posts
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string data = "{\"posts\": ["

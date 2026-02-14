@@ -1,6 +1,6 @@
 // Header Component
 
-component:
+component: tag="site-header"
 	string render()
 		string h = "<header class=\"site-header\">"
 		h = h + "<nav class=\"container\">"

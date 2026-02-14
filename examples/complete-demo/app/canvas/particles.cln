@@ -1,9 +1,6 @@
 // Particle animation - frame.canvas plugin
 // Location: app/canvas/ tells the compiler this is a canvas application
 
-plugins:
-	frame.canvas
-
 state:
 	integer canvasId = 0
 	number mouseX = 400.0

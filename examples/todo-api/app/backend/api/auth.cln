@@ -1,10 +1,6 @@
 // Authentication Endpoints
 // Register, login, logout, and session management
 
-plugins:
-	frame.httpserver
-	frame.data
-
 functions:
 	// POST /auth/register - User registration (public)
 	string __route_handler_0()

@@ -1,7 +1,7 @@
 // NewsletterForm Component
 // Simple newsletter form (static SSR)
 
-component:
+component: tag="newsletter-form"
 	string render()
 		string html = "<form class=\"newsletter-form\" action=\"/api/subscribe\" method=\"POST\">"
 		html = html + "<div class=\"form-row\">"

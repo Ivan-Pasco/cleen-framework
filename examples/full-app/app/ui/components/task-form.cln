@@ -1,6 +1,6 @@
 // Task Form Component
 
-component:
+component: tag="task-form"
 	string render()
 		string html = "<form class=\"task-form\" action=\"/api/tasks\" method=\"POST\">"
 		html = html + "<h2>Create Task</h2>"

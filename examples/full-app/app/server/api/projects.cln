@@ -2,9 +2,6 @@
 // Route: GET /api/projects
 // Returns JSON array of projects
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string json = "["

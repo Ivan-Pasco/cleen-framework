@@ -1,7 +1,7 @@
 // Header Component
 // Renders the site header with navigation
 
-component:
+component: tag="site-header"
 	string render()
 		string html = "<header class=\"site-header\">"
 		html = html + "<div class=\"header-content\">"

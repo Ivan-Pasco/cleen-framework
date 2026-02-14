@@ -1,9 +1,6 @@
 // Registration Form Screen
 // Pure Clean Language frontend with DOM interactions
 
-plugins:
-	frame.ui
-
 state:
 	string userName = ""
 	string userEmail = ""

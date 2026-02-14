@@ -1,9 +1,6 @@
 // Register endpoint
 // Route: POST /api/auth/register
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		return "{\"message\": \"registered\"}"

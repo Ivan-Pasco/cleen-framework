@@ -1,5 +1,5 @@
 // Comment model
-model: name="Comment", table="comments"
+data Comment
 	integer post_id
 	integer user_id
 	string content

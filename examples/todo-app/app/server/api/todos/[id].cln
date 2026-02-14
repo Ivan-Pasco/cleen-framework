@@ -3,9 +3,6 @@
 // Route: PUT /api/todos/:id - Update a todo
 // Route: DELETE /api/todos/:id - Delete a todo
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string odI = _req_param("id")

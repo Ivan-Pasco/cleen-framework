@@ -1,9 +1,6 @@
 // Category Model
 // For organizing todos
 
-plugins:
-	frame.data
-
 functions:
 	string getCategorySchema()
 		return "CREATE TABLE IF NOT EXISTS categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, color TEXT DEFAULT '#3B82F6', owner_id INTEGER)"

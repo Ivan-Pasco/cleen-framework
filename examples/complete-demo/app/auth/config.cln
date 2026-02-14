@@ -1,9 +1,6 @@
 // Authentication configuration - frame.auth plugin
 // Location: app/auth/ tells the compiler this is auth configuration
 
-plugins:
-	frame.auth
-
 functions:
 	string getAuthConfig()
 		string config = "{"

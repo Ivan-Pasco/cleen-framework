@@ -1,9 +1,6 @@
 // Post model
 // Table: posts
 
-plugins:
-	frame.data
-
 functions:
 	string getPostSchema()
 		return "CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE, title TEXT NOT NULL, excerpt TEXT, content TEXT, author TEXT, read_time INTEGER DEFAULT 5, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"

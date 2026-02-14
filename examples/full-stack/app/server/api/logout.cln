@@ -1,9 +1,6 @@
 // Logout endpoint
 // Route: POST /api/logout
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		return "{\"message\": \"logged out\"}"

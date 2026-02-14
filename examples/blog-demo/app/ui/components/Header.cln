@@ -1,7 +1,7 @@
 // Header component
-// Tag: <app-header>
+// Tag: <blog-header>
 
-component:
+component: tag="blog-header"
 	string render()
 		string h = "<header class=\"site-header\">"
 		h = h + "<nav>"

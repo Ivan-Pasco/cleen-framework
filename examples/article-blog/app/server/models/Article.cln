@@ -1,9 +1,6 @@
 // Article model
 // Schema for the Article data type
 
-plugins:
-	frame.data
-
 functions:
 	string getArticleSchema()
 		return "CREATE TABLE IF NOT EXISTS articles (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, slug TEXT UNIQUE, excerpt TEXT, content TEXT, category TEXT, read_time INTEGER DEFAULT 5, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"

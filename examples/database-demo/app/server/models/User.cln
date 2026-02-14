@@ -1,5 +1,5 @@
 // User model
-model: name="User", table="users"
+data User
 	integer id
 	string name
 	string email

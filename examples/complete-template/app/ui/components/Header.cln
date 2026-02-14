@@ -1,6 +1,6 @@
 // Header component
 // Tag: <app-header>
 
-component:
+component: tag="app-header"
 	string render()
 		return "<header><nav><a href=\"/\">My App</a></nav></header>"

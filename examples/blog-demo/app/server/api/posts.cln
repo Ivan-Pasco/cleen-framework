@@ -2,9 +2,6 @@
 // Route: GET /api/posts
 // Returns JSON array of blog posts
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string json = "["

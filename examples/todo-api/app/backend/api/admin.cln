@@ -1,10 +1,6 @@
 // Admin Endpoints
 // User management for administrators
 
-plugins:
-	frame.httpserver
-	frame.data
-
 functions:
 	// GET /admin/users - List all users (admin only)
 	string __route_handler_0()

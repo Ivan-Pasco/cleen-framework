@@ -1,7 +1,7 @@
 // Footer component
-// Tag: <app-footer>
+// Tag: <blog-footer>
 
-component:
+component: tag="blog-footer"
 	string render()
 		string f = "<footer class=\"site-footer\">"
 		f = f + "<div class=\"footer-content\">"

@@ -1,6 +1,6 @@
 // Kanban Board Component
 
-component:
+component: tag="kanban-board"
 	string render()
 		string html = "<div class=\"kanban-board\">"
 		html = html + "<div class=\"kanban-column\">"

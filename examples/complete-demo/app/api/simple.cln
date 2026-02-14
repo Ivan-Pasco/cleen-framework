@@ -1,8 +1,5 @@
 // Simple API demo - demonstrates basic HTTP endpoints
 
-plugins:
-	frame.httpserver
-
 endpoints Simple:
 	// Health check endpoint
 	GET "/api/health":

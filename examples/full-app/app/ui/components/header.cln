@@ -1,6 +1,6 @@
 // Header Component - Navigation Bar
 
-component:
+component: tag="app-header"
 	string render()
 		string html = "<header class=\"app-header\">"
 		html = html + "<div class=\"header-left\">"

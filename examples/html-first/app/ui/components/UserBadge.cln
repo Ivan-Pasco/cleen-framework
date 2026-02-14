@@ -1,7 +1,7 @@
 // UserBadge Component
 // Displays a user avatar and name
 
-component:
+component: tag="user-badge"
 	string render()
 		string html = "<div class=\"user-badge\">"
 		html = html + "<img src=\"/images/default-avatar.png\" alt=\"\" class=\"avatar\">"

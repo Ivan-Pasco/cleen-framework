@@ -1,6 +1,6 @@
 // Stats Card Component
 
-component:
+component: tag="stats-card"
 	string render()
 		string html = "<div class=\"stats-card\">"
 		html = html + "<span class=\"stats-value\">--</span>"

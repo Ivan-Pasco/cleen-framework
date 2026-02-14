@@ -1,9 +1,6 @@
 // User profile endpoint
 // Route: GET, PUT /api/profile
 
-plugins:
-	frame.httpserver
-
 functions:
 	string __route_handler_0()
 		string method = _req_method()

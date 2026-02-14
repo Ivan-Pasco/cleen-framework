@@ -1,5 +1,5 @@
 // Post model
-model: name="Post", table="posts"
+data Post
 	integer user_id
 	string title
 	string content
