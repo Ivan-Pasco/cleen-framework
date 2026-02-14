@@ -124,7 +124,7 @@ app/
 3. **Clean templating in HTML** - Use `{{ variable }}` for interpolation and `cl-*` attributes for directives:
    ```html
    <h1>Welcome, {{ user.name }}</h1>
-   <ul cl-each="post in posts">
+   <ul cl-iterate="post in posts">
        <li>{{ post.title }}</li>
    </ul>
    <div cl-if="user.isAdmin">Admin Panel</div>

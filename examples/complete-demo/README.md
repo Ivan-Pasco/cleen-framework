@@ -109,7 +109,7 @@ Each folder maps to a specific plugin:
 ### Clean Templating in HTML
 ```html
 <h1>Welcome, {{ user.name }}</h1>
-<ul cl-each="item in items">
+<ul cl-iterate="item in items">
     <li>{{ item.title }}</li>
 </ul>
 <div cl-if="user.isAdmin">Admin content</div>

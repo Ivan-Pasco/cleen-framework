@@ -41,6 +41,9 @@ functions:
 		if block_name == "component"
 			return expand_component(attributes, body)
 
+		if block_name == "html"
+			return expand_html_block(body)
+
 		// Check if this is a screen block (block_name is "screen ScreenName")
 		if block_name.startsWith("screen ")
 			// Split the operations to debug corruption issue
@@ -95,7 +98,7 @@ functions:
 
 	// Get keywords for IDE support
 	string get_keywords()
-		return "[\"component\", \"props\", \"state\", \"render\", \"tag\", \"client\", \"if\", \"else\", \"each\", \"bind\", \"slot\"]"
+		return "[\"component\", \"props\", \"state\", \"render\", \"tag\", \"client\", \"if\", \"else\", \"each\", \"bind\", \"slot\", \"html\"]"
 
 // ============================================================================
 // STRING HELPER FUNCTIONS (workaround for buggy trim())
@@ -449,34 +452,34 @@ functions:
 	string process_element(string tag_content, string inner_html, string registry_json)
 		string tag_name = extract_tag_name(tag_content)
 
-		// Check for directives
-		string if_attr = extract_attr_value("<" + tag_content + ">", "if")
-		string else_attr = extract_attr_value("<" + tag_content + ">", "else")
-		string each_attr = extract_attr_value("<" + tag_content + ">", "each")
-		string bind_attr = extract_attr_value("<" + tag_content + ">", "bind")
+		// Check for cl- directives
+		string if_attr = extract_attr_value("<" + tag_content + ">", "cl-if")
+		string else_attr = extract_attr_value("<" + tag_content + ">", "cl-else")
+		string iterate_attr = extract_attr_value("<" + tag_content + ">", "cl-iterate")
+		string bind_attr = extract_attr_value("<" + tag_content + ">", "cl-bind")
 
 		string result = ""
 
-		// Handle if directive
+		// Handle cl-if directive
 		if if_attr != ""
 			result = result + "if " + if_attr + "\n"
 			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json)
 			return result
 
-		// Handle else directive (must follow if)
-		if else_attr != "" or tag_content.indexOf(" else") != -1 or tag_content.indexOf(" else>") != -1
+		// Handle cl-else directive (must follow cl-if)
+		if else_attr != "" or tag_content.indexOf(" cl-else") != -1
 			result = result + "else\n"
 			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json)
 			return result
 
-		// Handle each directive
-		if each_attr != ""
+		// Handle cl-iterate directive
+		if iterate_attr != ""
 			// Parse "item in items" or "item, index in items"
-			integer in_pos = each_attr.indexOf(" in ")
+			integer in_pos = iterate_attr.indexOf(" in ")
 			if in_pos != -1
-				string vars = each_attr.substring(0, in_pos).trim()
-				string collection = each_attr.substring(in_pos + 4, each_attr.length()).trim()
-				result = result + "for " + vars + " in " + collection + "\n"
+				string vars = iterate_attr.substring(0, in_pos).trim()
+				string collection = iterate_attr.substring(in_pos + 4, iterate_attr.length()).trim()
+				result = result + "iterate " + vars + " in " + collection + "\n"
 				result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json)
 				return result
 
@@ -662,7 +665,7 @@ functions:
 
 	// Extract attributes from tag, excluding directives
 	string extract_attributes(string tag_content)
-		string directives = ",if,else,each,bind,client,"
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,"
 		string result = ""
 
 		// Simple attribute extraction - find key="value" or key='value' pairs
@@ -756,7 +759,7 @@ functions:
 
 	// Extract component props as setter code
 	string extract_component_props(string tag_content)
-		string directives = ",if,else,each,bind,client,slot,"
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-slot,cl-show,cl-validate,"
 		string result = ""
 
 		string remaining = tag_content
@@ -859,6 +862,386 @@ functions:
 		result = result.replace("\"", "\\\"")
 		result = result.replace("\n", "\\n")
 		result = result.replace("\t", "\\t")
+		return result
+
+// ============================================================================
+// HTML: BLOCK TEMPLATE TRANSFORMATION
+// ============================================================================
+// Transforms html: template blocks into Clean string concatenation code.
+// Uses {expr} for escaped interpolation and {!expr} for raw interpolation.
+// Output variable is __html, escape function is _html_escape().
+
+functions:
+	// Entry point for standalone html: blocks (inside functions)
+	// Generates: string __html = "" + building code + return __html
+	string expand_html_block(string body)
+		string cleaned = strip_block_indent(body)
+		string code = html_block_to_code(cleaned)
+		string result = "string __html = \"\"\n"
+		result = result + code
+		result = result + "return __html\n"
+		return result
+
+	// Core transformer: walks HTML and delegates to text/element processors
+	// Parallel to html_to_render but uses {expr} syntax and __html variable
+	string html_block_to_code(string html)
+		string result = ""
+		string remaining = html
+
+		while remaining.length() > 0
+			integer tag_start = remaining.indexOf("<")
+
+			if tag_start == -1
+				// No more tags - process remaining text
+				string text = remaining.trim()
+				if text.length() > 0
+					result = result + process_block_text_node(text)
+				remaining = ""
+			else if tag_start > 0
+				// Text before tag
+				string text = remaining.substring(0, tag_start)
+				if text.trim().length() > 0
+					result = result + process_block_text_node(text)
+				remaining = remaining.substring(tag_start, remaining.length())
+			else
+				// At a tag
+				integer tag_end = find_tag_end(remaining)
+				if tag_end == -1
+					remaining = ""
+				else
+					string tag_content = remaining.substring(1, tag_end)
+					string tag_name = extract_tag_name(tag_content)
+
+					boolean self_closing = tag_content.endsWith("/") or is_void_element(tag_name)
+
+					if tag_content.startsWith("/")
+						// Closing tag - skip (handled by opening tag)
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if self_closing
+						result = result + process_block_element(tag_content, "")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else
+						string close_tag = "</" + tag_name + ">"
+						integer close_pos = find_matching_close(remaining, tag_name)
+						if close_pos == -1
+							result = result + process_block_element(tag_content, "")
+							remaining = remaining.substring(tag_end + 1, remaining.length())
+						else
+							string inner = remaining.substring(tag_end + 1, close_pos)
+							result = result + process_block_element(tag_content, inner)
+							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+
+		return result
+
+	// Process text node for html: blocks
+	// Handles {expr} (escaped via _html_escape) and {!expr} (raw)
+	string process_block_text_node(string text)
+		string result = "__html = __html + \""
+		string remaining = text
+
+		while remaining.length() > 0
+			integer brace_start = remaining.indexOf("{")
+
+			if brace_start == -1
+				// No more interpolations - add remaining text
+				result = result + escape_string(remaining)
+				remaining = ""
+			else
+				integer brace_end = remaining.indexOf("}", brace_start + 1)
+
+				if brace_end == -1
+					// No closing brace - treat as literal text
+					result = result + escape_string(remaining)
+					remaining = ""
+				else
+					// Add text before the brace
+					if brace_start > 0
+						result = result + escape_string(remaining.substring(0, brace_start))
+
+					// Check if raw interpolation {!expr}
+					string after_brace = ""
+					if brace_start + 1 < remaining.length()
+						after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+
+					if after_brace == "!"
+						// Raw interpolation - no escaping
+						string expr = remaining.substring(brace_start + 2, brace_end)
+						result = result + "\" + " + strip_spaces(expr) + " + \""
+					else
+						// Escaped interpolation
+						string expr = remaining.substring(brace_start + 1, brace_end)
+						result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+					remaining = remaining.substring(brace_end + 1, remaining.length())
+
+		result = result + "\"\n"
+		return result
+
+	// Process an HTML element for html: blocks
+	string process_block_element(string tag_content, string inner_html)
+		string tag_name = extract_tag_name(tag_content)
+
+		string result = "__html = __html + \"<" + tag_name
+
+		// Add attributes
+		string attrs = extract_block_attributes(tag_content)
+		if attrs != ""
+			result = result + " " + attrs
+
+		result = result + ">\"\n"
+
+		// Process inner content recursively
+		if inner_html.trim().length() > 0
+			result = result + html_block_to_code(inner_html)
+
+		// Close tag (unless void element)
+		if is_void_element(tag_name) == false
+			result = result + "__html = __html + \"</" + tag_name + ">\"\n"
+
+		return result
+
+	// Extract attributes from tag for html: blocks
+	// Handles {expr} interpolation in attribute values
+	string extract_block_attributes(string tag_content)
+		string result = ""
+
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos != -1
+			remaining = remaining.substring(space_pos + 1, remaining.length())
+		else
+			return ""
+
+		// Remove trailing /
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+
+		remaining = remaining.trim()
+
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				// Boolean attribute or end
+				integer next_space = remaining.indexOf(" ")
+				if next_space == -1
+					string attr_name = remaining.trim()
+					if attr_name.length() > 0
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = ""
+				else
+					string attr_name = remaining.substring(0, next_space).trim()
+					if attr_name.length() > 0
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = remaining.substring(next_space + 1, remaining.length()).trim()
+			else
+				string attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if result != ""
+							result = result + " "
+						// Handle interpolations in attribute values
+						if attr_value.indexOf("{") != -1
+							result = result + attr_name + "=\\\"\" + " + interpolate_block_attr(attr_value) + " + \"\\\""
+						else
+							result = result + attr_name + "=\\\"" + attr_value + "\\\""
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					// Unquoted value
+					integer next_space = after_eq.indexOf(" ")
+					if next_space == -1
+						next_space = after_eq.length()
+					string attr_value = after_eq.substring(0, next_space)
+					if result != ""
+						result = result + " "
+					result = result + attr_name + "=\\\"" + attr_value + "\\\""
+					remaining = after_eq.substring(next_space, after_eq.length()).trim()
+
+		return result
+
+	// Convert attribute value with {expr} interpolations to expression
+	// Used for: class="badge-{this.difficulty}" -> "badge-" + _html_escape(this.difficulty)
+	string interpolate_block_attr(string value)
+		string result = "\""
+		string remaining = value
+
+		while remaining.length() > 0
+			integer startIdx = remaining.indexOf("{")
+			if startIdx == -1
+				result = result + remaining + "\""
+				remaining = ""
+			else
+				if startIdx > 0
+					result = result + remaining.substring(0, startIdx)
+
+				integer end = remaining.indexOf("}", startIdx + 1)
+				if end == -1
+					end = remaining.length()
+
+				string after_brace = remaining.substring(startIdx + 1, startIdx + 2)
+				if after_brace == "!"
+					// Raw interpolation in attribute
+					string expr = remaining.substring(startIdx + 2, end)
+					result = result + "\" + " + strip_spaces(expr) + " + \""
+				else
+					// Escaped interpolation in attribute
+					string expr = remaining.substring(startIdx + 1, end)
+					result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+				remaining = remaining.substring(end + 1, remaining.length())
+
+		return result
+
+	// Parse component body to extract html: block and other sections
+	// Returns JSON: {"before": "...", "html": "...", "after": "..."}
+	string parse_component_body(string body)
+		string before = ""
+		string html_content = ""
+		string after = ""
+
+		// Search for html: as a section header
+		integer html_pos = -1
+		integer search_pos = 0
+
+		while search_pos < body.length()
+			integer pos = body.indexOf("html:", search_pos)
+			if pos == -1
+				search_pos = body.length()
+			else
+				// Verify it's at the start of a line (after newline/tab or at start)
+				boolean valid = false
+				if pos == 0
+					valid = true
+				else
+					string char_before = body.substring(pos - 1, pos)
+					if char_before == "\n" or char_before == "\t"
+						valid = true
+
+				if valid
+					html_pos = pos
+					search_pos = body.length()
+				else
+					search_pos = pos + 5
+
+		if html_pos == -1
+			// No html: block found
+			return "{\"before\":\"" + escape_json_string(body) + "\",\"html\":\"\",\"after\":\"\"}"
+
+		// Extract content before html:
+		if html_pos > 0
+			before = body.substring(0, html_pos)
+
+		// Find content start (after "html:\n")
+		integer content_start = body.indexOf("\n", html_pos)
+		if content_start == -1
+			return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"\",\"after\":\"\"}"
+		content_start = content_start + 1
+
+		// Determine the indentation level of the html: line
+		integer html_line_indent = 0
+		integer scan = html_pos - 1
+		while scan >= 0 and body.substring(scan, scan + 1) == "\t"
+			html_line_indent = html_line_indent + 1
+			scan = scan - 1
+
+		// Find end of html: block by scanning for next section header at same or lower indent
+		integer html_end = body.length()
+		string sections = ",props:,state:,functions:,computed:,handlers:,"
+		string search_remaining = body.substring(content_start, body.length())
+		integer line_start = 0
+
+		while line_start < search_remaining.length()
+			integer nl = search_remaining.indexOf("\n", line_start)
+			if nl == -1
+				nl = search_remaining.length()
+			string line = search_remaining.substring(line_start, nl)
+
+			// Count indent level
+			integer indent = 0
+			while indent < line.length() and line.substring(indent, indent + 1) == "\t"
+				indent = indent + 1
+
+			// Check if this is a section header at same or lower indent
+			if indent <= html_line_indent and line.trim().length() > 0
+				string trimmed = line.trim()
+				if trimmed.endsWith(":")
+					// Check it's a known section
+					string section_name = trimmed.substring(0, trimmed.length() - 1)
+					if sections.indexOf("," + section_name + ",") != -1
+						html_end = content_start + line_start
+						after = body.substring(html_end, body.length())
+						line_start = search_remaining.length()
+					else
+						line_start = nl + 1
+				else
+					line_start = nl + 1
+			else
+				line_start = nl + 1
+
+		html_content = body.substring(content_start, html_end)
+
+		return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"" + escape_json_string(html_content) + "\",\"after\":\"" + escape_json_string(after) + "\"}"
+
+	// Strip common indentation from html: block content and collapse whitespace
+	string strip_block_indent(string content)
+		// Find minimum indent level across non-empty lines
+		integer min_indent = 999
+		string remaining = content
+
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			if line.trim().length() > 0
+				integer indent = 0
+				while indent < line.length() and line.substring(indent, indent + 1) == "\t"
+					indent = indent + 1
+				if indent < min_indent
+					min_indent = indent
+
+		if min_indent == 999
+			min_indent = 0
+
+		// Rebuild content with common indent stripped
+		string result = ""
+		remaining = content
+		boolean first = true
+
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			if line.trim().length() > 0
+				if first == false
+					result = result + " "
+				first = false
+				if line.length() > min_indent
+					result = result + line.substring(min_indent, line.length()).trim()
+				else
+					result = result + line.trim()
+
 		return result
 
 // ============================================================================
@@ -986,17 +1369,62 @@ functions:
 		result = result + "\tstring _hydration_mode = \"" + client + "\"\n"
 		result = result + "\tstring _slot_content = \"\"\n"
 
-		// Add body (props, state, functions)
-		result = result + "\t" + body + "\n"
+		// Parse body to find html: block and other sections
+		string parsed = parse_component_body(body)
+		string before_html = extract_json_field(parsed, "before")
+		string html_content = extract_json_field(parsed, "html")
+		string after_html = extract_json_field(parsed, "after")
 
-		// Add slot setter
-		result = result + "\n\tfunctions:\n"
-		result = result + "\t\tvoid setSlot(string content)\n"
-		result = result + "\t\t\t_slot_content = content\n"
+		if html_content != ""
+			// html: block found - generate render() from it
 
-		// Add SSR render wrapper
-		result = result + "\n\t\tstring renderSSR()\n"
-		result = result + "\t\t\treturn this.render()\n"
+			// Add sections before html: (typically props:, state:)
+			if before_html.trim().length() > 0
+				result = result + "\t" + before_html + "\n"
+
+			// Generate render() function from html: block content
+			string cleaned_html = strip_block_indent(html_content)
+			string render_code = html_block_to_code(cleaned_html)
+
+			// Check if after_html contains a functions: section
+			if after_html.trim().length() > 0 and after_html.trim().startsWith("functions:")
+				// Merge render() into the existing functions: block
+				result = result + "\n\t" + after_html.trim().substring(0, 10) + "\n"
+				result = result + "\t\tstring render()\n"
+				result = result + "\t\t\tstring __html = \"\"\n"
+				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+				result = result + "\t\t\treturn __html\n\n"
+				// Add remaining functions after "functions:" header
+				string remaining_funcs = after_html.trim().substring(10, after_html.trim().length())
+				if remaining_funcs.trim().length() > 0
+					result = result + "\t\t" + remaining_funcs.trim() + "\n"
+			else
+				// No functions: section after html - create one with render()
+				result = result + "\n\tfunctions:\n"
+				result = result + "\t\tstring render()\n"
+				result = result + "\t\t\tstring __html = \"\"\n"
+				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+				result = result + "\t\t\treturn __html\n"
+				// Add any remaining content after html:
+				if after_html.trim().length() > 0
+					result = result + "\n\t" + after_html + "\n"
+		else
+			// No html: block - pass body through as before (backward compatible)
+			result = result + "\t" + body + "\n"
+
+		// Add slot setter and SSR wrapper
+		if html_content != "" and after_html.trim().startsWith("functions:")
+			// Functions block already exists, just append
+			result = result + "\n\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t_slot_content = content\n"
+			result = result + "\n\t\tstring renderSSR()\n"
+			result = result + "\t\t\treturn this.render()\n"
+		else
+			result = result + "\n\tfunctions:\n"
+			result = result + "\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t_slot_content = content\n"
+			result = result + "\n\t\tstring renderSSR()\n"
+			result = result + "\t\t\treturn this.render()\n"
 
 		return result
 

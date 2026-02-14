@@ -25,14 +25,14 @@ get_page_meta = "get_page_meta"
 get_keywords = "get_keywords"
 
 [handles]
-blocks = ["component", "screen", "page"]
+blocks = ["component", "screen", "page", "html"]
 
 [html]
 # File extensions processed as HTML pages
 extensions = [".html"]
 
 # Directives recognized in HTML
-directives = ["if", "else", "each", "bind", "client", "slot", "show", "validate"]
+directives = ["cl-if", "cl-else", "cl-iterate", "cl-bind", "cl-client", "cl-slot", "cl-show", "cl-validate"]
 
 # Event attributes recognized (with modifiers like .prevent, .stop)
 events = ["onclick", "oninput", "onchange", "onsubmit", "onfocus", "onblur", "onkeydown", "onkeyup", "onmouseenter", "onmouseleave"]
@@ -119,7 +119,7 @@ functions = [
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["component", "screen", "page", "styles"]
+blocks = ["component", "screen", "page", "styles", "html"]
 
 # Keywords used within plugin context
 keywords = [
@@ -132,7 +132,7 @@ keywords = [
   { name = "global", description = "Global CSS styles", context = "block" },
   { name = "if", description = "Conditional rendering directive", context = "directive" },
   { name = "else", description = "Else clause for conditional", context = "directive" },
-  { name = "each", description = "Loop rendering directive", context = "directive" },
+  { name = "iterate", description = "Iterate rendering directive (cl-iterate)", context = "directive" },
   { name = "bind", description = "Two-way data binding", context = "directive" },
   { name = "client", description = "Hydration mode attribute", context = "attribute" },
   { name = "slot", description = "Slot for content projection", context = "directive" },

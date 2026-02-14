@@ -63,7 +63,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					<tr cl-each="user in users">
+					<tr cl-iterate="user in users">
 						<td>{{ user.id }}</td>
 						<td>
 							<span class="user-avatar">{{ user.username | first | upper }}</span>

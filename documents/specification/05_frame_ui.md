@@ -199,7 +199,86 @@ component: tag="user-card"
             return html
 ```
 
-### 4.3 Component Registry
+### 4.3 The `html:` Template Block
+
+The `html:` block provides a clean, declarative way to write HTML templates inside components and functions. It replaces verbose string concatenation with actual HTML that supports `{expression}` interpolation.
+
+#### In Components
+
+Use `html:` instead of a manual `render()` function:
+
+```clean
+// app/ui/components/UserCard.cln
+component: tag="user-card"
+    props:
+        string userId
+        boolean showAvatar = true
+
+    html:
+        <div class="user-card">
+            <h3>{this.userId}</h3>
+        </div>
+
+    functions:
+        string getAvatar()
+            return "/avatars/" + this.userId + ".png"
+```
+
+The plugin automatically generates a `render()` function from the `html:` block at compile time. The generated code is identical to hand-written string concatenation.
+
+#### In Functions
+
+Use `html:` inside any function that returns a string:
+
+```clean
+string build_nav(string lang, string nav_items_html)
+    html:
+        <nav class="navbar">
+            <a href="/">{lang}</a>
+            {!nav_items_html}
+        </nav>
+```
+
+#### Interpolation Syntax
+
+| Syntax | Meaning | Generated Code |
+|--------|---------|---------------|
+| `{expression}` | Escaped interpolation (safe) | `_html_escape(expression)` |
+| `{!expression}` | Raw interpolation (trusted HTML) | Direct output, no escaping |
+
+**Safe by default**: `{expression}` always escapes HTML entities to prevent XSS. Use `{!expression}` only for trusted HTML fragments (e.g., pre-rendered component output).
+
+#### Attribute Interpolation
+
+Interpolation works inside HTML attribute values:
+
+```clean
+html:
+    <div class="badge-{this.difficulty}" data-id="{this.id}">
+        <span>{this.label}</span>
+    </div>
+```
+
+#### Build-Time Transformation
+
+The `html:` block is transformed at compile time with zero runtime cost. The input:
+
+```clean
+html:
+    <h3 class="title">{this.title}</h3>
+    <p>{this.description}</p>
+```
+
+Generates:
+
+```clean
+string __html = ""
+__html = __html + "<h3 class=\"title\">" + _html_escape(this.title) + "</h3>"
+__html = __html + "<p>" + _html_escape(this.description) + "</p>"
+return __html
+```
+
+### 4.4 Component Registry
 
 Components are auto-discovered from `app/ui/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
 
@@ -270,35 +349,52 @@ page: path="/profile/[id]"
 
 ### 5.3 Conditional Rendering
 
+All directives use the `cl-` prefix to clearly distinguish Clean Language directives from standard HTML attributes.
+
 ```html
-<!-- if/else -->
-<div if="user.isAdmin">
+<!-- cl-if/cl-else -->
+<div cl-if="user.isAdmin">
     <admin-panel></admin-panel>
 </div>
-<div else>
+<div cl-else>
     <p>Access denied</p>
 </div>
 
-<!-- Show/hide (renders but hides with CSS) -->
-<div show="isLoading">Loading...</div>
+<!-- cl-show (renders but hides with CSS) -->
+<div cl-show="isLoading">Loading...</div>
 ```
 
 ### 5.4 List Rendering
 
+Uses `cl-iterate` to match the Clean Language `iterate` keyword:
+
 ```html
 <ul>
-    <li each="post in posts">
+    <li cl-iterate="post in posts">
         <a href="/blog/{{post.slug}}">{{post.title}}</a>
     </li>
 </ul>
 
 <!-- With index -->
 <ol>
-    <li each="item, index in items">
+    <li cl-iterate="item, index in items">
         {{index + 1}}. {{item.name}}
     </li>
 </ol>
 ```
+
+### 5.5 Directive Reference
+
+| Directive | Purpose | Example |
+|-----------|---------|---------|
+| `cl-if` | Conditional rendering | `<div cl-if="isVisible">` |
+| `cl-else` | Alternative branch | `<div cl-else>` |
+| `cl-iterate` | Iteration over collections | `<li cl-iterate="item in items">` |
+| `cl-bind` | Two-way data binding | `<input cl-bind="username">` |
+| `cl-show` | CSS visibility toggle | `<div cl-show="isLoading">` |
+| `cl-client` | Hydration mode | `<div cl-client="on">` |
+| `cl-slot` | Content projection | `<div cl-slot="header">` |
+| `cl-validate` | Form validation | `<input cl-validate="email">` |
 
 ---
 
@@ -490,12 +586,12 @@ Page-level `client` attribute overrides component default.
 <form onsubmit.prevent="createUser">
     <label>
         Name
-        <input type="text" name="name" bind="formData.name">
+        <input type="text" name="name" cl-bind="formData.name">
     </label>
 
     <label>
         Email
-        <input type="email" name="email" bind="formData.email">
+        <input type="email" name="email" cl-bind="formData.email">
     </label>
 
     <button type="submit">Create User</button>
@@ -504,13 +600,13 @@ Page-level `client` attribute overrides component default.
 
 ### 9.2 Two-Way Binding
 
-The `bind` attribute creates two-way data binding:
+The `cl-bind` attribute creates two-way data binding:
 
 ```html
-<input type="text" bind="searchQuery">
-<textarea bind="content"></textarea>
-<select bind="selectedCountry">
-    <option each="country in countries" value="{{country.code}}">
+<input type="text" cl-bind="searchQuery">
+<textarea cl-bind="content"></textarea>
+<select cl-bind="selectedCountry">
+    <option cl-iterate="country in countries" value="{{country.code}}">
         {{country.name}}
     </option>
 </select>
@@ -521,12 +617,12 @@ The `bind` attribute creates two-way data binding:
 ```html
 <input
     type="email"
-    bind="email"
+    cl-bind="email"
     required
-    validate="email"
+    cl-validate="email"
     error-message="Please enter a valid email">
 
-<span if="errors.email" class="error">
+<span cl-if="errors.email" class="error">
     {{errors.email}}
 </span>
 ```
@@ -643,7 +739,7 @@ Always use semantic elements:
     <icon-x></icon-x>
 </button>
 
-<div role="alert" aria-live="polite" if="notification">
+<div role="alert" aria-live="polite" cl-if="notification">
     {{notification.message}}
 </div>
 ```
@@ -853,7 +949,7 @@ All bridge functions are declared in `plugin.toml` and implemented in `loader.js
     <section class="comments">
         <h2>Comments ({{comments.length}})</h2>
 
-        <div each="comment in comments" class="comment">
+        <div cl-iterate="comment in comments" class="comment">
             <comment-card comment-id="{{comment.id}}"></comment-card>
         </div>
 
