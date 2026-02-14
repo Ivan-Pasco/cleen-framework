@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.1.0"
+version = "2.2.0"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -78,6 +78,43 @@ functions = [
 
   # Validation
   { name = "_ui_validate", params = ["string", "string"], returns = "string", description = "Validate value against rule: value, rule type - returns error or empty", expand_strings = true },
+
+  # Event Handler Context (available during event callbacks)
+  { name = "_ui_event_attr", params = ["string"], returns = "string", description = "Get attribute value from current event target element", expand_strings = true },
+  { name = "_ui_event_value", params = [], returns = "string", description = "Get value/textContent of current event target element" },
+  { name = "_ui_event_closest_attr", params = ["string", "string"], returns = "string", description = "Find closest ancestor matching selector, return its attribute value", expand_strings = true },
+  { name = "_ui_event_type", params = [], returns = "string", description = "Get the type of the current event (click, input, etc.)" },
+
+  # Clipboard
+  { name = "_ui_clipboard_write", params = ["string"], returns = "integer", description = "Write text to clipboard (navigator.clipboard.writeText)", expand_strings = true },
+
+  # URL / Location
+  { name = "_ui_location_href", params = ["string"], returns = "integer", description = "Navigate to URL (window.location.href)", expand_strings = true },
+  { name = "_ui_location_query", params = ["string"], returns = "string", description = "Get URL query parameter value", expand_strings = true },
+  { name = "_ui_location_path", params = [], returns = "string", description = "Get current URL pathname" },
+
+  # DOM Query (single element)
+  { name = "_ui_get_text", params = ["string"], returns = "string", description = "Get textContent of first element matching selector", expand_strings = true },
+  { name = "_ui_get_attr", params = ["string", "string"], returns = "string", description = "Get attribute of first element matching selector", expand_strings = true },
+  { name = "_ui_toggle_class", params = ["string", "string"], returns = "integer", description = "Toggle CSS class on first element matching selector", expand_strings = true },
+  { name = "_ui_add_class", params = ["string", "string"], returns = "integer", description = "Add CSS class to first element matching selector", expand_strings = true },
+  { name = "_ui_remove_class", params = ["string", "string"], returns = "integer", description = "Remove CSS class from first element matching selector", expand_strings = true },
+  { name = "_ui_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set inline style property on first element: selector, property, value", expand_strings = true },
+  { name = "_ui_update_element_self", params = ["string"], returns = "integer", description = "Update textContent of the current event target element", expand_strings = true },
+
+  # DOM Batch (querySelectorAll)
+  { name = "_ui_query_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set style property on ALL elements matching selector", expand_strings = true },
+  { name = "_ui_query_set_attr", params = ["string", "string", "string"], returns = "integer", description = "Set attribute on ALL elements matching selector", expand_strings = true },
+  { name = "_ui_query_add_class", params = ["string", "string"], returns = "integer", description = "Add class to ALL elements matching selector", expand_strings = true },
+  { name = "_ui_query_remove_class", params = ["string", "string"], returns = "integer", description = "Remove class from ALL elements matching selector", expand_strings = true },
+  { name = "_ui_filter_by_attr", params = ["string", "string", "string"], returns = "integer", description = "Show elements where attr matches value, hide others (* for all)", expand_strings = true },
+  { name = "_ui_filter_by_text", params = ["string", "string", "string", "string"], returns = "integer", description = "Filter elements by text search across name and description attributes", expand_strings = true },
+
+  # IntersectionObserver
+  { name = "_ui_observe_visible", params = ["string", "string"], returns = "integer", description = "Add class to elements when they become visible (one-shot)", expand_strings = true },
+
+  # Timers
+  { name = "_ui_set_timeout", params = ["integer", "integer"], returns = "integer", description = "Call handle_event_N after delay ms: handler_idx, delay_ms" },
 ]
 
 [language]

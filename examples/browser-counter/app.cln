@@ -1,5 +1,5 @@
-// Clean Language Dashboard - State & Logic Only
-// HTML is in template.html, loader.js handles rendering
+// Clean Language Counter — Bridge Function Approach
+// Compiles to WASM, runs via loader.js runtime
 
 plugins:
 	frame.ui
@@ -9,145 +9,65 @@ state:
 	integer clicks = 0
 	integer progress = 25
 	boolean darkMode = true
-	string statusMsg = "Welcome to the dashboard!"
-	integer activeTab = 0
-	string userName = ""
-	boolean showGreeting = false
+
+start:
+	integer s = 0
+	s = _ui_on_event(".btn-increment", "click", 0)
+	s = _ui_on_event(".btn-decrement", "click", 1)
+	s = _ui_on_event(".btn-reset", "click", 2)
+	s = _ui_on_event(".btn-prog-up", "click", 3)
+	s = _ui_on_event(".btn-prog-down", "click", 4)
+	s = _ui_on_event(".btn-theme", "click", 5)
 
 functions:
-	// Getters for template binding
-	integer get_count()
-		return count
+	update_display()
+		integer s = 0
+		s = _ui_update_element("#count-value", count.toString())
+		s = _ui_update_element("#clicks-value", clicks.toString())
+		s = _ui_update_element("#progress-label", progress.toString() + "% complete")
+		s = _ui_set_style(".progress-bar", "width", progress.toString() + "%")
 
-	integer get_clicks()
-		return clicks
-
-	integer get_progress()
-		return progress
-
-	boolean get_darkMode()
-		return darkMode
-
-	string get_statusMsg()
-		return statusMsg
-
-	integer get_activeTab()
-		return activeTab
-
-	string get_userName()
-		return userName
-
-	boolean get_showGreeting()
-		return showGreeting
-
-	string get_theme()
-		if darkMode
-			return "dark"
-		return "light"
-
-	string get_countColor()
-		if count < -5
-			return "#dc2626"
-		if count < 0
-			return "#ef4444"
-		if count == 0
-			return "#6b7280"
-		if count <= 5
-			return "#3b82f6"
-		if count <= 15
-			return "#8b5cf6"
-		return "#10b981"
-
-	// Event Handlers
-	handle_event_increment()
+	handle_event_0()
 		count = count + 1
 		clicks = clicks + 1
+		update_display()
 		if count == 10
-			statusMsg = "Nice! You reached 10!"
-		if count == 25
-			statusMsg = "Quarter century! 25!"
+			integer s = _ui_update_element("#status-msg", "Nice! You reached 10!")
 		if count == 50
-			statusMsg = "On fire! 50!"
+			integer s = _ui_update_element("#status-msg", "On fire! 50!")
 		if count == 100
-			statusMsg = "LEGENDARY! 100!"
+			integer s = _ui_update_element("#status-msg", "LEGENDARY! 100!")
 
-	handle_event_decrement()
+	handle_event_1()
 		count = count - 1
 		clicks = clicks + 1
-		if count == -10
-			statusMsg = "Brrr! -10 reached!"
+		update_display()
 
-	handle_event_reset()
+	handle_event_2()
 		count = 0
 		clicks = clicks + 1
-		statusMsg = "Counter reset to zero"
+		update_display()
+		integer s = _ui_update_element("#status-msg", "Counter reset to zero")
 
-	handle_event_progUp()
+	handle_event_3()
 		progress = progress + 10
 		clicks = clicks + 1
 		if progress > 100
 			progress = 100
+		update_display()
 		if progress == 100
-			statusMsg = "Progress complete!"
+			integer s = _ui_update_element("#status-msg", "Progress complete!")
 
-	handle_event_progDown()
+	handle_event_4()
 		progress = progress - 10
 		clicks = clicks + 1
 		if progress < 0
 			progress = 0
+		update_display()
 
-	handle_event_toggleTheme()
+	handle_event_5()
 		darkMode = not darkMode
 		clicks = clicks + 1
-		if darkMode
-			statusMsg = "Dark mode enabled"
-		else
-			statusMsg = "Light mode enabled"
-
-	handle_event_tab0()
-		activeTab = 0
-		clicks = clicks + 1
-
-	handle_event_tab1()
-		activeTab = 1
-		clicks = clicks + 1
-
-	handle_event_tab2()
-		activeTab = 2
-		clicks = clicks + 1
-
-	handle_event_tab3()
-		activeTab = 3
-		clicks = clicks + 1
-
-	handle_event_greet()
-		clicks = clicks + 1
-		if userName.length() > 0
-			showGreeting = true
-			statusMsg = "Hello " + userName + "!"
-		else
-			statusMsg = "Please enter your name"
-			showGreeting = false
-
-	handle_event_moreParticles()
-		clicks = clicks + 1
-
-	handle_event_fewerParticles()
-		clicks = clicks + 1
-
-	handle_event_resetCanvas()
-		clicks = clicks + 1
-
-	// Setters for data binding
-	set_userName(string value)
-		userName = value
-
-start:
-	count = 0
-	clicks = 0
-	progress = 25
-	darkMode = true
-	statusMsg = "Welcome to the dashboard!"
-	activeTab = 0
-	userName = ""
-	showGreeting = false
+		integer s = _ui_toggle_class(".dashboard", "dark")
+		s = _ui_toggle_class(".dashboard", "light")
+		update_display()

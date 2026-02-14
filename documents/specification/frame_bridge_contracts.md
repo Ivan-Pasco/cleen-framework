@@ -736,6 +736,93 @@ Response:
 
 ---
 
+### 11. UI Bridge (frame.ui plugin)
+
+Browser-only bridge functions provided by the `frame.ui` plugin via `loader.js`. All functions use WASM pointer+length format for string parameters.
+
+#### Event Registration
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_on_event` | selector, event_type, handler_idx | integer | Register event handler via document-level delegation |
+
+#### Event Context (available during event handler execution)
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_event_attr` | attr_name | string | Get attribute from current event target |
+| `_ui_event_value` | — | string | Get value (inputs) or textContent (others) of event target |
+| `_ui_event_closest_attr` | selector, attr_name | string | Find closest ancestor matching selector, get its attribute |
+| `_ui_event_type` | — | string | Get event type (click, input, etc.) |
+
+#### DOM Manipulation (single element — querySelector)
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_update_element` | selector, content | integer | Set innerHTML of first matching element |
+| `_ui_update_attr` | selector, attr, value | integer | Set attribute on first matching element |
+| `_ui_get_text` | selector | string | Get textContent of first matching element |
+| `_ui_get_attr` | selector, attr | string | Get attribute of first matching element |
+| `_ui_toggle_class` | selector, class | integer | Toggle CSS class |
+| `_ui_add_class` | selector, class | integer | Add CSS class |
+| `_ui_remove_class` | selector, class | integer | Remove CSS class |
+| `_ui_set_style` | selector, property, value | integer | Set inline style |
+| `_ui_update_element_self` | content | integer | Update current event target's textContent |
+
+#### DOM Batch (querySelectorAll)
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_query_set_style` | selector, property, value | integer | Set style on ALL matching elements |
+| `_ui_query_set_attr` | selector, attr, value | integer | Set attribute on ALL matching elements |
+| `_ui_query_add_class` | selector, class | integer | Add class to ALL matching elements |
+| `_ui_query_remove_class` | selector, class | integer | Remove class from ALL matching elements |
+| `_ui_filter_by_attr` | selector, attr, value | integer | Show elements matching attr value, hide others (`*` for all) |
+| `_ui_filter_by_text` | selector, name_attr, desc_attr, query | integer | Filter by text search across name/description attributes |
+
+#### Browser APIs
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_clipboard_write` | text | integer | Copy text to clipboard |
+| `_ui_location_href` | url | integer | Navigate to URL |
+| `_ui_location_query` | param | string | Get URL query parameter |
+| `_ui_location_path` | — | string | Get current pathname |
+| `_ui_observe_visible` | selector, class | integer | Add class when elements scroll into view (one-shot) |
+| `_ui_set_timeout` | handler_idx, delay_ms | integer | Call `handle_event_N` after delay |
+
+#### HTML Rendering
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_html_escape` | string | string | Escape HTML entities in string |
+| `_html_raw` | string | string | Return raw HTML without escaping |
+
+#### Component Registry
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_register_component` | tag, class | integer | Register component by tag name |
+| `_ui_get_component` | tag | string | Get component class by tag name |
+| `_ui_set_slot` | name, content | integer | Set slot content |
+| `_ui_get_slot` | name | string | Get slot content |
+
+#### State Management
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_set_state` | id, json | integer | Set component state as JSON |
+| `_ui_get_state` | id | string | Get component state JSON |
+
+#### Form Binding & Validation
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_bind_input` | selector, path | integer | Bind input to state path |
+| `_ui_validate` | value, rule | string | Validate value against rule (required, email, url) |
+
+---
+
 ## Error Codes
 
 | Code | Meaning |

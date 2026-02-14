@@ -760,22 +760,42 @@ server:
 
 ### 14.2 Loader Script
 
-A minimal `loader.js` hydrates islands based on strategy:
+The `loader.js` runtime is the single browser runtime for all Frame UI applications. It loads WASM, calls `_start()`, and provides bridge functions for event handling and DOM manipulation.
 
-```javascript
-// Auto-generated, ~2KB
-const manifest = await fetch('/manifest.islands.json').then(r => r.json());
-
-// Hydrate based on strategy
-document.querySelectorAll('[data-hydrate]').forEach(el => {
-    const strategy = el.dataset.hydrate;
-    const component = el.tagName.toLowerCase();
-
-    if (strategy === 'on') hydrateNow(el, component);
-    if (strategy === 'visible') observeVisible(el, component);
-    if (strategy === 'idle') requestIdleCallback(() => hydrateNow(el, component));
-});
+```html
+<script src="loader.js" data-wasm="frontend.wasm"></script>
 ```
+
+**Lifecycle:**
+
+1. Loads and instantiates the WASM module with all bridge function imports
+2. Calls `_start()` — the WASM module registers event handlers via `_ui_on_event`
+3. Events are dispatched via document-level delegation using CSS selectors
+4. Handlers make targeted DOM updates via bridge functions (`_ui_update_element`, `_ui_toggle_class`, etc.)
+
+**Client-side code pattern:**
+
+```clean
+start:
+    integer s = 0
+    s = _ui_on_event(".btn-save", "click", 0)
+    s = _ui_on_event(".search-input", "input", 1)
+
+functions:
+    handle_event_0()
+        string value = _ui_event_value()
+        integer s = _ui_update_element("#status", "Saved!")
+        s = _ui_set_timeout(2, 2000)
+
+    handle_event_1()
+        string query = _ui_event_value()
+        integer s = _ui_filter_by_text(".card", "data-name", "data-desc", query)
+
+    handle_event_2()
+        integer s = _ui_update_element("#status", "")
+```
+
+All bridge functions are declared in `plugin.toml` and implemented in `loader.js`. See the Bridge Contracts specification for the complete function reference.
 
 ---
 

@@ -18,7 +18,7 @@ test_component_with_hydration()
 	body = "render()\n\treturn \"<div></div>\""
 	result = expand_block("component", "{\"name\": \"Widget\", \"client\": \"visible\"}", body)
 	assert(result.contains("_hydration_mode = \"visible\""))
-	assert(result.contains("data-hydrate"))
+	assert(result.contains("class Widget"))
 
 test_layout_expansion()
 	result = expand_block("layout", "{\"name\": \"MainLayout\"}", "return \"<html>\" + _slot() + \"</html>\"")

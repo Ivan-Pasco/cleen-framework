@@ -1,773 +1,305 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clean Language Dashboard</title>
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary: #8b5cf6;
-            --accent: #06b6d4;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --bg-light: #f8fafc;
-            --bg-dark: #0f172a;
-            --card-light: #ffffff;
-            --card-dark: #1e293b;
-            --text-light: #1e293b;
-            --text-dark: #f1f5f9;
-            --border-light: #e2e8f0;
-            --border-dark: #334155;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            min-height: 100vh;
-            transition: all 0.3s ease;
-        }
-
-        /* Theme Styles */
-        .dashboard.light {
-            background: linear-gradient(135deg, var(--bg-light) 0%, #e0e7ff 100%);
-            color: var(--text-light);
-        }
-
-        .dashboard.dark {
-            background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a2e 100%);
-            color: var(--text-dark);
-        }
-
-        .dashboard {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* Navbar */
-        .navbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 2rem;
-            backdrop-filter: blur(10px);
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .light .navbar {
-            background: rgba(255,255,255,0.8);
-            border-color: var(--border-light);
-        }
-
-        .dark .navbar {
-            background: rgba(30,41,59,0.8);
-            border-color: var(--border-dark);
-        }
-
-        .nav-brand {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-size: 1.5rem;
-            font-weight: 700;
-        }
-
-        .brand-icon {
-            font-size: 2rem;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .nav-btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
-            transition: all 0.2s ease;
-        }
-
-        .light .nav-btn {
-            background: var(--primary);
-            color: white;
-        }
-
-        .dark .nav-btn {
-            background: var(--secondary);
-            color: white;
-        }
-
-        .nav-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99,102,241,0.4);
-        }
-
-        /* Main Content */
-        .main-content {
-            flex: 1;
-            padding: 2rem;
-            max-width: 1200px;
-            margin: 0 auto;
-            width: 100%;
-        }
-
-        /* Stats Row */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
-        }
-
-        .stat-card {
-            border-radius: 16px;
-            padding: 1.5rem;
-            transition: all 0.3s ease;
-        }
-
-        .light .stat-card {
-            background: var(--card-light);
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
-        }
-
-        .dark .stat-card {
-            background: var(--card-dark);
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
-        }
-
-        .stat-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
-        }
-
-        .card-header {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-            opacity: 0.7;
-        }
-
-        .card-icon {
-            font-size: 1.2rem;
-        }
-
-        .counter-value {
-            font-size: 4rem;
-            font-weight: 800;
-            text-align: center;
-            line-height: 1;
-            margin: 1rem 0;
-            transition: color 0.3s ease;
-        }
-
-        .counter-controls {
-            display: flex;
-            justify-content: center;
-            gap: 0.75rem;
-        }
-
-        .ctrl-btn {
-            width: 48px;
-            height: 48px;
-            border: none;
-            border-radius: 12px;
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .ctrl-btn.minus {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
-        }
-
-        .ctrl-btn.reset {
-            background: linear-gradient(135deg, #6b7280, #4b5563);
-            color: white;
-        }
-
-        .ctrl-btn.plus {
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-        }
-
-        .ctrl-btn:hover {
-            transform: scale(1.1);
-        }
-
-        .ctrl-btn:active {
-            transform: scale(0.95);
-        }
-
-        .stat-value {
-            font-size: 3rem;
-            font-weight: 700;
-            text-align: center;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .stat-label {
-            text-align: center;
-            opacity: 0.6;
-            font-size: 0.9rem;
-        }
-
-        /* Progress Bar */
-        .progress-container {
-            height: 12px;
-            background: rgba(0,0,0,0.1);
-            border-radius: 6px;
-            overflow: hidden;
-            margin: 1rem 0;
-        }
-
-        .dark .progress-container {
-            background: rgba(255,255,255,0.1);
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary), var(--accent), var(--success));
-            border-radius: 6px;
-            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .progress-label {
-            text-align: center;
-            font-size: 0.9rem;
-            opacity: 0.7;
-        }
-
-        .progress-controls {
-            display: flex;
-            justify-content: center;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-
-        .sm-btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.2s ease;
-        }
-
-        .light .sm-btn {
-            background: #e2e8f0;
-            color: var(--text-light);
-        }
-
-        .dark .sm-btn {
-            background: #334155;
-            color: var(--text-dark);
-        }
-
-        .sm-btn:hover {
-            transform: scale(1.05);
-        }
-
-        /* Tabs Section */
-        .tabs-section {
-            border-radius: 16px;
-            overflow: hidden;
-        }
-
-        .light .tabs-section {
-            background: var(--card-light);
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-        }
-
-        .dark .tabs-section {
-            background: var(--card-dark);
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);
-        }
-
-        .tabs-header {
-            display: flex;
-            border-bottom: 1px solid;
-        }
-
-        .light .tabs-header {
-            border-color: var(--border-light);
-        }
-
-        .dark .tabs-header {
-            border-color: var(--border-dark);
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 1rem;
-            border: none;
-            background: transparent;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 500;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-
-        .light .tab-btn {
-            color: var(--text-light);
-        }
-
-        .dark .tab-btn {
-            color: var(--text-dark);
-        }
-
-        .tab-btn:hover {
-            background: rgba(99,102,241,0.1);
-        }
-
-        .tab-btn.active {
-            color: var(--primary);
-        }
-
-        .tab-btn.active::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--primary), var(--secondary));
-        }
-
-        .tab-content {
-            padding: 2rem;
-            min-height: 300px;
-        }
-
-        /* Form Panel */
-        .form-panel h3, .settings-panel h3, .about-panel h3, .success-panel h3 {
-            margin-bottom: 1.5rem;
-            font-size: 1.25rem;
-        }
-
-        .input-group {
-            margin-bottom: 1.25rem;
-        }
-
-        .input-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            font-size: 0.9rem;
-        }
-
-        .input-group input,
-        .input-group textarea {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: 2px solid;
-            border-radius: 10px;
-            font-size: 1rem;
-            transition: all 0.2s ease;
-        }
-
-        .light .input-group input,
-        .light .input-group textarea {
-            background: var(--bg-light);
-            border-color: var(--border-light);
-            color: var(--text-light);
-        }
-
-        .dark .input-group input,
-        .dark .input-group textarea {
-            background: var(--bg-dark);
-            border-color: var(--border-dark);
-            color: var(--text-dark);
-        }
-
-        .input-group input:focus,
-        .input-group textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
-        }
-
-        .input-group textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        .action-btn {
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: 10px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .action-btn.primary {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            color: white;
-        }
-
-        .action-btn.secondary {
-            background: linear-gradient(135deg, #6b7280, #4b5563);
-            color: white;
-        }
-
-        .action-btn.danger {
-            background: linear-gradient(135deg, var(--danger), #dc2626);
-            color: white;
-        }
-
-        .action-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-
-        /* Settings Panel */
-        .setting-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1rem 0;
-            border-bottom: 1px solid;
-        }
-
-        .light .setting-item {
-            border-color: var(--border-light);
-        }
-
-        .dark .setting-item {
-            border-color: var(--border-dark);
-        }
-
-        .toggle-btn {
-            padding: 0.5rem 1.25rem;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.2s ease;
-        }
-
-        .light .toggle-btn {
-            background: #e2e8f0;
-            color: var(--text-light);
-        }
-
-        .dark .toggle-btn {
-            background: #334155;
-            color: var(--text-dark);
-        }
-
-        .toggle-btn.active {
-            background: linear-gradient(135deg, var(--success), #059669);
-            color: white;
-        }
-
-        /* Success Panel */
-        .success-panel {
-            text-align: center;
-        }
-
-        .success-icon {
-            font-size: 4rem;
-            color: var(--success);
-            margin-bottom: 1rem;
-        }
-
-        .sender-name {
-            opacity: 0.7;
-            margin-bottom: 1rem;
-        }
-
-        .message-bubble {
-            padding: 1rem 1.5rem;
-            border-radius: 16px;
-            margin: 1rem auto;
-            max-width: 400px;
-            font-style: italic;
-        }
-
-        .light .message-bubble {
-            background: #e0e7ff;
-        }
-
-        .dark .message-bubble {
-            background: #1e1b4b;
-        }
-
-        /* About Panel */
-        .about-panel p {
-            margin-bottom: 1.5rem;
-            line-height: 1.6;
-        }
-
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-        }
-
-        .feature-item {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 1rem;
-            border-radius: 10px;
-            transition: all 0.2s ease;
-        }
-
-        .light .feature-item {
-            background: var(--bg-light);
-        }
-
-        .dark .feature-item {
-            background: rgba(255,255,255,0.05);
-        }
-
-        .feature-item:hover {
-            transform: translateX(4px);
-        }
-
-        .feature-icon {
-            font-size: 1.5rem;
-        }
-
-        /* Status Bar */
-        .status-bar {
-            position: fixed;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 0.75rem 1.5rem;
-            border-radius: 30px;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            backdrop-filter: blur(10px);
-            z-index: 100;
-        }
-
-        .light .status-bar {
-            background: rgba(99,102,241,0.9);
-            color: white;
-        }
-
-        .dark .status-bar {
-            background: rgba(139,92,246,0.9);
-            color: white;
-        }
-
-        /* Status Panel */
-        .status-panel {
-            text-align: center;
-            padding: 2rem;
-        }
-
-        .status-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            display: block;
-        }
-
-        .status-message {
-            font-size: 1.25rem;
-            margin-bottom: 1.5rem;
-            line-height: 1.6;
-        }
-
-        .milestone-info {
-            opacity: 0.6;
-            font-size: 0.9rem;
-        }
-
-        /* Greeting Box */
-        .greeting-box {
-            margin-top: 1.5rem;
-            padding: 1.5rem;
-            border-radius: 12px;
-            text-align: center;
-        }
-
-        .light .greeting-box {
-            background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-        }
-
-        .dark .greeting-box {
-            background: linear-gradient(135deg, #1e1b4b, #312e81);
-        }
-
-        .greeting-box p {
-            font-size: 1.1rem;
-        }
-
-        .greeting-box strong {
-            color: var(--primary);
-        }
-
-        .form-tab {
-            padding: 0;
-        }
-
-        /* Nav Actions */
-        .nav-actions {
-            display: flex;
-            gap: 0.5rem;
-        }
-
-        /* Canvas Panel */
-        .canvas-panel {
-            text-align: center;
-        }
-
-        .canvas-panel h3 {
-            margin-bottom: 0.5rem;
-        }
-
-        .canvas-panel p {
-            opacity: 0.7;
-            margin-bottom: 1rem;
-            font-size: 0.9rem;
-        }
-
-        .canvas-panel canvas {
-            border-radius: 12px;
-            width: 100%;
-            max-width: 600px;
-            height: 300px;
-        }
-
-        .light .canvas-panel canvas {
-            background: linear-gradient(135deg, #1e293b, #0f172a);
-        }
-
-        .dark .canvas-panel canvas {
-            background: linear-gradient(135deg, #1e1b4b, #0f172a);
-        }
-
-        .canvas-controls {
-            margin-top: 1rem;
-            display: flex;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            padding: 1.5rem;
-            opacity: 0.6;
-            font-size: 0.9rem;
-        }
-
-        .heart {
-            color: var(--danger);
-            animation: heartbeat 1.5s ease infinite;
-        }
-
-        /* Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        @keyframes slideDown {
-            from { transform: translateY(-20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
-
-        @keyframes scaleIn {
-            from { transform: scale(0.95); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        @keyframes bounceIn {
-            0% { transform: scale(0.3); opacity: 0; }
-            50% { transform: scale(1.05); }
-            70% { transform: scale(0.9); }
-            100% { transform: scale(1); opacity: 1; }
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.02); }
-        }
-
-        @keyframes heartbeat {
-            0%, 100% { transform: scale(1); }
-            25% { transform: scale(1.1); }
-            50% { transform: scale(1); }
-            75% { transform: scale(1.1); }
-        }
-
-        .animate-fade-in { animation: fadeIn 0.5s ease-out; }
-        .animate-slide-down { animation: slideDown 0.5s ease-out; }
-        .animate-slide-up { animation: slideUp 0.5s ease-out; }
-        .animate-scale-in { animation: scaleIn 0.4s ease-out; }
-        .animate-bounce-in { animation: bounceIn 0.6s ease-out; }
-        .animate-pulse { animation: pulse 2s ease-in-out infinite; }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .main-content {
-                padding: 1rem;
-            }
-
-            .navbar {
-                padding: 1rem;
-            }
-
-            .nav-brand {
-                font-size: 1.25rem;
-            }
-
-            .counter-value {
-                font-size: 3rem;
-            }
-
-            .stats-row {
-                grid-template-columns: 1fr;
-            }
-
-            .feature-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Clean Language Counter</title>
+	<style>
+		:root {
+			--primary: #6366f1;
+			--secondary: #8b5cf6;
+			--accent: #06b6d4;
+			--success: #10b981;
+			--danger: #ef4444;
+		}
+
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+
+		body {
+			font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+			min-height: 100vh;
+		}
+
+		.dashboard {
+			min-height: 100vh;
+			display: flex;
+			flex-direction: column;
+			transition: all 0.3s ease;
+		}
+
+		.dashboard.dark {
+			background: linear-gradient(135deg, #0f172a 0%, #1a1a2e 100%);
+			color: #f1f5f9;
+		}
+
+		.dashboard.light {
+			background: linear-gradient(135deg, #f8fafc 0%, #e0e7ff 100%);
+			color: #1e293b;
+		}
+
+		.navbar {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 1rem 2rem;
+			backdrop-filter: blur(10px);
+		}
+
+		.dark .navbar { background: rgba(30,41,59,0.8); }
+		.light .navbar { background: rgba(255,255,255,0.8); }
+
+		.nav-brand {
+			display: flex;
+			align-items: center;
+			gap: 0.75rem;
+			font-size: 1.5rem;
+			font-weight: 700;
+		}
+
+		.brand-icon {
+			font-size: 2rem;
+			background: linear-gradient(135deg, var(--primary), var(--secondary));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+		}
+
+		.btn-theme {
+			padding: 0.5rem 1rem;
+			border: none;
+			border-radius: 8px;
+			cursor: pointer;
+			font-size: 0.9rem;
+			font-weight: 500;
+			background: var(--secondary);
+			color: white;
+			transition: all 0.2s ease;
+		}
+
+		.btn-theme:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+		}
+
+		.main-content {
+			flex: 1;
+			padding: 2rem;
+			max-width: 1200px;
+			margin: 0 auto;
+			width: 100%;
+		}
+
+		.stats-row {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+			gap: 1.5rem;
+			margin-bottom: 2rem;
+		}
+
+		.stat-card {
+			border-radius: 16px;
+			padding: 1.5rem;
+			transition: all 0.3s ease;
+		}
+
+		.dark .stat-card { background: #1e293b; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+		.light .stat-card { background: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+
+		.stat-card:hover {
+			transform: translateY(-4px);
+			box-shadow: 0 20px 25px rgba(0,0,0,0.15);
+		}
+
+		.card-header {
+			display: flex;
+			align-items: center;
+			gap: 0.5rem;
+			margin-bottom: 1rem;
+			font-size: 0.9rem;
+			opacity: 0.7;
+		}
+
+		.card-icon { font-size: 1.2rem; }
+
+		.counter-value {
+			font-size: 4rem;
+			font-weight: 800;
+			text-align: center;
+			line-height: 1;
+			margin: 1rem 0;
+			background: linear-gradient(135deg, var(--primary), var(--secondary));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+		}
+
+		.counter-controls {
+			display: flex;
+			justify-content: center;
+			gap: 0.75rem;
+		}
+
+		.ctrl-btn {
+			width: 48px;
+			height: 48px;
+			border: none;
+			border-radius: 12px;
+			font-size: 1.5rem;
+			cursor: pointer;
+			transition: all 0.2s ease;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			color: white;
+		}
+
+		.btn-decrement { background: linear-gradient(135deg, #ef4444, #dc2626); }
+		.btn-reset { background: linear-gradient(135deg, #6b7280, #4b5563); }
+		.btn-increment { background: linear-gradient(135deg, #10b981, #059669); }
+		.ctrl-btn:hover { transform: scale(1.1); }
+		.ctrl-btn:active { transform: scale(0.95); }
+
+		.stat-value {
+			font-size: 3rem;
+			font-weight: 700;
+			text-align: center;
+			background: linear-gradient(135deg, var(--primary), var(--secondary));
+			-webkit-background-clip: text;
+			-webkit-text-fill-color: transparent;
+			background-clip: text;
+		}
+
+		.stat-label { text-align: center; opacity: 0.6; font-size: 0.9rem; }
+
+		.progress-container {
+			height: 12px;
+			border-radius: 6px;
+			overflow: hidden;
+			margin: 1rem 0;
+		}
+
+		.dark .progress-container { background: rgba(255,255,255,0.1); }
+		.light .progress-container { background: rgba(0,0,0,0.1); }
+
+		.progress-bar {
+			height: 100%;
+			width: 25%;
+			background: linear-gradient(90deg, var(--primary), var(--accent), var(--success));
+			border-radius: 6px;
+			transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+		}
+
+		.progress-label { text-align: center; font-size: 0.9rem; opacity: 0.7; }
+
+		.progress-controls {
+			display: flex;
+			justify-content: center;
+			gap: 0.5rem;
+			margin-top: 1rem;
+		}
+
+		.sm-btn {
+			padding: 0.5rem 1rem;
+			border: none;
+			border-radius: 8px;
+			cursor: pointer;
+			font-weight: 600;
+			transition: all 0.2s ease;
+		}
+
+		.dark .sm-btn { background: #334155; color: #f1f5f9; }
+		.light .sm-btn { background: #e2e8f0; color: #1e293b; }
+		.sm-btn:hover { transform: scale(1.05); }
+
+		.status-section {
+			border-radius: 16px;
+			padding: 2rem;
+			text-align: center;
+		}
+
+		.dark .status-section { background: #1e293b; }
+		.light .status-section { background: #ffffff; }
+
+		.status-icon { font-size: 3rem; margin-bottom: 1rem; display: block; }
+		#status-msg { font-size: 1.25rem; line-height: 1.6; }
+
+		.footer {
+			text-align: center;
+			padding: 1.5rem;
+			opacity: 0.6;
+			font-size: 0.9rem;
+		}
+
+		@media (max-width: 768px) {
+			.main-content { padding: 1rem; }
+			.navbar { padding: 1rem; }
+			.counter-value { font-size: 3rem; }
+			.stats-row { grid-template-columns: 1fr; }
+		}
+	</style>
 </head>
 <body>
-    <div id="app">
-        <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:linear-gradient(135deg,#0f172a,#1a1a2e);">
-            <div style="text-align:center;color:#f1f5f9;">
-                <div style="font-size:3rem;margin-bottom:1rem;">&#9881;</div>
-                <p>Loading Clean Language Dashboard...</p>
-            </div>
-        </div>
-    </div>
-    <script src="loader.js" data-wasm="app.wasm"></script>
+	<div id="app">
+		<div class="dashboard dark">
+			<nav class="navbar">
+				<div class="nav-brand">
+					<span class="brand-icon">&#9670;</span>
+					<span>Clean Counter</span>
+				</div>
+				<button class="btn-theme">Toggle Theme</button>
+			</nav>
+
+			<main class="main-content">
+				<section class="stats-row">
+					<div class="stat-card">
+						<div class="card-header">
+							<span class="card-icon">&#9733;</span>
+							<span class="card-title">Counter</span>
+						</div>
+						<div class="counter-value" id="count-value">0</div>
+						<div class="counter-controls">
+							<button class="ctrl-btn btn-decrement">&#8722;</button>
+							<button class="ctrl-btn btn-reset">&#8634;</button>
+							<button class="ctrl-btn btn-increment">+</button>
+						</div>
+					</div>
+
+					<div class="stat-card">
+						<div class="card-header">
+							<span class="card-icon">&#9757;</span>
+							<span class="card-title">Total Clicks</span>
+						</div>
+						<div class="stat-value" id="clicks-value">0</div>
+						<div class="stat-label">interactions</div>
+					</div>
+
+					<div class="stat-card">
+						<div class="card-header">
+							<span class="card-icon">&#9881;</span>
+							<span class="card-title">Progress</span>
+						</div>
+						<div class="progress-container">
+							<div class="progress-bar"></div>
+						</div>
+						<div class="progress-label" id="progress-label">25% complete</div>
+						<div class="progress-controls">
+							<button class="sm-btn btn-prog-down">-10</button>
+							<button class="sm-btn btn-prog-up">+10</button>
+						</div>
+					</div>
+				</section>
+
+				<section class="status-section">
+					<span class="status-icon">&#9432;</span>
+					<p id="status-msg">Welcome to the dashboard!</p>
+				</section>
+			</main>
+
+			<footer class="footer">
+				<p>Built with Clean Language &bull; WebAssembly</p>
+			</footer>
+		</div>
+	</div>
+	<script src="loader.js" data-wasm="app.wasm"></script>
 </body>
 </html>

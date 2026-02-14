@@ -542,19 +542,13 @@ functions:
 			result = result + props_code
 
 		// Generate island wrapper
-		result = result + "\thtml = html + \"<div data-screen=\\\"" + screen_name + "\\\" data-client=\\\"" + client + "\\\">\"\n"
+		result = result + "\thtml = html + \"<div id=\\\"screen-" + screen_name + "\\\">\"\n"
 
 		// Call screen render
 		result = result + "\thtml = html + _screen.render()\n"
 
 		// Close wrapper
 		result = result + "\thtml = html + \"</div>\"\n"
-
-		// Inject hydration data if client mode is enabled
-		if client != "off"
-			result = result + "\thtml = html + \"<script type=\\\"application/json\\\" data-hydration=\\\"" + screen_name + "\\\">\"\n"
-			result = result + "\thtml = html + _screen.getHydrationData()\n"
-			result = result + "\thtml = html + \"</script>\"\n"
 
 		result = result + "}\n"
 
@@ -659,13 +653,8 @@ functions:
 			result = result + "\t" + html_to_render(inner_html, registry_json).replace("html = html +", "_slot = _slot +")
 			result = result + "\t_comp.setSlot(_slot)\n"
 
-		// Render with hydration wrapper
-		if client == "off"
-			result = result + "\thtml = html + _comp.render()\n"
-		else
-			result = result + "\thtml = html + \"<div data-component=\\\"" + tag_name + "\\\" data-hydrate=\\\"" + client + "\\\">\"\n"
-			result = result + "\thtml = html + _comp.render()\n"
-			result = result + "\thtml = html + \"</div>\"\n"
+		// Render component directly
+		result = result + "\thtml = html + _comp.render()\n"
 
 		result = result + "}\n"
 
@@ -973,7 +962,7 @@ functions:
 	// Generate runtime injection code
 	string generate_runtime_injection()
 		string result = ""
-		result = result + "html = html + \"<script src=\\\"/clean-runtime.js\\\"></script>\"\n"
+		result = result + "html = html + \"<script src=\\\"/loader.js\\\" data-wasm=\\\"/frontend.wasm\\\"></script>\"\n"
 		return result
 
 	// Expand component block (Clean syntax for component definitions)
@@ -1007,11 +996,7 @@ functions:
 
 		// Add SSR render wrapper
 		result = result + "\n\t\tstring renderSSR()\n"
-		result = result + "\t\t\tstring html = this.render()\n"
-		if client != "off"
-			result = result + "\t\t\treturn \"<div data-component=\\\"" + tag + "\\\" data-hydrate=\\\"\" + this._hydration_mode + \"\\\">\" + html + \"</div>\"\n"
-		else
-			result = result + "\t\t\treturn html\n"
+		result = result + "\t\t\treturn this.render()\n"
 
 		return result
 
@@ -1356,10 +1341,13 @@ functions:
 		// Generate module-level render function that exports the screen's render
 		result = result + "\n// Module-level screen instance\n"
 		result = result + "__Screen_" + name + " __screen_instance\n\n"
-		result = result + "// Exported render function for browser runtime\n"
 		result = result + "functions:\n"
 		result = result + "\tstring render()\n"
-		result = result + "\t\treturn __screen_instance.render()\n"
+		result = result + "\t\treturn __screen_instance.render()\n\n"
+
+		// Generate start() and handle_event_N() for client-side
+		string client_code = generate_client_handlers(name, state_json, render_content)
+		result = result + client_code
 
 		return result
 
@@ -1889,54 +1877,112 @@ functions:
 	string generate_hydration_function(string name, string state_json, string render_content)
 		return generate_hydration_function_full(name, state_json, render_content, "", "", "")
 
-	// Generate hydration function with lifecycle hooks
-	string generate_hydration_function_full(string name, string state_json, string render_content, string on_mount, string on_unmount, string on_update)
-		string result = "\t\t\tstring getHydrationData()\n"
-		result = result + "\t\t\t\tstring json = \"{\"\n"
-
-		// Serialize state
-		result = result + "\t\t\t\tjson = json + \"\\\"state\\\":{\"\n"
-
-		list<string> state_vars = json_to_object_list(state_json)
-		integer i = 0
-		while i < state_vars.length()
-			string var_json = state_vars[i]
-			string var_name = extract_json_field(var_json, "name")
-			string var_type = extract_json_field(var_json, "type")
-
-			if i > 0
-				result = result + "\t\t\t\tjson = json + \",\"\n"
-
-			string clean_type = map_ui_type(var_type)
-			if clean_type == "string"
-				result = result + "\t\t\t\tjson = json + \"\\\"" + var_name + "\\\":\\\"\" + " + var_name + " + \"\\\"\"\n"
-			else
-				result = result + "\t\t\t\tjson = json + \"\\\"" + var_name + "\\\":\" + " + var_name + ".toString()\n"
-
-			i = i + 1
-
-		result = result + "\t\t\t\tjson = json + \"}\"\n"
-
-		// Generate events array from render content
-		// Handle both JSON array format and plain string (single line)
+	// Generate client-side handler functions (start() and handle_event_N())
+	string generate_client_handlers(string name, string state_json, string render_content)
+		// Parse render content lines
 		list<string> lines = []
 		if render_content.startsWith("[")
 			lines = json_to_string_list(render_content)
 		else
 			lines = split_lines(render_content)
 
-		string events_json = extract_events_from_render(lines)
-		result = result + "\t\t\t\tjson = json + \",\\\"events\\\":\" + \"" + events_json + "\"\n"
+		// Scan for events and collect them
+		list<string> event_data = collect_event_data(lines)
 
-		// Add lifecycle hooks
-		result = result + "\t\t\t\tjson = json + \",\\\"lifecycle\\\":{\"\n"
-		result = result + "\t\t\t\tjson = json + \"\\\"onMount\\\":\\\"" + escape_json_string(on_mount) + "\\\"\"\n"
-		result = result + "\t\t\t\tjson = json + \",\\\"onUnmount\\\":\\\"" + escape_json_string(on_unmount) + "\\\"\"\n"
-		result = result + "\t\t\t\tjson = json + \",\\\"onUpdate\\\":\\\"" + escape_json_string(on_update) + "\\\"\"\n"
-		result = result + "\t\t\t\tjson = json + \"}\"\n"
+		// Generate start() function with event registrations
+		string start_code = generate_start_function(event_data)
 
-		result = result + "\t\t\t\tjson = json + \"}\"\n"
-		result = result + "\t\t\t\treturn json\n\n"
+		// Generate handle_event_N() functions
+		string handler_code = generate_event_handlers(name, event_data)
+
+		return start_code + handler_code
+
+	// Collect event data from render lines
+	list<string> collect_event_data(list<string> lines)
+		list<string> events = []
+		integer event_counter = 0
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+
+			if is_widget_line(line)
+				string widget_name = get_widget_name(line)
+				boolean has_children = widget_has_children(line)
+
+				if has_children
+					// Look for event handlers in the next lines
+					integer child_indent = get_indent_level(line)
+					integer j = i + 1
+					while j < lines.length()
+						string child_line = lines[j]
+						if child_line.trim().length() == 0
+							j = j + 1
+						else
+							integer child_level = get_indent_level(child_line)
+							if child_level > child_indent
+								// Check for event handler
+								string event_type = detect_event_handler(child_line)
+								if event_type != ""
+									// Found an event handler - extract the action
+									string action = extract_event_action(lines, j + 1, child_level)
+
+									// Create event data entry: "evt-N|event_type|action"
+									string event_entry = "evt-" + event_counter.toString() + "|" + event_type + "|" + action
+									events = events.append(event_entry)
+
+								j = j + 1
+							else
+								break
+
+				event_counter = event_counter + 1
+
+			i = i + 1
+
+		return events
+
+	// Generate start() function that registers all events
+	string generate_start_function(list<string> events)
+		string result = "\tstart()\n"
+
+		integer i = 0
+		while i < events.length()
+			string event_entry = events[i]
+
+			// Parse event entry: "evt-N|event_type|action"
+			integer pipe1 = event_entry.indexOf("|")
+			if pipe1 > 0
+				string selector = "." + event_entry.substring(0, pipe1)
+				integer pipe2 = event_entry.indexOf("|", pipe1 + 1)
+				if pipe2 > pipe1
+					string event_type = event_entry.substring(pipe1 + 1, pipe2)
+					result = result + "\t\tinteger s = _ui_on_event(\"" + selector + "\", \"" + event_type + "\", " + i.toString() + ")\n"
+
+			i = i + 1
+
+		return result + "\n"
+
+	// Generate handle_event_N() functions
+	string generate_event_handlers(string name, list<string> events)
+		string result = ""
+
+		integer i = 0
+		while i < events.length()
+			string event_entry = events[i]
+
+			// Parse event entry: "evt-N|event_type|action"
+			integer pipe1 = event_entry.indexOf("|")
+			if pipe1 > 0
+				integer pipe2 = event_entry.indexOf("|", pipe1 + 1)
+				if pipe2 > pipe1
+					string action = event_entry.substring(pipe2 + 1)
+
+					result = result + "\thandle_event_" + i.toString() + "()\n"
+					result = result + "\t\t// Event action: " + action + "\n"
+					result = result + "\t\t__screen_instance." + action + "\n"
+					result = result + "\t\tinteger s = _ui_update_element(\"#screen-" + name + "\", __screen_instance.render())\n\n"
+
+			i = i + 1
 
 		return result
 
@@ -2607,8 +2653,7 @@ functions:
 				code = code + "\t\t\thtml = html + \"</span>\"\n"
 		else if widget_name == "button"
 			// Button widget - may have onClick
-			string event_id = "evt-" + event_counter.toString()
-			code = code + "\t\t\thtml = html + \"<button class=\\\"" + html_class + "\\\" data-event-id=\\\"" + event_id + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<button class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
 			if html_style != ""
 				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
@@ -2622,8 +2667,7 @@ functions:
 			event_counter = event_counter + 1
 		else if widget_name == "textField"
 			// Text input field
-			string event_id = "evt-" + event_counter.toString()
-			code = code + "\t\t\thtml = html + \"<input type=\\\"text\\\" class=\\\"" + html_class + "\\\" data-event-id=\\\"" + event_id + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<input type=\\\"text\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
 			if html_style != ""
 				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
 
@@ -2631,7 +2675,6 @@ functions:
 			string bind_var = get_prop_value(props, "bind")
 			if bind_var != ""
 				code = code + "\t\t\thtml = html + \" value=\\\"\" + html.escape(" + bind_var + ") + \"\\\"\"\n"
-				code = code + "\t\t\thtml = html + \" data-bind=\\\"" + bind_var + "\\\"\"\n"
 
 			// Check for placeholder
 			string placeholder = get_prop_value(props, "placeholder")
@@ -2642,16 +2685,14 @@ functions:
 			event_counter = event_counter + 1
 		else if widget_name == "checkbox"
 			// Checkbox input
-			string event_id = "evt-" + event_counter.toString()
 			code = code + "\t\t\thtml = html + \"<label class=\\\"" + html_class + "-wrapper\\\">\"\n"
-			code = code + "\t\t\thtml = html + \"<input type=\\\"checkbox\\\" class=\\\"" + html_class + "\\\" data-event-id=\\\"" + event_id + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<input type=\\\"checkbox\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
 
 			// Check for bind prop
 			string bind_var = get_prop_value(props, "bind")
 			if bind_var != ""
 				code = code + "\t\t\tif " + bind_var + "\n"
 				code = code + "\t\t\t\thtml = html + \" checked\"\n"
-				code = code + "\t\t\thtml = html + \" data-bind=\\\"" + bind_var + "\\\"\"\n"
 
 			code = code + "\t\t\thtml = html + \"/>\"\n"
 
@@ -2664,13 +2705,12 @@ functions:
 			event_counter = event_counter + 1
 		else if widget_name == "radio"
 			// Radio input (should be inside radioGroup)
-			string event_id = "evt-" + event_counter.toString()
 			string radio_value = get_prop_value(props, "value")
 			string label_text = get_prop_value(props, "label")
 			string name_attr = get_prop_value(props, "name")
 
 			code = code + "\t\t\thtml = html + \"<label class=\\\"" + html_class + "-wrapper\\\">\"\n"
-			code = code + "\t\t\thtml = html + \"<input type=\\\"radio\\\" class=\\\"" + html_class + "\\\" data-event-id=\\\"" + event_id + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<input type=\\\"radio\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
 
 			if name_attr != ""
 				code = code + "\t\t\thtml = html + \" name=\\\"" + name_attr + "\\\"\"\n"
@@ -2686,15 +2726,9 @@ functions:
 			event_counter = event_counter + 1
 		else if widget_name == "select"
 			// Select dropdown
-			string event_id = "evt-" + event_counter.toString()
-			code = code + "\t\t\thtml = html + \"<select class=\\\"" + html_class + "\\\" data-event-id=\\\"" + event_id + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<select class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
 			if html_style != ""
 				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
-
-			// Check for bind prop
-			string bind_var = get_prop_value(props, "bind")
-			if bind_var != ""
-				code = code + "\t\t\thtml = html + \" data-bind=\\\"" + bind_var + "\\\"\"\n"
 
 			code = code + "\t\t\thtml = html + \">\"\n"
 
@@ -2720,8 +2754,7 @@ functions:
 			code = code + "\t\t\thtml = html + \"</option>\"\n"
 		else if widget_name == "slider"
 			// Range slider input
-			string event_id = "evt-" + event_counter.toString()
-			code = code + "\t\t\thtml = html + \"<input type=\\\"range\\\" class=\\\"" + html_class + "\\\" data-event-id=\\\"" + event_id + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<input type=\\\"range\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
 			if html_style != ""
 				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
 
@@ -2741,7 +2774,6 @@ functions:
 			string bind_var = get_prop_value(props, "bind")
 			if bind_var != ""
 				code = code + "\t\t\thtml = html + \" value=\\\"\" + " + bind_var + ".toString() + \"\\\"\"\n"
-				code = code + "\t\t\thtml = html + \" data-bind=\\\"" + bind_var + "\\\"\"\n"
 
 			code = code + "\t\t\thtml = html + \"/>\"\n"
 			event_counter = event_counter + 1
@@ -3088,11 +3120,8 @@ functions:
 		list<string> render_lines = json_to_string_list(render_content)
 		string body_html = render_ui_tree_direct(render_lines, 0, 0)
 
-		// Generate initial state JSON for hydration
-		string initial_state = generate_initial_state_json(state_json)
-
 		// Generate the complete HTML document
-		string html = generate_html_document(name, body_html, initial_state)
+		string html = generate_html_document(name, body_html)
 
 		return html
 
@@ -3205,21 +3234,16 @@ functions:
 			html = html + "<input type=\"text\" class=\"" + html_class + "\""
 			if placeholder != ""
 				html = html + " placeholder=\"" + strip_quotes(placeholder) + "\""
-			if bind_var != ""
-				html = html + " data-bind=\"" + bind_var + "\""
 			if html_style != ""
 				html = html + " style=\"" + html_style + "\""
 			html = html + ">"
 
 		else if widget_name == "passwordField"
 			string placeholder = get_prop_value(props, "placeholder")
-			string bind_var = get_prop_value(props, "bind")
 
 			html = html + "<input type=\"password\" class=\"" + html_class + "\""
 			if placeholder != ""
 				html = html + " placeholder=\"" + strip_quotes(placeholder) + "\""
-			if bind_var != ""
-				html = html + " data-bind=\"" + bind_var + "\""
 			if html_style != ""
 				html = html + " style=\"" + html_style + "\""
 			html = html + ">"
@@ -3247,55 +3271,23 @@ functions:
 
 		return html
 
-	// Generate initial state as JSON for hydration
-	string generate_initial_state_json(string state_json)
-		string result = "{"
-		list<string> state_vars = json_to_object_list(state_json)
-
-		integer i = 0
-		while i < state_vars.length()
-			string var_json = state_vars[i]
-			string var_name = extract_json_field(var_json, "name")
-			string var_default = extract_json_field(var_json, "default")
-
-			if i > 0
-				result = result + ","
-			result = result + "\"" + var_name + "\":"
-
-			// Check if it's a string or other type
-			if var_default.startsWith("\"")
-				result = result + var_default
-			else if var_default == "true" or var_default == "false"
-				result = result + var_default
-			else if var_default == ""
-				result = result + "null"
-			else
-				result = result + var_default
-
-			i = i + 1
-
-		result = result + "}"
-		return result
-
 	// Generate complete HTML document
-	string generate_html_document(string screen_name, string body_html, string initial_state)
+	string generate_html_document(string screen_name, string body_html)
 		string html = "<!DOCTYPE html>\n"
 		html = html + "<html lang=\"en\">\n"
 		html = html + "<head>\n"
 		html = html + "\t<meta charset=\"UTF-8\">\n"
 		html = html + "\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
 		html = html + "\t<title>" + screen_name + "</title>\n"
-		html = html + "\t<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n"
-		html = html + "\t<link href=\"https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500;600&display=swap\" rel=\"stylesheet\">\n"
 		html = html + "\t<style>\n"
 		html = html + generate_default_styles()
 		html = html + "\t</style>\n"
 		html = html + "</head>\n"
 		html = html + "<body>\n"
-		html = html + "\t<div id=\"app\" data-screen=\"" + screen_name + "\" data-state='" + initial_state + "'>\n"
+		html = html + "\t<div id=\"app\">\n"
 		html = html + body_html
 		html = html + "\t</div>\n"
-		html = html + "\t<script type=\"module\" src=\"hydrate.js\"></script>\n"
+		html = html + "\t<script src=\"loader.js\" data-wasm=\"frontend.wasm\"></script>\n"
 		html = html + "</body>\n"
 		html = html + "</html>"
 		return html
