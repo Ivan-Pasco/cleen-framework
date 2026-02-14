@@ -2,11 +2,10 @@
 // Simple newsletter form (static SSR)
 
 component: tag="newsletter-form"
-	string render()
-		string html = "<form class=\"newsletter-form\" action=\"/api/subscribe\" method=\"POST\">"
-		html = html + "<div class=\"form-row\">"
-		html = html + "<input type=\"email\" name=\"email\" placeholder=\"Enter your email\" required>"
-		html = html + "<button type=\"submit\">Subscribe</button>"
-		html = html + "</div>"
-		html = html + "</form>"
-		return html
+	html:
+		<form class="newsletter-form" action="/api/subscribe" method="POST">
+			<div class="form-row">
+				<input type="email" name="email" placeholder="Enter your email" required>
+				<button type="submit">Subscribe</button>
+			</div>
+		</form>

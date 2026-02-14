@@ -47,7 +47,10 @@ functions:
 			showSuccess = true
 
 	string render()
-		string html = "<div class=\"page-container\">"
+		// Uses traditional render() because of conditional if/else logic
+		// Will migrate to html: block when Phase 2 directives are available
+		string html = ""
+		html = html + "<div class=\"page-container\">"
 		html = html + "<div class=\"hero-section\">"
 		html = html + "<span class=\"eyebrow\">EST. 2026</span>"
 		html = html + "<h1 class=\"hero-title\">Join the<br><span class=\"accent\">Revolution</span></h1>"

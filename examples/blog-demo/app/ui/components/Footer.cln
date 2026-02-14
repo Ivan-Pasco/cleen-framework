@@ -2,11 +2,10 @@
 // Tag: <blog-footer>
 
 component: tag="blog-footer"
-	string render()
-		string f = "<footer class=\"site-footer\">"
-		f = f + "<div class=\"footer-content\">"
-		f = f + "<p>Built with Clean Framework</p>"
-		f = f + "<p><a href=\"https://github.com/Ivan-Pasco/cleen-framework\">View on GitHub</a></p>"
-		f = f + "</div>"
-		f = f + "</footer>"
-		return f
+	html:
+		<footer class="site-footer">
+			<div class="footer-content">
+				<p>Built with Clean Framework</p>
+				<p><a href="https://github.com/Ivan-Pasco/cleen-framework">View on GitHub</a></p>
+			</div>
+		</footer>

@@ -2,11 +2,10 @@
 // Simple comment form (static SSR)
 
 component: tag="comment-form"
-	string render()
-		string html = "<form class=\"comment-form\" action=\"/api/comments\" method=\"POST\">"
-		html = html + "<textarea name=\"content\" placeholder=\"Write a comment...\" rows=\"4\" required></textarea>"
-		html = html + "<div class=\"form-actions\">"
-		html = html + "<button type=\"submit\">Post Comment</button>"
-		html = html + "</div>"
-		html = html + "</form>"
-		return html
+	html:
+		<form class="comment-form" action="/api/comments" method="POST">
+			<textarea name="content" placeholder="Write a comment..." rows="4" required></textarea>
+			<div class="form-actions">
+				<button type="submit">Post Comment</button>
+			</div>
+		</form>

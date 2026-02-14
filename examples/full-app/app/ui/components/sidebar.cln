@@ -1,19 +1,18 @@
 // Sidebar Component - Project Navigation
 
 component: tag="app-sidebar"
-	string render()
-		string html = "<aside class=\"sidebar\">"
-		html = html + "<div class=\"sidebar-header\">"
-		html = html + "<h3>Projects</h3>"
-		html = html + "</div>"
-		html = html + "<div class=\"project-list\">"
-		html = html + "<a href=\"/projects/1\" class=\"project-item\">Marketing</a>"
-		html = html + "<a href=\"/projects/2\" class=\"project-item\">Development</a>"
-		html = html + "<a href=\"/projects/3\" class=\"project-item\">Design</a>"
-		html = html + "</div>"
-		html = html + "<div class=\"sidebar-footer\">"
-		html = html + "<a href=\"/tasks?filter=my\">My Tasks</a>"
-		html = html + "<a href=\"/tasks?filter=today\">Due Today</a>"
-		html = html + "</div>"
-		html = html + "</aside>"
-		return html
+	html:
+		<aside class="sidebar">
+			<div class="sidebar-header">
+				<h3>Projects</h3>
+			</div>
+			<div class="project-list">
+				<a href="/projects/1" class="project-item">Marketing</a>
+				<a href="/projects/2" class="project-item">Development</a>
+				<a href="/projects/3" class="project-item">Design</a>
+			</div>
+			<div class="sidebar-footer">
+				<a href="/tasks?filter=my">My Tasks</a>
+				<a href="/tasks?filter=today">Due Today</a>
+			</div>
+		</aside>

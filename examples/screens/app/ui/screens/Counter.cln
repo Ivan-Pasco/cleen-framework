@@ -7,14 +7,15 @@ state:
 
 functions:
 	string render()
-		string html = "<div class=\"counter-container\">"
-		html = html + "<p class=\"counter-label\" id=\"counter-display\">" + label + ": " + count.toString() + "</p>"
-		html = html + "<div class=\"counter-buttons\">"
-		html = html + "<button class=\"btn-decrement\">-</button>"
-		html = html + "<button class=\"btn-increment\">+</button>"
-		html = html + "<button class=\"btn-reset\">Reset</button>"
-		html = html + "</div></div>"
-		return html
+		html:
+			<div class="counter-container">
+				<p class="counter-label" id="counter-display">{label}: {count.toString()}</p>
+				<div class="counter-buttons">
+					<button class="btn-decrement">-</button>
+					<button class="btn-increment">+</button>
+					<button class="btn-reset">Reset</button>
+				</div>
+			</div>
 
 	handle_event_0()
 		count = count + 1

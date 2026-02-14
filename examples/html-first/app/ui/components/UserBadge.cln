@@ -2,9 +2,8 @@
 // Displays a user avatar and name
 
 component: tag="user-badge"
-	string render()
-		string html = "<div class=\"user-badge\">"
-		html = html + "<img src=\"/images/default-avatar.png\" alt=\"\" class=\"avatar\">"
-		html = html + "<span class=\"name\">User</span>"
-		html = html + "</div>"
-		return html
+	html:
+		<div class="user-badge">
+			<img src="/images/default-avatar.png" alt="" class="avatar">
+			<span class="name">User</span>
+		</div>

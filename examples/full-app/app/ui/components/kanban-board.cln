@@ -1,19 +1,18 @@
 // Kanban Board Component
 
 component: tag="kanban-board"
-	string render()
-		string html = "<div class=\"kanban-board\">"
-		html = html + "<div class=\"kanban-column\">"
-		html = html + "<h3>To Do</h3>"
-		html = html + "<div class=\"task-list\"><task-card></task-card></div>"
-		html = html + "</div>"
-		html = html + "<div class=\"kanban-column\">"
-		html = html + "<h3>In Progress</h3>"
-		html = html + "<div class=\"task-list\"><task-card></task-card></div>"
-		html = html + "</div>"
-		html = html + "<div class=\"kanban-column\">"
-		html = html + "<h3>Done</h3>"
-		html = html + "<div class=\"task-list\"><task-card></task-card></div>"
-		html = html + "</div>"
-		html = html + "</div>"
-		return html
+	html:
+		<div class="kanban-board">
+			<div class="kanban-column">
+				<h3>To Do</h3>
+				<div class="task-list"><task-card></task-card></div>
+			</div>
+			<div class="kanban-column">
+				<h3>In Progress</h3>
+				<div class="task-list"><task-card></task-card></div>
+			</div>
+			<div class="kanban-column">
+				<h3>Done</h3>
+				<div class="task-list"><task-card></task-card></div>
+			</div>
+		</div>

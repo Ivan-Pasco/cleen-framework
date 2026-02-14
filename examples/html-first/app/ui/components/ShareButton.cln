@@ -2,16 +2,15 @@
 // Social media share buttons
 
 component: tag="share-button"
-	string render()
-		string html = "<div class=\"share-buttons\">"
-		html = html + "<a href=\"#\" class=\"share-btn share-btn-twitter\" aria-label=\"Share on Twitter\">"
-		html = html + "<span>Twitter</span>"
-		html = html + "</a>"
-		html = html + "<a href=\"#\" class=\"share-btn share-btn-linkedin\" aria-label=\"Share on LinkedIn\">"
-		html = html + "<span>LinkedIn</span>"
-		html = html + "</a>"
-		html = html + "<a href=\"#\" class=\"share-btn share-btn-facebook\" aria-label=\"Share on Facebook\">"
-		html = html + "<span>Facebook</span>"
-		html = html + "</a>"
-		html = html + "</div>"
-		return html
+	html:
+		<div class="share-buttons">
+			<a href="#" class="share-btn share-btn-twitter" aria-label="Share on Twitter">
+				<span>Twitter</span>
+			</a>
+			<a href="#" class="share-btn share-btn-linkedin" aria-label="Share on LinkedIn">
+				<span>LinkedIn</span>
+			</a>
+			<a href="#" class="share-btn share-btn-facebook" aria-label="Share on Facebook">
+				<span>Facebook</span>
+			</a>
+		</div>

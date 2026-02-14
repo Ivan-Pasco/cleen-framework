@@ -1,11 +1,10 @@
 // Footer Component
 
 component: tag="site-footer"
-	string render()
-		string f = "<footer class=\"site-footer\">"
-		f = f + "<div class=\"container\">"
-		f = f + "<p>Built with Clean Framework</p>"
-		f = f + "<p>A modern web framework for Clean Language</p>"
-		f = f + "</div>"
-		f = f + "</footer>"
-		return f
+	html:
+		<footer class="site-footer">
+			<div class="container">
+				<p>Built with Clean Framework</p>
+				<p>A modern web framework for Clean Language</p>
+			</div>
+		</footer>

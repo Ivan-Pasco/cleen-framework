@@ -2,9 +2,8 @@
 // Displays a statistic placeholder
 
 component: tag="stat-card"
-	string render()
-		string html = "<div class=\"stat-card\">"
-		html = html + "<span class=\"stat-value\">--</span>"
-		html = html + "<span class=\"stat-label\">Stat</span>"
-		html = html + "</div>"
-		return html
+	html:
+		<div class="stat-card">
+			<span class="stat-value">--</span>
+			<span class="stat-label">Stat</span>
+		</div>

@@ -2,38 +2,28 @@
 // Renders the site footer
 
 component: tag="app-footer"
-	functions:
-		string render()
-			string html = "<footer class=\"site-footer\">"
-			html = html + "<div class=\"footer-content\">"
-
-			// Footer columns
-			html = html + "<div class=\"footer-col\">"
-			html = html + "<h4>Product</h4>"
-			html = html + "<a href=\"/features\">Features</a>"
-			html = html + "<a href=\"/pricing\">Pricing</a>"
-			html = html + "<a href=\"/docs\">Documentation</a>"
-			html = html + "</div>"
-
-			html = html + "<div class=\"footer-col\">"
-			html = html + "<h4>Company</h4>"
-			html = html + "<a href=\"/about\">About</a>"
-			html = html + "<a href=\"/blog\">Blog</a>"
-			html = html + "<a href=\"/careers\">Careers</a>"
-			html = html + "</div>"
-
-			html = html + "<div class=\"footer-col\">"
-			html = html + "<h4>Legal</h4>"
-			html = html + "<a href=\"/privacy\">Privacy</a>"
-			html = html + "<a href=\"/terms\">Terms</a>"
-			html = html + "</div>"
-
-			// Copyright
-			html = html + "<div class=\"footer-bottom\">"
-			html = html + "<p>&copy; 2025 My App. All rights reserved.</p>"
-			html = html + "</div>"
-
-			html = html + "</div>"
-			html = html + "</footer>"
-
-			return html
+	html:
+		<footer class="site-footer">
+			<div class="footer-content">
+				<div class="footer-col">
+					<h4>Product</h4>
+					<a href="/features">Features</a>
+					<a href="/pricing">Pricing</a>
+					<a href="/docs">Documentation</a>
+				</div>
+				<div class="footer-col">
+					<h4>Company</h4>
+					<a href="/about">About</a>
+					<a href="/blog">Blog</a>
+					<a href="/careers">Careers</a>
+				</div>
+				<div class="footer-col">
+					<h4>Legal</h4>
+					<a href="/privacy">Privacy</a>
+					<a href="/terms">Terms</a>
+				</div>
+				<div class="footer-bottom">
+					<p>&copy; 2025 My App. All rights reserved.</p>
+				</div>
+			</div>
+		</footer>
