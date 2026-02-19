@@ -394,6 +394,24 @@ The Host Bridge is the ONLY interface between WASM and system resources.
 7. `bridge:fs` - Filesystem (desktop/CLI only)
 8. `bridge:sys` - System information
 
+## WAT Spec Compliance (Host Function Signatures)
+
+**IMPORTANT: Host function signatures are enforced by a machine-checkable WAT contract.**
+
+The clean-server enforces all host function signatures via `clean-server/host-bridge/tests/spec_compliance.wat`. This file declares every host function import with its exact WASM signature. Any WASM module the framework generates or interacts with must match these signatures exactly.
+
+### Key Conventions
+
+1. **ALL string input parameters** use raw `(ptr: i32, len: i32)` pairs (NOT length-prefixed single pointers)
+2. **Return strings** use length-prefixed format: `[4-byte LE length][UTF-8 data]`
+3. **Integer values** use `i64` (not `i32`) for: `print_integer`, `int_to_string`, `string_to_int`
+4. When the framework generates or references host function calls, signatures must match the WAT spec
+
+### Authoritative References
+
+- WAT spec guard: `clean-server/host-bridge/tests/spec_compliance.wat`
+- Host Bridge documentation: `platform-architecture/HOST_BRIDGE.md`
+
 ## Security Requirements
 
 1. **WASM Sandboxing**: All application code runs in isolated WASM context

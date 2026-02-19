@@ -62,6 +62,12 @@ functions = [
   { name = "_role_has_permission", params = ["string", "string"], returns = "boolean", description = "Check if role has permission", expand_strings = true },
   { name = "_role_get_permissions", params = ["string"], returns = "string", description = "Get all permissions for role (JSON array)", expand_strings = true },
 
+  # Auth - Session Management
+  { name = "_auth_set_session", params = ["string"], returns = "boolean", description = "Create session from JSON with user_id, role, claims; sets session cookie on response", expand_strings = true },
+  { name = "_auth_clear_session", params = [], returns = "boolean", description = "Destroy current user session and clear session cookie; returns 1 on success, 0 if no session" },
+  { name = "_auth_user_id", params = [], returns = "integer", description = "Get current authenticated user ID; returns 0 if not authenticated" },
+  { name = "_auth_user_role", params = [], returns = "string", description = "Get current authenticated user role; returns empty string if unauthenticated" },
+
   # JSON helpers
   { name = "_json_get", params = ["string", "string"], returns = "string", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true },
 ]

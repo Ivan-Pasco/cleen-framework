@@ -34,12 +34,16 @@ expressions = [
 # Bridge function declarations - these are provided by the runtime (clean-server)
 # The compiler reads these to generate correct WASM imports
 [bridge]
-# Note: Only functions currently implemented in clean-server are listed here
-# Additional functions (transactions, schema ops) will be added when server supports them
+# Database functions provided by clean-server host bridge
 functions = [
   # Query and Execute - strings passed as (ptr, len) pairs at WASM level
   { name = "_db_query", params = ["string", "string"], returns = "string", description = "Execute SELECT query, returns JSON result with rows", expand_strings = true },
   { name = "_db_execute", params = ["string", "string"], returns = "integer", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
+
+  # Transactions
+  { name = "_db_begin", params = [], returns = "integer", description = "Begin a database transaction; returns 1 on success, 0 on error" },
+  { name = "_db_commit", params = [], returns = "integer", description = "Commit the current database transaction; returns 1 on success, 0 on error" },
+  { name = "_db_rollback", params = [], returns = "integer", description = "Rollback the current database transaction; returns 1 on success, 0 on error" },
 ]
 
 [language]
