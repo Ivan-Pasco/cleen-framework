@@ -344,3 +344,14 @@ functions = [
   { name = "_scene_push", params = ["string"], returns = "integer", description = "Push scene onto stack", expand_strings = true },
   { name = "_scene_pop", params = [], returns = "integer", description = "Pop scene from stack" },
 ]
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = [
+  { name = "_canvas_init", use_instead = "canvasScene:", message = "Use 'canvasScene:' block to initialize canvas" },
+]
+
+block_folder_rules = [
+  { block = "canvasScene", allowed_in = ["app/canvas/"], message = "canvasScene: blocks should be in app/canvas/" },
+]

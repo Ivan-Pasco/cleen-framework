@@ -140,3 +140,15 @@ files = [
   { path = "app/config/auth.cln", template = "auth.cln" },
   { path = "app/config/project.cln", template = "project.cln" },
 ]
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = [
+  { name = "_jwt_sign", use_instead = "auth: jwt: config", message = "Use auth: block JWT configuration instead of raw _jwt_sign()" },
+  { name = "_session_store", use_instead = "auth: session: config", message = "Use auth: block session configuration instead of raw session functions" },
+]
+
+block_folder_rules = [
+  { block = "auth", allowed_in = ["app/config/", "app/backend/", "app/server/"], message = "auth: config should be in app/config/" },
+]

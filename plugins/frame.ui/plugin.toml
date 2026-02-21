@@ -181,3 +181,17 @@ files = [
   { path = "app/ui/pages/index.html", template = "index.html" },
   { path = "app/ui/styles/theme.cln", template = "theme.cln" },
 ]
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = []
+
+required_blocks = [
+  { folder = "app/ui/components/", block = "component", message = "Component files should contain 'component' definitions" },
+]
+
+block_folder_rules = [
+  { block = "component", allowed_in = ["app/ui/", "app/components/"], message = "component: blocks should be in app/ui/components/" },
+  { block = "screen", allowed_in = ["app/ui/", "app/screens/"], message = "screen: blocks should be in app/ui/ or app/screens/" },
+]

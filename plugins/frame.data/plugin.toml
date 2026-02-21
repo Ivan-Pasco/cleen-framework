@@ -100,3 +100,19 @@ patterns = ["*.cln", "*.sql"]
 
 # Files in owned folders automatically import this plugin
 implicit_import = true
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = [
+  { name = "_db_query", use_instead = "Model.find: or db.query:", message = "Use ORM query blocks instead of raw _db_query()" },
+  { name = "_db_execute", use_instead = "Model.insert:/update:/delete:", message = "Use ORM mutation blocks instead of raw _db_execute()" },
+]
+
+required_blocks = [
+  { folder = "app/data/models/", block = "data", message = "Model files should contain 'data ModelName' definitions" },
+]
+
+block_folder_rules = [
+  { block = "data", allowed_in = ["app/data/", "app/backend/", "app/server/"], message = "data models should be in app/data/ or app/backend/" },
+]

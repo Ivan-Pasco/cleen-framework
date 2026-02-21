@@ -180,3 +180,22 @@ implicit_import = true
 files = [
   { path = "app/backend/api/health.cln", template = "health.cln" },
 ]
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = [
+  { name = "_http_route", use_instead = "endpoints:", message = "Use 'endpoints:' block to define routes instead of calling _http_route() directly" },
+  { name = "_http_route_protected", use_instead = "endpoints: with guard:", message = "Use 'endpoints:' block with guard: sub-block for protected routes" },
+  { name = "_http_listen", use_instead = "server:", message = "Use 'server:' block to configure and start the HTTP server" },
+  { name = "_http_respond", use_instead = "return json()/html()/redirect()", message = "Use response helpers inside endpoints: handlers" },
+]
+
+required_blocks = [
+  { folder = "app/backend/api/", block = "endpoints", message = "API endpoint files should use 'endpoints:' block" },
+]
+
+block_folder_rules = [
+  { block = "endpoints", allowed_in = ["app/backend/", "app/server/"], message = "endpoints: block should be in app/backend/ or app/server/" },
+  { block = "server", allowed_in = ["app/backend/", "app/server/", "app/"], message = "server: block should be in backend or app root" },
+]
