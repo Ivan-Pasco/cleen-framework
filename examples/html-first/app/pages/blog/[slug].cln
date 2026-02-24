@@ -1,0 +1,7 @@
+// Companion data loader for blog/[slug].html
+// Loads blog post data by slug from the URL path parameter
+
+functions:
+	any load()
+		string slug = _req_param("slug")
+		return { slug: slug }

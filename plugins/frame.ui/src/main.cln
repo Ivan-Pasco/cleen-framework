@@ -9,29 +9,33 @@
 functions:
 	// Process HTML page content - main entry point for HTML-first pages
 	// Returns Clean code that renders the page
-	string process_html(string html, string path, string registry_json)
+	// companion_json: "" for no companion, or JSON with has_guard, has_load, module_name
+	string process_html(string html, string path, string registry_json, string companion_json)
 		// Extract page metadata
 		string layout = extract_page_attr(html, "layout")
 		string auth = extract_page_attr(html, "auth")
 		string roles = extract_page_attr(html, "roles")
 
-		// Extract data block if present
-		string data_block = extract_data_block(html)
-
 		// Parse HTML body (remove head, extract body content)
 		string body_html = extract_body(html)
 
+		// Determine if companion has load() — affects variable scoping
+		boolean has_data = false
+		if companion_json != ""
+			if companion_json.indexOf("\"has_load\":true") != -1
+				has_data = true
+
 		// Transform HTML to render function
-		string render_code = html_to_render(body_html, registry_json)
+		string render_code = html_to_render(body_html, registry_json, has_data)
 
 		// Check if page needs client runtime for interactive screens
 		if needs_client_runtime(html)
 			// Inject runtime script at end of render code
 			render_code = render_code + generate_runtime_injection()
 
-		// Generate page class
+		// Generate page class with companion file support
 		string page_name = path_to_class_name(path)
-		string result = generate_page_class(page_name, path, layout, auth, roles, data_block, render_code)
+		string result = generate_page_class(page_name, path, layout, auth, roles, render_code, companion_json)
 
 		return result
 
@@ -141,19 +145,9 @@ functions:
 		string page_tag = html.substring(page_start, page_end + 1)
 		return extract_attr_value(page_tag, attr_name)
 
-	// Extract <script type="text/clean"> data block
+	// Data block extraction removed — page data now comes from companion .cln files
 	string extract_data_block(string html)
-		string marker = "<script type=\"text/clean\">"
-		integer startIdx = html.indexOf(marker)
-		if startIdx == -1
-			return ""
-
-		integer content_start = startIdx + marker.length()
-		integer end = html.indexOf("</script>", content_start)
-		if end == -1
-			return ""
-
-		return html.substring(content_start, end).trim()
+		return ""
 
 	// Extract body content from HTML
 	string extract_body(string html)
@@ -181,16 +175,6 @@ functions:
 
 		// Remove <page ...> tag
 		result = remove_tag(result, "page")
-
-		// Remove <script type="text/clean">...</script>
-		string script_marker = "<script type=\"text/clean\">"
-		integer script_start = result.indexOf(script_marker)
-		if script_start != -1
-			integer script_end = result.indexOf("</script>", script_start)
-			if script_end != -1
-				string before = result.substring(0, script_start)
-				string after = result.substring(script_end + 9, result.length())
-				result = before + after
 
 		return result.trim()
 
@@ -293,7 +277,8 @@ functions:
 
 functions:
 	// Convert HTML body to render function code
-	string html_to_render(string html, string registry_json)
+	// has_data: true when companion has load(), causing {{expr}} to reference data.expr
+	string html_to_render(string html, string registry_json, boolean has_data)
 		string result = ""
 		string remaining = html
 
@@ -304,13 +289,13 @@ functions:
 				// No more tags - add remaining text
 				string text = remaining.trim()
 				if text.length() > 0
-					result = result + process_text_node(text)
+					result = result + process_text_node(text, has_data)
 				remaining = ""
 			else if tag_start > 0
 				// Text before tag
 				string text = remaining.substring(0, tag_start)
 				if text.trim().length() > 0
-					result = result + process_text_node(text)
+					result = result + process_text_node(text, has_data)
 				remaining = remaining.substring(tag_start, remaining.length())
 			else
 				// At a tag
@@ -330,7 +315,7 @@ functions:
 						remaining = remaining.substring(tag_end + 1, remaining.length())
 					else if self_closing
 						// Self-closing tag
-						result = result + process_element(tag_content, "", registry_json)
+						result = result + process_element(tag_content, "", registry_json, has_data)
 						remaining = remaining.substring(tag_end + 1, remaining.length())
 					else
 						// Opening tag - find matching close
@@ -338,12 +323,12 @@ functions:
 						integer close_pos = find_matching_close(remaining, tag_name)
 						if close_pos == -1
 							// No close tag - treat as self-closing
-							result = result + process_element(tag_content, "", registry_json)
+							result = result + process_element(tag_content, "", registry_json, has_data)
 							remaining = remaining.substring(tag_end + 1, remaining.length())
 						else
 							// Extract inner content
 							string inner = remaining.substring(tag_end + 1, close_pos)
-							result = result + process_element(tag_content, inner, registry_json)
+							result = result + process_element(tag_content, inner, registry_json, has_data)
 							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
 
 		return result
@@ -406,7 +391,9 @@ functions:
 		return void_elements.indexOf("," + tag_name + ",") != -1
 
 	// Process a text node, handling interpolations
-	string process_text_node(string text)
+	// Process text node with interpolation
+	// has_data: when true, {{expr}} references data.expr (companion load() return value)
+	string process_text_node(string text, boolean has_data)
 		string result = "html = html + \""
 		string remaining = text
 
@@ -425,20 +412,26 @@ functions:
 				integer raw_end = remaining.indexOf("}}}", raw_start + 3)
 				if raw_end == -1
 					raw_end = remaining.length()
-				string expr = remaining.substring(raw_start + 3, raw_end)
-				result = result + expr.trim() + " + \""
+				string expr = remaining.substring(raw_start + 3, raw_end).trim()
+				if has_data
+					result = result + "data." + expr + " + \""
+				else
+					result = result + expr + " + \""
 				remaining = remaining.substring(raw_end + 3, remaining.length())
 			else if esc_start != -1
 				// Escaped interpolation
 				if esc_start > 0
 					result = result + escape_string(remaining.substring(0, esc_start))
-				result = result + "\" + html.escape("
+				result = result + "\" + _html_escape("
 
 				integer esc_end = remaining.indexOf("}}", esc_start + 2)
 				if esc_end == -1
 					esc_end = remaining.length()
-				string expr = remaining.substring(esc_start + 2, esc_end)
-				result = result + expr.trim() + ") + \""
+				string expr = remaining.substring(esc_start + 2, esc_end).trim()
+				if has_data
+					result = result + "data." + expr + ") + \""
+				else
+					result = result + expr + ") + \""
 				remaining = remaining.substring(esc_end + 2, remaining.length())
 			else
 				// No more interpolations
@@ -449,7 +442,7 @@ functions:
 		return result
 
 	// Process an HTML element
-	string process_element(string tag_content, string inner_html, string registry_json)
+	string process_element(string tag_content, string inner_html, string registry_json, boolean has_data)
 		string tag_name = extract_tag_name(tag_content)
 
 		// Check for cl- directives
@@ -460,41 +453,47 @@ functions:
 
 		string result = ""
 
-		// Handle cl-if directive
+		// Handle cl-if directive — prefix condition with data. when has_data
 		if if_attr != ""
-			result = result + "if " + if_attr + "\n"
-			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json)
+			if has_data
+				result = result + "if data." + if_attr + "\n"
+			else
+				result = result + "if " + if_attr + "\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 			return result
 
 		// Handle cl-else directive (must follow cl-if)
 		if else_attr != "" or tag_content.indexOf(" cl-else") != -1
 			result = result + "else\n"
-			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json)
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 			return result
 
-		// Handle cl-iterate directive
+		// Handle cl-iterate directive — prefix collection with data. when has_data
 		if iterate_attr != ""
 			// Parse "item in items" or "item, index in items"
 			integer in_pos = iterate_attr.indexOf(" in ")
 			if in_pos != -1
 				string vars = iterate_attr.substring(0, in_pos).trim()
 				string collection = iterate_attr.substring(in_pos + 4, iterate_attr.length()).trim()
-				result = result + "iterate " + vars + " in " + collection + "\n"
-				result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json)
+				if has_data
+					result = result + "iterate " + vars + " in data." + collection + "\n"
+				else
+					result = result + "iterate " + vars + " in " + collection + "\n"
+				result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 				return result
 
 		// Regular element
-		return render_element(tag_name, tag_content, inner_html, registry_json)
+		return render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 
 	// Render a single element to Clean code
-	string render_element(string tag_name, string tag_content, string inner_html, string registry_json)
+	string render_element(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
 		// Check if this is a <screen> tag for islands
 		if tag_name == "screen"
 			return render_screen_island(tag_content, inner_html, registry_json)
 
 		// Check if custom component (contains hyphen)
 		if tag_name.indexOf("-") != -1
-			return render_component(tag_name, tag_content, inner_html, registry_json)
+			return render_component(tag_name, tag_content, inner_html, registry_json, has_data)
 
 		// Standard HTML element
 		string result = "html = html + \"<" + tag_name
@@ -508,7 +507,7 @@ functions:
 
 		// Process inner content
 		if inner_html.trim().length() > 0
-			result = result + html_to_render(inner_html, registry_json)
+			result = result + html_to_render(inner_html, registry_json, has_data)
 
 		// Close tag (unless void element)
 		if is_void_element(tag_name) == false
@@ -626,7 +625,7 @@ functions:
 		return true
 
 	// Render a custom component
-	string render_component(string tag_name, string tag_content, string inner_html, string registry_json)
+	string render_component(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
 		// Look up component class name
 		string class_name = lookup_component(tag_name, registry_json)
 		if class_name == ""
@@ -653,7 +652,7 @@ functions:
 		// Set slot content if any
 		if inner_html.trim().length() > 0
 			result = result + "\tstring _slot = \"\"\n"
-			result = result + "\t" + html_to_render(inner_html, registry_json).replace("html = html +", "_slot = _slot +")
+			result = result + "\t" + html_to_render(inner_html, registry_json, has_data).replace("html = html +", "_slot = _slot +")
 			result = result + "\t_comp.setSlot(_slot)\n"
 
 		// Render component directly
@@ -1290,7 +1289,7 @@ functions:
 		return result + "Page"
 
 	// Generate page class from parsed HTML
-	string generate_page_class(string name, string path, string layout, string auth, string roles, string data_block, string render_code)
+	string generate_page_class(string name, string path, string layout, string auth, string roles, string render_code, string companion_json)
 		string result = "class " + name + "\n"
 
 		// Page metadata fields
@@ -1304,17 +1303,21 @@ functions:
 
 		result = result + "\n\tfunctions:\n"
 
-		// Data loading function
-		if data_block != ""
-			result = result + "\t\tvoid loadData()\n"
-			// Parse data block and generate assignments
-			string data_lines = data_block
-			// Simple: just include the data block
-			result = result + "\t\t\t" + data_block.replace("\n", "\n\t\t\t") + "\n"
-			result = result + "\n"
-
 		// Render function
 		result = result + "\t\tstring render()\n"
+
+		// If companion has guard(), call it first
+		if companion_json != ""
+			string module_name = extract_json_field(companion_json, "module_name")
+
+			if companion_json.indexOf("\"has_guard\":true") != -1
+				result = result + "\t\t\tany guard_result = " + module_name + "_guard()\n"
+				result = result + "\t\t\tif guard_result != null\n"
+				result = result + "\t\t\t\treturn \"\"\n"
+
+			if companion_json.indexOf("\"has_load\":true") != -1
+				result = result + "\t\t\tany data = " + module_name + "_load()\n"
+
 		result = result + "\t\t\tstring html = \"\"\n"
 		result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
 		result = result + "\t\t\treturn html\n"

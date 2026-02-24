@@ -164,7 +164,7 @@ completions = [
 
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["app/ui", "app/ui/pages", "app/ui/components", "app/ui/layouts", "app/ui/styles"]
+owns = ["app/pages", "app/components", "app/layouts"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -178,8 +178,7 @@ implicit_import = true
 [templates]
 # Starter files created when plugin is added to a project
 files = [
-  { path = "app/ui/pages/index.html", template = "index.html" },
-  { path = "app/ui/styles/theme.cln", template = "theme.cln" },
+  { path = "app/pages/index.html", template = "index.html" },
 ]
 
 [enforcement]
@@ -188,10 +187,10 @@ severity = "warn"
 restricted_functions = []
 
 required_blocks = [
-  { folder = "app/ui/components/", block = "component", message = "Component files should contain 'component' definitions" },
+  { folder = "app/components/", block = "component", message = "Component files should contain 'component' definitions" },
 ]
 
 block_folder_rules = [
-  { block = "component", allowed_in = ["app/ui/", "app/components/"], message = "component: blocks should be in app/ui/components/" },
-  { block = "screen", allowed_in = ["app/ui/", "app/screens/"], message = "screen: blocks should be in app/ui/ or app/screens/" },
+  { block = "component", allowed_in = ["app/components/"], message = "component: blocks should be in app/components/" },
+  { block = "screen", allowed_in = ["app/pages/", "app/components/"], message = "screen: blocks should be in app/pages/ or app/components/" },
 ]
