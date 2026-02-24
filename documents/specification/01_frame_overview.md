@@ -211,43 +211,51 @@ myapp/
 ├── project.toml            # Project configuration
 │
 └── app/
-    ├── ui/                 # Presentation Layer (frame.ui)
-    │   ├── pages/          # Route-level pages/screens
-    │   ├── components/     # Reusable UI pieces
-    │   ├── layouts/        # Page layouts
-    │   └── styles/         # Theme, global styles, tokens
+    ├── pages/              # SSR pages (frame.ui)
+    │   ├── index.html      # HTML template with {{ }} and cl-* directives
+    │   ├── index.cln       # Companion data loader (load/guard functions)
+    │   ├── about.html
+    │   └── blog/
+    │       ├── [slug].html
+    │       └── [slug].cln
     │
-    ├── backend/            # Application Layer (frame.httpserver)
-    │   ├── api/            # Endpoints / controllers / route handlers
-    │   ├── services/       # Business use-cases (orchestration)
-    │   └── middleware/     # Auth, logging, rate limit, etc.
+    ├── components/         # Reusable UI components (frame.ui)
+    │   ├── Header.cln
+    │   └── Footer.cln
     │
-    ├── data/               # Persistence Layer (frame.data)
-    │   ├── models/         # DB models / record types
-    │   ├── queries/        # SQL / query builders
-    │   ├── migrations/     # Schema migrations
-    │   └── repositories/   # Data access functions
+    ├── layouts/            # Page layout wrappers (frame.ui)
+    │   └── main.html
     │
-    ├── shared/             # Cross-Cutting (safe for UI and backend)
-    │   ├── types/          # DTOs, shared structs, contracts
-    │   ├── validation/     # Shared validation rules
-    │   └── utils/          # Pure helpers (no IO, no DB, no secrets)
+    ├── api/                # HTTP endpoints (frame.httpserver)
+    │   ├── users.cln
+    │   └── posts.cln
     │
-    └── config/             # Configuration (frame.auth)
-        └── auth.cln        # Auth, roles, session config
+    ├── data/               # Data models/ORM (frame.data)
+    │   ├── User.cln
+    │   ├── Post.cln
+    │   └── migrations/     # Schema migrations
+    │
+    ├── auth/               # Auth configuration (frame.auth)
+    │   └── config.cln
+    │
+    ├── canvas/             # Canvas applications (frame.canvas)
+    │
+    └── public/             # Static assets (served as-is)
+        └── css/
+            └── style.css
 
-├── public/                 # Static assets
-└── dist/                   # Compiled WASM output
+├── dist/                   # Compiled WASM output
 ```
 
 ### Folder Ownership by Plugin
 
 | Plugin | Owned Folders |
 |--------|---------------|
-| `frame.ui` | `app/ui/`, `app/ui/pages/`, `app/ui/components/`, `app/ui/layouts/`, `app/ui/styles/` |
-| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
-| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
-| `frame.auth` | `app/config/` |
+| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
+| `frame.httpserver` | `app/api/` |
+| `frame.data` | `app/data/` |
+| `frame.auth` | `app/auth/` |
+| `frame.canvas` | `app/canvas/` |
 
 ### Plugin Auto-Detection (v2.1)
 
@@ -255,13 +263,13 @@ The compiler automatically detects and loads plugins based on file paths. Files 
 
 | Folder Pattern | Auto-Detected Plugins |
 |----------------|----------------------|
-| `/api/`, `/backend/api/`, `/endpoints/` | `frame.httpserver` + `frame.data` + `frame.auth` |
-| `/data/`, `/models/` | `frame.data` |
+| `/api/`, `/endpoints/` | `frame.httpserver` + `frame.data` + `frame.auth` |
+| `/data/` | `frame.data` |
 | `/auth/` | `frame.auth` |
 | `/canvas/` | `frame.canvas` |
-| `/ui/`, `/components/` | `frame.ui` |
+| `/pages/`, `/components/`, `/layouts/` | `frame.ui` |
 
-This means a file at `app/backend/api/users.cln` automatically has access to HTTP, database, and auth bridge functions without any imports.
+This means a file at `app/api/users.cln` automatically has access to HTTP, database, and auth bridge functions without any imports.
 
 ### Folder Creation
 

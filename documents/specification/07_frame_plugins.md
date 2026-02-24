@@ -490,11 +490,11 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 
 | Plugin | Owned Folders | File Types | Purpose |
 |--------|---------------|------------|---------|
-| `frame.ui` | `src/ui/`, `pages/` | `.cln`, `.html` | UI components, pages |
-| `frame.data` | `src/data/` | `.cln` | Data models, queries |
-| `frame.httpserver` | `src/endpoints/` | `.cln` | API routes, middleware |
-| `frame.auth` | `src/auth/` | `.cln` | Auth configuration |
-| `frame.canvas` | `src/canvas/` | `.cln` | Canvas rendering, animation |
+| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` | `.html`, `.cln` | Pages, components, layouts |
+| `frame.data` | `app/data/` | `.cln` | Data models, ORM |
+| `frame.httpserver` | `app/api/` | `.cln` | API routes, endpoints |
+| `frame.auth` | `app/auth/` | `.cln` | Auth configuration |
+| `frame.canvas` | `app/canvas/` | `.cln` | Canvas rendering, animation |
 
 ### Project Structure Example
 
@@ -502,27 +502,31 @@ After importing plugins, the framework creates this structure:
 
 ```
 myapp/
-├── frame.toml                  # Project manifest
-├── src/
-│   ├── ui/                     # Owned by frame.ui
-│   │   ├── Button.cln          # Implicitly a component
-│   │   ├── Card.cln            # Implicitly a component
-│   │   └── Layout.cln          # Implicitly a component
-│   ├── data/                   # Owned by frame.data
-│   │   ├── User.cln            # Implicitly a model
-│   │   └── Post.cln            # Implicitly a model
-│   ├── endpoints/              # Owned by frame.httpserver
-│   │   ├── users.cln           # Implicitly API routes
-│   │   └── posts.cln           # Implicitly API routes
-│   ├── auth/                   # Owned by frame.auth
-│   │   └── config.cln          # Auth configuration
-│   ├── canvas/                 # Owned by frame.canvas
-│   │   ├── GameScene.cln       # Implicitly canvas scene
-│   │   └── ChartViz.cln        # Implicitly canvas scene
-│   └── main.cln                # Application entry point
-└── pages/                      # Owned by frame.ui
-    ├── index.html              # Home page
-    └── about.html              # About page
+├── app.cln                     # Application entry point
+├── project.toml                # Project manifest
+└── app/
+    ├── pages/                  # Owned by frame.ui
+    │   ├── index.html          # Home page template
+    │   ├── index.cln           # Companion data loader
+    │   └── about.html          # About page
+    ├── components/             # Owned by frame.ui
+    │   ├── Button.cln          # Implicitly a component
+    │   └── Card.cln            # Implicitly a component
+    ├── layouts/                # Owned by frame.ui
+    │   └── main.html           # Layout wrapper
+    ├── api/                    # Owned by frame.httpserver
+    │   ├── users.cln           # Implicitly API routes
+    │   └── posts.cln           # Implicitly API routes
+    ├── data/                   # Owned by frame.data
+    │   ├── User.cln            # Implicitly a model
+    │   └── Post.cln            # Implicitly a model
+    ├── auth/                   # Owned by frame.auth
+    │   └── config.cln          # Auth configuration
+    ├── canvas/                 # Owned by frame.canvas
+    │   ├── GameScene.cln       # Implicitly canvas scene
+    │   └── ChartViz.cln        # Implicitly canvas scene
+    └── public/                 # Static assets
+        └── css/
 ```
 
 ### Implicit Import Behavior
@@ -531,7 +535,7 @@ When `implicit_import = true`, files in owned folders don't need explicit import
 
 **Without folder conventions** (explicit import required):
 ```clean
-// src/data/User.cln
+// app/data/User.cln
 import:
     frame.data
 
@@ -542,8 +546,8 @@ model: name="User"
 
 **With folder conventions** (implicit import):
 ```clean
-// src/data/User.cln
-// No import needed - frame.data is implicit for files in src/data/
+// app/data/User.cln
+// No import needed - frame.data is implicit for files in app/data/
 
 model: name="User"
     string email
@@ -558,11 +562,11 @@ The Clean Language compiler (v0.15.0+) now automatically detects plugins based o
 
 | File Path Pattern | Auto-Loaded Plugins |
 |-------------------|---------------------|
-| `/api/`, `/backend/api/`, `/server/api/`, `/endpoints/` | `frame.httpserver`, `frame.data`, `frame.auth` |
-| `/data/`, `/models/`, `/server/models/` | `frame.data` |
-| `/auth/`, `/config/auth/` | `frame.auth` |
+| `/api/`, `/endpoints/` | `frame.httpserver`, `frame.data`, `frame.auth` |
+| `/data/` | `frame.data` |
+| `/auth/` | `frame.auth` |
 | `/canvas/` | `frame.canvas` |
-| `/ui/`, `/components/`, `/screens/` | `frame.ui` |
+| `/pages/`, `/components/`, `/layouts/` | `frame.ui` |
 
 **How It Works:**
 
@@ -599,7 +603,7 @@ start:
 When multiple plugins could own the same folder:
 
 1. **Explicit ownership wins**: First plugin to declare `owns` takes priority
-2. **Nested folders are specific**: `src/data/users/` can be owned by a different plugin than `src/data/`
+2. **Nested folders are specific**: `app/data/users/` can be owned by a different plugin than `app/data/`
 3. **Pattern matching**: More specific patterns match first (`*.model.cln` before `*.cln`)
 
 ### Custom Plugin Folders

@@ -21,10 +21,10 @@
 ## 2. Architecture Overview
 
 ```
-app/ui/pages/*.html      (HTML with Clean Language processing)
+app/pages/*.html      (HTML with Clean Language processing)
         │
         ▼ parse
-app/ui/components/*.cln      (Clean components define custom tags)
+app/components/*.cln      (Clean components define custom tags)
         │
         ▼ compile
 dist/app.wasm                (SSR renderer)
@@ -54,27 +54,29 @@ Clean Framework uses automatic file discovery. Place files in the `app/` folder:
 
 ```
 app/
-  ui/                         # Frontend (browser-facing)
-    pages/                    # HTML page routes
-      index.html          # → /
-      about.html          # → /about
-      blog/
-        index.html        # → /blog
-        [slug].html       # → /blog/:slug
-    components/               # Custom HTML elements
-      Header.cln              # → <app-header>
-      UserCard.cln            # → <user-card>
-    layouts/                  # Page wrappers
-      main.html
-    public/                   # Static assets (CSS, images, JS)
-      css/
-      images/
-  server/                     # Backend
-    api/                      # JSON API endpoints (→ /api/*)
-    models/                   # Database schemas
-    middleware/               # Request filters
-  shared/                     # Shared code
-    lib/                      # Utility modules
+  pages/                      # SSR page templates + companion loaders
+    index.html                # → /
+    index.cln                 # Companion: load() and guard()
+    about.html                # → /about
+    blog/
+      index.html              # → /blog
+      index.cln
+      [slug].html             # → /blog/:slug
+      [slug].cln
+  components/                 # Custom HTML elements
+    Header.cln                # → <app-header>
+    UserCard.cln              # → <user-card>
+  layouts/                    # Page layout wrappers
+    main.html
+  api/                        # JSON API endpoints (→ /api/*)
+    users.cln
+  data/                       # Data models / ORM
+    User.cln
+  auth/                       # Auth configuration
+    config.cln
+  public/                     # Static assets (CSS, images)
+    css/
+    images/
 ```
 
 **Build command:**
@@ -87,12 +89,12 @@ frame scan            # Preview discovered routes/components
 
 ## 3. Page Structure (HTML)
 
-Pages are `.html` files in `app/ui/pages/`. File paths map to URL routes.
+Pages are `.html` files in `app/pages/`. File paths map to URL routes.
 
 ### 3.1 Basic Page
 
 ```html
-<!-- app/ui/pages/index.html → / -->
+<!-- app/pages/index.html → / -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -116,11 +118,11 @@ Pages are `.html` files in `app/ui/pages/`. File paths map to URL routes.
 
 | File Path | URL Route |
 |-----------|-----------|
-| `app/ui/pages/index.html` | `/` |
-| `app/ui/pages/about.html` | `/about` |
-| `app/ui/pages/blog/index.html` | `/blog` |
-| `app/ui/pages/blog/[slug].html` | `/blog/:slug` |
-| `app/ui/pages/users/[id]/posts.html` | `/users/:id/posts` |
+| `app/pages/index.html` | `/` |
+| `app/pages/about.html` | `/about` |
+| `app/pages/blog/index.html` | `/blog` |
+| `app/pages/blog/[slug].html` | `/blog/:slug` |
+| `app/pages/users/[id]/posts.html` | `/users/:id/posts` |
 
 ### 3.3 Page Metadata
 
@@ -179,10 +181,10 @@ Custom HTML tags are defined by Clean Language components. Tags follow the Web C
 
 ### 4.2 Component Definition (Clean)
 
-Components are defined in `app/ui/components/*.cln`:
+Components are defined in `app/components/*.cln`:
 
 ```clean
-// app/ui/components/UserCard.cln
+// app/components/UserCard.cln
 component: tag="user-card"
     props:
         string userId
@@ -208,7 +210,7 @@ The `html:` block provides a clean, declarative way to write HTML templates insi
 Use `html:` instead of a manual `render()` function:
 
 ```clean
-// app/ui/components/UserCard.cln
+// app/components/UserCard.cln
 component: tag="user-card"
     props:
         string userId
@@ -280,7 +282,7 @@ return __html
 
 ### 4.4 Component Registry
 
-Components are auto-discovered from `app/ui/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
+Components are auto-discovered from `app/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
 
 **Naming convention:**
 - File: `UserCard.cln`
@@ -315,12 +317,47 @@ Use double curly braces for dynamic values:
 - `{{{expression}}}` - Raw HTML (use only for trusted content)
 - Expressions can include property access, function calls, and simple operations
 
-### 5.2 Page Data
+### 5.2 Page Data (Companion File Pattern)
 
-Data for pages comes from a companion `.cln` file or inline `<script type="text/clean">`:
+Pages get their server-side data from a **companion `.cln` file** paired by filename. This is the only mechanism for providing data to HTML templates. No `<script>` tags of any kind are allowed in page templates.
+
+The companion file lives alongside the `.html` file in `app/pages/`:
+
+```
+app/pages/
+├── profile.html         # Template (pure HTML + {{ }} + cl-*)
+└── profile.cln          # Companion data loader
+```
+
+**Companion file contract:**
+
+The companion `.cln` file may export two functions:
+
+| Function | Required | Purpose |
+|----------|----------|---------|
+| `load(Request request)` | Optional | Loads data for the page; return value becomes template variables |
+| `guard(Request request)` | Optional | Runs before `load()`; return `redirect(url)` to block access, `null` to allow |
+
+Both functions must be inside a `functions:` block. The `request` parameter gives access to path params, query strings, headers, and auth state.
+
+**Example — Profile page:**
+
+```clean
+// app/pages/profile.cln
+functions:
+	any guard(Request request)
+		if not request.auth.loggedIn
+			return redirect("/login")
+		return null
+
+	any load(Request request)
+		integer id = request.params.id
+		User user = User.find(id)
+		return { user: user }
+```
 
 ```html
-<!-- app/ui/pages/profile.html -->
+<!-- app/pages/profile.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -329,23 +366,17 @@ Data for pages comes from a companion `.cln` file or inline `<script type="text/
 <body>
     <h1>{{user.name}}</h1>
     <p>Member since {{formatDate(user.createdAt)}}</p>
-
-    <script type="text/clean">
-        data:
-            user = User.find(params.id)
-    </script>
 </body>
 </html>
 ```
 
-Or in a separate file:
-
-```clean
-// app/ui/pages/profile.cln
-page: path="/profile/[id]"
-    data:
-        user = User.find(params.id)
-```
+**Rules:**
+- The `.html` file contains ZERO logic — no `<script>` tags, no data fetching
+- The `.cln` companion is optional; pages without a companion receive no server data
+- A companion with only `guard()` (no `load()`) is valid for auth-gated pages
+- Data returned by `load()` is merged into the template's variable scope
+- Path parameters (e.g., from `[id].html`) are available as `request.params.id`
+- The compiler type-checks the companion's return type against template variable usage
 
 ### 5.3 Conditional Rendering
 
@@ -520,7 +551,7 @@ Page-level `client` attribute overrides component default.
 ### 8.1 Layout Definition
 
 ```html
-<!-- app/ui/layouts/main.html -->
+<!-- app/layouts/main.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -543,7 +574,7 @@ Page-level `client` attribute overrides component default.
 ### 8.2 Using Layouts
 
 ```html
-<!-- app/ui/pages/about.html -->
+<!-- app/pages/about.html -->
 <page layout="main"></page>
 
 <h1>About Us</h1>
@@ -553,7 +584,7 @@ Page-level `client` attribute overrides component default.
 ### 8.3 Named Slots
 
 ```html
-<!-- app/ui/layouts/dashboard.html -->
+<!-- app/layouts/dashboard.html -->
 <div class="dashboard">
     <aside>
         <slot name="sidebar"></slot>
@@ -565,7 +596,7 @@ Page-level `client` attribute overrides component default.
 ```
 
 ```html
-<!-- app/ui/pages/dashboard.html -->
+<!-- app/pages/dashboard.html -->
 <page layout="dashboard"></page>
 
 <slot name="sidebar">
@@ -768,7 +799,7 @@ Forms automatically include CSRF tokens:
 
 ### 12.3 Content Security Policy
 
-Configure CSP in `/config/server.cln`:
+Configure CSP in `app.cln`:
 
 ```clean
 server:
@@ -784,44 +815,42 @@ server:
 ## 13. File Structure
 
 ```
-/app
-├── /components          # Clean component definitions
+app/
+├── pages/                   # HTML pages + companion loaders
+│   ├── index.html
+│   ├── index.cln            # Companion: load(), guard()
+│   ├── about.html
+│   ├── blog/
+│   │   ├── index.html
+│   │   ├── index.cln
+│   │   ├── [slug].html
+│   │   └── [slug].cln
+│   └── dashboard/
+│       ├── index.html
+│       └── index.cln
+├── components/              # Clean component definitions
 │   ├── Header.cln
 │   ├── Footer.cln
-│   ├── UserCard.cln
-│   └── ...
-├── /pages               # HTML pages
-│   ├── index.html
-│   ├── about.html
-│   ├── /blog
-│   │   ├── index.html
-│   │   └── [slug].html
-│   └── /dashboard
-│       └── index.html
-├── /layouts             # Layout templates
+│   └── UserCard.cln
+├── layouts/                 # Layout templates
 │   ├── main.html
 │   └── admin.html
-└── /partials            # Reusable HTML fragments
-    ├── nav.html
-    └── sidebar.html
+├── api/                     # API endpoint modules
+│   └── users.cln
+├── data/                    # Data models
+│   └── User.cln
+├── auth/                    # Auth configuration
+│   └── config.cln
+└── public/                  # Static assets
+    ├── css/
+    │   └── main.css
+    └── images/
+        └── logo.svg
 
-/config
-├── tags.cln             # Component registry (optional)
-└── ui.cln               # Theme configuration
-
-/public
-├── /css
-│   └── main.css
-├── /js
-│   └── app.js
-└── /images
-    └── logo.svg
-
-/dist                    # Build output
+dist/                        # Build output
 ├── server.wasm
 ├── ui.wasm
-├── manifest.islands.json
-└── /public
+└── manifest.islands.json
 ```
 
 ---
@@ -900,7 +929,7 @@ All bridge functions are declared in `plugin.toml` and implemented in `loader.js
 ### 15.1 Simple Page
 
 ```html
-<!-- app/ui/pages/index.html -->
+<!-- app/pages/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -924,15 +953,25 @@ All bridge functions are declared in `plugin.toml` and implemented in `loader.js
 
 ### 15.2 Dynamic Page with Data
 
-```html
-<!-- app/ui/pages/blog/[slug].html -->
-<page layout="main"></page>
+Blog detail page using the companion file pattern:
 
-<script type="text/clean">
-    data:
-        post = Post.find: where: slug=params.slug
-        comments = post.comments: order: createdAt="desc"
-</script>
+```clean
+// app/pages/blog/[slug].cln
+functions:
+	any load(Request request)
+		string slug = request.params.slug
+		Post post = Post.find:
+			where:
+				slug == slug
+		list<Comment> comments = post.comments:
+			order:
+				createdAt desc
+		return { post: post, comments: comments }
+```
+
+```html
+<!-- app/pages/blog/[slug].html -->
+<page layout="main"></page>
 
 <article class="blog-post">
     <header>
@@ -961,7 +1000,7 @@ All bridge functions are declared in `plugin.toml` and implemented in `loader.js
 ### 15.3 Interactive Component
 
 ```clean
-// app/ui/components/CommentForm.cln
+// app/components/CommentForm.cln
 component: tag="comment-form" client="on"
     props:
         string postId

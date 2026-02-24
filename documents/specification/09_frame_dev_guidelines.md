@@ -48,41 +48,44 @@ myapp/
 ├── project.toml            # Project configuration
 │
 └── app/
-    ├── ui/                 # Presentation Layer (frame.ui)
-    │   ├── pages/          # Route-level pages/screens
-    │   ├── components/     # Reusable UI pieces
-    │   ├── layouts/        # Page layouts
-    │   └── styles/         # Theme, global styles, tokens
+    ├── pages/              # SSR pages + companion loaders (frame.ui)
+    │   ├── index.html
+    │   ├── index.cln       # Companion: load(), guard()
+    │   └── blog/
+    │       ├── [slug].html
+    │       └── [slug].cln
     │
-    ├── backend/            # Application Layer (frame.httpserver)
-    │   ├── api/            # Endpoints / route handlers
-    │   ├── services/       # Business logic / use-cases
-    │   └── middleware/     # Auth, logging, rate limit
+    ├── components/         # Reusable UI components (frame.ui)
+    │   ├── Header.cln
+    │   └── Footer.cln
     │
-    ├── data/               # Persistence Layer (frame.data)
-    │   ├── models/         # DB models / record types
-    │   ├── queries/        # SQL / query builders
-    │   ├── migrations/     # Schema migrations
-    │   └── repositories/   # Data access functions
+    ├── layouts/            # Page layout wrappers (frame.ui)
+    │   └── main.html
     │
-    ├── shared/             # Cross-Cutting (safe for UI + backend)
-    │   ├── types/          # DTOs, shared structs
-    │   ├── validation/     # Shared validation rules
-    │   └── utils/          # Pure helpers (no IO)
+    ├── api/                # HTTP endpoints (frame.httpserver)
+    │   └── users.cln
     │
-    └── config/             # Configuration (frame.auth)
-        └── auth.cln        # Auth, roles, session config
+    ├── data/               # Data models / ORM (frame.data)
+    │   ├── User.cln
+    │   └── migrations/
+    │
+    ├── auth/               # Auth configuration (frame.auth)
+    │   └── config.cln
+    │
+    └── public/             # Static assets
+        └── css/
+            └── main.css
 
-├── public/                 # Static assets
 ├── dist/                   # Compiled WASM output
 └── docs/specification/     # Documentation
 ```
 
 Plugin Folder Ownership:
-- frame.ui → app/ui/**
-- frame.httpserver → app/backend/**
-- frame.data → app/data/**
-- frame.auth → app/config/
+- frame.ui → app/pages/, app/components/, app/layouts/
+- frame.httpserver → app/api/
+- frame.data → app/data/
+- frame.auth → app/auth/
+- frame.canvas → app/canvas/
 
 4) Clean Language Conventions
 

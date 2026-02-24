@@ -94,7 +94,7 @@ When creating a project with `cleen project create`, the CLI reads each plugin's
 ```toml
 # Example from plugin.toml
 [paths]
-owns = ["app/backend", "app/backend/api", "app/backend/services"]
+owns = ["app/api"]
 auto_create = true
 ```
 
@@ -114,27 +114,20 @@ $ cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui,fram
 Creating project 'myapp'...
 
   Creating folders...
-  [frame.data] Creating app/data/models/
-  [frame.data] Creating app/data/queries/
-  [frame.data] Creating app/data/migrations/
-  [frame.data] Creating app/data/repositories/
-  [frame.httpserver] Creating app/backend/api/
-  [frame.httpserver] Creating app/backend/services/
-  [frame.httpserver] Creating app/backend/middleware/
-  [frame.ui] Creating app/ui/pages/
-  [frame.ui] Creating app/ui/components/
-  [frame.ui] Creating app/ui/layouts/
-  [frame.ui] Creating app/ui/styles/
-  [frame.auth] Creating app/config/
+  [frame.data] Creating app/data/
+  [frame.httpserver] Creating app/api/
+  [frame.ui] Creating app/pages/
+  [frame.ui] Creating app/components/
+  [frame.ui] Creating app/layouts/
+  [frame.auth] Creating app/auth/
+  [core] Creating app/public/css/
 
   Creating files...
   [core] Creating app.cln
   [core] Creating project.toml
-  [frame.auth] Creating app/config/auth.cln
-  [frame.auth] Creating app/config/project.cln
-  [frame.ui] Creating app/ui/pages/index.html
-  [frame.ui] Creating app/ui/styles/theme.cln
-  [frame.httpserver] Creating app/backend/api/health.cln
+  [frame.auth] Creating app/auth/config.cln
+  [frame.ui] Creating app/pages/index.html
+  [frame.httpserver] Creating app/api/health.cln
 
 Project created successfully!
 
@@ -142,26 +135,17 @@ myapp/
 ├── app.cln                          # Main entry point
 ├── project.toml                     # Project manifest
 └── app/
-    ├── config/
-    │   ├── project.cln              # Project settings
-    │   └── auth.cln                 # Auth configuration
+    ├── pages/
+    │   └── index.html               # Home page
+    ├── components/
+    ├── layouts/
+    ├── api/
+    │   └── health.cln               # Health check endpoint
     ├── data/
-    │   ├── models/
-    │   ├── queries/
-    │   ├── migrations/
-    │   └── repositories/
-    ├── backend/
-    │   ├── api/
-    │   │   └── health.cln           # Health check endpoint
-    │   ├── services/
-    │   └── middleware/
-    └── ui/
-        ├── pages/
-        │   └── index.html       # Home page
-        ├── components/
-        ├── layouts/
-        └── styles/
-            └── theme.cln            # Default theme
+    ├── auth/
+    │   └── config.cln               # Auth configuration
+    └── public/
+        └── css/
 ```
 
 #### Starter File Templates
@@ -172,8 +156,8 @@ Plugins can provide starter file templates in their `[templates]` section:
 # plugin.toml
 [templates]
 files = [
-  { path = "app/config/auth.cln", template = "auth_config.cln" },
-  { path = "app/backend/api/health.cln", template = "health_endpoint.cln" },
+  { path = "app/auth/config.cln", template = "auth_config.cln" },
+  { path = "app/api/health.cln", template = "health_endpoint.cln" },
 ]
 ```
 
@@ -188,14 +172,8 @@ $ cleen plugin add frame.data
 
 Installing frame.data@2.0.0...
   Creating app/data/
-  Creating app/data/models/
-  Creating app/data/queries/
-  Creating app/data/migrations/
-  Creating app/data/repositories/
 
-Plugin installed. Add to your app.cln:
-  plugins:
-      frame.data
+Plugin installed. Files in app/data/ automatically use frame.data (implicit import).
 ```
 
 #### Implicit Plugin Import
@@ -205,12 +183,12 @@ Files in plugin-owned folders can optionally skip the `plugins:` declaration if 
 ```toml
 # plugin.toml
 [paths]
-owns = ["app/data/models"]
+owns = ["app/data"]
 implicit_import = true
 ```
 
 ```clean
-// app/data/models/User.cln
+// app/data/User.cln
 // No need for 'plugins: frame.data' - it's implicit
 
 data User

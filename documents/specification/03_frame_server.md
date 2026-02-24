@@ -29,10 +29,13 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 ## 3. File Layout
 ```
 /app/api/*.cln           # API modules using `endpoints:`
-/app/pages/*.cln         # UI pages (SSR/CSR)
+/app/pages/*.html        # SSR page templates (HTML)
+/app/pages/*.cln         # Companion data loaders (paired by filename)
 /app/components/*.cln    # UI components
-/config/*.cln            # app, ui, data, auth
-/public/*                # static assets
+/app/layouts/*.html      # Page layout wrappers
+/app/data/*.cln          # Data models / ORM
+/app/auth/*.cln          # Auth configuration
+/public/*                # Static assets
 ```
 
 ---
@@ -175,7 +178,7 @@ frame api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ---
 
 ## 11. SSR Pipeline (UI)
-- Server renders pages declared in `/app/pages/*.cln`.
+- Server renders pages from `/app/pages/*.html`. Data is supplied by paired companion `.cln` files.
 - Output HTML is streamed or buffered (host adapter decides).
 - Hydration islands are scheduled according to `client="on|visible|idle|only"`.
 

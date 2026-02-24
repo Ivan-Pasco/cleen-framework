@@ -45,13 +45,15 @@ Platforms	CLI, Server	Target packaging, runtime adapters
 
 These are the standard paths used across all Frame-based projects:
 
-/app/pages/*.cln         → Page-level UI routes (SSR)
+/app/pages/*.html        → SSR page templates (HTML with {{ }} and cl-* directives)
+/app/pages/*.cln         → Companion data loaders (paired by filename: load/guard)
 /app/components/*.cln    → Reusable UI components
+/app/layouts/*.html      → Page layout wrappers
 /app/api/*.cln           → Server endpoints
-/config/*.cln            → Configuration files (app, ui, data, auth)
-/db/schema.cln           → ORM schema definitions
-/db/migrations/*.sql     → Generated SQL migrations
-/public/*                → Static assets (CSS, JS, icons)
+/app/data/*.cln          → Data models / ORM
+/app/auth/*.cln          → Auth configuration
+/app/canvas/*.cln        → Canvas applications
+/public/*                → Static assets (CSS, images)
 /dist/*                  → Compiled WASM and bundles
 /docs/specification/*    → Developer and AI documentation
 /docs/specification/ai_context/* → AI context data

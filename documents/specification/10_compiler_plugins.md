@@ -122,7 +122,7 @@ functions = [
 
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/backend", "app/backend/api", "app/backend/services", "app/backend/middleware"]
+owns = ["app/api"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -564,7 +564,7 @@ Plugins can define folder ownership through the `[paths]` section in `plugin.tom
 ```toml
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/backend", "app/backend/api", "app/backend/services"]
+owns = ["app/api"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -587,10 +587,11 @@ implicit_import = true
 
 | Plugin | Owned Folders |
 |--------|---------------|
-| `frame.ui` | `app/ui/`, `app/ui/pages/`, `app/ui/components/`, `app/ui/layouts/`, `app/ui/styles/` |
-| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
-| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
-| `frame.auth` | `app/config/` |
+| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
+| `frame.httpserver` | `app/api/` |
+| `frame.data` | `app/data/` |
+| `frame.auth` | `app/auth/` |
+| `frame.canvas` | `app/canvas/` |
 
 ### 7.3 Folder Creation
 
@@ -605,19 +606,10 @@ $ cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui
 
 Creating project 'myapp'...
   [frame.data] Creating app/data/
-  [frame.data] Creating app/data/models/
-  [frame.data] Creating app/data/queries/
-  [frame.data] Creating app/data/migrations/
-  [frame.data] Creating app/data/repositories/
-  [frame.httpserver] Creating app/backend/
-  [frame.httpserver] Creating app/backend/api/
-  [frame.httpserver] Creating app/backend/services/
-  [frame.httpserver] Creating app/backend/middleware/
-  [frame.ui] Creating app/ui/
-  [frame.ui] Creating app/ui/pages/
-  [frame.ui] Creating app/ui/components/
-  [frame.ui] Creating app/ui/layouts/
-  [frame.ui] Creating app/ui/styles/
+  [frame.httpserver] Creating app/api/
+  [frame.ui] Creating app/pages/
+  [frame.ui] Creating app/components/
+  [frame.ui] Creating app/layouts/
 
 Project created successfully!
 ```
@@ -627,9 +619,9 @@ Project created successfully!
 When `implicit_import = true`, files in owned folders don't need explicit `plugins:` declarations:
 
 ```clean
-// app/data/models/User.cln
+// app/data/User.cln
 // No need for 'plugins: frame.data' - it's implicit because
-// the file is in app/data/models/ which is owned by frame.data
+// the file is in app/data/ which is owned by frame.data
 
 data User
     integer id : pk, auto
@@ -765,8 +757,8 @@ The language server detects active plugins using these methods (in order):
    ```
 
 3. **Folder ownership** (implicit)
-   - File in `app/data/models/` → frame.data is active
-   - File in `app/backend/api/` → frame.httpserver is active
+   - File in `app/data/` → frame.data is active
+   - File in `app/api/` → frame.httpserver is active
 
 ### 8.5 Caching Strategy
 

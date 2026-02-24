@@ -140,11 +140,11 @@ app/
    **Auto-Detection Rules:**
    | Path Pattern | Auto-Loaded Plugins |
    |--------------|---------------------|
-   | `/api/`, `/backend/api/`, `/endpoints/` | httpserver + data + auth |
-   | `/data/`, `/models/` | data |
+   | `/api/`, `/endpoints/` | httpserver + data + auth |
+   | `/data/` | data |
    | `/auth/` | auth |
    | `/canvas/` | canvas |
-   | `/ui/`, `/components/` | ui |
+   | `/pages/`, `/components/`, `/layouts/` | ui |
 
 5. **No CSS in HTML** - Inline styles are prohibited. All CSS must be in `public/css/` and linked via `<link>` tags.
 
