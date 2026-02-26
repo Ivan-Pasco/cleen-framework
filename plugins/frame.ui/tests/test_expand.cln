@@ -56,3 +56,27 @@ test_page_validation_missing_path()
 test_unknown_block_passthrough()
 	result = expand_block("unknown", "{}", "original body")
 	assert(result == "original body")
+
+// html: block tests
+
+test_html_block_default()
+	result = expand_block("html", "{}", "<p>{message}</p>")
+	assert(result.contains("string __html = \"\""))
+	assert(result.contains("return __html"))
+	assert(result.contains("_html_escape(message)"))
+
+test_html_block_with_var()
+	result = expand_block("html", "{\"var\": \"header\"}", "<nav><a href=\"/\">{brand}</a></nav>")
+	assert(result.contains("string header = \"\""))
+	assert(result.contains("header = header +"))
+	assert(result.contains("_html_escape(brand)"))
+	// Named var mode must NOT generate return
+	assert(result.contains("return") == false)
+	// Must not contain __html — replaced with var name
+	assert(result.contains("__html") == false)
+
+test_html_block_raw_interpolation()
+	result = expand_block("html", "{}", "<div>{!raw_content}</div>")
+	assert(result.contains("raw_content"))
+	// Raw interpolation must NOT use _html_escape
+	assert(result.contains("_html_escape(raw_content)") == false)

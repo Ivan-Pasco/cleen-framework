@@ -241,6 +241,32 @@ string build_nav(string lang, string nav_items_html)
         </nav>
 ```
 
+When `html:` appears without attributes, it generates `string __html = "" ... return __html`. The block must be the last statement in the function.
+
+#### Named Variable Mode
+
+When building multiple HTML fragments in one function, use `var=` to assign the block result to a named variable instead of returning immediately:
+
+```clean
+string build_page(string title, string items_html)
+    html: var="header"
+        <header>
+            <h1>{title}</h1>
+        </header>
+
+    html: var="footer"
+        <footer>
+            <p>Copyright 2026</p>
+        </footer>
+
+    return header + items_html + footer
+```
+
+**Rules:**
+- `html:` (no attributes) — generates `string __html = "" ... return __html`
+- `html: var="name"` — generates `string name = "" ... name = name + ...` (no return)
+- Named variable mode allows combining multiple HTML fragments with custom logic
+
 #### Interpolation Syntax
 
 | Syntax | Meaning | Generated Code |

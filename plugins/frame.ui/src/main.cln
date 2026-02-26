@@ -46,7 +46,7 @@ functions:
 			return expand_component(attributes, body)
 
 		if block_name == "html"
-			return expand_html_block(body)
+			return expand_html_block(attributes, body)
 
 		// Check if this is a screen block (block_name is "screen ScreenName")
 		if block_name.startsWith("screen ")
@@ -872,14 +872,24 @@ functions:
 
 functions:
 	// Entry point for standalone html: blocks (inside functions)
-	// Generates: string __html = "" + building code + return __html
-	string expand_html_block(string body)
+	// Default mode: generates string __html = "" + building code + return __html
+	// Named var mode (var="name"): generates string name = "" + building code (no return)
+	string expand_html_block(string attributes, string body)
 		string cleaned = strip_block_indent(body)
 		string code = html_block_to_code(cleaned)
-		string result = "string __html = \"\"\n"
-		result = result + code
-		result = result + "return __html\n"
-		return result
+		string var_name = get_attr(attributes, "var", "")
+
+		if var_name == ""
+			// Default mode: build __html and return it
+			string result = "string __html = \"\"\n"
+			result = result + code
+			result = result + "return __html\n"
+			return result
+		else
+			// Named variable mode: build into named var, no return
+			string result = "string " + var_name + " = \"\"\n"
+			result = result + code.replace("__html", var_name)
+			return result
 
 	// Core transformer: walks HTML and delegates to text/element processors
 	// Parallel to html_to_render but uses {expr} syntax and __html variable
