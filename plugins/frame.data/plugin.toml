@@ -63,7 +63,11 @@ keywords = [
   { name = "order", description = "Sort query results", context = "block" },
   { name = "limit", description = "Limit number of results", context = "block" },
   { name = "offset", description = "Skip number of results", context = "block" },
-  { name = "include", description = "Include related models", context = "block" },
+  { name = "include", description = "Include related models (eager loading)", context = "block" },
+  { name = "join", description = "Join related tables", context = "block" },
+  { name = "group", description = "Group results by field", context = "block" },
+  { name = "having", description = "Filter grouped results", context = "block" },
+  { name = "select", description = "Select specific fields", context = "block" },
 ]
 
 # Custom types provided by the plugin
@@ -78,6 +82,8 @@ functions = [
   { name = "Data.tx", signature = "Data.tx: block", description = "Execute block in transaction" },
   { name = "db.query", signature = "db.query: sql, params", description = "Execute raw SQL query" },
   { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model" },
+  { name = "Model.exists", signature = "Model.exists(id)", description = "Check if record exists by ID" },
+  { name = "Model.findOrFail", signature = "Model.findOrFail(id)", description = "Find record by ID or throw error" },
 ]
 
 # Auto-completion suggestions

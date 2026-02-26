@@ -81,16 +81,19 @@ keywords = [
   { name = "session", description = "Session configuration block", context = "block" },
   { name = "jwt", description = "JWT configuration block", context = "block" },
   { name = "cookie", description = "Session cookie name", context = "config" },
-  { name = "sameSite", description = "Cookie SameSite attribute", context = "config" },
-  { name = "secure", description = "Cookie Secure flag", context = "config" },
-  { name = "httpOnly", description = "Cookie HttpOnly flag", context = "config" },
+  { name = "sameSite", description = "Cookie SameSite attribute (Strict, Lax, None)", context = "config" },
+  { name = "secure", description = "Cookie Secure flag (HTTPS only)", context = "config" },
+  { name = "httpOnly", description = "Cookie HttpOnly flag (no JS access)", context = "config" },
   { name = "timeoutMinutes", description = "Session timeout in minutes", context = "config" },
   { name = "enabled", description = "Enable/disable feature", context = "config" },
-  { name = "secret", description = "JWT secret source", context = "config" },
-  { name = "algorithm", description = "JWT signing algorithm", context = "config" },
-  { name = "expiresIn", description = "JWT expiration time", context = "config" },
-  { name = "require", description = "Required role/permission", context = "guard" },
+  { name = "secret", description = "JWT secret source (use $ENV_VAR)", context = "config" },
+  { name = "algorithm", description = "JWT signing algorithm (HS256, HS384, HS512)", context = "config" },
+  { name = "expiresIn", description = "JWT expiration time (e.g., 3600)", context = "config" },
+  { name = "refreshToken", description = "Refresh token configuration", context = "config" },
+  { name = "require", description = "Required role/permission for access", context = "block" },
   { name = "roles", description = "Role definitions block", context = "block" },
+  { name = "permissions", description = "Permission definitions for a role", context = "block" },
+  { name = "csrf", description = "CSRF protection configuration", context = "config" },
 ]
 
 # Custom types provided by the plugin
@@ -103,15 +106,18 @@ types = [
 
 # Built-in functions/expressions
 functions = [
-  { name = "Auth.login", signature = "Auth.login(credentials)", description = "Authenticate user" },
-  { name = "Auth.logout", signature = "Auth.logout()", description = "End user session" },
-  { name = "Auth.session", signature = "Auth.session()", description = "Get current session" },
-  { name = "Auth.user", signature = "Auth.user()", description = "Get authenticated user" },
-  { name = "Auth.check", signature = "Auth.check()", description = "Check if authenticated" },
-  { name = "Auth.hasRole", signature = "Auth.hasRole(role)", description = "Check user role" },
-  { name = "Auth.can", signature = "Auth.can(permission)", description = "Check user permission" },
-  { name = "hashPassword", signature = "hashPassword(plain)", description = "Hash password with Argon2" },
-  { name = "verifyPassword", signature = "verifyPassword(plain, hash)", description = "Verify password hash" },
+  { name = "Auth.login", signature = "Auth.login(credentials)", description = "Authenticate user and create session" },
+  { name = "Auth.logout", signature = "Auth.logout()", description = "End user session and clear cookie" },
+  { name = "Auth.session", signature = "Auth.session()", description = "Get current session data" },
+  { name = "Auth.user", signature = "Auth.user()", description = "Get authenticated user context" },
+  { name = "Auth.check", signature = "Auth.check()", description = "Check if request is authenticated (returns boolean)" },
+  { name = "Auth.userId", signature = "Auth.userId()", description = "Get current authenticated user ID" },
+  { name = "Auth.userRole", signature = "Auth.userRole()", description = "Get current authenticated user role" },
+  { name = "Auth.hasRole", signature = "Auth.hasRole(role)", description = "Check if user has specific role" },
+  { name = "Auth.can", signature = "Auth.can(permission)", description = "Check if user has specific permission" },
+  { name = "hashPassword", signature = "hashPassword(plain)", description = "Hash password with Argon2id" },
+  { name = "verifyPassword", signature = "verifyPassword(plain, hash)", description = "Verify password against Argon2id hash" },
+  { name = "Auth.csrfToken", signature = "Auth.csrfToken()", description = "Get CSRF token for current session" },
 ]
 
 # Auto-completion suggestions

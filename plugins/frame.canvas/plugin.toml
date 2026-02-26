@@ -29,8 +29,9 @@ keywords = [
   { name = "background", description = "Background color", context = "config" },
   { name = "assets", description = "Asset preloading block", context = "block" },
   { name = "init", description = "Initialization block", context = "block" },
-  { name = "update", description = "Update loop block", context = "block" },
-  { name = "render", description = "Render loop block", context = "block" },
+  { name = "update", description = "Update loop block (runs every frame)", context = "block" },
+  { name = "render", description = "Render loop block (runs every frame after update)", context = "block" },
+  { name = "scene", description = "Scene management (change, push, pop)", context = "expression" },
 ]
 
 # Custom types provided by the plugin
@@ -84,6 +85,11 @@ functions = [
   { name = "ease.inQuad", signature = "ease.inQuad(t)", description = "Quadratic ease in" },
   { name = "ease.outQuad", signature = "ease.outQuad(t)", description = "Quadratic ease out" },
   { name = "ease.inOutQuad", signature = "ease.inOutQuad(t)", description = "Quadratic ease in-out" },
+  # Scene management
+  { name = "scene.change", signature = "scene.change(name)", description = "Change to scene by name" },
+  { name = "scene.push", signature = "scene.push(name)", description = "Push scene onto stack" },
+  { name = "scene.pop", signature = "scene.pop()", description = "Pop scene from stack" },
+  { name = "scene.current", signature = "scene.current()", description = "Get current scene name" },
 ]
 
 # Auto-completion suggestions

@@ -121,17 +121,20 @@ blocks = ["server", "endpoints"]
 
 # Keywords used within plugin context
 keywords = [
-  { name = "GET", description = "HTTP GET endpoint", context = "endpoint" },
-  { name = "POST", description = "HTTP POST endpoint", context = "endpoint" },
-  { name = "PUT", description = "HTTP PUT endpoint", context = "endpoint" },
-  { name = "PATCH", description = "HTTP PATCH endpoint", context = "endpoint" },
-  { name = "DELETE", description = "HTTP DELETE endpoint", context = "endpoint" },
+  { name = "GET", description = "HTTP GET endpoint", context = "block" },
+  { name = "POST", description = "HTTP POST endpoint", context = "block" },
+  { name = "PUT", description = "HTTP PUT endpoint", context = "block" },
+  { name = "PATCH", description = "HTTP PATCH endpoint", context = "block" },
+  { name = "DELETE", description = "HTTP DELETE endpoint", context = "block" },
   { name = "guard", description = "Authentication/authorization guard", context = "block" },
   { name = "returns", description = "Response type declaration", context = "block" },
   { name = "cache", description = "Response caching configuration", context = "block" },
   { name = "handle", description = "Error handler block", context = "block" },
+  { name = "middleware", description = "Middleware handler block", context = "block" },
   { name = "port", description = "Server port configuration", context = "config" },
   { name = "host", description = "Server host configuration", context = "config" },
+  { name = "cors", description = "CORS configuration", context = "config" },
+  { name = "rateLimit", description = "Rate limiting configuration", context = "config" },
 ]
 
 # Custom types provided by the plugin
@@ -143,15 +146,19 @@ types = [
 # Built-in functions/expressions
 functions = [
   { name = "json", signature = "json(data)", description = "Return JSON response" },
-  { name = "html", signature = "html(content)", description = "Return HTML response" },
+  { name = "html", signature = "html(content)", description = "Return HTML response (use with html: blocks for templates)" },
   { name = "redirect", signature = "redirect(url, status?)", description = "Redirect to URL" },
   { name = "notFound", signature = "notFound(message?)", description = "Return 404 response" },
   { name = "error", signature = "error(status, message)", description = "Return error response" },
+  { name = "status", signature = "status(code, body)", description = "Return response with specific HTTP status code" },
   { name = "req.param", signature = "req.param(name)", description = "Get path parameter" },
   { name = "req.query", signature = "req.query(name)", description = "Get query parameter" },
   { name = "req.header", signature = "req.header(name)", description = "Get request header" },
-  { name = "req.body", signature = "req.body()", description = "Get request body" },
-  { name = "req.form", signature = "req.form()", description = "Get form data" },
+  { name = "req.body", signature = "req.body()", description = "Get request body as string" },
+  { name = "req.form", signature = "req.form()", description = "Get form data as JSON" },
+  { name = "req.method", signature = "req.method()", description = "Get HTTP method (GET, POST, etc.)" },
+  { name = "req.path", signature = "req.path()", description = "Get request URL path" },
+  { name = "req.cookie", signature = "req.cookie(name)", description = "Get cookie value by name" },
 ]
 
 # Auto-completion suggestions
