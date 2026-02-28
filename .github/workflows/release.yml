@@ -94,7 +94,7 @@ jobs:
 
       - name: Create archive
         run: |
-          tar czf frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz frame-plugins-${{ needs.create-release.outputs.version }}
+          tar czf frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz -C frame-plugins-${{ needs.create-release.outputs.version }} .
 
       - name: Generate checksum
         run: |
