@@ -1610,9 +1610,7 @@ functions:
 			if eq_pos == -1
 				// Remove the trailing colon and trim any spaces before it
 				string name = trimmed.substring(0, trimmed.length() - 1)
-				string result = name.trim()
-				return result
-		else
+				return name.trim()
 
 		return ""
 
@@ -2314,7 +2312,57 @@ functions:
 		result = result + "\t\t\t\treturn html\n\n"
 		return result
 
-	// Generate hydration function for a screen
+	// Generate hydration function for a screen (full version with lifecycle hooks)
+	string generate_hydration_function_full(string name, string state_json, string render_content, string on_mount, string on_unmount, string on_update)
+		string result = "\t\tstring getHydrationData()\n"
+		result = result + "\t\t\tstring json = \"{\"\n"
+
+		// Serialize state
+		result = result + "\t\t\tjson = json + \"\\\"state\\\":{\"\n"
+		result = result + generate_hydration_state_fields(state_json)
+		result = result + "\t\t\tjson = json + \"}\"\n"
+
+		// Generate events array from render content
+		list<string> lines = json_to_string_list(render_content)
+		string events_json = extract_events_from_render(lines)
+		result = result + "\t\t\tjson = json + \",\\\"events\\\":\" + \"" + events_json + "\"\n"
+
+		// Add lifecycle hooks
+		result = result + "\t\t\tjson = json + \",\\\"lifecycle\\\":{\"\n"
+		result = result + "\t\t\tjson = json + \"\\\"onMount\\\":\\\"" + escape_json_string(on_mount) + "\\\"\"\n"
+		result = result + "\t\t\tjson = json + \",\\\"onUnmount\\\":\\\"" + escape_json_string(on_unmount) + "\\\"\"\n"
+		result = result + "\t\t\tjson = json + \",\\\"onUpdate\\\":\\\"" + escape_json_string(on_update) + "\\\"\"\n"
+		result = result + "\t\t\tjson = json + \"}\"\n"
+
+		result = result + "\t\t\tjson = json + \"}\"\n"
+		result = result + "\t\t\treturn json\n\n"
+
+		return result
+
+	// Helper: generate serialization code for a single state field
+	string generate_hydration_state_field(string var_json, boolean add_comma)
+		string var_name = extract_json_field(var_json, "name")
+		string var_type = extract_json_field(var_json, "type")
+		string separator = ""
+		if add_comma
+			separator = ","
+		string clean_type = map_ui_type(var_type)
+		if clean_type == "string"
+			return "\t\t\tjson = json + \"" + separator + "\\\"" + var_name + "\\\":\\\"\" + " + var_name + " + \"\\\"\"\n"
+		return "\t\t\tjson = json + \"" + separator + "\\\"" + var_name + "\\\":\" + " + var_name + ".toString()\n"
+
+	// Helper: generate state field serialization code
+	string generate_hydration_state_fields(string state_json)
+		string result = ""
+		list<string> state_vars = json_to_object_list(state_json)
+		integer i = 0
+		while i < state_vars.length()
+			boolean needs_comma = i > 0
+			result = result + generate_hydration_state_field(state_vars[i], needs_comma)
+			i = i + 1
+		return result
+
+	// Generate hydration function for a screen (simplified, no lifecycle hooks)
 	string generate_hydration_function(string name, string state_json, string render_content)
 		return generate_hydration_function_full(name, state_json, render_content, "", "", "")
 

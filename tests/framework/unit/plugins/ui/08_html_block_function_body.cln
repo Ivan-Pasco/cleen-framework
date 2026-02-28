@@ -1,0 +1,92 @@
+// Test: html: blocks inside function bodies
+// Verifies that html: blocks correctly generate return statements
+// when used inside functions (not top-level component/page context)
+
+plugins:
+	frame.ui
+
+start:
+	printl("=== Test Suite: html: Blocks in Function Bodies ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	// Test 1: Basic html block returns string
+	string basic_result = test_basic()
+	if basic_result.contains("<div") and basic_result.contains("Hello")
+		printl("PASS: basic html: block returns valid HTML string")
+		passed = passed + 1
+	else
+		printl("FAIL: basic html: block should return HTML string, got: " + basic_result)
+		failed = failed + 1
+
+	// Test 2: Interpolation works
+	string interp_result = test_interp("World")
+	if interp_result.contains("Hello") and interp_result.contains("World")
+		printl("PASS: html: block with interpolation works")
+		passed = passed + 1
+	else
+		printl("FAIL: html: block interpolation, got: " + interp_result)
+		failed = failed + 1
+
+	// Test 3: Raw interpolation works
+	string raw_result = test_raw("<strong>Nav</strong>")
+	if raw_result.contains("<nav>") and raw_result.contains("<strong>Nav</strong>")
+		printl("PASS: html: block with raw interpolation works")
+		passed = passed + 1
+	else
+		printl("FAIL: html: block raw interpolation, got: " + raw_result)
+		failed = failed + 1
+
+	// Test 4: Attributes with special chars
+	string attrs_result = test_attrs("https://example.com")
+	if attrs_result.contains("href=") and attrs_result.contains("example.com")
+		printl("PASS: html: block with attribute interpolation works")
+		passed = passed + 1
+	else
+		printl("FAIL: html: block attr interpolation, got: " + attrs_result)
+		failed = failed + 1
+
+	// Test 5: Multiple elements
+	string multi_result = test_multi("Title", "Description")
+	if multi_result.contains("Title") and multi_result.contains("Description")
+		printl("PASS: html: block with multiple elements works")
+		passed = passed + 1
+	else
+		printl("FAIL: html: block multi elements, got: " + multi_result)
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test 1: Basic html: block in function
+	string test_basic()
+		html:
+			<div class="card">
+				<h1>Hello</h1>
+			</div>
+
+	// Test 2: html: block with variable interpolation
+	string test_interp(string name)
+		html:
+			<p>Hello {name}!</p>
+
+	// Test 3: html: block with raw interpolation
+	string test_raw(string nav_html)
+		html:
+			<nav>{!nav_html}</nav>
+
+	// Test 4: html: block with attributes containing special chars
+	string test_attrs(string url)
+		html:
+			<a href="{url}" class="btn btn-primary" target="_blank" rel="noopener noreferrer">Click</a>
+
+	// Test 5: html: block with multiple elements
+	string test_multi(string title, string desc)
+		html:
+			<div class="card">
+				<h1>{title}</h1>
+				<p>{desc}</p>
+			</div>
