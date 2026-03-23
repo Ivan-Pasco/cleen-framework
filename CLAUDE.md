@@ -22,7 +22,7 @@ Frame is a modern, full-stack web framework that unifies frontend, backend, and 
 All specifications are located in `/documents/specification/`:
 
 1. **[01_frame_overview.md](documents/specification/01_frame_overview.md)** - High-level architecture, philosophy, and core concepts
-2. **[02_frame_cli.md](documents/specification/02_frame_cli.md)** - CLI commands, build system, and development workflow
+2. **[02_frame_cli.md](documents/specification/02_frame_cli.md)** - CLI commands (v1 deprecated, v2 migration guide)
 3. **[03_frame_server.md](documents/specification/03_frame_server.md)** - Server runtime, HTTP APIs using `endpoints:` blocks, and Host Bridge
 4. **[04_frame_data.md](documents/specification/04_frame_data.md)** - ORM system with block-based queries, migrations, and many-to-many relationships
 5. **[05_frame_ui.md](documents/specification/05_frame_ui.md)** - UI components, SSR/CSR, hydration strategies, and theming
@@ -30,15 +30,29 @@ All specifications are located in `/documents/specification/`:
 7. **[07_frame_plugins.md](documents/specification/07_frame_plugins.md)** - Plugin system, lifecycle hooks, and extensibility
 8. **[08_frame_platforms.md](documents/specification/08_frame_platforms.md)** - Multi-platform deployment (Web, PWA, Mobile, Desktop, Server, CLI)
 9. **[09_frame_dev_guidelines.md](documents/specification/09_frame_dev_guidelines.md)** - Coding standards, naming conventions, and best practices
-10. **[frame_bridge_contracts.md](documents/specification/frame_bridge_contracts.md)** - Host Bridge JSON contracts for system integration
-11. **[frame_internal_map.md](documents/specification/frame_internal_map.md)** - Document index and module relationship map
+10. **[10_compiler_plugins.md](documents/specification/10_compiler_plugins.md)** - Compiler plugin architecture (Clean Language plugins)
+11. **[11_database_plugins.md](documents/specification/11_database_plugins.md)** - Database plugin architecture, C-ABI interface, runtime drivers
+12. **[12_frame_canvas.md](documents/specification/12_frame_canvas.md)** - Canvas rendering, animation, drawing primitives, bridge functions
+13. **[13_frame_future_evolution.md](documents/specification/13_frame_future_evolution.md)** - Roadmap, research directions, versioning policy
 
-### Reference Documentation
+### Reference Documents
 
-- **[ARCHITECTURE.md](documents/ARCHITECTURE.md)** - Deep technical dive into Frame's implementation
-- **[README.md](documents/README.md)** - Quick start guide and overview
-- **[CONTRIBUTING.md](documents/CONTRIBUTING.md)** - Contribution guidelines and workflow
-- **[ROADMAP.md](documents/ROADMAP.md)** - Future features and release timeline
+- **[frame_bridge_contracts.md](documents/specification/frame_bridge_contracts.md)** - Host Bridge JSON contracts for system integration
+- **[frame_internal_map.md](documents/specification/frame_internal_map.md)** - Document index and module relationship map
+
+### Guides
+
+- **[GETTING_STARTED.md](documents/GETTING_STARTED.md)** - Quick start tutorial for new users
+- **[PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md)** - Folder conventions and file discovery
+- **[API_REFERENCE.md](documents/API_REFERENCE.md)** - API quick reference cheat sheet
+- **[PLUGIN_GUIDE.md](documents/PLUGIN_GUIDE.md)** - Plugin system from the user's perspective
+
+### Parent-Level Documentation
+
+For project-wide docs (architecture, contributing, platform), see the parent folder:
+- **[platform-architecture/](../platform-architecture/)** - Execution layers, Host Bridge, memory model
+- **[README.md](../README.md)** - Project overview
+- **[CLAUDE.md](../CLAUDE.md)** - Cross-component work policy
 
 ## Language Specification
 
@@ -82,19 +96,28 @@ app/
 │   ├── Header.cln
 │   └── Footer.cln
 │
-├── api/                # frame.httpserver → API endpoints
-│   ├── users.cln
-│   └── posts.cln
+├── backend/            # frame.httpserver → HTTP server
+│   ├── api/            # API endpoints
+│   │   ├── users.cln
+│   │   └── posts.cln
+│   ├── services/       # Business logic
+│   └── middleware/      # Middleware
 │
 ├── data/               # frame.data → Data models/ORM
-│   ├── User.cln
-│   └── Post.cln
+│   ├── models/
+│   │   ├── User.cln
+│   │   └── Post.cln
+│   ├── queries/
+│   ├── migrations/
+│   └── repositories/
 │
 ├── auth/               # frame.auth → Auth configuration
-│   └── config.cln
+│   └── auth.cln
 │
 ├── canvas/             # frame.canvas → Canvas applications
-│   └── game.cln
+│   ├── scenes/
+│   ├── sprites/
+│   └── audio/
 │
 └── public/             # Static assets (served as-is)
     ├── css/
@@ -110,8 +133,8 @@ app/
 | SSR Pages | `.html` | `pages/` | Full (any HTML editor) |
 | Stylesheets | `.css` | `public/css/` | Full (any CSS editor) |
 | Components | `.cln` | `components/` | Clean Language |
-| API Endpoints | `.cln` | `api/` | Clean Language |
-| Data Models | `.cln` | `data/` | Clean Language |
+| API Endpoints | `.cln` | `backend/api/` | Clean Language |
+| Data Models | `.cln` | `data/models/` | Clean Language |
 | Auth Config | `.cln` | `auth/` | Clean Language |
 | Canvas Apps | `.cln` | `canvas/` | Clean Language |
 
@@ -130,21 +153,21 @@ app/
    <div cl-if="user.isAdmin">Admin Panel</div>
    ```
 
-4. **Folder = Plugin (Auto-Detection)** - The compiler automatically detects and loads plugins based on file location. No explicit `plugins:` block is required:
-   - `api/users.cln` → auto-loads `frame.httpserver`, `frame.data`, `frame.auth`
-   - `data/User.cln` → auto-loads `frame.data`
-   - `auth/config.cln` → auto-loads `frame.auth`
-   - `canvas/game.cln` → auto-loads `frame.canvas`
-   - `components/Button.cln` → auto-loads `frame.ui`
+4. **Folder Ownership (Plugin Declaration Required)** - Plugins must always be declared in `app.cln` via the `plugins:` block. Each plugin declares folder ownership in `plugin.toml`. When `implicit_import = true`, files in owned folders don't need explicit import statements — the declared plugin processes them automatically:
+   - `backend/api/users.cln` → processed by `frame.httpserver`
+   - `data/models/User.cln` → processed by `frame.data`
+   - `auth/auth.cln` → processed by `frame.auth`
+   - `canvas/scenes/game.cln` → processed by `frame.canvas`
+   - `components/Button.cln` → processed by `frame.ui`
 
-   **Auto-Detection Rules:**
-   | Path Pattern | Auto-Loaded Plugins |
-   |--------------|---------------------|
-   | `/api/`, `/endpoints/` | httpserver + data + auth |
-   | `/data/` | data |
-   | `/auth/` | auth |
-   | `/canvas/` | canvas |
-   | `/pages/`, `/components/`, `/layouts/` | ui |
+   **Folder Ownership Rules (per plugin.toml `[paths]` section):**
+   | Path Pattern | Owning Plugin |
+   |--------------|---------------|
+   | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.httpserver` |
+   | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/` | `frame.data` |
+   | `app/auth/` | `frame.auth` |
+   | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
+   | `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
 
 5. **No CSS in HTML** - Inline styles are prohibited. All CSS must be in `public/css/` and linked via `<link>` tags.
 
@@ -187,8 +210,10 @@ example/
 │   ├── pages/
 │   │   └── index.html      # Static HTML, NO <script> tags
 │   ├── data/
-│   │   └── User.cln        # Clean model (NO JS)
-│   └── api/
+│   │   └── models/
+│   │       └── User.cln    # Clean model (NO JS)
+│   └── backend/
+│       └── api/
 │       └── users.cln       # Clean endpoints (NO JS)
 └── public/
     └── css/
@@ -346,22 +371,25 @@ Follow Conventional Commits:
 
 ```
 clean-framework/
-├── frame-cli/           # CLI implementation (Rust)
-├── frame-server/        # Server runtime (Rust)
-├── frame-data/          # ORM layer (Rust)
-├── frame-ui/            # UI components (Rust)
-├── frame-auth/          # Authentication (Rust)
-├── frame-plugins/       # Plugin system (Rust)
-├── host-bridge/         # Host Bridge implementation (Rust)
+├── plugins/                 # Core framework plugins (Clean Language)
+│   ├── frame.auth/          # Authentication & authorization plugin
+│   ├── frame.canvas/        # Canvas rendering & game dev plugin
+│   ├── frame.data/          # ORM & database plugin
+│   ├── frame.httpserver/    # HTTP server & routing plugin
+│   └── frame.ui/            # UI components & SSR plugin
 ├── documents/
-│   ├── specification/   # All specification files
-│   ├── ARCHITECTURE.md
-│   ├── README.md
-│   ├── CONTRIBUTING.md
-│   └── ROADMAP.md
-├── examples/            # Example Frame applications
-├── tests/               # Test suites
-└── CLAUDE.md           # This file
+│   ├── specification/       # All specification files (01-13)
+│   ├── API_REFERENCE.md     # Quick API reference
+│   ├── GETTING_STARTED.md   # Quick start tutorial
+│   ├── PLUGIN_GUIDE.md      # Plugin system guide
+│   └── PROJECT_STRUCTURE.md # Folder conventions
+├── examples/                # Example Frame applications
+├── tests/                   # Test suites
+├── scripts/                 # Build and test scripts
+├── system-documents/        # Internal development docs
+├── CLAUDE.md                # This file
+├── README.md                # Project overview
+└── TASKS.md                 # Development task tracker
 ```
 
 ## Development Workflow
@@ -425,8 +453,6 @@ The clean-server enforces all host function signatures via `clean-server/host-br
 
 ## Performance Targets
 
-Reference: [ARCHITECTURE.md](documents/ARCHITECTURE.md)
-
 **Compilation**:
 - < 1s per 1000 LOC
 - < 100ms incremental rebuild
@@ -485,7 +511,7 @@ cargo clippy -- -D warnings
 ## Getting Help
 
 1. Check the relevant specification document first
-2. Review [ARCHITECTURE.md](documents/ARCHITECTURE.md) for technical details
+2. Review the specification files in `documents/specification/`
 3. Look at examples in `/examples/`
 4. Search existing issues on GitHub
 5. Ask in GitHub Discussions
@@ -515,8 +541,6 @@ Breaking changes require:
 4. Automated migration tools (when possible)
 
 ## Success Metrics
-
-Reference: [ROADMAP.md](documents/ROADMAP.md)
 
 Track these metrics:
 - Compilation time per 1000 LOC
