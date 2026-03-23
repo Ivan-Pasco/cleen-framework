@@ -28,15 +28,20 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 
 ## 3. File Layout
 ```
-/app/api/*.cln           # API modules using `endpoints:`
+/app/backend/            # Owned by frame.httpserver plugin
+/app/backend/api/*.cln   # API modules using `endpoints:`
+/app/backend/services/   # Business logic services
+/app/backend/middleware/ # Custom middleware
 /app/pages/*.html        # SSR page templates (HTML)
 /app/pages/*.cln         # Companion data loaders (paired by filename)
 /app/components/*.cln    # UI components
 /app/layouts/*.html      # Page layout wrappers
 /app/data/*.cln          # Data models / ORM
-/app/auth/*.cln          # Auth configuration
+/app/auth/*.cln          # Auth configuration (frame.auth)
 /public/*                # Static assets
 ```
+
+**Plugin Folder Ownership:** Files placed in `app/backend/`, `app/backend/api/`, or `app/backend/services/` are processed by the `frame.httpserver` plugin. The plugin must be declared in `app.cln` via the `plugins:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
 
 ---
 
@@ -44,7 +49,7 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 Each API module exposes a single `endpoints:` block. Endpoints are declared by **METHOD + PATH** and the block body handles the request.
 
 ```clean
-# /app/api/users.cln
+# /app/backend/api/users.cln
 endpoints:
     GET /api/users:
         list<User> users = User.find:
@@ -144,7 +149,7 @@ Typical codes: `AUTH_ERROR`, `NOT_FOUND`, `VALIDATION_ERROR`, `NETWORK_FAIL`.
 ---
 
 ## 9. Auth Integration
-Auth lives in `/config/auth.cln` and exposes guards usable inside `guard:` blocks or imperative checks.
+Auth lives in `app/auth/auth.cln` and exposes guards usable inside `guard:` blocks or imperative checks.
 
 ```clean
 endpoints:
@@ -167,8 +172,8 @@ if not auth.can(user, "post.publish"):
 The server can emit OpenAPI 3.1 by inspecting `endpoints:` declarations, `returns:`, typed params, and DTOs.
 
 ```bash
-frame api:spec   # writes openapi.json
-frame api:sdk    # generates Clean/TS/Swift/Kotlin clients
+cleen api:spec   # writes openapi.json
+cleen api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ```
 
 **Conventions**
@@ -217,10 +222,10 @@ The Clean code never calls host APIs directly—only via these bridges.
 
 ## 15. CLI
 ```bash
-frame serve        # dev server with hot reload
-frame build        # produce optimized WASM + assets
-frame api:spec     # OpenAPI
-frame api:sdk      # Client SDKs
+cleen serve        # dev server with hot reload
+cln compile app.cln -o app.wasm --plugins    # produce WASM
+cleen api:spec     # OpenAPI
+cleen api:sdk      # Client SDKs
 ```
 
 ---
@@ -237,7 +242,7 @@ frame api:sdk      # Client SDKs
 
 ### 17.1 Simple CRUD
 ```clean
-# /app/api/posts.cln
+# /app/backend/api/posts.cln
 endpoints:
     GET /api/posts:
         list<Post> posts = Post.find:

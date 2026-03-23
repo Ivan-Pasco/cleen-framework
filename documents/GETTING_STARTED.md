@@ -18,7 +18,7 @@ cleen server install
 ## Create a New Project
 
 ```bash
-frame new my-app
+cleen project create my-app --plugins=frame.httpserver,frame.data,frame.ui,frame.auth
 cd my-app
 ```
 
@@ -26,47 +26,64 @@ This creates a project with automatic file discovery:
 
 ```
 my-app/
-  app/
-    ui/
-      pages/
-        index.html     # Home page (/)
-      components/          # Reusable UI components
-      layouts/             # Page layouts
-      public/              # Static files (CSS, images)
-    server/
-      api/                 # JSON API endpoints
-      models/              # Database models
-      middleware/          # Request filters
-  config.cln               # Project configuration
+├── app.cln                  # Main entry point (plugins: block)
+├── project.toml             # Project configuration
+└── app/
+    ├── pages/               # SSR pages (.html)          → frame.ui
+    │   └── index.html       # Home page (/)
+    ├── components/          # Reusable UI components (.cln) → frame.ui
+    ├── layouts/             # Page layout wrappers (.html) → frame.ui
+    ├── backend/             # HTTP server layer           → frame.httpserver
+    │   ├── api/             # HTTP endpoints (.cln)
+    │   ├── services/        # Business logic (.cln)
+    │   └── middleware/      # Request filters (.cln)
+    ├── data/                # ORM layer                   → frame.data
+    │   ├── models/          # Data model definitions (.cln)
+    │   ├── queries/         # Reusable queries (.cln)
+    │   ├── migrations/      # Schema migrations (.cln)
+    │   └── repositories/    # Data access layer (.cln)
+    ├── auth/                # Auth configuration (.cln)   → frame.auth
+    └── public/              # Static files (CSS, images)
+        └── css/
 ```
 
 ## Your First Page
 
-Edit `app/ui/pages/index.html`:
+Edit `app/pages/index.html`:
 
-```cln
-// Home page
-string html = "<html>
+```html
+<html>
 <head>
     <title>My App</title>
-    <link rel='stylesheet' href='/public/css/style.css'>
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-    <h1>Welcome to Clean Framework</h1>
+    <h1>Welcome to {appName}</h1>
     <p>Build fast, type-safe web applications.</p>
 </body>
-</html>"
-
-return html
+</html>
 ```
+
+### Data for Pages (Companion File)
+
+Pages get their data from a companion `.cln` file with the same name:
+
+```clean
+// app/pages/index.cln
+functions:
+	any load(Request request)
+		return { appName: "My App" }
+```
+
+The companion file provides data that the HTML template can access via `{expression}` interpolation.
 
 ## Build and Run
 
 ```bash
-# Build the application
-frame build
+# Compile with plugins
+cln compile app.cln -o dist/app.wasm --plugins
 
-# Run it
+# Run the server
 cleen server run dist/app.wasm --port 3000
 ```
 
@@ -74,78 +91,72 @@ Open http://localhost:3000 in your browser.
 
 ## Add More Pages
 
-Create `app/ui/pages/about.html`:
+Create `app/pages/about.html`:
 
-```cln
-string html = "<html>
+```html
+<html>
 <body>
     <h1>About Us</h1>
-    <a href='/'>Back to Home</a>
+    <a href="/">Back to Home</a>
 </body>
-</html>"
-
-return html
+</html>
 ```
 
 Rebuild and the `/about` route is automatically available.
 
 ## Dynamic Routes
 
-Create `app/ui/pages/blog/[slug].html` for dynamic URLs:
+Create `app/pages/blog/[slug].html` for dynamic URLs:
 
-```cln
-// The slug parameter is automatically extracted from the URL
-string html = "<html>
+```html
+<html>
 <body>
-    <h1>Blog Post: " + slug + "</h1>
+    <h1>Blog Post: {post.title}</h1>
+    <p>{post.content}</p>
 </body>
-</html>"
+</html>
+```
 
-return html
+With companion loader `app/pages/blog/[slug].cln`:
+
+```clean
+functions:
+	any load(Request request)
+		string slug = request.params.slug
+		Post post = Post.first:
+			where:
+				slug == slug
+		return { post: post }
 ```
 
 This handles URLs like `/blog/hello-world`, `/blog/my-first-post`, etc.
 
 ## Add an API Endpoint
 
-Create `app/server/api/users.cln`:
+Create `app/backend/api/users.cln`:
 
-```cln
-// Returns JSON
-return "[{\"id\": 1, \"name\": \"Alice\"}, {\"id\": 2, \"name\": \"Bob\"}]"
+```clean
+endpoints:
+	GET /api/users:
+		handle:
+			list users = User.find:
+				where:
+					active == true
+			return json(users)
 ```
 
 Access it at `/api/users`.
 
-## Discover Your Project
-
-See what will be built:
-
-```bash
-frame scan
-```
-
-Output:
-```
-Discovered 3 items:
-
-Pages (2):
-  GET /
-  GET /about
-
-API Routes (1):
-  GET /api/users
-```
-
 ## Add a Database Model
 
-Create `app/server/models/User.cln`:
+Create `app/data/models/User.cln`:
 
-```cln
+```clean
 data User
-    integer id
-    string name
-    string email
+	integer id : pk, auto
+	string name
+	string email : unique
+	boolean active = true
 ```
 
 Models are auto-discovered and available in your pages and API endpoints.
@@ -153,30 +164,33 @@ Models are auto-discovered and available in your pages and API endpoints.
 ## Next Steps
 
 - Read [Project Structure](PROJECT_STRUCTURE.md) for the complete folder reference
-- Check the [Examples](../examples/) for real-world patterns
-- See the [UI Specification](specification/05_frame_ui.md) for components and layouts
+- See the [API Reference](API_REFERENCE.md) for a quick cheat sheet
+- Check the [UI Specification](specification/05_frame_ui.md) for components and layouts
+- Read the [Plugin Guide](PLUGIN_GUIDE.md) for plugin system details
 
 ## Quick Reference
 
 | Command | Description |
 |---------|-------------|
-| `frame new <name>` | Create new project |
-| `frame scan` | Preview discovered files |
-| `frame build` | Build to dist/app.wasm |
+| `cleen project create <name>` | Create new project |
+| `cln compile app.cln -o app.wasm --plugins` | Build the application |
 | `cleen server run dist/app.wasm` | Run the application |
 
-| Folder | Purpose |
-|--------|---------|
-| `app/ui/pages/` | HTML routes (.html) |
-| `app/ui/components/` | Custom elements (.cln) |
-| `app/server/api/` | JSON endpoints (.cln) |
-| `app/server/models/` | Database schemas (.cln) |
-| `app/ui/public/` | Static files |
+| Folder | Purpose | Plugin |
+|--------|---------|--------|
+| `app/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
+| `app/components/` | Reusable components (.cln) | frame.ui |
+| `app/layouts/` | Page layouts (.html) | frame.ui |
+| `app/backend/api/` | HTTP endpoints (.cln) | frame.httpserver |
+| `app/backend/services/` | Business logic (.cln) | frame.httpserver |
+| `app/data/models/` | Data model definitions (.cln) | frame.data |
+| `app/data/migrations/` | Schema migrations (.cln) | frame.data |
+| `app/auth/` | Auth configuration (.cln) | frame.auth |
+| `app/public/` | Static files (CSS, images) | (served as-is) |
 
 | File Pattern | Route |
 |--------------|-------|
 | `pages/index.html` | `/` |
 | `pages/about.html` | `/about` |
 | `pages/blog/[slug].html` | `/blog/:slug` |
-| `api/users.cln` | `/api/users` |
-| `api/users/[id].cln` | `/api/users/:id` |
+| `backend/api/users.cln` | `/api/users` |

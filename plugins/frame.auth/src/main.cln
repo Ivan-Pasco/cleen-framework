@@ -28,7 +28,7 @@ functions:
 
 	// Keywords for IDE
 	string get_keywords()
-		return "[\"auth\", \"protected\", \"login\", \"roles\", \"jwt\", \"session\", \"cookie\", \"sameSite\", \"secure\", \"httpOnly\", \"timeoutMinutes\", \"secret\", \"alg\", \"ttlMinutes\", \"refreshTtlMinutes\", \"csrf\"]"
+		return "[\"auth\", \"protected\", \"login\", \"roles\", \"jwt\", \"session\", \"cookie\", \"sameSite\", \"secure\", \"httpOnly\", \"timeoutMinutes\", \"secret\", \"alg\", \"ttlMinutes\", \"refreshTtlMinutes\", \"csrf\", \"tenant\", \"tenantId\"]"
 
 // ============================================================================
 // AUTH CONFIG EXPANSION
@@ -53,6 +53,11 @@ functions:
 		string roles_config = extract_subblock(body, "roles:")
 		if roles_config.length() > 0
 			result = result + expand_roles(roles_config)
+
+		// Parse tenant config
+		string tenant_config = extract_subblock(body, "tenant:")
+		if tenant_config.length() > 0
+			result = result + expand_tenant_config(tenant_config)
 
 		// Generate auth helper object
 		result = result + generate_auth_helpers()
@@ -95,6 +100,18 @@ functions:
 
 		return result
 
+	// Expand tenant configuration
+	string expand_tenant_config(string config)
+		string field = get_config_value(config, "field", "tenantId")
+		string header = get_config_value(config, "header", "")
+
+		string result = "// Tenant configuration\n"
+		result = result + "string __tenant_field = \"" + field + "\"\n"
+		if header.length() > 0
+			result = result + "string __tenant_header = \"" + header + "\"\n"
+		result = result + "\n"
+		return result
+
 // ============================================================================
 // AUTH HELPER GENERATION
 // ============================================================================
@@ -123,25 +140,49 @@ functions:
 		result = result + "\t\tcookie = cookie + \"; Max-Age=\" + (__session_timeout * 60).toString()\n"
 		result = result + "\t\treturn _http_set_header(\"Set-Cookie\", cookie)\n\n"
 
-		// auth.session.get()
+		// auth.session.get() - retrieves and validates session, checking expiry
 		result = result + "\tstring session_get()\n"
 		result = result + "\t\tstring sessionId = _req_cookie(__session_cookie)\n"
 		result = result + "\t\tif sessionId == \"\"\n"
 		result = result + "\t\t\treturn \"\"\n"
-		result = result + "\t\treturn _session_get(sessionId)\n\n"
+		result = result + "\t\tstring data = _session_get(sessionId)\n"
+		result = result + "\t\tif data == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\tstring expiry_str = _json_get(data, \"expiry\")\n"
+		result = result + "\t\tif expiry_str != \"\"\n"
+		result = result + "\t\t\tinteger expiry = parseInt(expiry_str)\n"
+		result = result + "\t\t\tif _time_now() > expiry\n"
+		result = result + "\t\t\t\t_session_delete(sessionId)\n"
+		result = result + "\t\t\t\treturn \"\"\n"
+		result = result + "\t\treturn data\n\n"
 
-		// auth.session.destroy()
+		// auth.session.destroy() - clears server session and expires client cookie
 		result = result + "\tboolean session_destroy()\n"
 		result = result + "\t\tstring sessionId = _req_cookie(__session_cookie)\n"
 		result = result + "\t\tif sessionId != \"\"\n"
 		result = result + "\t\t\t_session_delete(sessionId)\n"
+		result = result + "\t\tstring expireCookie = __session_cookie + \"=; Path=\" + __session_path + \"; SameSite=\" + __session_same_site + \"; Max-Age=0\"\n"
+		result = result + "\t\tif __session_secure\n"
+		result = result + "\t\t\texpireCookie = expireCookie + \"; Secure\"\n"
+		result = result + "\t\tif __session_http_only\n"
+		result = result + "\t\t\texpireCookie = expireCookie + \"; HttpOnly\"\n"
+		result = result + "\t\t_http_set_header(\"Set-Cookie\", expireCookie)\n"
 		result = result + "\t\treturn true\n\n"
 
 		// auth.jwt.sign(claims)
 		result = result + "\tstring jwt_sign(string claims)\n"
 		result = result + "\t\tinteger iat = _time_now()\n"
 		result = result + "\t\tinteger exp = iat + (__jwt_ttl * 60)\n"
-		result = result + "\t\tstring payload = \"{\\\"iat\\\":\" + iat.toString() + \",\\\"exp\\\":\" + exp.toString() + \",\" + claims.substring(1, claims.length())\n"
+		result = result + "\t\tstring payload = \"{\\\"iat\\\":\" + iat.toString() + \",\\\"exp\\\":\" + exp.toString()\n"
+		result = result + "\t\tif claims.length() > 2\n"
+		result = result + "\t\t\tinteger brace_pos = claims.indexOf(\"{\")\n"
+		result = result + "\t\t\tif brace_pos != -1\n"
+		result = result + "\t\t\t\tstring inner = claims.substring(brace_pos + 1, claims.length())\n"
+		result = result + "\t\t\t\tpayload = payload + \",\" + inner\n"
+		result = result + "\t\t\telse\n"
+		result = result + "\t\t\t\tpayload = payload + \"}\"\n"
+		result = result + "\t\telse\n"
+		result = result + "\t\t\tpayload = payload + \"}\"\n"
 		result = result + "\t\treturn _jwt_sign(payload, __jwt_secret, __jwt_alg)\n\n"
 
 		// auth.jwt.verify(token)
@@ -202,6 +243,27 @@ functions:
 		result = result + "\tboolean csrf_validate(string token)\n"
 		result = result + "\t\tstring expected = _session_get_csrf()\n"
 		result = result + "\t\treturn expected != \"\" and expected == token\n\n"
+
+		// auth.tenant.getId() - get tenant ID from current session claims
+		result = result + "\tstring tenant_getId()\n"
+		result = result + "\t\tstring session = session_get()\n"
+		result = result + "\t\tif session == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\treturn _json_get(session, \"claims.tenantId\")\n\n"
+
+		// auth.tenant.require() - require a valid tenant context; returns tenantId or empty string on failure
+		result = result + "\tstring tenant_require()\n"
+		result = result + "\t\tstring tenantId = tenant_getId()\n"
+		result = result + "\t\tif tenantId == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\treturn tenantId\n\n"
+
+		// auth.tenant.matches(checkTenantId) - check if current user belongs to given tenant
+		result = result + "\tboolean tenant_matches(string checkTenantId)\n"
+		result = result + "\t\tstring myTenantId = tenant_getId()\n"
+		result = result + "\t\tif myTenantId == \"\"\n"
+		result = result + "\t\t\treturn false\n"
+		result = result + "\t\treturn myTenantId == checkTenantId\n\n"
 
 		return result
 
@@ -294,7 +356,9 @@ functions:
 		result = result + "\t\tif not verifyPassword(password, user." + password_field + ")\n"
 		result = result + "\t\t\treturn badRequest(\"Invalid credentials\")\n"
 		result = result + "\t\t\n"
-		result = result + "\t\tstring claims = \"{\\\"email\\\":\\\"\" + user." + email_field + " + \"\\\",\\\"role\\\":\\\"\" + user.role + \"\\\"}\"\n"
+		result = result + "\t\tstring safe_email = user." + email_field + ".replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")\n"
+		result = result + "\t\tstring safe_role = user.role.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")\n"
+		result = result + "\t\tstring claims = \"{\\\"email\\\":\\\"\" + safe_email + \"\\\",\\\"role\\\":\\\"\" + safe_role + \"\\\"}\"\n"
 		result = result + "\t\tstring sessionId = session_create(user.id, claims)\n"
 		result = result + "\t\tsession_setCookie(sessionId)\n"
 		result = result + "\t\treturn redirect(\"" + redirect_to + "\")\n\n"
@@ -322,7 +386,7 @@ functions:
 		while search_pos < body.length()
 			if body.substring(search_pos, search_pos + 1) == "\n"
 				string after_newline = body.substring(search_pos + 1, body.length()).trim()
-				if after_newline.startsWith("session:") or after_newline.startsWith("jwt:") or after_newline.startsWith("roles:")
+				if after_newline.startsWith("session:") or after_newline.startsWith("jwt:") or after_newline.startsWith("roles:") or after_newline.startsWith("tenant:")
 					end_pos = search_pos
 					break
 			search_pos = search_pos + 1

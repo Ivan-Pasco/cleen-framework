@@ -1,24 +1,13 @@
 # Frame Plugins Specification (07)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
-**Version:** 2.0
 **Location:** `/docs/specification/07_frame_plugins.md`
 
 ---
 
 ## 1. Introduction
 
-**Frame Plugins** in version 2.0 are **compiler plugins written in Clean Language**. They extend the compiler by transforming DSL blocks into standard Clean code at compile-time.
-
-### Version 2.0 Changes
-
-| Aspect | v1 | v2 |
-|--------|-----|-----|
-| **Plugin Language** | Rust | Clean Language |
-| **Plugin Format** | Rust crate with `plugin.cln` manifest | `.cln` source compiled to `.wasm` |
-| **Execution Time** | Build/serve (Rust runtime) | Compile-time (WASM runtime) |
-| **Hook System** | Multiple hooks (ui, cli, server, data) | Single `expand_block` function |
-| **Location** | `/plugins/` in project | `~/.cleen/plugins/` global |
+**Frame Plugins** are **compiler plugins written in Clean Language**. They extend the compiler by transforming DSL blocks into standard Clean code at compile-time.
 
 ### Design Goals
 
@@ -37,7 +26,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                        SOURCE CODE                               │
 │                                                                  │
-│   import:                                                        │
+│   plugins:                                                       │
 │       my-plugin                                                  │
 │                                                                  │
 │   myblock: attr="value"                                         │
@@ -48,7 +37,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                        COMPILER                                  │
 │                                                                  │
-│   1. Parse import: blocks                                       │
+│   1. Parse plugins: block in app.cln                            │
 │   2. Load plugins from ~/.cleen/plugins/                        │
 │   3. Find framework blocks (myblock:)                           │
 │   4. Call plugin.expand_block("myblock", attrs, body)           │
@@ -72,11 +61,23 @@ Plugins are installed to `~/.cleen/plugins/<name>/<version>/`:
 
 ```
 ~/.cleen/plugins/
-├── frame.web/
+├── frame.httpserver/
 │   └── 1.0.0/
 │       ├── plugin.toml       # Plugin manifest
 │       └── plugin.wasm       # Compiled plugin
 ├── frame.data/
+│   └── 1.0.0/
+│       ├── plugin.toml
+│       └── plugin.wasm
+├── frame.auth/
+│   └── 1.0.0/
+│       ├── plugin.toml
+│       └── plugin.wasm
+├── frame.ui/
+│   └── 1.0.0/
+│       ├── plugin.toml
+│       └── plugin.wasm
+├── frame.canvas/
 │   └── 1.0.0/
 │       ├── plugin.toml
 │       └── plugin.wasm
@@ -115,7 +116,7 @@ handles = ["myblock", "another"]  # DSL blocks this plugin handles
 owns = ["src/mymodule"]           # Folders this plugin owns
 auto_create = true                # Create folders on plugin import
 patterns = ["*.cln"]              # File patterns in owned folders
-implicit_import = true            # Files in owned folders auto-import this plugin
+implicit_import = true            # Files in owned folders skip import statements (plugin still declared in app.cln)
 ```
 
 ### Manifest Fields
@@ -135,7 +136,7 @@ implicit_import = true            # Files in owned folders auto-import this plug
 | `[paths]` | owns | No | List of folder paths this plugin owns |
 | | auto_create | No | Create folders automatically (default: true) |
 | | patterns | No | File patterns recognized in owned folders |
-| | implicit_import | No | Auto-import plugin for files in owned folders (default: true) |
+| | implicit_import | No | Skip import statements in files inside owned folders; plugin must still be declared in app.cln (default: true) |
 
 ---
 
@@ -257,10 +258,10 @@ cleen plugin build
 
 ```bash
 # Install to local plugins directory
-cleen plugin install ./
+cleen plugin add ./
 
-# Create test file
-echo 'import:
+# Create test file using plugins: block in app.cln
+echo 'plugins:
     my-plugin
 
 greet: name="Developer"
@@ -282,89 +283,91 @@ cleen plugin publish
 
 ## 6. Official Frame Plugins
 
-### frame.web
+Plugins are loaded via the `plugins:` block in `app.cln`. This declaration is always required. There are no `import:` blocks for plugins. When `implicit_import = true` is set in a plugin's `plugin.toml`, individual source files in the plugin's owned folders do not need to declare the plugin themselves — it is already declared in `app.cln` and the compiler knows which folders it owns.
 
-**Blocks:** `server`, `route`, `middleware`
+### frame.httpserver
 
-**Source:** `plugins/frame.web/src/main.cln`
+**Blocks:** `endpoints`
+
+**Source:** `plugins/frame.httpserver/src/main.cln`
+
+**Owned Folders:** `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/`
 
 ```clean
-// frame.web plugin - Web server DSL
+// frame.httpserver plugin - HTTP server and routing DSL
 
 expand_block(block_name: string, attributes: string, body: string) -> string
     if block_name == "server"
         return expand_server(attributes, body)
-    if block_name == "route"
-        return expand_route(attributes, body)
-    if block_name == "middleware"
-        return expand_middleware(attributes, body)
+    if block_name == "endpoints"
+        return expand_endpoints(attributes, body)
     return body
 
 expand_server(attrs: string, body: string) -> string
     port = get_attr(attrs, "port", "8080")
     host = get_attr(attrs, "host", "localhost")
     return "
-start()
+start:
     _log_info(\"Server starting on " + host + ":" + port + "\")
     " + body + "
     _http_listen(\"" + host + "\", " + port + ")
 "
 
-expand_route(attrs: string, body: string) -> string
-    method = get_attr(attrs, "method", "GET")
-    path = get_attr(attrs, "path", "/")
+expand_endpoints(attrs: string, body: string) -> string
     return "
-_http_route(\"" + method + "\", \"" + path + "\", (request) -> any
+functions:
     " + body + "
-)
-"
-
-expand_middleware(attrs: string, body: string) -> string
-    return "
-_http_middleware((request, next) -> any
-    " + body + "
-    return next(request)
-)
 "
 ```
 
-**Usage:**
+**Usage (via `plugins:` block in app.cln):**
 
 ```clean
-import:
-    frame.web
+// app.cln
+plugins:
+    frame.httpserver
 
 server: port=3000
-    middleware:
-        _log_info("Request: " + request.path)
-        return next(request)
+    endpoints:
+        GET /hello
+            return json({"message": "Hello World"})
 
-    route: method="GET" path="/hello"
-        return {"message": "Hello World"}
+        POST /echo
+            return json(request.body)
+```
 
-    route: method="POST" path="/echo"
-        return request.body
+**Usage (in an owned folder — no import statement needed in the file):**
+
+```clean
+// app/backend/api/users.cln
+// No import needed — frame.httpserver declared in app.cln, processes files in this folder
+
+endpoints:
+    GET /users
+        string result = _db_query("SELECT * FROM users", "[]")
+        return json({"ok": true, "data": result})
+
+    POST /users
+        return json({"ok": true})
 ```
 
 ### frame.data
 
-**Blocks:** `model`, `query`, `transaction`
+**Blocks:** `data`
 
 **Source:** `plugins/frame.data/src/main.cln`
+
+**Owned Folders:** `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/`
 
 ```clean
 // frame.data plugin - ORM DSL
 
 expand_block(block_name: string, attributes: string, body: string) -> string
-    if block_name == "model"
-        return expand_model(attributes, body)
-    if block_name == "query"
-        return expand_query(attributes, body)
-    if block_name == "transaction"
-        return expand_transaction(attributes, body)
+    if block_name == "data"
+        return expand_data(attributes, body)
     return body
 
-expand_model(attrs: string, body: string) -> string
+expand_data(attrs: string, body: string) -> string
     name = get_attr(attrs, "name", "Model")
     table = get_attr(attrs, "table", name.toLowerCase())
     return "
@@ -372,38 +375,43 @@ class " + name + "
     integer id
     " + body + "
 
-    save() -> boolean
-        if this.id == 0
-            this.id = _db_insert(\"" + table + "\", this)
-            return this.id > 0
-        return _db_update(\"" + table + "\", this.id, this)
+    functions:
+        save() -> boolean
+            if this.id == 0
+                this.id = _db_insert(\"" + table + "\", this)
+                return this.id > 0
+            return _db_update(\"" + table + "\", this.id, this)
 
-    static find(id: integer) -> " + name + "
-        row = _db_query_one(\"SELECT * FROM " + table + " WHERE id = ?\", [id])
-        return " + name + ".fromRow(row)
+        static find(id: integer) -> " + name + "
+            row = _db_query_one(\"SELECT * FROM " + table + " WHERE id = ?\", [id])
+            return " + name + ".fromRow(row)
 
-    static all() -> list<" + name + ">
-        rows = _db_query(\"SELECT * FROM " + table + "\", [])
-        return rows.map((row) -> " + name + ".fromRow(row))
+        static all() -> Array<" + name + ">
+            rows = _db_query(\"SELECT * FROM " + table + "\", [])
+            return rows.map((row) -> " + name + ".fromRow(row))
 
-    delete() -> boolean
-        return _db_delete(\"" + table + "\", this.id)
+        delete() -> boolean
+            return _db_delete(\"" + table + "\", this.id)
 "
 ```
 
-**Usage:**
+**Usage (in an owned folder — no import statement needed in the file):**
 
 ```clean
-import:
-    frame.data
+// app/data/User.cln
+// No import needed — frame.data declared in app.cln, processes files in this folder
 
-model: name="User" table="users"
+data User
     string email
     string name
     boolean active = true
     string created_at
+```
 
-model: name="Post" table="posts"
+```clean
+// app/data/Post.cln
+
+data Post
     integer user_id
     string title
     string content
@@ -411,49 +419,83 @@ model: name="Post" table="posts"
 
 ### frame.auth
 
-**Blocks:** `auth`, `protected`, `login`
+**Blocks:** `auth`, `protected`, `login`, `roles`
 
 **Source:** `plugins/frame.auth/src/main.cln`
 
-**Usage:**
+**Owned Folders:** `app/auth/`
+
+**Usage (in an owned folder — no import statement needed in the file):**
 
 ```clean
-import:
-    frame.auth
+// app/auth/auth.cln
+// No import needed — frame.auth declared in app.cln, processes files in this folder
 
 auth: strategy="jwt" secret="$JWT_SECRET"
 
-protected:
-    route: method="GET" path="/profile"
-        return request.user
+roles:
+    admin
+    user
+    guest
+
+protected: role="user"
+    endpoints:
+        GET /profile
+            return json(request.user)
 ```
 
 ### frame.ui
 
-**Blocks:** `component`, `layout`, `page`
+**Blocks:** `component`, `screen`, `page`, `html`
 
 **Source:** `plugins/frame.ui/src/main.cln`
 
-**Usage:**
+**Owned Folders:** `app/pages/`, `app/components/`, `app/layouts/`
+
+**Usage (in an owned folder — no import statement needed in the file):**
 
 ```clean
-import:
-    frame.ui
+// app/components/Button.cln
+// No import needed — frame.ui declared in app.cln, processes files in this folder
 
-component: name="Button"
-    props:
-        string label
-        string variant = "primary"
+component Button
+    string label
+    string variant = "primary"
 
-    render()
-        return "<button class=\"btn btn-" + variant + "\">" + label + "</button>"
+    html:
+        <button class="btn btn-{{ variant }}">{{ label }}</button>
+```
+
+### frame.canvas
+
+**Blocks:** `canvasScene`, `draw`, `onFrame`
+
+**Source:** `plugins/frame.canvas/src/main.cln`
+
+**Owned Folders:** `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/`
+
+**Usage (in an owned folder — no import statement needed in the file):**
+
+```clean
+// app/canvas/GameScene.cln
+// No import needed — frame.canvas declared in app.cln, processes files in this folder
+
+canvasScene: name="GameScene" width=800 height=600
+
+    onFrame: delta=dt
+        clearRect(0, 0, 800, 600)
+        drawSprite("player", playerX, playerY)
+
+    draw:
+        fillStyle("#1a1a2e")
+        fillRect(0, 0, 800, 600)
 ```
 
 ---
 
 ## 7. Folder Conventions
 
-Plugins can declare **folder ownership** to provide convention-over-configuration semantics. Files placed in a plugin's owned folders automatically receive that plugin's context.
+Plugins can declare **folder ownership** to provide convention-over-configuration semantics. When a plugin is declared in `app.cln` and `implicit_import = true`, files placed in that plugin's owned folders receive the plugin's context without needing an explicit import statement in each file.
 
 ### How Folder Conventions Work
 
@@ -461,8 +503,11 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 ┌─────────────────────────────────────────────────────────────────┐
 │                     PROJECT INITIALIZATION                       │
 │                                                                  │
-│   frame.toml declares:                                          │
-│       plugins = ["frame.ui", "frame.data", "frame.httpserver"]  │
+│   app.cln declares:                                             │
+│       plugins:                                                   │
+│           frame.ui                                               │
+│           frame.data                                             │
+│           frame.httpserver                                       │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -491,18 +536,18 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 | Plugin | Owned Folders | File Types | Purpose |
 |--------|---------------|------------|---------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` | `.html`, `.cln` | Pages, components, layouts |
-| `frame.data` | `app/data/` | `.cln` | Data models, ORM |
-| `frame.httpserver` | `app/api/` | `.cln` | API routes, endpoints |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `.cln` | Data models, ORM, queries, migrations |
+| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `.cln` | HTTP server, API routes, endpoints |
 | `frame.auth` | `app/auth/` | `.cln` | Auth configuration |
-| `frame.canvas` | `app/canvas/` | `.cln` | Canvas rendering, animation |
+| `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `.cln` | Canvas rendering, animation, sprites, audio |
 
 ### Project Structure Example
 
-After importing plugins, the framework creates this structure:
+After plugins are declared in `app.cln`, the framework creates this structure:
 
 ```
 myapp/
-├── app.cln                     # Application entry point
+├── app.cln                     # Application entry point (plugins: block here)
 ├── project.toml                # Project manifest
 └── app/
     ├── pages/                  # Owned by frame.ui
@@ -510,93 +555,103 @@ myapp/
     │   ├── index.cln           # Companion data loader
     │   └── about.html          # About page
     ├── components/             # Owned by frame.ui
-    │   ├── Button.cln          # Implicitly a component
-    │   └── Card.cln            # Implicitly a component
+    │   ├── Button.cln          # Processed by frame.ui (no import needed)
+    │   └── Card.cln            # Processed by frame.ui (no import needed)
     ├── layouts/                # Owned by frame.ui
     │   └── main.html           # Layout wrapper
-    ├── api/                    # Owned by frame.httpserver
-    │   ├── users.cln           # Implicitly API routes
-    │   └── posts.cln           # Implicitly API routes
+    ├── backend/                # Owned by frame.httpserver
+    │   ├── api/
+    │   │   ├── users.cln       # Processed by frame.httpserver (no import needed)
+    │   │   └── posts.cln       # Processed by frame.httpserver (no import needed)
+    │   ├── services/
+    │   │   └── email.cln       # Processed by frame.httpserver (no import needed)
+    │   └── middleware/
+    │       └── cors.cln        # Processed by frame.httpserver (no import needed)
     ├── data/                   # Owned by frame.data
-    │   ├── User.cln            # Implicitly a model
-    │   └── Post.cln            # Implicitly a model
+    │   ├── User.cln            # Processed by frame.data (no import needed)
+    │   ├── Post.cln            # Processed by frame.data (no import needed)
+    │   ├── models/
+    │   ├── queries/
+    │   ├── migrations/
+    │   └── repositories/
     ├── auth/                   # Owned by frame.auth
-    │   └── config.cln          # Auth configuration
+    │   └── auth.cln            # Processed by frame.auth (no import needed)
     ├── canvas/                 # Owned by frame.canvas
-    │   ├── GameScene.cln       # Implicitly canvas scene
-    │   └── ChartViz.cln        # Implicitly canvas scene
+    │   ├── GameScene.cln       # Processed by frame.canvas (no import needed)
+    │   ├── ChartViz.cln        # Processed by frame.canvas (no import needed)
+    │   ├── scenes/
+    │   ├── sprites/
+    │   └── audio/
     └── public/                 # Static assets
         └── css/
 ```
 
 ### Implicit Import Behavior
 
-When `implicit_import = true`, files in owned folders don't need explicit imports:
+When `implicit_import = true` in a plugin's `plugin.toml`, individual source files in the plugin's owned folders do not need to declare the plugin or add any import statement — the compiler knows the plugin owns that folder because the plugin was declared in `app.cln`. The plugin itself must always be declared in `app.cln`.
 
-**Without folder conventions** (explicit import required):
+`implicit_import = true` controls whether **files skip import statements**, not whether **the plugin skips declaration**.
+
+**Always required — plugin declaration in app.cln:**
 ```clean
-// app/data/User.cln
-import:
+// app.cln
+plugins:
     frame.data
-
-model: name="User"
-    string email
-    string name
 ```
 
-**With folder conventions** (implicit import):
+**What implicit_import = true enables — no import statement needed in individual files:**
 ```clean
 // app/data/User.cln
-// No import needed - frame.data is implicit for files in app/data/
+// No import statement needed — frame.data is declared in app.cln and owns this folder
 
-model: name="User"
+data User
     string email
     string name
 ```
 
-### Compiler Auto-Detection (v2.1)
+### Compiler Folder Ownership Resolution
 
-The Clean Language compiler (v0.15.0+) now automatically detects plugins based on file paths. This feature works independently of plugin.toml declarations and provides a fallback for projects without explicit plugin configuration.
+The Clean Language compiler resolves which plugin processes each source file by checking the folder ownership declared in each plugin's `plugin.toml`. This is not automatic detection — it depends entirely on which plugins are declared in `app.cln`.
 
-**Auto-Detection Rules:**
+**Resolution Rules:**
 
-| File Path Pattern | Auto-Loaded Plugins |
-|-------------------|---------------------|
-| `/api/`, `/endpoints/` | `frame.httpserver`, `frame.data`, `frame.auth` |
-| `/data/` | `frame.data` |
-| `/auth/` | `frame.auth` |
-| `/canvas/` | `frame.canvas` |
-| `/pages/`, `/components/`, `/layouts/` | `frame.ui` |
+| File Path Pattern | Owning Plugin (when declared in app.cln) |
+|-------------------|------------------------------------------|
+| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.httpserver` |
+| `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `frame.data` |
+| `app/auth/` | `frame.auth` |
+| `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
+| `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
 
 **How It Works:**
 
-1. The compiler examines the source file's path
-2. Matches against known folder patterns
-3. Automatically loads relevant plugins
-4. Merges with any explicitly declared plugins
+1. The compiler reads the `plugins:` block in `app.cln` and loads each declared plugin
+2. For each loaded plugin, it reads the `[paths]` section of `plugin.toml` to learn which folders that plugin owns
+3. When compiling a source file, it checks which declared plugin owns the file's folder
+4. If `implicit_import = true`, the plugin's blocks are available in that file without any import statement
 
-**Example - Zero-Configuration API:**
+**Example — file in an owned folder:**
 
 ```clean
-// File: app/api/users.cln
-// No plugins: block needed!
-// Auto-detected: frame.httpserver, frame.data, frame.auth
-
-functions:
-    string __route_handler_0()
-        string result = _db_query("SELECT * FROM users", "[]")
-        return "{\"ok\":true,\"data\":" + result + "}"
-
-start:
-    integer s = _http_route("GET", "/users", 0)
-    printl("Users API ready")
+// app.cln — frame.httpserver must be declared here
+plugins:
+    frame.httpserver
 ```
 
-**Precedence:**
+```clean
+// File: app/backend/api/users.cln
+// No import statement needed — frame.httpserver declared in app.cln, owns this folder
 
-1. Explicit `plugins:` block declarations take highest priority
-2. Auto-detected plugins are merged (not replaced)
-3. Plugin.toml `implicit_import` settings are respected when available
+endpoints:
+    GET /users
+        string result = _db_query("SELECT * FROM users", "[]")
+        return json({"ok": true, "data": result})
+
+    POST /users
+        return json({"ok": true})
+```
+
+**Important:** If `frame.httpserver` is not declared in `app.cln`, no plugin will process this file regardless of its folder path.
 
 ### Folder Priority Rules
 
@@ -658,29 +713,7 @@ Plugins run in a WASM sandbox during compilation:
 
 ---
 
-## 9. Migration from v1
-
-### Removed Concepts
-
-The following v1 concepts are replaced:
-
-| v1 Concept | v2 Replacement |
-|------------|----------------|
-| `plugin.cln` manifest | `plugin.toml` manifest |
-| Multiple hooks (ui, cli, server, data) | Single `expand_block` function |
-| Project-local `/plugins/` | Global `~/.cleen/plugins/` |
-| Rust plugin execution | WASM plugin execution |
-
-### Migration Steps
-
-1. **Manifest**: Convert `plugin.cln` to `plugin.toml`
-2. **Hooks**: Combine all hooks into `expand_block`
-3. **Build**: Use `cleen plugin build` instead of framework build
-4. **Install**: Use `cleen plugin install` instead of project copy
-
----
-
-## 10. Testing Plugins
+## 9. Testing Plugins
 
 ### Unit Tests
 
@@ -703,9 +736,9 @@ test_unknown_block()
 Test with the compiler:
 
 ```bash
-# Create test input
+# Create test input using plugins: block
 cat > test_input.cln << 'EOF'
-import:
+plugins:
     my-plugin
 
 greet: name="World"
@@ -720,14 +753,14 @@ wasm-validate test.wasm
 
 ---
 
-## 11. Versioning & Compatibility
+## 10. Versioning & Compatibility
 
 ### Semantic Versioning
 
 Plugins follow **semver** (MAJOR.MINOR.PATCH):
 
 - **MAJOR**: Breaking changes to block syntax
-- **MINOR**: New blocks or features (backward compatible)
+- **MINOR**: New blocks or features
 - **PATCH**: Bug fixes
 
 ### Compiler Compatibility
@@ -743,7 +776,7 @@ The compiler refuses to load incompatible plugins.
 
 ---
 
-## 12. AI Development Notes
+## 11. AI Development Notes
 
 This architecture supports AI-assisted development:
 
@@ -759,7 +792,7 @@ When prompting AI:
 
 ---
 
-## 13. File Locations Summary
+## 12. File Locations Summary
 
 | Item | Location |
 |------|----------|
@@ -770,4 +803,4 @@ When prompting AI:
 
 ---
 
-**End of Document 07 (v2)**
+**End of Document 07**

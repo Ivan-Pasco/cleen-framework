@@ -37,16 +37,23 @@ HTML + loader.js             (Browser receives rendered page)
 
 ### 2.1 File Extensions
 
-| Extension | Purpose |
-|-----------|---------|
-| `.html` | HTML pages that need Clean Language processing (data binding, components, etc.) |
-| `.html` | Static HTML files served as-is without processing |
-| `.cln` | Clean Language source files (components, logic, etc.) |
+| Extension | Location | Purpose |
+|-----------|----------|---------|
+| `.html` | `app/pages/` | All pages (both dynamic and static) — file-based routing |
+| `.cln` | `app/pages/` | Companion loaders for pages (`load()`, `guard()` functions) |
+| `.cln` | `app/components/` | Reusable UI components |
 
-The `.html` extension indicates that the file contains HTML that should be processed by the Clean Language compiler. This allows:
-- Clear distinction between static and dynamic pages
+**All pages go in `app/pages/`**, whether they use Clean directives or not. This gives every page consistent file-based routing (e.g., `about.html` → `/about`).
+
+The `app/public/` folder is for **assets only** (CSS, images, fonts) — not for pages.
+
+**Static page optimization**: Pages that contain no Clean directives (`{ }`, `cl-*` attributes, or `<app-*>` components) are detected at compile time and served as pre-rendered static HTML with no runtime template processing.
+
+This allows:
 - Standard HTML tooling support (editors, linters, formatters)
-- IDEs can recognize the file as HTML for syntax highlighting
+- IDEs recognize `.html` files for syntax highlighting
+- Consistent URL routing for all pages regardless of dynamic content
+- Zero overhead for purely static pages
 
 ### 2.2 Project Structure
 
@@ -68,12 +75,13 @@ app/
     UserCard.cln              # → <user-card>
   layouts/                    # Page layout wrappers
     main.html
-  api/                        # JSON API endpoints (→ /api/*)
-    users.cln
+  backend/
+    api/                      # JSON API endpoints (→ /api/*)
+      users.cln
   data/                       # Data models / ORM
     User.cln
   auth/                       # Auth configuration
-    config.cln
+    auth.cln
   public/                     # Static assets (CSS, images)
     css/
     images/
@@ -81,8 +89,8 @@ app/
 
 **Build command:**
 ```bash
-frame build           # Discovers files, generates main.cln, compiles to WASM
-frame scan            # Preview discovered routes/components
+cln compile app.cln -o app.wasm --plugins    # Compile with plugin expansion
+cleen scan                                    # Preview discovered routes/components
 ```
 
 ---
@@ -181,33 +189,7 @@ Custom HTML tags are defined by Clean Language components. Tags follow the Web C
 
 ### 4.2 Component Definition (Clean)
 
-Components are defined in `app/components/*.cln`:
-
-```clean
-// app/components/UserCard.cln
-component: tag="user-card"
-    props:
-        string userId
-        boolean showAvatar = true
-
-    functions:
-        string render()
-            user = User.find(userId)
-            html = "<div class=\"user-card\">"
-            if showAvatar
-                html = html + "<img src=\"" + user.avatar + "\" alt=\"\">"
-            html = html + "<h3>" + user.name + "</h3>"
-            html = html + "</div>"
-            return html
-```
-
-### 4.3 The `html:` Template Block
-
-The `html:` block provides a clean, declarative way to write HTML templates inside components and functions. It replaces verbose string concatenation with actual HTML that supports `{expression}` interpolation.
-
-#### In Components
-
-Use `html:` instead of a manual `render()` function:
+Components are defined in `app/components/*.cln` using `html:` blocks for templates:
 
 ```clean
 // app/components/UserCard.cln
@@ -218,6 +200,7 @@ component: tag="user-card"
 
     html:
         <div class="user-card">
+            <img src="{this.getAvatar()}" alt="">
             <h3>{this.userId}</h3>
         </div>
 
@@ -226,7 +209,11 @@ component: tag="user-card"
             return "/avatars/" + this.userId + ".png"
 ```
 
-The plugin automatically generates a `render()` function from the `html:` block at compile time. The generated code is identical to hand-written string concatenation.
+The plugin automatically generates a `render()` function from the `html:` block at compile time.
+
+### 4.3 The `html:` Template Block
+
+The `html:` block provides a clean, declarative way to write HTML templates inside components and functions. It uses `{expression}` interpolation and supports conditionals via `cl-if` attributes.
 
 #### In Functions
 
@@ -330,17 +317,17 @@ tags:
 
 ### 5.1 Interpolation Syntax
 
-Use double curly braces for dynamic values:
+Use curly braces for dynamic values:
 
 ```html
-<h1>Hello, {{user.name}}</h1>
-<p>You have {{notifications.count}} notifications</p>
-<span class="price">{{formatCurrency(product.price)}}</span>
+<h1>Hello, {user.name}</h1>
+<p>You have {notifications.count} notifications</p>
+<span class="price">{formatCurrency(product.price)}</span>
 ```
 
 **Rules:**
-- `{{expression}}` - HTML-escaped by default (XSS-safe)
-- `{{{expression}}}` - Raw HTML (use only for trusted content)
+- `{expression}` - HTML-escaped by default (XSS-safe)
+- `{!expression}` - Raw HTML (use only for trusted content)
 - Expressions can include property access, function calls, and simple operations
 
 ### 5.2 Page Data (Companion File Pattern)
@@ -351,7 +338,7 @@ The companion file lives alongside the `.html` file in `app/pages/`:
 
 ```
 app/pages/
-├── profile.html         # Template (pure HTML + {{ }} + cl-*)
+├── profile.html         # Template (pure HTML + { } + cl-*)
 └── profile.cln          # Companion data loader
 ```
 
@@ -387,11 +374,11 @@ functions:
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{user.name}}'s Profile</title>
+    <title>{user.name}'s Profile</title>
 </head>
 <body>
-    <h1>{{user.name}}</h1>
-    <p>Member since {{formatDate(user.createdAt)}}</p>
+    <h1>{user.name}</h1>
+    <p>Member since {formatDate(user.createdAt)}</p>
 </body>
 </html>
 ```
@@ -428,14 +415,14 @@ Uses `cl-iterate` to match the Clean Language `iterate` keyword:
 ```html
 <ul>
     <li cl-iterate="post in posts">
-        <a href="/blog/{{post.slug}}">{{post.title}}</a>
+        <a href="/blog/{post.slug}">{post.title}</a>
     </li>
 </ul>
 
 <!-- With index -->
 <ol>
     <li cl-iterate="item, index in items">
-        {{index + 1}}. {{item.name}}
+        {index + 1}. {item.name}
     </li>
 </ol>
 ```
@@ -582,7 +569,7 @@ Page-level `client` attribute overrides component default.
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>{{title}} - MyApp</title>
+    <title>{title} - MyApp</title>
     <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
@@ -663,8 +650,8 @@ The `cl-bind` attribute creates two-way data binding:
 <input type="text" cl-bind="searchQuery">
 <textarea cl-bind="content"></textarea>
 <select cl-bind="selectedCountry">
-    <option cl-iterate="country in countries" value="{{country.code}}">
-        {{country.name}}
+    <option cl-iterate="country in countries" value="{country.code}">
+        {country.name}
     </option>
 </select>
 ```
@@ -680,7 +667,7 @@ The `cl-bind` attribute creates two-way data binding:
     error-message="Please enter a valid email">
 
 <span cl-if="errors.email" class="error">
-    {{errors.email}}
+    {errors.email}
 </span>
 ```
 
@@ -714,7 +701,7 @@ Add scoped styles within components:
 
 ### 10.3 CSS Variables (Theming)
 
-Define theme in `/config/ui.cln`:
+Define theme in `app.cln`:
 
 ```clean
 ui:
@@ -776,7 +763,7 @@ Always use semantic elements:
 
 <main>
     <article>
-        <h1>{{post.title}}</h1>
+        <h1>{post.title}</h1>
     </article>
 </main>
 
@@ -791,13 +778,13 @@ Always use semantic elements:
 ```html
 <button
     aria-label="Close dialog"
-    aria-expanded="{{isOpen}}"
+    aria-expanded="{isOpen}"
     onclick="toggleMenu">
     <icon-x></icon-x>
 </button>
 
 <div role="alert" aria-live="polite" cl-if="notification">
-    {{notification.message}}
+    {notification.message}
 </div>
 ```
 
@@ -807,8 +794,8 @@ Always use semantic elements:
 
 ### 12.1 XSS Prevention
 
-- `{{expression}}` is HTML-escaped by default
-- Use `{{{expression}}}` only for trusted, sanitized HTML
+- `{expression}` is HTML-escaped by default
+- Use `{!expression}` only for trusted, sanitized HTML
 - Never use raw HTML with user input
 
 ### 12.2 CSRF Protection
@@ -861,12 +848,13 @@ app/
 ├── layouts/                 # Layout templates
 │   ├── main.html
 │   └── admin.html
-├── api/                     # API endpoint modules
-│   └── users.cln
-├── data/                    # Data models
+├── backend/                 # Backend modules (frame.httpserver)
+│   └── api/                 # API endpoint modules
+│       └── users.cln
+├── data/                    # Data models (frame.data)
 │   └── User.cln
-├── auth/                    # Auth configuration
-│   └── config.cln
+├── auth/                    # Auth configuration (frame.auth)
+│   └── auth.cln
 └── public/                  # Static assets
     ├── css/
     │   └── main.css
@@ -1001,24 +989,24 @@ functions:
 
 <article class="blog-post">
     <header>
-        <h1>{{post.title}}</h1>
+        <h1>{post.title}</h1>
         <p class="meta">
-            By {{post.author.name}} on {{formatDate(post.createdAt)}}
+            By {post.author.name} on {formatDate(post.createdAt)}
         </p>
     </header>
 
     <div class="content">
-        {{{post.content}}}
+        {!post.content}
     </div>
 
     <section class="comments">
-        <h2>Comments ({{comments.length}})</h2>
+        <h2>Comments ({comments.length})</h2>
 
         <div cl-iterate="comment in comments" class="comment">
-            <comment-card comment-id="{{comment.id}}"></comment-card>
+            <comment-card comment-id="{comment.id}"></comment-card>
         </div>
 
-        <comment-form post-id="{{post.id}}" client="on"></comment-form>
+        <comment-form post-id="{post.id}" client="on"></comment-form>
     </section>
 </article>
 ```
@@ -1050,19 +1038,6 @@ component: tag="comment-form" client="on"
             content = ""
             submitting = false
 ```
-
----
-
-## 16. Migration from v1
-
-If migrating from Clean-first syntax:
-
-| v1 (Clean DSL) | v2 (HTML-first) |
-|----------------|-----------------|
-| `page:` blocks | `.html` files |
-| `component:` with layout | `.cln` with `render()` |
-| Clean templating | HTML + `{{}}` |
-| `render()` returns Widget | `render()` returns string |
 
 ---
 

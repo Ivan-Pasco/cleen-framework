@@ -14,8 +14,8 @@ validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
-# Model definitions
-blocks = ["data"]
+# Model definitions and migration definitions
+blocks = ["data", "migrate"]
 
 # CRUD operations (these are expression-level, handled by compiler calling expand functions)
 expressions = [
@@ -41,14 +41,38 @@ functions = [
   { name = "_db_execute", params = ["string", "string"], returns = "integer", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
 
   # Transactions
-  { name = "_db_begin", params = [], returns = "integer", description = "Begin a database transaction; returns 1 on success, 0 on error" },
-  { name = "_db_commit", params = [], returns = "integer", description = "Commit the current database transaction; returns 1 on success, 0 on error" },
-  { name = "_db_rollback", params = [], returns = "integer", description = "Rollback the current database transaction; returns 1 on success, 0 on error" },
+  { name = "_db_begin", params = [], returns = "string", description = "Begin a database transaction; returns transaction ID string" },
+  { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
+  { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Configuration - called once at startup from a data: config block
+  # Parameters: engine, host, port, database, user, password, pool_max, pool_idle_timeout_ms
+  { name = "_db_configure", params = ["string", "string", "integer", "string", "string", "string", "integer", "integer"], returns = "integer", description = "Configure the database connection pool; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Migration System
+  # Register a named migration for version tracking; the runtime records it in the
+  # schema_migrations table with a pending status until it is applied.
+  { name = "_db_register_migration", params = ["string"], returns = "integer", description = "Register a migration by name for version tracking; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Compare the declared field definitions for a table against the live database
+  # schema and return the ALTER TABLE SQL needed to reconcile the difference.
+  # Returns an empty string when the schema already matches the declaration.
+  { name = "_db_migration_diff", params = ["string", "string"], returns = "string", description = "Compare declared model fields against the live database table schema; returns ALTER TABLE SQL or empty string when in sync", expand_strings = true },
+
+  # Execute all pending registered migrations in version order.
+  { name = "_db_run_migrations", params = [], returns = "integer", description = "Run all pending registered migrations in version order; returns count of migrations applied" },
+
+  # Roll back a specific named migration by executing its down function.
+  { name = "_db_rollback_migration", params = ["string"], returns = "integer", description = "Rollback a specific migration by name; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Return a JSON array describing every known migration and its current status.
+  # Each element has the shape: {"name":"...","applied_at":"..."|null}.
+  { name = "_db_migration_status", params = [], returns = "string", description = "Get JSON array of migration status records (name, applied_at); applied_at is null for pending migrations" },
 ]
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["data"]
+blocks = ["data", "migrate"]
 
 # Keywords used within plugin context
 keywords = [
@@ -58,7 +82,7 @@ keywords = [
   { name = "insert", description = "Insert new record(s)", context = "expression" },
   { name = "update", description = "Update existing record(s)", context = "expression" },
   { name = "delete", description = "Delete record(s)", context = "expression" },
-  { name = "migrate", description = "Run database migration", context = "expression" },
+  { name = "migrate", description = "Run model schema migration (expression) or define a versioned migration file (block)", context = "both" },
   { name = "where", description = "Filter query conditions", context = "block" },
   { name = "order", description = "Sort query results", context = "block" },
   { name = "limit", description = "Limit number of results", context = "block" },
@@ -68,6 +92,8 @@ keywords = [
   { name = "group", description = "Group results by field", context = "block" },
   { name = "having", description = "Filter grouped results", context = "block" },
   { name = "select", description = "Select specific fields", context = "block" },
+  { name = "up", description = "SQL to apply when running the migration forward", context = "block" },
+  { name = "down", description = "SQL to apply when rolling back the migration", context = "block" },
 ]
 
 # Custom types provided by the plugin
@@ -84,6 +110,7 @@ functions = [
   { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model" },
   { name = "Model.exists", signature = "Model.exists(id)", description = "Check if record exists by ID" },
   { name = "Model.findOrFail", signature = "Model.findOrFail(id)", description = "Find record by ID or throw error" },
+  { name = "migrate", signature = "migrate \"name\":\n\tup:\n\t\tSQL\n\tdown:\n\t\tSQL", description = "Define a versioned schema migration" },
 ]
 
 # Auto-completion suggestions
@@ -92,6 +119,7 @@ completions = [
   { trigger = ".find:", insert = "find:\n\twhere:\n\t\t${1:condition}" },
   { trigger = ".insert:", insert = "insert:\n\t${1:field}: ${2:value}" },
   { trigger = "Data.tx:", insert = "Data.tx:\n\t${1:// transaction code}" },
+  { trigger = "migrate ", insert = "migrate \"${1:001_migration_name}\":\n\tup:\n\t\t${2:CREATE TABLE ...}\n\tdown:\n\t\t${3:DROP TABLE ...}" },
 ]
 
 [paths]
@@ -117,8 +145,10 @@ restricted_functions = [
 
 required_blocks = [
   { folder = "app/data/models/", block = "data", message = "Model files should contain 'data ModelName' definitions" },
+  { folder = "app/data/migrations/", block = "migrate", message = "Migration files should contain 'migrate \"name\":' definitions" },
 ]
 
 block_folder_rules = [
   { block = "data", allowed_in = ["app/data/", "app/backend/", "app/server/"], message = "data models should be in app/data/ or app/backend/" },
+  { block = "migrate", allowed_in = ["app/data/migrations/"], message = "migrate blocks must be in app/data/migrations/" },
 ]

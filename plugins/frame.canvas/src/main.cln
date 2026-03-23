@@ -1,7 +1,7 @@
 // frame.canvas plugin - Canvas Rendering and Animation DSL
-// Provides: canvasScene, draw, onFrame blocks
+// Provides: canvasScene, draw, onFrame, onPointerDown, onPointerMove, onKeyDown blocks
 // Also provides: canvas.* drawing commands
-// Version: 1.0.0
+// Version: 2.1.0
 
 functions:
 	// Main entry point - called by compiler for each framework block
@@ -12,6 +12,12 @@ functions:
 			return expand_draw(attributes, body)
 		if block_name == "onFrame"
 			return expand_on_frame(attributes, body)
+		if block_name == "onPointerDown"
+			return expand_on_pointer_down(attributes, body)
+		if block_name == "onPointerMove"
+			return expand_on_pointer_move(attributes, body)
+		if block_name == "onKeyDown"
+			return expand_on_key_down(attributes, body)
 		// Handle canvas.* drawing commands
 		if block_name.startsWith("canvas.")
 			return expand_canvas_command(block_name, attributes, body)
@@ -25,7 +31,7 @@ functions:
 
 	// Keywords for IDE
 	string get_keywords()
-		return "[\"canvasScene\", \"draw\", \"onFrame\", \"canvas\", \"clear\", \"circle\", \"rect\", \"line\", \"text\", \"image\", \"save\", \"restore\", \"translate\", \"rotate\", \"scale\", \"color\", \"radius\", \"width\", \"height\", \"stroke\", \"filled\"]"
+		return "[\"canvasScene\", \"draw\", \"onFrame\", \"onPointerDown\", \"onPointerMove\", \"onKeyDown\", \"canvas\", \"clear\", \"circle\", \"rect\", \"line\", \"text\", \"image\", \"save\", \"restore\", \"translate\", \"rotate\", \"scale\", \"color\", \"radius\", \"width\", \"height\", \"stroke\", \"filled\"]"
 
 	// ========================================================================
 	// CANVAS SCENE EXPANSION
@@ -62,6 +68,67 @@ functions:
 		string result = "// Animation frame handler\n"
 		result = result + "_canvas_request_frame(" + canvas_id + ")\n"
 		result = result + "number " + param + " = _canvas_get_delta_time()\n"
+		result = result + body + "\n"
+		return result
+
+	// Expand onPointerDown block - handles mouse/touch click events
+	string expand_on_pointer_down(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string params = get_attr(attrs, "params", "x,y")
+
+		// Determine variable names from params attribute (comma-separated)
+		string x_var = "x"
+		string y_var = "y"
+		integer comma_pos = params.indexOf(",")
+		if comma_pos != -1
+			x_var = params.substring(0, comma_pos)
+			y_var = params.substring(comma_pos + 1, params.length())
+
+		// Register pointer down handler and inject coordinate variables
+		string result = "// Pointer down event handler\n"
+		result = result + "_canvas_on_pointer_down(" + canvas_id + ")\n"
+		result = result + "number " + x_var + " = _canvas_event_x()\n"
+		result = result + "number " + y_var + " = _canvas_event_y()\n"
+		result = result + body + "\n"
+		return result
+
+	// Expand onPointerMove block - handles mouse/touch movement events
+	string expand_on_pointer_move(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string params = get_attr(attrs, "params", "x,y")
+
+		// Determine variable names from params attribute (comma-separated)
+		string x_var = "x"
+		string y_var = "y"
+		integer comma_pos = params.indexOf(",")
+		if comma_pos != -1
+			x_var = params.substring(0, comma_pos)
+			y_var = params.substring(comma_pos + 1, params.length())
+
+		// Register pointer move handler and inject coordinate variables
+		string result = "// Pointer move event handler\n"
+		result = result + "_canvas_on_pointer_move(" + canvas_id + ")\n"
+		result = result + "number " + x_var + " = _canvas_event_x()\n"
+		result = result + "number " + y_var + " = _canvas_event_y()\n"
+		result = result + body + "\n"
+		return result
+
+	// Expand onKeyDown block - handles keyboard key press events
+	string expand_on_key_down(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string params = get_attr(attrs, "params", "key")
+
+		// Determine key variable name from params attribute
+		string key_var = params
+		integer comma_pos = params.indexOf(",")
+		if comma_pos != -1
+			// Only first param is meaningful for key events; use everything before comma
+			key_var = params.substring(0, comma_pos)
+
+		// Register key down handler and inject key string variable
+		string result = "// Key down event handler\n"
+		result = result + "_canvas_on_key_down(" + canvas_id + ")\n"
+		result = result + "string " + key_var + " = _canvas_event_key()\n"
 		result = result + body + "\n"
 		return result
 
@@ -112,11 +179,13 @@ functions:
 
 		if cmd == "text"
 			string text_val = get_attr(attrs, "value", body)
+			// Escape quotes and backslashes in text value for safe string literal
+			string safe_text = text_val.replace("\\", "\\\\").replace("\"", "\\\"")
 			string x = get_attr(attrs, "x", "0")
 			string y = get_attr(attrs, "y", "0")
 			string size = get_attr(attrs, "size", "16")
 			string color = get_attr(attrs, "color", "black")
-			return "_canvas_text(" + canvas_id + ", \"" + text_val + "\", " + x + ", " + y + ", " + size + ", \"" + color + "\")\n"
+			return "_canvas_text(" + canvas_id + ", \"" + safe_text + "\", " + x + ", " + y + ", " + size + ", \"" + color + "\")\n"
 
 		if cmd == "image"
 			string src = get_attr(attrs, "src", "")

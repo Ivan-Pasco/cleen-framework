@@ -9,8 +9,6 @@
 
 functions:
 	string expand(string block_name, string attributes, string body)
-		if block_name == "server"
-			return expand_server(attributes)
 		if block_name == "endpoints"
 			return expand_endpoints(body)
 		return body
@@ -22,19 +20,7 @@ functions:
 
 	string get_keywords()
 		// NOTE: Avoid keywords that conflict with built-in namespaces (json, string, http, etc.)
-		return "[\"server\", \"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\"]"
-
-// ============================================================================
-// SERVER BLOCK EXPANSION
-// ============================================================================
-
-functions:
-	string expand_server(string attrs)
-		string port = get_attr(attrs, "port", "3000")
-		string result = "start:\n"
-		result = result + "\tprintl(\"Server starting on port " + port + "\")\n"
-		result = result + "\t_http_listen(" + port + ")\n"
-		return result
+		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\"]"
 
 // ============================================================================
 // ENDPOINTS BLOCK EXPANSION
@@ -51,23 +37,47 @@ functions:
 		result = result + "\tstring _http_redirect(integer status, string url)\n"
 		result = result + "\tstring _http_set_header(string name, string value)\n"
 		result = result + "\tstring _req_body_field(string field_name)\n"
-		result = result + "\tinteger _req_param_int(string param_name)\n\n"
+		result = result + "\tinteger _req_param_int(string param_name)\n"
+		result = result + "\tinteger _http_route(string method, string path, integer handler_idx)\n"
+		result = result + "\tinteger _http_set_cache(integer maxAge)\n"
+		result = result + "\tinteger _http_no_cache()\n\n"
 
 		// Add response helpers
 		result = result + "functions:\n"
 		result = result + "\tstring jsonResponse(any data)\n"
 		result = result + "\t\treturn _http_respond(200, \"application/json\", data.toString())\n\n"
-		result = result + "\tstring badRequest(string message)\n"
-		result = result + "\t\treturn _http_respond(400, \"application/json\", message)\n\n"
+		result = result + "\tstring jsonResponseStatus(any data, integer status_code)\n"
+		result = result + "\t\treturn _http_respond(status_code, \"application/json\", data.toString())\n\n"
 		result = result + "\tstring htmlResponse(string content)\n"
 		result = result + "\t\treturn _http_respond(200, \"text/html\", content)\n\n"
+		result = result + "\tstring redirectTo(string url)\n"
+		result = result + "\t\treturn _http_redirect(302, url)\n\n"
+		result = result + "\tstring redirectToStatus(string url, integer status_code)\n"
+		result = result + "\t\treturn _http_redirect(status_code, url)\n\n"
+		result = result + "\tstring notFound()\n"
+		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"Resource not found\\\"}}\")\n\n"
+		result = result + "\tstring __json_escape(string s)\n"
+		result = result + "\t\tstring r = s.replace(\"\\\\\", \"\\\\\\\\\")\n"
+		result = result + "\t\tr = r.replace(\"\\\"\", \"\\\\\\\"\")\n"
+		result = result + "\t\treturn r\n\n"
+		result = result + "\tstring notFoundMsg(string message)\n"
+		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"\" + __json_escape(message) + \"\\\"}}\")\n\n"
+		result = result + "\tstring badRequest(string message)\n"
+		result = result + "\t\treturn _http_respond(400, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"\" + __json_escape(message) + \"\\\"}}\")\n\n"
+		result = result + "\tstring unauthorized()\n"
+		result = result + "\t\treturn _http_respond(401, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"AUTH_ERROR\\\",\\\"message\\\":\\\"Authentication required\\\"}}\")\n\n"
+		result = result + "\tstring forbidden()\n"
+		result = result + "\t\treturn _http_respond(403, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"PERMISSION_DENIED\\\",\\\"message\\\":\\\"Access denied\\\"}}\")\n\n"
+		result = result + "\tstring httpHeader(string name, string value)\n"
+		result = result + "\t\treturn _http_set_header(name, value)\n\n"
 
 		// Parse endpoints - find methods and paths
 		string remaining = body
 		integer handler_idx = 0
 		boolean keep_going = true
+		string route_calls = ""
 
-		while handler_idx < 20 and keep_going
+		while handler_idx < 30 and keep_going
 			// Find method (GET, POST, PUT, DELETE, PATCH)
 			integer get_pos = remaining.indexOf("GET ")
 			integer post_pos = remaining.indexOf("POST ")
@@ -100,82 +110,136 @@ functions:
 			else
 				// Get substring from method position
 				string from_method = remaining.substring(method_pos, remaining.length())
-				// Find end of path
-				integer colon_pos = from_method.indexOf("\" :")
-				if colon_pos == -1
-					colon_pos = from_method.indexOf("\":")
 
+				// Find end of path — look for colon at end of path declaration
+				// Supports both: GET /path:  and  GET "/path":
+				integer path_start = method.length() + 1
+				string after_method = from_method.substring(path_start, from_method.length())
+
+				// Find the colon that terminates the path (before newline)
+				integer nl_pos = after_method.indexOf("\n")
+				if nl_pos == -1
+					nl_pos = after_method.length()
+				string first_line = after_method.substring(0, nl_pos)
+				integer colon_pos = first_line.lastIndexOf(":")
 				if colon_pos == -1
+					colon_pos = first_line.length()
+
+				// Calculate skip_chars (colon + optional space after colon)
+				integer skip_chars = 1
+				integer abs_colon = path_start + colon_pos
+
+				if colon_pos == -1 or colon_pos == first_line.length()
 					keep_going = false
 				else
-					// Check if we matched " : (3 chars) or ": (2 chars)
-					integer skip_chars = 2
-					string check_space = from_method.substring(colon_pos + 1, colon_pos + 2)
-					if check_space == " "
-						skip_chars = 3
-
-					// Extract path
-					integer path_start = method.length() + 1
-					string raw_path = from_method.substring(path_start, colon_pos + 1)
-					string path = raw_path.trim()
+					// Extract and clean path
+					string raw_path = first_line.substring(0, colon_pos).trim()
+					// Strip quotes if present (support both quoted and unquoted)
+					string path = raw_path
 					if path.startsWith("\"")
 						path = path.substring(1, path.length())
 					if path.endsWith("\"")
 						path = path.substring(0, path.length() - 1)
 
 					// Find handle: block and extract code
-					string endpoint_body = from_method.substring(colon_pos + skip_chars, from_method.length())
+					string endpoint_body = from_method.substring(abs_colon + skip_chars, from_method.length())
 					string handler_code = extract_handle_code(endpoint_body)
 
 					// Generate handler function
-					result = result + "\tstring handler_" + handler_idx.toString() + "()\n"
+					result = result + "\tstring __route_handler_" + handler_idx.toString() + "()\n"
 					if handler_code.length() > 0
 						result = result + handler_code
 					else
 						result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
 					result = result + "\n"
 
+					// Collect route registration call for start block
+					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", " + handler_idx.toString() + ")\n"
+
 					handler_idx = handler_idx + 1
 
-					// Advance remaining
-					remaining = from_method.substring(colon_pos + skip_chars, from_method.length())
+					// Advance remaining past this endpoint
+					remaining = from_method.substring(abs_colon + skip_chars, from_method.length())
 
 		result = result + "start:\n"
-		result = result + "\tprintl(\"Registered " + handler_idx.toString() + " handlers\")\n"
+		result = result + route_calls
+		result = result + "\tprintl(\"Registered " + handler_idx.toString() + " routes\")\n"
 		return result
 
 	string extract_handle_code(string endpoint_body)
 		string result = ""
 
-		// 1. Extract and process body: declarations
+		// 1. Extract and process guard: block for auth checks
+		integer guard_pos = endpoint_body.indexOf("guard :")
+		if guard_pos == -1
+			guard_pos = endpoint_body.indexOf("guard:")
+		if guard_pos != -1
+			integer guard_end = endpoint_body.indexOf("\n", guard_pos)
+			if guard_end == -1
+				guard_end = endpoint_body.length()
+			// Find guard block content (lines after guard: until next keyword)
+			string guard_content = ""
+			string guard_remaining = endpoint_body.substring(guard_end + 1, endpoint_body.length())
+			integer guard_line_count = 0
+			while guard_line_count < 10
+				guard_line_count = guard_line_count + 1
+				integer gnl = guard_remaining.indexOf("\n")
+				if gnl == -1
+					gnl = guard_remaining.length()
+				string guard_line = guard_remaining.substring(0, gnl).trim()
+				if guard_line.startsWith("returns") or guard_line.startsWith("handle") or guard_line.startsWith("cache") or guard_line.startsWith("body") or guard_line.startsWith("params")
+					break
+				if guard_line.length() > 0
+					guard_content = guard_content + guard_line + "\n"
+				if gnl >= guard_remaining.length()
+					break
+				guard_remaining = guard_remaining.substring(gnl + 1, guard_remaining.length())
+			string guard_code = generate_guard_check(guard_content)
+			if guard_code.length() > 0
+				result = result + guard_code
+
+		// 2. Extract and process returns: block (annotation only — drives OpenAPI/SDK generation)
+		string returns_annotation = extract_returns_annotation(endpoint_body)
+		if returns_annotation.length() > 0
+			result = result + returns_annotation
+
+		// 3. Extract and process cache: block — emits _http_set_cache() call
+		string cache_code = extract_cache_code(endpoint_body)
+		if cache_code.length() > 0
+			result = result + cache_code
+
+		// 4. Extract and process body: declarations
 		string body_vars = extract_body_declarations(endpoint_body)
 		if body_vars.length() > 0
 			result = result + body_vars
 
-		// 2. Extract and process params: declarations
+		// 5. Extract and process params: declarations
 		string param_vars = extract_params_declarations(endpoint_body)
 		if param_vars.length() > 0
 			result = result + param_vars
 
-		// 3. Find and extract handle: block
+		// 6. Find and extract handle: block (or direct code if no handle: keyword)
 		integer handle_pos = endpoint_body.indexOf("handle :")
 		integer handle_skip = 8
 		if handle_pos == -1
 			handle_pos = endpoint_body.indexOf("handle:")
 			handle_skip = 7
-		if handle_pos == -1
-			return result
 
-		// Get everything after handle:
-		string after_handle = endpoint_body.substring(handle_pos + handle_skip, endpoint_body.length())
+		string after_handle = ""
+		if handle_pos == -1
+			// No handle: keyword - use the direct code after the endpoint declaration
+			after_handle = endpoint_body
+		else
+			// Get everything after handle:
+			after_handle = endpoint_body.substring(handle_pos + handle_skip, endpoint_body.length())
 
 		// Find where this handler ends (next endpoint or end of input)
 		integer end_pos = after_handle.length()
-		integer next_get = after_handle.indexOf("GET \"")
-		integer next_post = after_handle.indexOf("POST \"")
-		integer next_put = after_handle.indexOf("PUT \"")
-		integer next_delete = after_handle.indexOf("DELETE \"")
-		integer next_patch = after_handle.indexOf("PATCH \"")
+		integer next_get = after_handle.indexOf("GET /")
+		integer next_post = after_handle.indexOf("POST /")
+		integer next_put = after_handle.indexOf("PUT /")
+		integer next_delete = after_handle.indexOf("DELETE /")
+		integer next_patch = after_handle.indexOf("PATCH /")
 
 		if next_get >= 0 and next_get < end_pos
 			end_pos = next_get
@@ -192,7 +256,7 @@ functions:
 		string sub_result = after_handle.substring(0, end_pos)
 		string raw_code = sub_result.trim()
 
-		// 4. Transform the handler code
+		// 7. Transform the handler code
 		string transformed = transform_handler(raw_code)
 
 		result = result + transformed
@@ -292,43 +356,17 @@ functions:
 
 		return result
 
-	integer find_block_end(string content)
-		// Find where a sub-block ends (at next keyword)
-		integer end_pos = content.length()
-
-		integer returns_pos = content.indexOf("returns")
-		integer handle_pos = content.indexOf("handle")
-		integer guard_pos = content.indexOf("guard")
-		integer cache_pos = content.indexOf("cache")
-		integer body_pos = content.indexOf("body")
-		integer params_pos = content.indexOf("params")
-
-		if returns_pos >= 0 and returns_pos < end_pos
-			end_pos = returns_pos
-		if handle_pos >= 0 and handle_pos < end_pos
-			end_pos = handle_pos
-		if guard_pos >= 0 and guard_pos < end_pos
-			end_pos = guard_pos
-		if cache_pos >= 0 and cache_pos < end_pos
-			end_pos = cache_pos
-		if body_pos > 0 and body_pos < end_pos
-			end_pos = body_pos
-		if params_pos > 0 and params_pos < end_pos
-			end_pos = params_pos
-
-		return end_pos
-
-	string get_next_line(string text)
-		integer newline_pos = text.indexOf("\n")
-		if newline_pos == -1
-			return text
-		return text.substring(0, newline_pos)
-
 	string transform_handler(string code)
-		// SIMPLIFIED VERSION - avoiding complex JSON block handling for now
-		// Process line by line to handle indentation and basic transforms
+		// First apply semantic transforms for req.params.*, req.query.*, req.json(), json+status
+		string pre = code
+		pre = transform_req_params(pre, "")
+		pre = transform_req_query(pre)
+		pre = transform_req_json(pre)
+		pre = transform_json_status(pre)
+
+		// Then process line by line for indentation and syntax transforms
 		string result = ""
-		string remaining = code
+		string remaining = pre
 		integer safety = 0
 		boolean in_if_block = false
 
@@ -405,203 +443,105 @@ functions:
 
 		return result
 
-	string build_json_property(string line)
-		// Parse "key : value" into JSON property
-		integer colon = line.indexOf(" : ")
-		if colon == -1
-			return ""
-
-		string key = line.substring(0, colon)
-		integer val_start = colon + 3
-		integer line_len = line.length()
-		if val_start >= line_len
-			return "\\\"" + key + "\\\":null"
-
-		string value = line.substring(val_start, line_len)
-
-		// Build property: \"key\":value
-		string prop = "\\\"" + key + "\\\":"
-
-		// Handle value types
-		if value == "true"
-			return prop + "true"
-		if value == "false"
-			return prop + "false"
-		if value == "[ ]" or value == "[]"
-			return prop + "[]"
-
-		// Check if quoted string
-		if value.startsWith("\"")
-			string inner = value.substring(1, value.length() - 1)
-			return prop + "\\\"" + inner + "\\\""
-
-		// Check if numeric
-		string first = value.substring(0, 1)
-		if first >= "0" and first <= "9"
-			return prop + value
-		if first == "-"
-			return prop + value
-
-		// Variable reference - quote it
-		return prop + "\\\"" + value + "\\\""
-
-	string remove_object_properties(string code)
-		string result = ""
-		string remaining = code
-		integer safety = 0
-
-		while safety < 50 and remaining.length() > 0
-			safety = safety + 1
-			integer nl = remaining.indexOf("\n")
-			string line = ""
-			if nl == -1
-				line = remaining
-				remaining = ""
-			else
-				line = remaining.substring(0, nl)
-				remaining = remaining.substring(nl + 1, remaining.length())
-
-			string trimmed = line.trim()
-
-			// Keep lines that are: empty, if statements, returns, or don't have " : "
-			boolean keep_line = true
-			if trimmed.indexOf(" : ") > 0
-				if not trimmed.startsWith("if ") and not trimmed.startsWith("return")
-					keep_line = false
-
-			if keep_line
-				result = result + line + "\n"
-
-		return result
-
-	string transform_single_line(string line)
-		// Transform "return json :" to return jsonResponse("{}")
-		if line.startsWith("return json :")
-			return "return jsonResponse(\"{}\")"
-		if line.startsWith("return json:")
-			return "return jsonResponse(\"{}\")"
-
-		// Transform "return html (" to "return htmlResponse("
-		if line.startsWith("return html (")
-			string rest = line.substring(13, line.length())
-			return "return htmlResponse(" + rest
-		if line.startsWith("return html(")
-			string rest = line.substring(12, line.length())
-			return "return htmlResponse(" + rest
-
-		// Transform "if ... :" - remove trailing colon
-		if line.startsWith("if ") and line.endsWith(" :")
-			return line.substring(0, line.length() - 2)
-		if line.startsWith("if ") and line.endsWith(":")
-			return line.substring(0, line.length() - 1)
-
-		// Skip object property lines (key : value) inside json blocks
-		if not line.startsWith("return") and not line.startsWith("if ") and line.indexOf(" : ") > 0
-			return "//skip"
-
-		return line
-
-	integer count_leading_spaces(string line)
-		integer count = 0
-		integer i = 0
-		while i < line.length()
-			string ch = line.substring(i, i + 1)
-			if ch == " "
-				count = count + 1
-			else if ch == "\t"
-				count = count + 4
-			else
-				return count
-			i = i + 1
-		return count
-
-	string transform_line(string line)
-		// Transform "return json :" to "return jsonResponse({...})"
-		if line.startsWith("return json") and line.indexOf(":") > 0
-			return "return jsonResponse(\"{}\")"
-
-		// Transform "return html (" to "return htmlResponse("
-		if line.startsWith("return html (") or line.startsWith("return html(")
-			string after_html = line.substring(11, line.length()).trim()
-			if after_html.startsWith("(")
-				after_html = after_html.substring(1, after_html.length())
-			if after_html.endsWith(")")
-				after_html = after_html.substring(0, after_html.length() - 1)
-			return "return htmlResponse(" + after_html + ")"
-
-		// Transform "if ... :" block start - remove trailing colon
-		if line.startsWith("if ") and line.endsWith(":")
-			return line.substring(0, line.length() - 1)
-		if line.startsWith("if ") and line.endsWith(" :")
-			return line.substring(0, line.length() - 2)
-
-		// Transform object property lines (key : value) - skip these
-		if line.indexOf(" : ") > 0 and not line.startsWith("return") and not line.startsWith("if ")
-			// This is likely an object property inside json:, skip it
-			return "// " + line
-
-		return line
-
 // ============================================================================
-// RESPONSE HELPER GENERATION
+// RETURNS AND CACHE PROCESSING
 // ============================================================================
 
 functions:
-	string generate_response_helpers()
-		// Don't start with functions: - will be added at the end
-		// NOTE: Function names avoid conflicts with built-in namespaces
-		// (json, string, math, file, http, etc.) by using different names
-		string result = ""
+	string extract_returns_annotation(string endpoint_body)
+		// Find returns: or returns : block
+		integer returns_pos = endpoint_body.indexOf("returns :")
+		if returns_pos == -1
+			returns_pos = endpoint_body.indexOf("returns:")
+		if returns_pos == -1
+			return ""
 
-		// jsonResponse() helper - renamed from json() to avoid namespace conflict
-		result = result + "\tstring jsonResponse(any data)\n"
-		result = result + "\t\treturn _http_respond(200, \"application/json\", _json_encode(data))\n\n"
+		// Advance past the keyword and colon — skip to next line
+		integer nl_pos = endpoint_body.indexOf("\n", returns_pos)
+		if nl_pos == -1
+			return ""
 
-		// jsonResponseStatus() - renamed from json_status()
-		result = result + "\tstring jsonResponseStatus(any data, integer status_code)\n"
-		result = result + "\t\treturn _http_respond(status_code, \"application/json\", _json_encode(data))\n\n"
+		// Collect content lines until the next sub-block keyword
+		string remaining = endpoint_body.substring(nl_pos + 1, endpoint_body.length())
+		string content = ""
+		integer line_count = 0
 
-		// htmlResponse() helper - renamed from html()
-		result = result + "\tstring htmlResponse(string content)\n"
-		result = result + "\t\treturn _http_respond(200, \"text/html\", content)\n\n"
+		while line_count < 10
+			line_count = line_count + 1
+			integer nl = remaining.indexOf("\n")
+			if nl == -1
+				nl = remaining.length()
+			string line = remaining.substring(0, nl)
+			string trimmed = line.trim()
 
-		// redirectTo() helper - renamed from redirect()
-		result = result + "\tstring redirectTo(string url)\n"
-		result = result + "\t\treturn _http_redirect(302, url)\n\n"
+			// Stop at the next sub-block keyword
+			if trimmed.startsWith("guard") or trimmed.startsWith("cache") or trimmed.startsWith("handle") or trimmed.startsWith("body") or trimmed.startsWith("params")
+				break
 
-		// redirectToStatus() - renamed from redirect_status()
-		result = result + "\tstring redirectToStatus(string url, integer status_code)\n"
-		result = result + "\t\treturn _http_redirect(status_code, url)\n\n"
+			// Accumulate non-empty lines as the return type declaration
+			if trimmed.length() > 0
+				if content.length() == 0
+					content = trimmed
+				else
+					content = content + " " + trimmed
 
-		// notFound() helper - safe name
-		result = result + "\tstring notFound()\n"
-		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"Resource not found\\\"}}\")\n\n"
+			if nl >= remaining.length()
+				break
+			remaining = remaining.substring(nl + 1, remaining.length())
 
-		// notFoundMsg() - safe name
-		result = result + "\tstring notFoundMsg(string message)\n"
-		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"\" + message + \"\\\"}}\")\n\n"
+		if content.length() == 0
+			return ""
 
-		// badRequest() helper - safe name
-		result = result + "\tstring badRequest(string message)\n"
-		result = result + "\t\treturn _http_respond(400, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"\" + message + \"\\\"}}\")\n\n"
+		// Emit as a comment annotation for OpenAPI/SDK tooling
+		return "\t\t// @returns " + content + "\n"
 
-		// unauthorized() helper - safe name
-		result = result + "\tstring unauthorized()\n"
-		result = result + "\t\treturn _http_respond(401, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"AUTH_ERROR\\\",\\\"message\\\":\\\"Authentication required\\\"}}\")\n\n"
+	string extract_cache_code(string endpoint_body)
+		// Find cache: or cache : block
+		integer cache_pos = endpoint_body.indexOf("cache :")
+		if cache_pos == -1
+			cache_pos = endpoint_body.indexOf("cache:")
+		if cache_pos == -1
+			return ""
 
-		// forbidden() helper - safe name
-		result = result + "\tstring forbidden()\n"
-		result = result + "\t\treturn _http_respond(403, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"PERMISSION_DENIED\\\",\\\"message\\\":\\\"Access denied\\\"}}\")\n\n"
+		// Advance past the keyword and colon — skip to next line
+		integer nl_pos = endpoint_body.indexOf("\n", cache_pos)
+		if nl_pos == -1
+			return ""
 
-		// httpStatus() helper - renamed from status() to be more explicit
-		result = result + "\tinteger httpStatus(integer code)\n"
-		result = result + "\t\treturn code\n\n"
+		// Collect content lines until the next sub-block keyword
+		string remaining = endpoint_body.substring(nl_pos + 1, endpoint_body.length())
+		integer line_count = 0
 
-		// httpHeader() helper - renamed from header() to be more explicit
-		result = result + "\tstring httpHeader(string name, string value)\n"
-		result = result + "\t\treturn _http_set_header(name, value)\n\n"
+		while line_count < 10
+			line_count = line_count + 1
+			integer nl = remaining.indexOf("\n")
+			if nl == -1
+				nl = remaining.length()
+			string line = remaining.substring(0, nl)
+			string trimmed = line.trim()
 
-		return result
+			// Stop at the next sub-block keyword
+			if trimmed.startsWith("guard") or trimmed.startsWith("returns") or trimmed.startsWith("handle") or trimmed.startsWith("body") or trimmed.startsWith("params")
+				break
+
+			// Parse maxAge = <number>
+			if trimmed.startsWith("maxAge")
+				integer eq_pos = trimmed.indexOf("=")
+				if eq_pos != -1
+					string value_raw = trimmed.substring(eq_pos + 1, trimmed.length()).trim()
+					if value_raw.length() > 0
+						return "\t\t_http_set_cache(" + value_raw + ")\n"
+
+			// Parse noCache directive (no value expected)
+			if trimmed == "noCache"
+				return "\t\t_http_no_cache()\n"
+
+			if nl >= remaining.length()
+				break
+			remaining = remaining.substring(nl + 1, remaining.length())
+
+		// cache: block found but no recognized directive — emit no-cache as safe default
+		return ""
 
 // ============================================================================
 // GUARD PROCESSING
@@ -640,35 +580,12 @@ functions:
 
 		return result
 
-	string extract_role_from_guard(string guard_block)
-		// Extract first role for protected route registration
-		integer bracket_start = guard_block.indexOf("[")
-		integer bracket_end = guard_block.indexOf("]")
-		if bracket_start != -1 and bracket_end != -1
-			string roles = guard_block.substring(bracket_start + 1, bracket_end)
-			integer comma_pos = roles.indexOf(",")
-			if comma_pos != -1
-				roles = roles.substring(0, comma_pos)
-			// Clean up quotes
-			roles = roles.trim()
-			if roles.startsWith("\"")
-				roles = roles.substring(1, roles.length())
-			if roles.endsWith("\"")
-				roles = roles.substring(0, roles.length() - 1)
-			return roles
-		return ""
 
 // ============================================================================
 // HANDLER CODE TRANSFORMATION
 // ============================================================================
 
 functions:
-	string transform_handler_code(string code, string path)
-		// SIMPLIFIED: Just return the code as-is for now
-		// The complex transformations were causing WASM crashes
-		// TODO: Debug and fix transform_req_params, transform_req_query, etc.
-		return code
-
 	string transform_req_params(string code, string path)
 		string result = code
 
@@ -795,66 +712,6 @@ functions:
 // ============================================================================
 
 functions:
-	// Find method position supporting both quoted and unquoted paths
-	integer find_method_pos(string text, string method, integer start_pos)
-		// Try quoted path first: GET "/ or GET '/
-		integer quoted_pos = text.indexOf(method + " \"", start_pos)
-		integer single_quoted = text.indexOf(method + " '", start_pos)
-		// Try unquoted path: GET /
-		integer unquoted_pos = text.indexOf(method + " /", start_pos)
-
-		// Return the earliest match
-		integer result = -1
-		if quoted_pos >= 0
-			result = quoted_pos
-		if single_quoted >= 0
-			if result == -1 or single_quoted < result
-				result = single_quoted
-		if unquoted_pos >= 0
-			if result == -1 or unquoted_pos < result
-				result = unquoted_pos
-		return result
-
-	integer find_min_positive(integer a, integer b, integer c, integer d, integer e)
-		integer min_val = -1
-		if a >= 0
-			if min_val == -1 or a < min_val
-				min_val = a
-		if b >= 0
-			if min_val == -1 or b < min_val
-				min_val = b
-		if c >= 0
-			if min_val == -1 or c < min_val
-				min_val = c
-		if d >= 0
-			if min_val == -1 or d < min_val
-				min_val = d
-		if e >= 0
-			if min_val == -1 or e < min_val
-				min_val = e
-		return min_val
-
-	integer find_next_endpoint(string text, integer start_idx)
-		integer get_pos = find_method_pos(text, "GET", start_idx)
-		integer post_pos = find_method_pos(text, "POST", start_idx)
-		integer put_pos = find_method_pos(text, "PUT", start_idx)
-		integer delete_pos = find_method_pos(text, "DELETE", start_idx)
-		integer patch_pos = find_method_pos(text, "PATCH", start_idx)
-		return find_min_positive(get_pos, post_pos, put_pos, delete_pos, patch_pos)
-
-	string path_to_func_name(string path)
-		string result = ""
-		integer i = 0
-		while i < path.length()
-			string ch = path.substring(i, i + 1)
-			if ch == "/"
-				result = result + "_"
-			else if ch == ":"
-				result = result + "p"
-			else if is_identifier_char(ch)
-				result = result + ch
-			i = i + 1
-		return result
 
 	boolean is_identifier_char(string ch)
 		if ch >= "a" and ch <= "z"
@@ -866,84 +723,6 @@ functions:
 		if ch == "_"
 			return true
 		return false
-
-	string extract_subblock(string body, string block_name)
-		integer start_pos = body.indexOf(block_name)
-		if start_pos == -1
-			return ""
-
-		integer content_start = start_pos + block_name.length()
-
-		// Find the end of this sub-block
-		integer end_pos = body.length()
-		integer search_pos = content_start
-
-		while search_pos < body.length()
-			if body.substring(search_pos, search_pos + 1) == "\n"
-				string after_newline = body.substring(search_pos + 1, body.length()).trim()
-				if after_newline.startsWith("guard:") or after_newline.startsWith("returns:") or after_newline.startsWith("cache:") or after_newline.startsWith("handle:")
-					end_pos = search_pos
-					break
-			search_pos = search_pos + 1
-
-		return body.substring(content_start, end_pos).trim()
-
-	string remove_subblocks(string body)
-		string result = body
-
-		// Remove guard: block
-		result = remove_block(result, "guard:")
-		// Remove returns: block
-		result = remove_block(result, "returns:")
-		// Remove cache: block
-		result = remove_block(result, "cache:")
-		// Remove handle: block (handle is special - it's used for the code)
-		// Don't remove it here as it's extracted separately
-
-		return result.trim()
-
-	string remove_block(string body, string block_name)
-		integer start_pos = body.indexOf(block_name)
-		if start_pos == -1
-			return body
-
-		// Find end of block
-		integer end_pos = body.length()
-		integer search_pos = start_pos + block_name.length()
-
-		while search_pos < body.length()
-			if body.substring(search_pos, search_pos + 1) == "\n"
-				string after_newline = body.substring(search_pos + 1, body.length()).trim()
-				if after_newline.startsWith("guard:") or after_newline.startsWith("returns:") or after_newline.startsWith("cache:") or after_newline.startsWith("handle:") or after_newline.startsWith("GET ") or after_newline.startsWith("POST ") or after_newline.startsWith("PUT ") or after_newline.startsWith("DELETE ") or after_newline.startsWith("PATCH ")
-					end_pos = search_pos
-					break
-			search_pos = search_pos + 1
-
-		return body.substring(0, start_pos) + body.substring(end_pos, body.length())
-
-	string indent_code(string code, integer levels)
-		string indent = ""
-		integer i = 0
-		while i < levels
-			indent = indent + "\t"
-			i = i + 1
-
-		string result = ""
-		string lines = code
-		integer line_start = 0
-
-		while line_start < lines.length()
-			integer line_end = lines.indexOf("\n", line_start)
-			if line_end == -1
-				line_end = lines.length()
-
-			string line = lines.substring(line_start, line_end)
-			if line.trim().length() > 0
-				result = result + indent + line.trim() + "\n"
-
-			line_start = line_end + 1
-
-		return result
 
 	string get_attr(string attrs, string key, string default_val)
 		string pattern = "\"" + key + "\""

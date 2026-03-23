@@ -290,7 +290,7 @@ Rollback a transaction, discarding all queued operations.
 
 ---
 
-## HTTP Bridge Functions (frame.web plugin)
+## HTTP Bridge Functions (frame.httpserver plugin)
 
 Low-level WASM imports for HTTP server operations. Implemented in `clean-server/src/bridge.rs`.
 
@@ -923,6 +923,17 @@ let bridge: [String: Any] = [
 | `_http_listen` | - | tokio | - | - | - |
 | `env.get` | - | env | env | Bundle | BuildConfig |
 | `crypto.random` | WebCrypto | ring | ring | SecRandom | SecureRandom |
+| `_ui_load_layout` | - | server | - | - | - |
+| `_ui_inject_head_css` | - | server | - | - | - |
+| `_canvas_on_pointer_down` | browser | - | desktop | - | - |
+| `_canvas_on_pointer_move` | browser | - | desktop | - | - |
+| `_canvas_on_key_down` | browser | - | desktop | - | - |
+| `_canvas_event_x` | browser | - | desktop | - | - |
+| `_canvas_event_y` | browser | - | desktop | - | - |
+| `_canvas_event_key` | browser | - | desktop | - | - |
+| `_db_configure` | - | server | - | - | - |
+| `_db_register_migration` | - | server | - | - | - |
+| `_db_migration_diff` | - | server | - | - | - |
 
 ---
 

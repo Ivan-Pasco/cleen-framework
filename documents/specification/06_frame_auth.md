@@ -38,7 +38,7 @@ Auth is designed to be **simple by default** (cookies + sessions) and **extensib
 
 ## 4. Configuration
 
-**File:** `/app/auth/config.cln`
+**File:** `/app/auth/auth.cln`
 ```clean
 auth:
     session:
@@ -262,14 +262,14 @@ This file provides deterministic structures for AI agents:
 
 When prompting an AI agent:
 - Include this file + `03_frame_server.md` for route handling.
-- Provide `/app/auth/config.cln` and `/app/auth/roles.cln` snippets if relevant.
+- Provide `/app/auth/auth.cln` and `/app/auth/roles.cln` snippets if relevant.
 
 ---
 
 ## 15. File Locations
 
-- Config: `/app/auth/config.cln`, `/app/auth/roles.cln`
-- Server handlers: `/app/api/auth/*.cln`
+- Config: `/app/auth/auth.cln`, `/app/auth/roles.cln`
+- Server handlers: `/app/backend/api/auth/*.cln`
 - UI: gated components under `/app/components/` and pages in `/app/pages/`
 - Tests: `/tests/auth/`
 

@@ -6,316 +6,259 @@ Complete reference for the automatic file discovery system.
 
 ```
 my-project/
-  app/
-    ui/                       # Frontend (browser-facing)
-      pages/                  # HTML page routes
-      components/             # Custom HTML elements
-      layouts/                # Page wrappers
-      public/                 # Static assets
-    server/                   # Backend
-      api/                    # JSON API routes
-      models/                 # Database schemas
-      middleware/             # Request filters
-    shared/                   # Shared code
-      lib/                    # Utility modules
-  config.cln                  # Project configuration
-  dist/                       # Build output
+├── app.cln                      # Main entry point / plugin configuration
+├── project.toml                 # Project metadata and build settings
+├── app/
+│   ├── pages/                   # SSR page routes (.html)        → frame.ui
+│   │   ├── index.html           # Home page (/)
+│   │   ├── index.cln            # Companion data loader
+│   │   └── blog/
+│   │       ├── [slug].html      # Dynamic route (/blog/:slug)
+│   │       └── [slug].cln       # Companion loader
+│   ├── components/              # Reusable UI components (.cln)  → frame.ui
+│   ├── layouts/                 # Page layout wrappers (.html)   → frame.ui
+│   ├── backend/                 # HTTP server layer              → frame.httpserver
+│   │   ├── api/                 # HTTP endpoint handlers (.cln)
+│   │   ├── services/            # Business logic (.cln)
+│   │   └── middleware/          # Request filters (.cln)
+│   ├── data/                    # ORM / database layer           → frame.data
+│   │   ├── models/              # Data model definitions (.cln)
+│   │   ├── queries/             # Reusable named queries (.cln)
+│   │   ├── migrations/          # Schema migration files (.cln)
+│   │   └── repositories/        # Data access layer (.cln)
+│   ├── auth/                    # Auth configuration (.cln)      → frame.auth
+│   ├── canvas/                  # Canvas applications            → frame.canvas
+│   │   ├── scenes/              # Scene definitions (.cln)
+│   │   ├── sprites/             # Sprite definitions (.cln)
+│   │   └── audio/               # Audio config (.cln)
+│   └── public/                  # Static assets (served as-is)
+│       ├── css/
+│       └── images/
+└── dist/                        # Build output (generated)
 ```
+
+## Plugin Folder Ownership
+
+Plugins must be declared in `app.cln` via the `plugins:` block. Once declared, files in plugin-owned folders do not need individual `import` statements — the folder location tells the compiler which plugin processes each file.
+
+| Path Pattern | Owning Plugin |
+|---|---|
+| `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
+| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.httpserver` |
+| `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `frame.data` |
+| `app/auth/` | `frame.auth` |
+| `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
 
 ## Folder Reference
 
-### `app/ui/pages/`
+### `app/pages/`
 
-HTML page routes. Files become GET routes returning HTML.
+HTML page routes. Each `.html` file becomes a GET route returning server-rendered HTML. Owned by `frame.ui`.
 
 | File | Route |
 |------|-------|
 | `index.html` | `/` |
 | `about.html` | `/about` |
-| `contact.html` | `/contact` |
 | `blog/index.html` | `/blog` |
 | `blog/[slug].html` | `/blog/:slug` |
 | `users/[id]/profile.html` | `/users/:id/profile` |
 
-**Naming Rules:**
-- Files must end with `.html`
-- `index.html` maps to the folder path
-- `[param].html` creates a dynamic route parameter
+**Companion files**: Each page can have a matching `.cln` file (same name) that provides server-side data via `load()` and access control via `guard()`.
 
-**Example page:**
-```cln
-// app/ui/pages/blog/[slug].html
-
-// Parameter 'slug' is auto-extracted from URL
-string html = "<html>
-<body>
-    <h1>Post: " + slug + "</h1>
-</body>
-</html>"
-
-return html
+```
+app/pages/
+├── profile.html         # Template with {expression} interpolation
+└── profile.cln          # Companion: load() provides data, guard() checks access
 ```
 
-### `app/ui/components/`
+**Example page:**
+```html
+<!-- app/pages/blog/[slug].html -->
+<page layout="main"></page>
 
-Custom HTML elements. PascalCase filename becomes kebab-case tag.
+<article>
+    <h1>{post.title}</h1>
+    <p>{post.content}</p>
+</article>
+```
+
+**Example companion:**
+```clean
+// app/pages/blog/[slug].cln
+functions:
+	any load(Request request)
+		string slug = request.params.slug
+		Post post = Post.first:
+			where:
+				slug == slug
+		return { post: post }
+```
+
+**Interpolation syntax:**
+- `{expression}` — HTML-escaped output (safe, default)
+- `{!expression}` — Raw HTML output (trusted content only)
+
+### `app/components/`
+
+Reusable UI components. PascalCase filename becomes a kebab-case tag. Owned by `frame.ui`.
 
 | File | Tag |
 |------|-----|
 | `Header.cln` | `<app-header>` |
 | `Footer.cln` | `<app-footer>` |
 | `UserCard.cln` | `<user-card>` |
-| `BlogPostPreview.cln` | `<blog-post-preview>` |
-| `cards/ProductCard.cln` | `<product-card>` |
-
-**Naming Rules:**
-- Files must end with `.cln`
-- Use PascalCase for filenames
-- Single-word components get `app-` prefix
-- Multi-word components keep their words
 
 **Example component:**
-```cln
-// app/ui/components/Header.cln
+```clean
+// app/components/UserCard.cln
+component: tag="user-card"
+	props:
+		string userId
 
-component:
-    string render()
-        return "<header>
-            <nav>
-                <a href='/'>Home</a>
-                <a href='/about'>About</a>
-            </nav>
-        </header>"
+	html:
+		<div class="user-card">
+			<h3>{this.userId}</h3>
+		</div>
 ```
 
-### `app/ui/layouts/`
+### `app/layouts/`
 
-Page wrappers. Used with the `layout` attribute on pages.
-
-| File | Layout Name |
-|------|-------------|
-| `main.html` | `main` |
-| `admin.html` | `admin` |
-| `blog.html` | `blog` |
+Page layout wrappers referenced by pages via `<page layout="name">`. Owned by `frame.ui`.
 
 **Example layout:**
-```cln
-// app/ui/layouts/main.html
-
-return "<html>
+```html
+<!-- app/layouts/main.html -->
+<html>
 <head>
     <title>My Site</title>
-    <link rel='stylesheet' href='/public/css/style.css'>
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
     <app-header></app-header>
-    <main>{slot}</main>
+    <main><slot></slot></main>
     <app-footer></app-footer>
 </body>
-</html>"
+</html>
 ```
 
-### `app/ui/public/`
+### `app/backend/api/`
 
-Static files served as-is. Copied to `dist/public/` during build.
+HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.httpserver`.
 
-```
-public/
-  css/
-    style.css
-    reset.css
-  js/
-    app.js
-  images/
-    logo.png
-  favicon.ico
-  robots.txt
-```
+**Example endpoint:**
+```clean
+// app/backend/api/users.cln
+endpoints:
+	GET /api/users:
+		handle:
+			list users = User.find:
+				where:
+					active == true
+			return json(users)
 
-Access via `/public/...` URLs:
-- `/public/css/style.css`
-- `/public/images/logo.png`
+	POST /api/users:
+		body:
+			name : string
+			email : string
+		handle:
+			User u = User.insert:
+				name = name
+				email = email
+			return json(u)
 
-### `app/server/api/`
-
-JSON API endpoints. Files become routes with `/api/` prefix.
-
-| File | Route |
-|------|-------|
-| `users.cln` | `/api/users` |
-| `users/[id].cln` | `/api/users/:id` |
-| `articles/index.cln` | `/api/articles` |
-| `articles/[id]/comments.cln` | `/api/articles/:id/comments` |
-
-**Example API:**
-```cln
-// app/server/api/users/[id].cln
-
-// Return JSON
-return "{\"id\": " + id + ", \"name\": \"User " + id + "\"}"
+	GET /api/users/:id:
+		params:
+			id : integer
+		handle:
+			User user = User.first:
+				where:
+					id == id
+			return json(user)
 ```
 
-### `app/server/models/`
+### `app/data/models/`
 
-Database schemas. PascalCase name becomes snake_case table.
+Data model definitions. PascalCase filename becomes a snake_case database table. Owned by `frame.data`.
 
 | File | Model | Table |
 |------|-------|-------|
 | `User.cln` | `User` | `users` |
-| `Article.cln` | `Article` | `articles` |
 | `BlogPost.cln` | `BlogPost` | `blog_posts` |
 
 **Example model:**
-```cln
-// app/server/models/User.cln
-
+```clean
+// app/data/models/User.cln
 data User
-    integer id
-    string name
-    string email
-    string password_hash
-    string created_at
+	integer id : pk, auto
+	string name
+	string email : unique
+	string passwordHash
+	boolean active = true
+	datetime createdAt : default=now
 ```
 
-### `app/server/middleware/`
+### `app/auth/`
 
-Request filters applied to routes.
+Authentication and authorization configuration. Owned by `frame.auth`.
 
-| File | Middleware Name |
-|------|-----------------|
-| `auth.cln` | `auth` |
-| `logging.cln` | `logging` |
-| `cors.cln` | `cors` |
+**Example auth config:**
+```clean
+// app/auth/auth.cln
+auth:
+	session:
+		cookie = "frame.sid"
+		sameSite = "Lax"
+		secure = true
+		httpOnly = true
+		timeoutMinutes = 60
 
-**Example middleware:**
-```cln
-// app/server/middleware/auth.cln
-
-// Check authentication
-string token = _req_header("Authorization")
-if token == ""
-    return _http_error(401, "Unauthorized")
-end
-```
-
-### `app/shared/lib/`
-
-Utility modules available everywhere.
-
-| File | Module |
-|------|--------|
-| `validation.cln` | `validation` |
-| `format.cln` | `format` |
-| `helpers.cln` | `helpers` |
-
-## Route Mapping
-
-### URL Parameters
-
-Use `[param]` in filenames:
-
-```
-pages/users/[id].html         → /users/:id
-pages/blog/[slug]/edit.html   → /blog/:slug/edit
-api/articles/[id]/comments.cln    → /api/articles/:id/comments
-```
-
-Parameters are automatically available as variables:
-
-```cln
-// pages/users/[id].html
-// 'id' variable is automatically set from URL
-
-string html = "<h1>User " + id + "</h1>"
-return html
-```
-
-### Index Files
-
-`index` files map to folder paths:
-
-```
-pages/index.html              → /
-pages/blog/index.html         → /blog
-api/users/index.cln               → /api/users
-```
-
-## Build Output
-
-After `frame build`:
-
-```
-dist/
-  app.wasm                # Compiled application
-  .generated/
-    main.cln              # Generated entry point
-    components.json       # Component registry
-  public/                 # Copied from app/ui/public/
-    css/
-    js/
-    images/
-```
-
-## Configuration (config.cln)
-
-```cln
-// config.cln
-
-config:
-	project:
-		name = "my-app"
-		version = "1.0.0"
-
-	build:
-		output = "dist"
-
-	server:
-		port = 3000
-		host = "127.0.0.1"
-
-	auth:
-		strategy = "jwt"
+	jwt:
 		secret = env("JWT_SECRET")
+		alg = "HS256"
+		ttlMinutes = 60
 
-	database:
-		driver = "sqlite"
-		path = "db/app.db"
+	roles:
+		admin: ["*"]
+		editor: ["post.create", "post.edit"]
+		viewer: ["post.read"]
+```
+
+### `app/public/`
+
+Static assets served directly without processing.
+
+Access via URL path: `/css/style.css`, `/images/logo.png`
+
+## app.cln Configuration
+
+The top-level `app.cln` file declares plugins. This is required.
+
+```clean
+// app.cln
+plugins:
+	frame.ui
+	frame.httpserver
+	frame.data
+	frame.auth
 ```
 
 ## Commands
 
 ```bash
-# Scan project structure
-frame scan
-frame scan --verbose
-frame scan --format json
+# Create project
+cleen project create my-app --plugins=frame.httpserver,frame.data,frame.ui,frame.auth
 
-# Build project
-frame build
-frame build -O 3          # Max optimization
-frame build -o build      # Custom output dir
+# Compile
+cln compile app.cln -o dist/app.wasm --plugins
 
-# Run
+# Run server
 cleen server run dist/app.wasm --port 3000
-```
 
-## Legacy Mode
+# Database migrations
+cleen db:migrate
+cleen db:plan
 
-Projects without `app/` folder use legacy mode:
-
-```
-my-project/
-  main.cln                # Entry file
-  src/
-    utils.cln
-```
-
-The build command looks for entry files in order:
-1. `app/api/main.cln`
-2. `main.cln`
-3. `src/main.cln`
-
-Or specify directly:
-```bash
-frame build main.cln
+# Plugin management
+cleen plugin add frame.canvas
+cleen plugin list
 ```

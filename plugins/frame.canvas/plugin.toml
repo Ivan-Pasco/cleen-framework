@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.canvas"
-version = "2.0.0"
+version = "2.1.0"
 description = "Canvas rendering plugin for Clean Language - provides drawing, animation, audio, sprites, input, and visual effects for game development"
 author = "Clean Language Team"
 license = "MIT"
@@ -14,11 +14,11 @@ validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
-blocks = ["canvasScene", "draw", "onFrame"]
+blocks = ["canvasScene", "draw", "onFrame", "onPointerDown", "onPointerMove", "onKeyDown"]
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["canvasScene", "draw", "onFrame"]
+blocks = ["canvasScene", "draw", "onFrame", "onPointerDown", "onPointerMove", "onKeyDown"]
 
 # Keywords used within plugin context
 keywords = [
@@ -32,6 +32,10 @@ keywords = [
   { name = "update", description = "Update loop block (runs every frame)", context = "block" },
   { name = "render", description = "Render loop block (runs every frame after update)", context = "block" },
   { name = "scene", description = "Scene management (change, push, pop)", context = "expression" },
+  { name = "onPointerDown", description = "Handle pointer down (click/touch) events", context = "block" },
+  { name = "onPointerMove", description = "Handle pointer move (mouse/touch movement) events", context = "block" },
+  { name = "onKeyDown", description = "Handle key press events", context = "block" },
+  { name = "params", description = "Parameter names for event handler variables", context = "config" },
 ]
 
 # Custom types provided by the plugin
@@ -94,9 +98,14 @@ functions = [
 
 # Auto-completion suggestions
 completions = [
-  { trigger = "canvasScene ", insert = "canvasScene ${1:Name}:\n\twidth: ${2:800}\n\theight: ${3:600}\n\n\tinit:\n\t\t${4:// initialization}\n\n\tupdate:\n\t\t${5:// game logic}\n\n\trender:\n\t\t${6:// drawing}" },
-  { trigger = "draw:", insert = "draw:\n\tcanvas.clear(\"${1:#000000}\")\n\t${2:// drawing code}" },
-  { trigger = "onFrame:", insert = "onFrame:\n\t${1:// per-frame code}" },
+  { trigger = "canvasScene:", insert = "canvasScene: width=${1:800} height=${2:600}\n\tdraw:\n\t\tcanvas.clear\n\t\t${3:// drawing commands}" },
+  { trigger = "draw:", insert = "draw:\n\tcanvas.clear\n\t${1:// drawing commands}" },
+  { trigger = "onFrame:", insert = "onFrame: param=\"dt\"\n\t${1:// per-frame update logic}" },
+  { trigger = "onPointerDown:", insert = "onPointerDown: params=\"x,y\"\n\t${1:// handle click/touch at x, y}" },
+  { trigger = "onPointerMove:", insert = "onPointerMove: params=\"x,y\"\n\t${1:// handle pointer movement}" },
+  { trigger = "onKeyDown:", insert = "onKeyDown: params=\"key\"\n\t${1:// handle key press, e.g. key == \"ArrowUp\"}" },
+  { trigger = "canvas.circle", insert = "canvas.circle x=${1:0} y=${2:0} radius=${3:10} color=\"${4:blue}\"" },
+  { trigger = "canvas.rect", insert = "canvas.rect x=${1:0} y=${2:0} width=${3:100} height=${4:100} color=\"${5:green}\"" },
 ]
 
 [paths]
@@ -174,6 +183,14 @@ functions = [
   { name = "_canvas_get_delta_time", params = [], returns = "number", description = "Get time since last frame in seconds" },
   { name = "_canvas_get_time", params = [], returns = "number", description = "Get total elapsed time in seconds" },
   { name = "_canvas_get_fps", params = [], returns = "number", description = "Get current frames per second" },
+
+  # ===== Input Event Handlers =====
+  { name = "_canvas_on_pointer_down", params = ["integer"], returns = "integer", description = "Register pointer down (click/touch) event handler for canvas: canvas_id" },
+  { name = "_canvas_on_pointer_move", params = ["integer"], returns = "integer", description = "Register pointer move (mouse/touch move) event handler for canvas: canvas_id" },
+  { name = "_canvas_on_key_down", params = ["integer"], returns = "integer", description = "Register key down event handler for canvas: canvas_id" },
+  { name = "_canvas_event_x", params = [], returns = "number", description = "Get X coordinate of the current pointer event (valid inside onPointerDown/onPointerMove)" },
+  { name = "_canvas_event_y", params = [], returns = "number", description = "Get Y coordinate of the current pointer event (valid inside onPointerDown/onPointerMove)" },
+  { name = "_canvas_event_key", params = [], returns = "string", description = "Get key string of the current key event (valid inside onKeyDown, e.g. 'ArrowUp', 'Space')" },
 
   # ===== Audio - Sound Effects =====
   { name = "_audio_load_sound", params = ["string"], returns = "integer", description = "Load sound effect, returns sound ID", expand_strings = true },

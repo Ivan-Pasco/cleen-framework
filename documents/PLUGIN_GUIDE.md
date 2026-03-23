@@ -17,7 +17,7 @@ configuration:
         name = "my-app"
 
     plugins:
-    frame.web
+    frame.httpserver
     frame.data
 ```
 
@@ -33,14 +33,16 @@ The compiler transforms `endpoints:` into regular Clean functions that register 
 1. **Install Clean + a plugin using `cleen`:**
 ```bash
 cleen install latest
-cleen plugin add frame.web
+cleen plugin add frame.httpserver
 ```
 
-2. **Import the plugin in your `.cln` file:**
+2. **Declare the plugin in your `app.cln` `plugins:` block:**
 ```clean
-import:
-    frame.web
+plugins:
+    frame.httpserver
 ```
+
+Plugins with `implicit_import = true` in their `plugin.toml` allow files inside their owned folders (e.g. `app/backend/api/` for `frame.httpserver`) to skip individual import statements. The plugin declaration in `app.cln` is still required — what's implicit is the per-file import, not the plugin declaration itself.
 
 3. **Use its new blocks:**
 ```clean
@@ -56,10 +58,11 @@ cln build
 The plugin converts the DSL into normal Clean code, and compilation continues normally.
 
 ### 2.2. Types of Plugins
-- **Web/API:** `endpoints:`, `routes:`
-- **Data/ORM:** `data:`, `model:`
-- **UI/Pages:** `component:`, `view:`
-- **Utilities:** `config:`, `log:`, `jobs:`
+- **Web/API (`frame.httpserver`):** `server`, `endpoints`
+- **Data/ORM (`frame.data`):** `data` (keyword-based model definition)
+- **UI/Pages (`frame.ui`):** `component`, `screen`, `page`, `html`
+- **Auth (`frame.auth`):** `auth`, `protected`, `login`, `roles`
+- **Canvas (`frame.canvas`):** `canvasScene`, `draw`, `onFrame`
 
 Each plugin simply adds readable blocks that make Clean more expressive.
 
@@ -78,12 +81,12 @@ cleen list
 ### 3.2. New Plugin Commands
 #### Install a plugin
 ```bash
-cleen plugin add frame.web
+cleen plugin add frame.httpserver
 ```
 
 #### Remove a plugin
 ```bash
-cleen plugin remove frame.web
+cleen plugin remove frame.httpserver
 ```
 
 #### List installed plugins
@@ -93,7 +96,7 @@ cleen plugin list
 
 #### Search for plugins
 ```bash
-cleen plugin search web
+cleen plugin search httpserver
 ```
 
 ### 3.3. Project Plugin Configuration
@@ -103,7 +106,7 @@ project:
     name = "my-app"
 
 plugins:
-    frame.web
+    frame.httpserver
     frame.data
 ```
 
@@ -185,26 +188,42 @@ you get something like (actual folders depend on the plugins and preset you choo
 
 ```text
 my-app/
-  configuration.cln
-  main.cln
-  api/
-    users.cln
-    orders.cln
-  pages/              # used by UI/HTML plugins (example)
-    home.html
-    about.html
-  components/         # used by UI component plugins (example)
-    header.cln
-    footer.cln
-  data/               # used by data/ORM plugins (example)
-    models.cln
+  app.cln
+  app/
+    backend/
+      api/
+        users.cln
+        orders.cln
+      services/
+      middleware/
+    pages/              # used by frame.ui (SSR pages)
+      home.html
+      about.html
+    components/         # used by frame.ui (reusable components)
+      header.cln
+      footer.cln
+    data/               # used by frame.data (ORM models, queries, migrations)
+      models/
+        User.cln
+      queries/
+      migrations/
+      repositories/
+    auth/               # used by frame.auth (auth configuration)
+    canvas/             # used by frame.canvas (canvas scenes, sprites, audio)
+      scenes/
+      sprites/
+      audio/
 ```
 
 **Key points:**
-- `configuration.cln` lives at the **root** and configures the project, compiler, plugins and framework.
-- `main.cln` is the **entry file**, where `start` is defined.
-- `api/` is the default folder for API-related code (e.g. endpoints, handlers).
-- Other folders (`pages/`, `components/`, `data/`) are examples of **plugin-owned folders**.
+- `app.cln` lives at the **root** and configures the project, compiler, plugins and framework.
+- The `plugins:` block in `app.cln` declares which plugins are active.
+- `app/backend/` and its subfolders are owned by `frame.httpserver` (endpoints, services, middleware).
+- `app/data/` and its subfolders are owned by `frame.data`.
+- `app/auth/` is owned by `frame.auth`.
+- `app/pages/`, `app/components/`, and `app/layouts/` are owned by `frame.ui`.
+- `app/canvas/` and its subfolders are owned by `frame.canvas`.
+- All of these are **plugin-owned folders** — once a plugin is declared in `app.cln`, files placed in its owned folder are processed by that plugin without needing individual import statements.
 
 ### 7.2. Root `main.cln` and `start`
 
@@ -226,13 +245,28 @@ Each plugin can define the folder(s) it uses. When a framework project is create
 
 Examples:
 
-- `frame.web` (web/API plugin) might define:
-  - `api/` → files where HTTP endpoints live.
-- `frame.ui` (UI/HTML plugin) might define:
-  - `pages/` → page templates.
-  - `components/` → reusable UI components.
-- `frame.data` (ORM plugin) might define:
-  - `data/` → data models and relations.
+- `frame.httpserver` (web/API plugin) owns:
+  - `app/backend/` → HTTP endpoints, services, and middleware.
+  - `app/backend/api/` → endpoint handler files.
+  - `app/backend/services/` → service layer files.
+  - `app/backend/middleware/` → middleware files.
+- `frame.ui` (UI/HTML plugin) owns:
+  - `app/pages/` → SSR page templates.
+  - `app/components/` → reusable UI components.
+  - `app/layouts/` → shared layout wrappers.
+- `frame.data` (ORM plugin) owns:
+  - `app/data/` → data models, queries, migrations, and repositories.
+  - `app/data/models/` → model definitions using the `data` keyword.
+  - `app/data/queries/` → reusable query blocks.
+  - `app/data/migrations/` → schema migration files.
+  - `app/data/repositories/` → repository pattern files.
+- `frame.auth` (auth plugin) owns:
+  - `app/auth/` → authentication and authorization configuration.
+- `frame.canvas` (canvas plugin) owns:
+  - `app/canvas/` → canvas applications and scenes.
+  - `app/canvas/scenes/` → scene definitions using `canvasScene`.
+  - `app/canvas/sprites/` → sprite and asset definitions.
+  - `app/canvas/audio/` → audio assets and configuration.
 
 **Behavior:**
 - The plugin declares: *“I own folder `pages/` and file patterns `*.html`.”*
@@ -241,22 +275,23 @@ Examples:
   - Routes them to the plugin for processing.
   - Includes the results in the build/runtime, with no extra code in `main.cln`.
 
-### 7.4. Automatic discovery: no boilerplate
+### 7.4. No per-file boilerplate
 
-Because plugins are location aware, a developer can simply create files in the right place and they will be picked up:
+Because plugins are folder-aware, once a plugin is declared in `app.cln`, a developer can create files in the owned folder and they will be picked up automatically:
 
 ```text
-pages/
+app/pages/
   home.html
   contact.html
 ```
 
-No need to manually register these pages. For example, `frame.ui` can treat each `*.html` as a route or a named template, depending on its rules.
+No need to manually register these pages. For example, `frame.ui` treats each `*.html` in its owned folder as a route or named template, depending on its rules.
 
 This means:
 
-- **No boilerplate imports** like "registerPage(home)".
-- Just create the file and let the plugin + framework do the registration.
+- **No per-file import statements** like `import frame.ui` in every `.cln` file.
+- **No boilerplate registration** like "registerPage(home)".
+- Just declare the plugin in `app.cln`, create the file in the right folder, and the framework handles the rest.
 
 ### 7.5. Example: `.html` processing
 
@@ -265,7 +300,7 @@ For UI/HTML-oriented plugins, we define a special extension convention:
 - Files ending in `.html` contain **HTML with custom tags**.
 - These tags are processed **before the file is retrieved/served**.
 
-Example file: `pages/home.html`
+Example file: `app/pages/home.html`
 
 ```html
 <html>
@@ -298,7 +333,7 @@ From the developer perspective:
 
 Below is a full minimal example of a framework project using the conventions above.
 
-**`configuration.cln` (at project root)**
+**`app.cln` (at project root)**
 
 ```clean
 configuration:
@@ -309,7 +344,7 @@ configuration:
         version = "latest"
 
     plugins:
-        frame.web
+        frame.httpserver
         frame.ui
 
     framework:
@@ -322,16 +357,14 @@ configuration:
 **`main.cln` (entrypoint at project root)**
 
 ```clean
-import:
-    frame.web
-    frame.ui
-
 start:
     // Startup logic
-    // The framework will discover API and page files automatically.
+    // The framework discovers backend and page files via plugin folder ownership.
+    // Plugins declared in app.cln process all files in their owned folders.
+    // No per-file import statements needed.
 ```
 
-**`api/users.cln` (API endpoints owned by `frame.web`)**
+**`app/backend/api/users.cln` (API endpoints owned by `frame.httpserver`)**
 
 ```clean
 endpoints:
@@ -339,10 +372,10 @@ endpoints:
 
 listUsers:
     // Implementation of the handler
-    // This block will be expanded by the web plugin into normal Clean code.
+    // This block is expanded by frame.httpserver into normal Clean code.
 ```
 
-**`pages/home.html` (HTML + custom tags owned by `frame.ui`)**
+**`app/pages/home.html` (HTML + custom tags owned by `frame.ui`)**
 
 ```html
 <html>
@@ -361,10 +394,10 @@ listUsers:
 
 In this example:
 
-- `configuration.cln` declares the project, compiler, plugins and framework.
+- `app.cln` declares the project, compiler, plugins and framework via the `plugins:` block.
 - `main.cln` defines `start`, the entrypoint block executed by the framework runtime.
-- `api/users.cln` is discovered by `frame.web` and turned into real endpoint registration code.
-- `pages/home.html` is discovered by `frame.ui` and compiled into a renderable page template.
+- `app/backend/api/users.cln` is discovered by `frame.httpserver` (its owned folder) and turned into real endpoint registration code.
+- `app/pages/home.html` is discovered by `frame.ui` (its owned folder) and compiled into a renderable page template.
 
 Developers do not need extra boilerplate; they only need to respect the folder structure and file conventions.
 

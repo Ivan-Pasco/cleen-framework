@@ -10,7 +10,7 @@ min_compiler_version = "0.15.0"
 requires = "clean-server"
 
 [handles]
-blocks = ["server", "endpoints"]
+blocks = ["endpoints"]
 
 [exports]
 expand = "expand"
@@ -117,7 +117,7 @@ functions = [
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["server", "endpoints"]
+blocks = ["endpoints"]
 
 # Keywords used within plugin context
 keywords = [
@@ -129,7 +129,7 @@ keywords = [
   { name = "guard", description = "Authentication/authorization guard", context = "block" },
   { name = "returns", description = "Response type declaration", context = "block" },
   { name = "cache", description = "Response caching configuration", context = "block" },
-  { name = "handle", description = "Error handler block", context = "block" },
+  { name = "handle", description = "Request handler block", context = "block" },
   { name = "middleware", description = "Middleware handler block", context = "block" },
   { name = "port", description = "Server port configuration", context = "config" },
   { name = "host", description = "Server host configuration", context = "config" },

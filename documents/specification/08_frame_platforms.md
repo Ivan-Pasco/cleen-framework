@@ -21,12 +21,12 @@ We keep one codebase: **Clean → WASM**, HTML-first UI, and a small **Host Brid
 ## 2. Quick Targets
 
 ```bash
-frame build --target=web        # static web build
-frame build --target=pwa        # web + manifest + service worker
-frame build --target=mobile     # Android/iOS wrapper (Capacitor)
-frame build --target=desktop    # Windows/Linux/macOS wrapper (Tauri)
-frame build --target=server     # server artifacts (Node/Rust host)
-frame build --target=cli        # CLI/daemon bundle
+cleen build --target=web        # static web build
+cleen build --target=pwa        # web + manifest + service worker
+cleen build --target=mobile     # Android/iOS wrapper (Capacitor)
+cleen build --target=desktop    # Windows/Linux/macOS wrapper (Tauri)
+cleen build --target=server     # server artifacts (Node/Rust host)
+cleen build --target=cli        # CLI/daemon bundle
 ```
 
 Output folder: `/dist`.
@@ -41,7 +41,7 @@ Output folder: `/dist`.
 
 ### Steps
 ```bash
-frame build --target=web
+cleen build --target=web
 ```
 Upload `/public` and `/dist` assets to your host.
 
@@ -54,7 +54,7 @@ Upload `/public` and `/dist` assets to your host.
 
 ### Steps
 ```bash
-frame build --target=pwa
+cleen build --target=pwa
 ```
 
 **Minimal `public/manifest.json`**
@@ -77,7 +77,7 @@ self.addEventListener('activate', e=>clients.claim());
 
 ### Steps
 ```bash
-frame mobile:init
+cleen mobile:init
 cd dist/mobile/capacitor
 npx cap sync
 npx cap open ios    # or: npx cap open android
@@ -109,7 +109,7 @@ bytes photo = camera.capture({ quality: 70 }).data
 
 ### Steps
 ```bash
-frame desktop:init
+cleen desktop:init
 cd dist/desktop/tauri
 cargo tauri dev
 ```
@@ -124,7 +124,7 @@ bridge fs.write input: { path: string, data: bytes } returns: { ok: boolean }
 
 ---
 
-## 7. Server (Node or Rust Host)
+## 7. Server (Node or Clean Host)
 
 - **Use when:** deploy API/UI from a server.
 
@@ -193,12 +193,12 @@ Legend: ✅ built‑in or easy, ➖ limited/not typical.
 ## 12. CLI Helpers
 
 ```bash
-frame pwa:init
-frame mobile:init
-frame mobile:plugin camera
-frame desktop:init
-frame desktop:adapter fs
-frame server:init
+cleen pwa:init
+cleen mobile:init
+cleen mobile:plugin camera
+cleen desktop:init
+cleen desktop:adapter fs
+cleen server:init
 ```
 
 ---

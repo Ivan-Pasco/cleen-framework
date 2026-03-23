@@ -1,7 +1,6 @@
 # Frame Framework Overview (01)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
-**Version:** 2.0
 **Location:** `/docs/specification/01_frame_overview.md`
 
 ---
@@ -13,17 +12,6 @@ Frame is the official full-stack framework for **Clean Language**, created to un
 The framework compiles entirely to **WebAssembly (WASM)**, which means that applications built with Frame can run seamlessly on any host—Node.js, Rust, Deno, Tauri, or future WASI environments.
 
 Frame embodies the **Clean Language philosophy**: simple, declarative, and transparent code that's easy to reason about and verify.
-
-### Version 2.0 Changes
-
-**Frame 2.0 introduces a new plugin architecture:**
-
-| Aspect | v1 | v2 |
-|--------|-----|-----|
-| **Plugin Language** | Rust crates | Clean Language |
-| **Plugin Format** | Compile-time Rust | WASM modules |
-| **Installation** | Built into framework | External via `cleen` |
-| **Location** | `frame-*` crates | `~/.cleen/plugins/` |
 
 ---
 
@@ -41,9 +29,9 @@ Frame embodies the **Clean Language philosophy**: simple, declarative, and trans
 
 ---
 
-## 3. Architecture Overview (v2)
+## 3. Architecture Overview
 
-Frame 2.0 is divided into three main components:
+Frame is divided into three main components:
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -51,7 +39,7 @@ Frame 2.0 is divided into three main components:
 │                         (cln binary)                                │
 │                                                                     │
 │   - Parses .cln source files                                       │
-│   - Loads plugins based on import: blocks                          │
+│   - Loads plugins declared in the plugins: block in app.cln        │
 │   - Expands framework blocks via plugin WASM                       │
 │   - Compiles to WebAssembly                                        │
 └────────────────────────────────────────────────────────────────────┘
@@ -61,11 +49,13 @@ Frame 2.0 is divided into three main components:
 │                      FRAME PLUGINS                                  │
 │               (Clean Language → WASM)                               │
 │                                                                     │
-│   ┌──────────────┬──────────────┬──────────────┬──────────────┐   │
-│   │  frame.web   │  frame.data  │  frame.auth  │  frame.ui    │   │
-│   │  (server,    │  (model,     │  (auth,      │  (component, │   │
-│   │   route)     │   query)     │   protected) │   layout)    │   │
-│   └──────────────┴──────────────┴──────────────┴──────────────┘   │
+│   ┌──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐   │
+│   │frame.http-   │  frame.data  │  frame.auth  │  frame.ui    │frame.canvas  │   │
+│   │  server      │  (data)      │  (auth,      │  (component, │(canvasScene, │   │
+│   │  (endpoints) │              │   protected, │   screen,    │ draw,        │   │
+│   │              │              │   login,     │   page,      │ onFrame)     │   │
+│   │              │              │   roles)     │   html)      │              │   │
+│   └──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘   │
 │                                                                     │
 │   Location: ~/.cleen/plugins/<name>/<version>/                     │
 │   Format: plugin.toml + plugin.wasm                                │
@@ -100,25 +90,26 @@ Frame 2.0 is divided into three main components:
 
 ---
 
-## 4. Plugin System (v2)
+## 4. Plugin System
 
 ### How Plugins Work
 
-1. Developer writes Clean code with framework blocks:
+1. Developer declares plugins in `app.cln` and writes Clean code with framework blocks in the appropriate folder:
    ```clean
-   import:
-       frame.web
+   // app/backend/api/hello.cln
+   // No import needed — frame.httpserver is declared in app.cln and owns this folder
 
-   server: port=3000
-       route: method="GET" path="/hello"
-           return {"message": "Hello World"}
+   endpoints:
+       GET /hello
+           handle:
+               return json({"message": "Hello World"})
    ```
 
-2. Compiler detects `import: frame.web` and loads the plugin
+2. Compiler reads the `plugins:` block in `app.cln`, loads `frame.httpserver`, and uses folder ownership to determine which files that plugin processes
 
 3. Plugin's `expand_block` function transforms each block:
    ```
-   Input:  server: port=3000 ...
+   Input:  endpoints: GET /hello ...
    Output: Generated Clean code with _http_listen(), _http_route(), etc.
    ```
 
@@ -131,8 +122,8 @@ Frame 2.0 is divided into three main components:
 Plugins are managed via the `cleen` CLI:
 
 ```bash
-cleen plugin install frame.web          # Install from registry
-cleen plugin install frame.data@1.0.0   # Specific version
+cleen plugin add frame.httpserver       # Install from registry
+cleen plugin add frame.data@1.0.0      # Specific version
 cleen plugin list                       # Show installed
 cleen plugin create my-plugin           # Create new plugin
 ```
@@ -176,7 +167,7 @@ See [10_compiler_plugins.md](./10_compiler_plugins.md) for full details.
       │
       ▼
 ┌─────────────────┐
-│ Plugin Expansion│  → Framework blocks → Clean code (NEW in v2)
+│ Plugin Expansion│  → Framework blocks → Clean code
 └─────────────────┘
       │
       ▼
@@ -201,13 +192,13 @@ See [10_compiler_plugins.md](./10_compiler_plugins.md) for full details.
 
 ---
 
-## 6. Project Structure (v2)
+## 6. Project Structure
 
 Frame uses a clean architecture-based folder structure with clear separation of concerns:
 
 ```
 myapp/
-├── app.cln                 # Main entry point with imports
+├── app.cln                 # Main entry point with plugins: block
 ├── project.toml            # Project configuration
 │
 └── app/
@@ -226,19 +217,28 @@ myapp/
     ├── layouts/            # Page layout wrappers (frame.ui)
     │   └── main.html
     │
-    ├── api/                # HTTP endpoints (frame.httpserver)
-    │   ├── users.cln
-    │   └── posts.cln
+    ├── backend/            # HTTP server (frame.httpserver)
+    │   ├── api/            # API endpoints
+    │   │   ├── users.cln
+    │   │   └── posts.cln
+    │   ├── services/       # Business logic
+    │   └── middleware/      # Middleware
     │
     ├── data/               # Data models/ORM (frame.data)
-    │   ├── User.cln
-    │   ├── Post.cln
-    │   └── migrations/     # Schema migrations
+    │   ├── models/
+    │   │   ├── User.cln
+    │   │   └── Post.cln
+    │   ├── queries/        # Custom queries
+    │   ├── migrations/     # Schema migrations
+    │   └── repositories/   # Data access patterns
     │
     ├── auth/               # Auth configuration (frame.auth)
-    │   └── config.cln
+    │   └── auth.cln
     │
     ├── canvas/             # Canvas applications (frame.canvas)
+    │   ├── scenes/
+    │   ├── sprites/
+    │   └── audio/
     │
     └── public/             # Static assets (served as-is)
         └── css/
@@ -249,27 +249,41 @@ myapp/
 
 ### Folder Ownership by Plugin
 
+Each plugin declares the folders it owns in its `plugin.toml` file. When a plugin is declared in `app.cln`, the compiler uses folder ownership to determine which files that plugin processes. Files in owned folders do not need an explicit `import` statement for the plugin (`implicit_import = true` controls this).
+
 | Plugin | Owned Folders |
 |--------|---------------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.httpserver` | `app/api/` |
-| `frame.data` | `app/data/` |
+| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
-| `frame.canvas` | `app/canvas/` |
+| `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
 
-### Plugin Auto-Detection (v2.1)
+### Plugin Loading
 
-The compiler automatically detects and loads plugins based on file paths. Files placed in standard folders don't need explicit `plugins:` declarations:
+Plugins **must** be declared in `app.cln` via the `plugins:` block:
 
-| Folder Pattern | Auto-Detected Plugins |
-|----------------|----------------------|
-| `/api/`, `/endpoints/` | `frame.httpserver` + `frame.data` + `frame.auth` |
-| `/data/` | `frame.data` |
-| `/auth/` | `frame.auth` |
-| `/canvas/` | `frame.canvas` |
-| `/pages/`, `/components/`, `/layouts/` | `frame.ui` |
+```clean
+// app.cln
+plugins:
+	frame.httpserver
+	frame.data
+	frame.auth
+	frame.ui
+```
 
-This means a file at `app/api/users.cln` automatically has access to HTTP, database, and auth bridge functions without any imports.
+Once a plugin is declared, `implicit_import = true` in the plugin's `plugin.toml` means files inside the plugin's owned folders do not need an explicit `import` statement — the plugin is already active for those files by virtue of folder ownership.
+
+| File Location | Plugin that processes it | Import needed? |
+|---------------|--------------------------|----------------|
+| `app/backend/api/users.cln` | `frame.httpserver` (declared in app.cln) | No |
+| `app/data/models/User.cln` | `frame.data` (declared in app.cln) | No |
+| `app/auth/auth.cln` | `frame.auth` (declared in app.cln) | No |
+| `app/pages/index.cln` | `frame.ui` (declared in app.cln) | No |
+| `app/components/Header.cln` | `frame.ui` (declared in app.cln) | No |
+| `app/canvas/scenes/main.cln` | `frame.canvas` (declared in app.cln) | No |
+
+This means a file at `app/backend/api/users.cln` does not need to import `frame.httpserver` explicitly — but the plugin must still be declared in `app.cln`.
 
 ### Folder Creation
 
@@ -306,85 +320,74 @@ Host Bridge functions are prefixed with `_` to indicate they are runtime imports
 
 | Plugin | Blocks | Purpose |
 |--------|--------|---------|
-| `frame.web` | server, route, middleware | Web server and routing |
-| `frame.data` | model, query, transaction | ORM and database |
-| `frame.auth` | auth, protected, login | Authentication |
-| `frame.ui` | component, layout, page | UI components and SSR |
+| `frame.httpserver` | endpoints | HTTP routing and API endpoints |
+| `frame.data` | data | ORM and database |
+| `frame.auth` | auth, protected, login, roles | Authentication and authorization |
+| `frame.ui` | component, screen, page, html | UI components and SSR |
+| `frame.canvas` | canvasScene, draw, onFrame | Canvas rendering and animation |
 
 ### Example Usage
 
+**`app.cln`** — project entry point:
 ```clean
-import:
-    frame.web
-    frame.data
-    frame.auth
+plugins:
+	frame.httpserver
+	frame.data
+	frame.auth
+	frame.ui
+```
 
-// Define data model
-model: name="User" table="users"
-    string email
-    string password_hash
-    boolean admin = false
+**`app/data/models/User.cln`** — data model (processed by `frame.data`, declared in app.cln):
+```clean
+data User
+	integer id : pk, auto
+	string email : unique
+	string passwordHash
+	boolean admin = false
+	datetime createdAt : default=now
+```
 
-// Configure authentication
-auth: strategy="jwt" secret="$JWT_SECRET"
+**`app/auth/auth.cln`** — auth configuration (processed by `frame.auth`, declared in app.cln):
+```clean
+auth:
+	session:
+		cookie: "session_id"
+		timeout: 3600
+	jwt:
+		algorithm: "HS256"
+		expiry: 86400
+```
 
-// Create web server
-server: port=3000
+**`app/backend/api/users.cln`** — API endpoints (processed by `frame.httpserver`, declared in app.cln):
+```clean
+endpoints:
+	POST /login:
+		LoginForm body = req.json(LoginForm)
+		User? user = User.first:
+			where: email == body.email
+		if user == null or not checkPassword(body.password, user.passwordHash)
+			return badRequest("Invalid credentials")
+		Session s = auth.session.create(user.id, claims: { email: user.email, role: user.role })
+		return auth.session.setCookie(s, redirect("/dashboard"))
 
-    // Public route
-    route: method="POST" path="/login"
-        user = User.find_by_email(request.body("email"))
-        if user == null
-            return {"error": "Invalid credentials"}
-        if !_auth_verify_password(request.body("password"), user.password_hash)
-            return {"error": "Invalid credentials"}
-        token = _auth_create_token(user, _auth_secret)
-        return {"token": token}
-
-    // Protected routes
-    protected:
-        route: method="GET" path="/profile"
-            return request.user
-
-        route: method="GET" path="/admin"
-            if !request.user.admin
-                return {"error": "Forbidden"}
-            return {"message": "Admin area"}
+	GET /profile:
+		guard:
+			require_auth()
+		handle:
+			User user = User.first:
+				where: id == req.context.claims.sub
+			return json(user)
 ```
 
 ---
 
-## 9. Migration from v1
-
-### Removed Components
-
-The following Rust crates are replaced by Clean Language plugins:
-
-| Removed Crate | Replacement |
-|---------------|-------------|
-| `frame-cli` | `cleen` (package manager) |
-| `frame-server` | `frame.web` plugin + Host Bridge |
-| `frame-data` | `frame.data` plugin + Host Bridge |
-| `frame-ui` | `frame.ui` plugin |
-| `frame-auth` | `frame.auth` plugin + Host Bridge |
-| `frame-plugins` | Deleted (replaced by compiler plugins) |
-| `frame-compiler-plugins` | Deleted (replaced by Clean plugins) |
-
-### Kept Components
-
-| Component | Status |
-|-----------|--------|
-| `host-bridge` | **KEPT** - Provides runtime imports |
-
----
-
-## 10. Development Workflow
+## 9. Development Workflow
 
 ### Development
 
 ```bash
 # Install plugins
-cleen plugin install frame.web frame.data
+cleen plugin add frame.httpserver frame.data frame.auth frame.ui
 
 # Compile with plugins
 cln compile app.cln -o app.wasm --plugins
@@ -404,15 +407,15 @@ cln compile app.cln -o app.wasm --plugins -O3
 
 ---
 
-## 11. Next Documents
+## 10. Next Documents
 
 | Document | Description |
 |----------|-------------|
-| [10_compiler_plugins.md](./10_compiler_plugins.md) | **NEW** - Compiler plugin architecture |
-| [03_frame_server.md](./03_frame_server.md) | Runtime, routing, Host Bridge (updated for v2) |
-| [04_frame_data.md](./04_frame_data.md) | ORM and database (updated for v2) |
+| [10_compiler_plugins.md](./10_compiler_plugins.md) | Compiler plugin architecture |
+| [03_frame_server.md](./03_frame_server.md) | Runtime, routing, Host Bridge |
+| [04_frame_data.md](./04_frame_data.md) | ORM and database |
 | [frame_bridge_contracts.md](./frame_bridge_contracts.md) | Host Bridge API reference |
 
 ---
 
-**End of Document 01 (v2)**
+**End of Document 01**

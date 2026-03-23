@@ -62,15 +62,18 @@ myapp/
     ├── layouts/            # Page layout wrappers (frame.ui)
     │   └── main.html
     │
-    ├── api/                # HTTP endpoints (frame.httpserver)
-    │   └── users.cln
+    ├── backend/            # HTTP server (frame.httpserver)
+    │   ├── api/            # API endpoints
+    │   │   └── users.cln
+    │   ├── services/       # Business logic
+    │   └── middleware/      # Middleware
     │
     ├── data/               # Data models / ORM (frame.data)
     │   ├── User.cln
     │   └── migrations/
     │
     ├── auth/               # Auth configuration (frame.auth)
-    │   └── config.cln
+    │   └── auth.cln
     │
     └── public/             # Static assets
         └── css/
@@ -82,10 +85,10 @@ myapp/
 
 Plugin Folder Ownership:
 - frame.ui → app/pages/, app/components/, app/layouts/
-- frame.httpserver → app/api/
-- frame.data → app/data/
+- frame.httpserver → app/backend/, app/backend/api/, app/backend/services/, app/backend/middleware/
+- frame.data → app/data/, app/data/models/, app/data/queries/, app/data/migrations/, app/data/repositories/
 - frame.auth → app/auth/
-- frame.canvas → app/canvas/
+- frame.canvas → app/canvas/, app/canvas/scenes/, app/canvas/sprites/, app/canvas/audio/
 
 4) Clean Language Conventions
 
@@ -117,7 +120,7 @@ Use relations (related) instead of manual FKs.
 
 Wrap multi-step writes in Data.tx: blocks.
 
-Keep migrations clean: run frame db:plan before committing.
+Keep migrations clean: run cleen db:plan before committing.
 
 7) Server Guidelines
 
@@ -137,7 +140,7 @@ E2E: headless browser for hydration and actions.
 
 Location: /tests/<area>/...
 
-Run (future): frame test.
+Run (future): cleen test.
 
 9) Security
 
@@ -177,7 +180,7 @@ PR checklist: tests, docs, lint.
 
 13) CI/CD
 
-Build: frame build --target=server (+ platform targets).
+Build: cleen build --target=server (+ platform targets).
 
 Lint & test; cache /dist.
 
@@ -205,67 +208,6 @@ Prefer --json outputs & normalized contracts.
 
 Put bridge schemas in /docs/specification/ai_context/.
 
-10_frame_future_evolution.md
+---
 
-(Place at /docs/specification/10_frame_future_evolution.md)
-
-Frame Future Evolution (10)
-
-Project: Frame – Full-Stack Framework for Clean Language
-Version: 1.0
-
-1) Vision
-
-Portable, secure, elegant. All logic in Clean, running everywhere via WASM. The host only provides a small typed bridge.
-
-2) Roadmap (12–18 months)
-
-Pure WASI Runtime — Wasmtime/wasmCloud; wasi:http, timers, sockets.
-
-Distributed Runtime — multi-node jobs, scheduler, durable queue.
-
-Streaming & Incremental Rendering — chunked SSR/JSON streams.
-
-Graph Layer — auto GraphQL (or Clean graph) from ORM.
-
-Visual Builder — drag-and-drop over Clean; persists .cln.
-
-Plugin Marketplace — signed plugins, permission manifests, CI tests.
-
-Observability Pack — spans via host:log; OTLP export.
-
-Security Hardening — key rotation helpers, mTLS adapters, SRI.
-
-DX — frame test, frame deploy, incremental builds, hot-reload.
-
-3) Research
-
-Deterministic scheduling across hosts.
-
-Zero-copy host↔WASM data (shared memory proposals).
-
-IndexedDB/OPFS-backed SQLite parity across browsers.
-
-4) Compatibility
-
-Semver for compiler/CLI; deprecations one minor ahead.
-
-Bridges backward-compatible within a major.
-
-Migration helpers auto-upgrade manifests/configs.
-
-5) Success Metrics
-
-SSR TTFP ≤ 150ms (baseline hardware).
-
-Hydration < 20ms for simple islands.
-
-p95 CRUD latency < 100ms (local region).
-
-Compile times improve release-over-release.
-
-6) Contributing
-
-RFCs for proposals; small patches with tests.
-
-Private channel for security reports.
+> **See also:** [13_frame_future_evolution.md](13_frame_future_evolution.md) for roadmap, research directions, and versioning policy.

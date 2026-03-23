@@ -1,100 +1,52 @@
 # Frame CLI Specification (02)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
-**Version:** 2.0 (DEPRECATED)
 **Location:** `/docs/specification/02_frame_cli.md`
 
 ---
 
-## DEPRECATION NOTICE (v2)
+## 1. Introduction
 
-> **This document describes the v1 Frame CLI which has been deprecated in v2.**
->
-> In Frame 2.0, the `frame` CLI is replaced by two separate tools:
->
-> | v1 Tool | v2 Replacement | Purpose |
-> |---------|----------------|---------|
-> | `frame new` | `cleen project create` | Project scaffolding |
-> | `frame serve` | `cln compile --watch` + host-bridge | Development server |
-> | `frame build` | `cln compile --plugins` | Production build |
-> | `frame db:*` | Host Bridge runtime | Database operations |
-> | `frame plugin:*` | `cleen plugin *` | Plugin management |
->
-> **For v2 documentation, see:**
-> - [10_compiler_plugins.md](./10_compiler_plugins.md) - Plugin architecture
-> - [01_frame_overview.md](./01_frame_overview.md) - Framework overview
+Frame development uses two CLI tools from the Clean Language ecosystem:
+
+| Tool | Purpose |
+|------|---------|
+| `cln` | Clean Language compiler – compilation and plugin loading |
+| `cleen` | Clean package manager – plugin and project management |
+
+There is no standalone `frame` CLI. All framework functionality is accessed through `cln` and `cleen`.
 
 ---
 
-## Historical Reference (v1)
+## 2. Goals
 
-The following documentation is preserved for reference purposes only. It describes the original Frame CLI architecture that has been superseded by the Clean Language compiler (`cln`) and package manager (`cleen`).
-
----
-
-## 1. Introduction (v1)
-
-The **Frame CLI** was the command-line interface used to create, build, serve, and deploy Frame projects. It acted as the entry point for developers, the compiler, and automation systems.
-
-Frame CLI bridged the developer experience between Clean Language source code and the runtime WASM environment.
-
-**Note:** This functionality is now handled by:
-- `cln` (Clean Language compiler) - Compilation and plugin loading
-- `cleen` (Clean package manager) - Plugin and project management
-- Host Bridge runtime - Development server and database operations
+| Goal | Description |
+|------|-------------|
+| **Unified workflow** | `cln` handles compilation; `cleen` handles project and plugin management |
+| **Automation-ready** | All commands can be scripted or run in CI/CD pipelines |
+| **Developer clarity** | Short, clear commands with readable output |
+| **Consistency** | Commands share structure and argument patterns |
+| **Extensibility** | Plugins extend functionality via WASM |
 
 ---
 
-## 2. Goals (v1)
-
-| Goal | Description | v2 Status |
-|------|--------------|-----------|
-| **Unified workflow** | Provide a single tool to create, serve, and build apps. | Split into `cln` + `cleen` |
-| **Automation-ready** | CLI commands can be scripted or run in CI/CD pipelines. | Maintained via `cln` |
-| **Developer clarity** | Short, clear commands with readable output. | Maintained |
-| **Consistency** | Commands share structure and argument patterns. | Maintained |
-| **Extensibility** | Plugins can add new commands dynamically. | Replaced by WASM plugins |
-
----
-
-## 3. Command Migration Guide
-
-### v1 to v2 Command Mapping
-
-| v1 Command | v2 Equivalent | Notes |
-|------------|---------------|-------|
-| `frame new <name>` | `cleen project create <name>` | Project scaffolding |
-| `frame serve` | `./host-bridge run app.wasm` | With file watching |
-| `frame build` | `cln compile app.cln -o app.wasm --plugins` | Production build |
-| `frame db:plan` | (Host Bridge runtime) | At runtime |
-| `frame db:migrate` | (Host Bridge runtime) | At runtime |
-| `frame db:seed` | (Host Bridge runtime) | At runtime |
-| `frame api:spec` | (Future: cleen generate openapi) | Planned |
-| `frame api:sdk` | (Future: cleen generate sdk) | Planned |
-| `frame pwa:init` | (Future: cleen project add pwa) | Planned |
-| `frame mobile:init` | (Future: cleen project add mobile) | Planned |
-| `frame desktop:init` | (Future: cleen project add desktop) | Planned |
-
----
-
-## 4. v2 Development Workflow
+## 3. Project Management
 
 ### Creating a New Project
 
 ```bash
-# v2 workflow
 cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui,frame.auth
 cd myapp
 ```
 
 #### Plugin-Based Folder Scaffolding
 
-When creating a project with `cleen project create`, the CLI reads each plugin's `plugin.toml` and auto-creates folders based on the `[paths]` configuration:
+When creating a project, the CLI reads each plugin's `plugin.toml` and auto-creates folders based on the `[paths]` configuration:
 
 ```toml
 # Example from plugin.toml
 [paths]
-owns = ["app/api"]
+owns = ["app/backend"]
 auto_create = true
 ```
 
@@ -115,7 +67,7 @@ Creating project 'myapp'...
 
   Creating folders...
   [frame.data] Creating app/data/
-  [frame.httpserver] Creating app/api/
+  [frame.httpserver] Creating app/backend/
   [frame.ui] Creating app/pages/
   [frame.ui] Creating app/components/
   [frame.ui] Creating app/layouts/
@@ -125,9 +77,9 @@ Creating project 'myapp'...
   Creating files...
   [core] Creating app.cln
   [core] Creating project.toml
-  [frame.auth] Creating app/auth/config.cln
+  [frame.auth] Creating app/auth/auth.cln
   [frame.ui] Creating app/pages/index.html
-  [frame.httpserver] Creating app/api/health.cln
+  [frame.httpserver] Creating app/backend/health.cln
 
 Project created successfully!
 
@@ -139,11 +91,11 @@ myapp/
     │   └── index.html               # Home page
     ├── components/
     ├── layouts/
-    ├── api/
+    ├── backend/
     │   └── health.cln               # Health check endpoint
     ├── data/
     ├── auth/
-    │   └── config.cln               # Auth configuration
+    │   └── auth.cln                 # Auth configuration
     └── public/
         └── css/
 ```
@@ -156,8 +108,8 @@ Plugins can provide starter file templates in their `[templates]` section:
 # plugin.toml
 [templates]
 files = [
-  { path = "app/auth/config.cln", template = "auth_config.cln" },
-  { path = "app/api/health.cln", template = "health_endpoint.cln" },
+  { path = "app/auth/auth.cln", template = "auth_config.cln" },
+  { path = "app/backend/health.cln", template = "health_endpoint.cln" },
 ]
 ```
 
@@ -165,20 +117,18 @@ The CLI reads templates from `~/.cleen/plugins/<name>/<version>/templates/` and 
 
 #### Adding Plugins to Existing Project
 
-When adding a plugin to an existing project, folders are created on-demand:
-
 ```bash
 $ cleen plugin add frame.data
 
-Installing frame.data@2.0.0...
+Adding frame.data@2.0.0...
   Creating app/data/
 
-Plugin installed. Files in app/data/ automatically use frame.data (implicit import).
+Plugin installed. Declare frame.data in your app.cln plugins: block. Files in app/data/ can then use frame.data without individual import statements (implicit import).
 ```
 
 #### Implicit Plugin Import
 
-Files in plugin-owned folders can optionally skip the `plugins:` declaration if `implicit_import = true` in plugin.toml:
+When a plugin is declared in `app.cln`, files in its owned folders do not need their own import statement. This is controlled by `implicit_import = true` in plugin.toml:
 
 ```toml
 # plugin.toml
@@ -189,7 +139,8 @@ implicit_import = true
 
 ```clean
 // app/data/User.cln
-// No need for 'plugins: frame.data' - it's implicit
+// No import statement needed in this file - frame.data is declared in app.cln
+// and implicit_import = true means files in owned folders skip individual imports
 
 data User
     integer id : pk, auto
@@ -198,7 +149,7 @@ data User
 
 #### Shared Folder (Cross-Cutting)
 
-The `app/shared/` folder is not owned by any plugin - it's for code that can be safely used by both UI and backend:
+The `app/shared/` folder is not owned by any plugin — it's for code that can be safely used by both UI and backend:
 
 ```bash
 $ cleen project create myapp --with-shared
@@ -241,33 +192,36 @@ functions:
         return true
 ```
 
-### Development
+---
+
+## 4. Development Workflow
+
+### Compile with Plugins
 
 ```bash
-# Compile with plugins
 cln compile app.cln -o app.wasm --plugins
+```
 
-# Run with host bridge
+### Run with Host Bridge
+
+```bash
 ./host-bridge run app.wasm
 ```
 
 ### Production Build
 
 ```bash
-# Optimized compilation
 cln compile app.cln -o app.wasm --plugins -O3
 ```
 
 ---
 
-## 5. Plugin Management (v2)
-
-Plugin management has moved from `frame plugin:*` to `cleen plugin *`:
+## 5. Plugin Management
 
 ```bash
 # Install plugins
-cleen plugin install frame.web
-cleen plugin install frame.data@1.0.0
+cleen plugin add frame.httpserver
+cleen plugin add frame.data@1.0.0
 
 # List installed plugins
 cleen plugin list
@@ -280,86 +234,22 @@ cd my-plugin
 cleen plugin build
 
 # Install local plugin
-cleen plugin install ./
+cleen plugin add ./
 ```
 
 ---
 
-## 6. Historical Documentation (v1)
-
-The remainder of this document preserves the original v1 specification for historical reference.
-
-### v1 Command Structure
-
-```
-frame <namespace>:<action> [options]
-```
-
-Examples:
-```bash
-frame new myapp
-frame db:migrate
-frame api:spec --format=json
-```
-
-Namespaces included: `db`, `api`, `mobile`, `desktop`, `pwa`, and `server`.
-
-### v1 Global Options
+## 6. Global Options
 
 | Flag | Description |
-|------|--------------|
-| `--help` | Show usage details for a command. |
-| `--version` | Display current CLI version and compiler version. |
-| `--verbose` | Enable detailed build or runtime logs. |
-| `--target=<env>` | Specify build target (`web`, `pwa`, `mobile`, `desktop`, `server`, `cli`). |
-| `--clean` | Force full rebuild and cache clear. |
-| `--watch` | Rebuild automatically on file changes (default for `serve`). |
-
-### v1 Internal Architecture
-
-```
-┌────────────────────────┐
-│ User Command (frame)   │
-├────────────────────────┤
-│ Command Parser          │ → interprets command + options
-├────────────────────────┤
-│ Clean Compiler Adapter  │ → triggers Clean compilation to WASM
-├────────────────────────┤
-│ Host Bridge Invoker     │ → connects to host for serve/build tasks
-└────────────────────────┘
-```
-
-### v1 Project Initialization
-
-```bash
-frame new myapp
-```
-
-Created the following structure:
-```
-myapp/
-├── app/
-│   ├── pages/
-│   ├── api/
-│   └── components/
-├── db/schema.cln
-├── config/app.cln
-├── public/
-└── .frame/              # internal build data
-```
+|------|-------------|
+| `--help` | Show usage details for a command |
+| `--version` | Display current CLI version and compiler version |
+| `--verbose` | Enable detailed build or runtime logs |
+| `--target=<env>` | Specify build target (`web`, `pwa`, `mobile`, `desktop`, `server`, `cli`) |
+| `--clean` | Force full rebuild and cache clear |
+| `--watch` | Rebuild automatically on file changes |
 
 ---
 
-## 7. Migration Notes
-
-When migrating from Frame v1 to v2:
-
-1. **Remove `frame` CLI dependency** - No longer needed
-2. **Install plugins separately** - Use `cleen plugin install`
-3. **Update build scripts** - Replace `frame build` with `cln compile --plugins`
-4. **Update dev scripts** - Use host-bridge directly
-5. **Update CI/CD pipelines** - Reference new commands
-
----
-
-**End of Document 02 (Deprecated in v2)**
+**End of Document 02**

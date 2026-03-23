@@ -1,24 +1,13 @@
 # Compiler Plugin Architecture (10)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
-**Version:** 2.0
 **Location:** `/docs/specification/10_compiler_plugins.md`
 
 ---
 
 ## 1. Introduction
 
-This document describes the **new compiler plugin architecture** where plugins are written **in Clean Language itself** and compiled to WebAssembly. This replaces the previous Rust-based plugin system.
-
-### Key Changes from Previous Architecture
-
-| Aspect | Previous (v1) | New (v2) |
-|--------|---------------|----------|
-| **Plugin Language** | Rust | Clean Language |
-| **Plugin Format** | Rust crate | `.cln` source → `.wasm` binary |
-| **Execution** | Compile-time Rust | Compile-time WASM |
-| **Installation** | Part of framework build | External via `cleen plugin install` |
-| **Location** | `frame-compiler-plugins/` | `~/.cleen/plugins/` |
+This document describes the **compiler plugin architecture** where plugins are written **in Clean Language itself** and compiled to WebAssembly.
 
 ### Benefits
 
@@ -38,12 +27,13 @@ This document describes the **new compiler plugin architecture** where plugins a
 │                         (with plugins: block)                            │
 │                                                                          │
 │   plugins:                                                               │
-│       frame.web                                                          │
+│       frame.httpserver                                                   │
 │       frame.data                                                         │
 │                                                                          │
-│   server: port=3000                                                      │
-│       route: method="GET" path="/users"                                  │
-│           return User.all()                                              │
+│   endpoints:                                                             │
+│       GET /users:                                                        │
+│           handle:                                                        │
+│               return User.all()                                          │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -51,9 +41,9 @@ This document describes the **new compiler plugin architecture** where plugins a
 │                           COMPILER                                       │
 │                                                                          │
 │   1. Parse source file                                                   │
-│   2. Extract plugins: blocks → ["frame.web", "frame.data"]              │
+│   2. Extract plugins: blocks → ["frame.httpserver", "frame.data"]       │
 │   3. Load plugins from ~/.cleen/plugins/                                 │
-│   4. For each framework block (server:, route:, model:):                │
+│   4. For each framework block (endpoints:, data, html:):                │
 │      → Call plugin.expand_block(name, attrs, body)                      │
 │      → Replace block with generated Clean code                          │
 │   5. Continue normal compilation                                         │
@@ -76,7 +66,7 @@ Plugins are installed to `~/.cleen/plugins/<name>/<version>/`:
 
 ```
 ~/.cleen/plugins/
-├── frame.web/
+├── frame.httpserver/
 │   └── 1.0.0/
 │       ├── plugin.toml       # Plugin manifest
 │       └── plugin.wasm       # Compiled plugin
@@ -94,9 +84,9 @@ Plugins are installed to `~/.cleen/plugins/<name>/<version>/`:
 
 ```toml
 [plugin]
-name = "frame.web"
+name = "frame.httpserver"
 version = "1.0.0"
-description = "Web framework plugin for Clean Language - provides server, route, and middleware DSL blocks"
+description = "HTTP server plugin for Clean Language - provides server, endpoints, and middleware DSL blocks"
 author = "Clean Language Team"
 license = "MIT"
 
@@ -109,7 +99,7 @@ validate = "validate"            # Optional: validation function
 get_keywords = "get_keywords"    # Optional: for IDE syntax highlighting
 
 [handles]
-blocks = ["server", "route", "middleware", "endpoints"]
+blocks = ["server", "endpoints"]
 
 # Bridge function declarations - Host Bridge functions this plugin's generated code requires
 # The compiler reads these to generate correct WASM imports
@@ -122,7 +112,7 @@ functions = [
 
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/api"]
+owns = ["app/backend", "app/backend/api", "app/backend/services", "app/backend/middleware"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -130,7 +120,7 @@ auto_create = true
 # File patterns recognized in owned folders
 patterns = ["*.cln"]
 
-# Files in owned folders automatically import this plugin
+# Files in owned folders skip explicit import statements
 implicit_import = true
 ```
 
@@ -141,16 +131,14 @@ implicit_import = true
 Plugins are written in Clean Language and export an `expand_block` function:
 
 ```clean
-// plugins/frame.web/src/main.cln
+// plugins/frame.httpserver/src/main.cln
 
 // Main entry point - called by compiler for each framework block
 expand_block(block_name: string, attributes: string, body: string) -> string
     if block_name == "server"
         return expand_server(attributes, body)
-    if block_name == "route"
-        return expand_route(attributes, body)
-    if block_name == "middleware"
-        return expand_middleware(attributes, body)
+    if block_name == "endpoints"
+        return expand_endpoints(attributes, body)
     return body
 
 // Server block expansion
@@ -160,19 +148,16 @@ expand_server(attrs: string, body: string) -> string
 
     return "
 // Generated server code
-start()
+start:
     print(\"Server starting on " + host + ":" + port + "\")
     " + body + "
     _http_listen(\"" + host + "\", " + port + ")
 "
 
-// Route block expansion
-expand_route(attrs: string, body: string) -> string
-    method = get_attr(attrs, "method", "GET")
-    path = get_attr(attrs, "path", "/")
-
+// Endpoints block expansion
+expand_endpoints(attrs: string, body: string) -> string
     return "
-_http_route(\"" + method + "\", \"" + path + "\", (request) -> any
+_http_register_endpoints((request) -> any
     " + body + "
 )
 "
@@ -189,22 +174,38 @@ get_attr(json: string, key: string, default_val: string) -> string
 
 ### Step 1: Plugin Detection
 
-The compiler parses `plugins:` blocks to identify required plugins:
+Plugins are loaded through two mechanisms:
+
+**Explicit via `plugins:` block in `app.cln`** (parsed by `app_config.rs` in the compiler):
 
 ```clean
+// app.cln
 plugins:
-    frame.web
+    frame.httpserver
     frame.data
 ```
 
-This tells the compiler to load `frame.web` and `frame.data` plugins.
+**Implicit via folder ownership**: Files placed in plugin-owned folders don't need explicit `import` statements — the declared plugin processes them automatically based on folder ownership. The compiler checks the source file path against each plugin's `owns` list to determine which declared plugin handles the file.
+
+```clean
+// app/backend/api/users.cln
+// No explicit import statement needed — frame.httpserver is declared in app.cln
+// and processes this file because app/backend/api/ is in its owned folders
+
+endpoints:
+    GET /users:
+        handle:
+            return User.all()
+```
+
+This tells the compiler to load `frame.httpserver` and `frame.data` plugins.
 
 > **Note:** The `plugins:` block is specifically for loading framework plugins. File imports use `import "path/to/file.cln"` syntax instead.
 
 ### Step 2: Plugin Loading
 
 ```
-1. For each import name:
+1. For each plugin name (from plugins: block in app.cln):
    a. Look in ~/.cleen/plugins/<name>/
    b. Find latest compatible version
    c. Load plugin.toml manifest
@@ -217,18 +218,19 @@ This tells the compiler to load `frame.web` and `frame.data` plugins.
 When the compiler encounters a framework block:
 
 ```clean
-server: port=3000
-    route: method="GET" path="/users"
-        return User.all()
+endpoints:
+    GET /users:
+        handle:
+            return User.all()
 ```
 
 It calls the plugin's `expand_block` function:
 
 ```
 Input:
-  - block_name: "server"
-  - attributes: '{"port": "3000"}'
-  - body: 'route: method="GET" path="/users"\n    return User.all()'
+  - block_name: "endpoints"
+  - attributes: '{}'
+  - body: 'GET /users:\n    handle:\n        return User.all()'
 
 Output:
   Clean Language source code that replaces the block
@@ -279,7 +281,7 @@ get_keywords() -> string
 
 Returns JSON array of keywords for IDE syntax highlighting:
 ```json
-["server", "route", "middleware", "GET", "POST", "PUT", "DELETE"]
+["server", "endpoints", "GET", "POST", "PUT", "DELETE", "PATCH"]
 ```
 
 ---
@@ -399,8 +401,8 @@ expand = "expand_block"
 validate = "validate_block"
 get_keywords = "get_keywords"
 
-[blocks]
-handles = ["model", "query", "transaction"]
+[handles]
+blocks = ["data"]
 
 [bridge]
 functions = [
@@ -410,25 +412,25 @@ functions = [
 
   # Transaction Control
   { name = "_db_begin", params = [], returns = "string", description = "Begin transaction, returns transaction ID" },
-  { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit transaction by ID, returns 0 on success" },
-  { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback transaction by ID, returns 0 on success" },
+  { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit transaction by ID, returns 0 on success", expand_strings = true },
+  { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback transaction by ID, returns 0 on success", expand_strings = true },
 ]
 ```
 
-#### Example: frame.web Plugin
+#### Example: frame.httpserver Plugin
 
 ```toml
 [plugin]
-name = "frame.web"
+name = "frame.httpserver"
 version = "1.0.0"
-description = "Web framework plugin for Clean Language - provides server, route, and middleware DSL blocks"
+description = "HTTP server plugin for Clean Language - provides server and endpoints DSL blocks"
 author = "Clean Language Team"
 
 [compatibility]
 min_compiler_version = "0.15.0"
 
 [handles]
-blocks = ["server", "route", "middleware", "endpoints"]
+blocks = ["server", "endpoints"]
 
 [exports]
 expand = "expand"
@@ -466,8 +468,8 @@ author = "Clean Language Team"
 [compatibility]
 min_compiler_version = "0.15.0"
 
-[blocks]
-handles = ["auth", "protected", "login", "guard"]
+[handles]
+blocks = ["auth", "protected", "login", "roles"]
 
 [exports]
 expand = "expand_block"
@@ -495,7 +497,7 @@ functions = [
 
 The following Host Bridge functions are available for plugins to declare. See [frame_bridge_contracts.md](frame_bridge_contracts.md) for detailed signatures and JSON formats.
 
-#### HTTP Functions (frame.web)
+#### HTTP Functions (frame.httpserver)
 
 ```clean
 // Server lifecycle
@@ -564,7 +566,7 @@ Plugins can define folder ownership through the `[paths]` section in `plugin.tom
 ```toml
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/api"]
+owns = ["app/backend", "app/backend/api", "app/backend/services", "app/backend/middleware"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -572,7 +574,7 @@ auto_create = true
 # File patterns recognized in owned folders
 patterns = ["*.cln"]
 
-# Files in owned folders automatically import this plugin
+# Files in owned folders skip explicit import statements
 implicit_import = true
 ```
 
@@ -581,17 +583,17 @@ implicit_import = true
 | `owns` | array | ✅ | - | Folders owned by this plugin |
 | `auto_create` | boolean | ❌ | `false` | Create folders on plugin install |
 | `patterns` | array | ❌ | `["*.cln"]` | File patterns recognized |
-| `implicit_import` | boolean | ❌ | `false` | Auto-import plugin in owned folders |
+| `implicit_import` | boolean | ❌ | `false` | Files in owned folders skip explicit import statements |
 
 ### 7.2 Official Plugin Folder Ownership
 
 | Plugin | Owned Folders |
 |--------|---------------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.httpserver` | `app/api/` |
-| `frame.data` | `app/data/` |
+| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
-| `frame.canvas` | `app/canvas/` |
+| `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
 
 ### 7.3 Folder Creation
 
@@ -606,7 +608,14 @@ $ cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui
 
 Creating project 'myapp'...
   [frame.data] Creating app/data/
-  [frame.httpserver] Creating app/api/
+  [frame.data] Creating app/data/models/
+  [frame.data] Creating app/data/queries/
+  [frame.data] Creating app/data/migrations/
+  [frame.data] Creating app/data/repositories/
+  [frame.httpserver] Creating app/backend/
+  [frame.httpserver] Creating app/backend/api/
+  [frame.httpserver] Creating app/backend/services/
+  [frame.httpserver] Creating app/backend/middleware/
   [frame.ui] Creating app/pages/
   [frame.ui] Creating app/components/
   [frame.ui] Creating app/layouts/
@@ -616,12 +625,12 @@ Project created successfully!
 
 ### 7.4 Implicit Imports
 
-When `implicit_import = true`, files in owned folders don't need explicit `plugins:` declarations:
+When `implicit_import = true`, files in owned folders don't need explicit `import` statements — the plugin declared in `app.cln` processes them automatically based on folder ownership:
 
 ```clean
-// app/data/User.cln
-// No need for 'plugins: frame.data' - it's implicit because
-// the file is in app/data/ which is owned by frame.data
+// app/data/models/User.cln
+// No explicit import statement needed — frame.data is declared in app.cln
+// and processes this file because app/data/models/ is in its owned folders
 
 data User
     integer id : pk, auto
@@ -629,7 +638,7 @@ data User
     string name
 ```
 
-The compiler detects the file is in a plugin-owned folder and automatically applies the plugin.
+The compiler routes files in plugin-owned folders to the appropriate declared plugin without requiring per-file import statements.
 
 ---
 
@@ -703,7 +712,7 @@ diagnostics = [
 │  1. DETECT PROJECT                                                       │
 │     - Read project.toml → get plugins list                              │
 │     - OR scan app.cln → parse plugins: block                            │
-│     - OR check file path → implicit plugin from folder ownership        │
+│     - Check file path against declared plugins' owned folders           │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -756,9 +765,12 @@ The language server detects active plugins using these methods (in order):
        frame.httpserver
    ```
 
-3. **Folder ownership** (implicit)
-   - File in `app/data/` → frame.data is active
-   - File in `app/api/` → frame.httpserver is active
+3. **Folder ownership** (for per-file plugin routing)
+   - File in `app/data/` → routed to frame.data (must be declared in app.cln or project.toml)
+   - File in `app/backend/` → routed to frame.httpserver (must be declared)
+   - File in `app/auth/` → routed to frame.auth (must be declared)
+   - File in `app/canvas/` → routed to frame.canvas (must be declared)
+   - File in `app/pages/` or `app/components/` → routed to frame.ui (must be declared)
 
 ### 8.5 Caching Strategy
 
@@ -793,7 +805,7 @@ cleen plugin build
 # Compiles src/main.cln → plugin.wasm
 
 # 4. Test locally
-cleen plugin install ./
+cleen plugin add ./
 # Installs to ~/.cleen/plugins/my-plugin/0.1.0/
 
 # 5. Use in project
@@ -829,112 +841,97 @@ echo "Built $(basename $(pwd)) plugin → plugin.wasm"
 
 ## 8. Official Frame Plugins
 
-### frame.web
+### frame.httpserver
 
-Handles web server DSL blocks.
+Handles HTTP server DSL blocks. Must be declared in `app.cln`. Files in `app/backend/`, `app/backend/api/`, `app/backend/services/`, and `app/backend/middleware/` are processed by this plugin without needing per-file import statements.
 
-**Blocks:** `server`, `route`, `middleware`
+**Blocks:** `server`, `endpoints`
 
-**Example:**
+**Declaration (required in app.cln):**
 ```clean
+// app.cln
 plugins:
-    frame.web
+    frame.httpserver
+```
 
-server: port=3000
-    middleware:
-        print("Request: " + request.path)
-        return next(request)
+**Usage (no import statement needed — file is in app/backend/api/):**
+```clean
+// app/backend/api/users.cln
+// frame.httpserver is declared in app.cln and owns this folder
 
-    route: method="GET" path="/"
-        return {"message": "Hello World"}
+endpoints:
+    GET /users:
+        handle:
+            return User.all()
+
+    POST /users:
+        handle:
+            user = User.create(request.body)
+            return user
 ```
 
 ### frame.data
 
-Handles database/ORM DSL blocks.
+Handles database/ORM DSL blocks. Must be declared in `app.cln`. Files in `app/data/` and its subdirectories are processed by this plugin without needing per-file import statements.
 
-**Blocks:** `model`, `query`, `transaction`
+**Blocks:** `data`
 
-**Example:**
+**Usage (no import statement needed — file is in app/data/models/):**
 ```clean
-plugins:
-    frame.data
+// app/data/models/User.cln
+// frame.data is declared in app.cln and owns this folder
 
-model: name="User" table="users"
-    string email
+data User
+    integer id : pk, auto
+    string email : unique
     string name
-    boolean active = true
+    boolean active : default=true
 ```
 
 ### frame.auth
 
-Handles authentication DSL blocks.
+Handles authentication DSL blocks. Must be declared in `app.cln`. Files in `app/auth/` are processed by this plugin without needing per-file import statements.
 
-**Blocks:** `auth`, `protected`, `login`
+**Blocks:** `auth`, `protected`, `login`, `roles`
 
-**Example:**
+**Usage (no import statement needed — file is in app/auth/):**
 ```clean
-plugins:
-    frame.auth
+// app/auth/auth.cln
+// frame.auth is declared in app.cln and owns this folder
 
-auth: strategy="jwt" secret="$JWT_SECRET"
+auth:
+    strategy: jwt
+    secret: env("JWT_SECRET")
 
-protected:
-    route: method="GET" path="/profile"
-        return request.user
+roles:
+    admin
+    user
+    guest
 ```
 
 ### frame.ui
 
-Handles UI component DSL blocks.
+Handles UI component DSL blocks. Must be declared in `app.cln`. Files in `app/pages/`, `app/components/`, and `app/layouts/` are processed by this plugin without needing per-file import statements.
 
-**Blocks:** `component`, `layout`, `page`
+**Blocks:** `component`, `screen`, `page`, `html`
 
-**Example:**
+**Usage (no import statement needed — file is in app/components/):**
 ```clean
-plugins:
-    frame.ui
+// app/components/Button.cln
+// frame.ui is declared in app.cln and owns this folder
 
-component: name="Button"
+component Button
     props:
         string label
         string variant = "primary"
 
-    render()
-        return <button class="btn btn-{variant}">{label}</button>
+    html:
+        <button class="btn btn-{variant}">{label}</button>
 ```
 
 ---
 
-## 9. Migration from Rust Plugins
-
-### What's Being Replaced
-
-| Old (Rust) | New (Clean) |
-|------------|-------------|
-| `frame-compiler-plugins/` | `plugins/frame.web/src/main.cln` |
-| `frame-plugins/` | Deleted - logic moves to Clean plugins |
-| Rust `FrameworkPlugin` trait | Clean `expand_block` function |
-| Compile-time Rust execution | Compile-time WASM execution |
-
-### What's Being Kept
-
-| Component | Status |
-|-----------|--------|
-| `host-bridge/` | **KEPT** - Provides runtime imports |
-| Host Bridge API | **KEPT** - Same function signatures |
-| Plugin concept | **KEPT** - Same DSL block expansion |
-
-### Migration Steps
-
-1. Each Rust plugin crate → Clean Language source file
-2. `FrameworkPlugin::expand()` → `expand_block()` function
-3. Plugin manifest: `plugin.cln` → `plugin.toml`
-4. Build: Rust compilation → `cln compile`
-
----
-
-## 10. Security Model
+## 9. Security Model
 
 ### Compile-Time Isolation
 
@@ -957,12 +954,12 @@ component: name="Button"
 
 ---
 
-## 11. CLI Integration
+## 10. CLI Integration
 
 ### Compiler Flags
 
 ```bash
-# Enable plugin loading (auto-detects from imports)
+# Enable plugin loading (reads plugins: block from app.cln)
 cln compile app.cln -o app.wasm --plugins
 
 # Specify custom plugin directory
@@ -972,18 +969,18 @@ cln compile app.cln -o app.wasm --plugins --plugin-dir ./local-plugins/
 ### Plugin Management (via cleen)
 
 ```bash
-cleen plugin install frame.web          # Install from registry
-cleen plugin install frame.web@1.0.0    # Specific version
-cleen plugin install ./my-plugin        # Local plugin
-cleen plugin list                       # List installed
-cleen plugin remove frame.web           # Uninstall
-cleen plugin create my-plugin           # Scaffold new plugin
-cleen plugin build                      # Build current plugin
+cleen plugin add frame.httpserver          # Install from registry
+cleen plugin add frame.httpserver@1.0.0    # Specific version
+cleen plugin add ./my-plugin               # Local plugin
+cleen plugin list                              # List installed
+cleen plugin remove frame.httpserver           # Uninstall
+cleen plugin create my-plugin                  # Scaffold new plugin
+cleen plugin build                             # Build current plugin
 ```
 
 ---
 
-## 12. AI Development Notes
+## 11. AI Development Notes
 
 This architecture is designed for AI-assisted development:
 

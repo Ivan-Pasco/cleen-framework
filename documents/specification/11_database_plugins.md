@@ -23,7 +23,7 @@ This specification covers **SQL-style relational databases**. Document databases
 - **Migration Support**: Schema migrations for all backends
 - **ABI-Stable**: Plugins can be compiled independently
 
-### Non-Goals (v1)
+### Non-Goals
 
 - Compile-time query validation (future: schema-aware tooling)
 - ORM abstractions (users write SQL)
@@ -431,19 +431,19 @@ finally:
 
 ## 6. Type Safety Clarification
 
-### Current Scope (v1): Runtime Safety
+### Current Scope: Runtime Safety
 
-Version 1 provides **runtime safety**, not compile-time type checking:
+The current implementation provides **runtime safety**, not compile-time type checking:
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Parameterized queries | ✅ v1 | Prevents SQL injection |
-| Type coercion | ✅ v1 | Params auto-converted to DB types |
-| Result as JSON | ✅ v1 | Rows returned as dynamic objects |
+| Parameterized queries | ✅ | Prevents SQL injection |
+| Type coercion | ✅ | Params auto-converted to DB types |
+| Result as JSON | ✅ | Rows returned as dynamic objects |
 | Query syntax validation | ❌ Future | Compile-time SQL parsing |
 | Schema-aware types | ❌ Future | `db.query<User>(...)` |
 
-### Future: Schema-Aware Tooling (v2+)
+### Future: Schema-Aware Tooling
 
 Future versions may add:
 
@@ -773,4 +773,4 @@ catch DbError as error
 
 ---
 
-**End of Document 11 (v1.1)**
+**End of Document 11**

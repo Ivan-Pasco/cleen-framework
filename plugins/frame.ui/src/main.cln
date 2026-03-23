@@ -1,6 +1,6 @@
 // frame.ui plugin - HTML-First UI Framework
 // Provides: HTML page processing, component definitions, SSR rendering
-// Version: 2.0.0
+// Version: 2.2.0
 
 // ============================================================================
 // MAIN ENTRY POINTS
@@ -47,6 +47,9 @@ functions:
 
 		if block_name == "html"
 			return expand_html_block(attributes, body)
+
+		if block_name == "ui"
+			return expand_ui_config(attributes, body)
 
 		// Check if this is a screen block (block_name is "screen ScreenName")
 		if block_name.startsWith("screen ")
@@ -102,7 +105,7 @@ functions:
 
 	// Get keywords for IDE support
 	string get_keywords()
-		return "[\"component\", \"props\", \"state\", \"render\", \"tag\", \"client\", \"if\", \"else\", \"each\", \"bind\", \"slot\", \"html\"]"
+		return "[\"component\", \"props\", \"state\", \"render\", \"tag\", \"client\", \"if\", \"else\", \"each\", \"bind\", \"slot\", \"html\", \"ui\", \"theme\", \"colors\", \"spacing\"]"
 
 // ============================================================================
 // STRING HELPER FUNCTIONS (workaround for buggy trim())
@@ -144,10 +147,6 @@ functions:
 
 		string page_tag = html.substring(page_start, page_end + 1)
 		return extract_attr_value(page_tag, attr_name)
-
-	// Data block extraction removed — page data now comes from companion .cln files
-	string extract_data_block(string html)
-		return ""
 
 	// Extract body content from HTML
 	string extract_body(string html)
@@ -450,6 +449,9 @@ functions:
 		string else_attr = extract_attr_value("<" + tag_content + ">", "cl-else")
 		string iterate_attr = extract_attr_value("<" + tag_content + ">", "cl-iterate")
 		string bind_attr = extract_attr_value("<" + tag_content + ">", "cl-bind")
+		string show_attr = extract_attr_value("<" + tag_content + ">", "cl-show")
+		string validate_attr = extract_attr_value("<" + tag_content + ">", "cl-validate")
+		string slot_attr = extract_attr_value("<" + tag_content + ">", "cl-slot")
 
 		string result = ""
 
@@ -482,6 +484,37 @@ functions:
 				result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 				return result
 
+		// Handle cl-show directive — always renders element but controls CSS display
+		// When expr is truthy: render normally; when falsy: render with style="display:none"
+		if show_attr != ""
+			string show_expr = show_attr
+			if has_data
+				show_expr = "data." + show_attr
+			result = result + "if " + show_expr + "\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			result = result + "else\n"
+			result = result + "\t" + render_element_hidden(tag_name, tag_content, inner_html, registry_json, has_data)
+			return result
+
+		// Handle cl-slot directive — content projection with named slot
+		// Renders a slot marker wrapping the default content
+		if slot_attr != ""
+			result = result + "html = html + \"<div data-slot=\\\"" + slot_attr + "\\\">\"\n"
+			if inner_html.trim().length() > 0
+				result = result + html_to_render(inner_html, registry_json, has_data)
+			result = result + "html = html + \"</div>\"\n"
+			return result
+
+		// Handle cl-validate directive — renders input then appends validation error span
+		// The input itself is rendered normally; we append an error display span after it
+		if validate_attr != ""
+			string error_msg_attr = extract_attr_value("<" + tag_content + ">", "error-message")
+			if error_msg_attr == ""
+				error_msg_attr = "Invalid value"
+			result = result + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			result = result + render_validation_error_span(bind_attr, validate_attr, error_msg_attr, has_data)
+			return result
+
 		// Regular element
 		return render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 
@@ -509,10 +542,93 @@ functions:
 		if inner_html.trim().length() > 0
 			result = result + html_to_render(inner_html, registry_json, has_data)
 
+		// Auto-inject CSRF hidden field for state-mutating forms (POST/PUT/PATCH/DELETE)
+		// Per spec 06_frame_auth.md: CSRF protection is automatic for forms that modify state.
+		// Forms with no method attribute default to POST behaviour and also receive the token.
+		if tag_name == "form"
+			string form_method = extract_attr_value("<" + tag_content + ">", "method")
+			string method_upper = form_method.toUpperCase()
+			boolean needs_csrf = method_upper == "POST" or method_upper == "PUT" or method_upper == "PATCH" or method_upper == "DELETE" or form_method == ""
+			if needs_csrf
+				result = result + "html = html + \"<input type=\\\"hidden\\\" name=\\\"_csrf\\\" value=\\\"\" + csrf_generate() + \"\\\">\"\n"
+
 		// Close tag (unless void element)
 		if is_void_element(tag_name) == false
 			result = result + "html = html + \"</" + tag_name + ">\"\n"
 
+		return result
+
+	// Render an element with display:none injected (for cl-show false branch)
+	string render_element_hidden(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		// Check if custom component (contains hyphen) — components do not support cl-show hidden mode directly
+		if tag_name.indexOf("-") != -1
+			return render_component(tag_name, tag_content, inner_html, registry_json, has_data)
+
+		string result = "html = html + \"<" + tag_name
+
+		// Add attributes (excluding directives), then inject display:none
+		string attrs = extract_attributes(tag_content)
+		if attrs != ""
+			// Check if there is already a style attribute — if so, prepend display:none to it
+			string style_check = " style="
+			if attrs.indexOf(style_check) != -1
+				// Inject display:none; into existing style value
+				integer style_pos = attrs.indexOf(style_check)
+				integer style_val_start = style_pos + style_check.length() + 3
+				string before_style = attrs.substring(0, style_val_start)
+				string after_style = attrs.substring(style_val_start, attrs.length())
+				attrs = before_style + "display:none;" + after_style
+			else
+				// No existing style attribute — append style="display:none"
+				attrs = attrs + " style=\\\"display:none\\\""
+			result = result + " " + attrs
+		else
+			result = result + " style=\\\"display:none\\\""
+
+		result = result + ">\"\n"
+
+		// Process inner content
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+
+		// Close tag (unless void element)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+
+		return result
+
+	// Render a validation error span for cl-validate
+	// Generates a conditionally-visible <span> that shows when validation fails
+	string render_validation_error_span(string field_name, string validate_type, string error_msg, boolean has_data)
+		string result = ""
+		string field_ref = field_name
+		if field_ref == ""
+			// No bind target — use a placeholder condition that never fails
+			return ""
+
+		if has_data
+			field_ref = "data." + field_name
+
+		// Build the condition expression based on validation type
+		string condition = ""
+		if validate_type == "email"
+			// Email: must contain "@" and "."
+			condition = field_ref + ".indexOf(\"@\") == -1 or " + field_ref + ".indexOf(\".\") == -1"
+		else if validate_type == "required"
+			// Required: must not be empty
+			condition = field_ref + ".length() == 0"
+		else if validate_type == "min"
+			// Min length — requires accompanying min attribute; use length > 0 check as fallback
+			condition = field_ref + ".length() == 0"
+		else if validate_type == "max"
+			// Max length — requires accompanying max attribute; use basic non-empty check
+			condition = field_ref + ".length() == 0"
+		else
+			// Unknown validation type — use required semantics as safe default
+			condition = field_ref + ".length() == 0"
+
+		result = result + "if " + condition + "\n"
+		result = result + "\thtml = html + \"<span class=\\\"cl-validation-error\\\">" + escape_string(error_msg) + "</span>\"\n"
 		return result
 
 	// Render a <screen> tag as an island
@@ -652,7 +768,23 @@ functions:
 		// Set slot content if any
 		if inner_html.trim().length() > 0
 			result = result + "\tstring _slot = \"\"\n"
-			result = result + "\t" + html_to_render(inner_html, registry_json, has_data).replace("html = html +", "_slot = _slot +")
+			// Render inner HTML then rewrite variable assignments line by line
+			string slot_code = html_to_render(inner_html, registry_json, has_data)
+			string slot_remaining = slot_code
+			while slot_remaining.length() > 0
+				integer snl = slot_remaining.indexOf("\n")
+				string sline = ""
+				if snl == -1
+					sline = slot_remaining
+					slot_remaining = ""
+				else
+					sline = slot_remaining.substring(0, snl)
+					slot_remaining = slot_remaining.substring(snl + 1, slot_remaining.length())
+				// Only replace at line start (not inside string literals)
+				if sline.startsWith("html = html +")
+					result = result + "\t_slot = _slot +" + sline.substring(13, sline.length()) + "\n"
+				else if sline.trim().length() > 0
+					result = result + "\t" + sline + "\n"
 			result = result + "\t_comp.setSlot(_slot)\n"
 
 		// Render component directly
@@ -663,8 +795,12 @@ functions:
 		return result
 
 	// Extract attributes from tag, excluding directives
+	// Event attributes (onclick, onsubmit, etc.) are transformed to data-on-* for SSR hydration
 	string extract_attributes(string tag_content)
-		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,"
+		// Directive attributes consumed by the compiler — not output to HTML
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,error-message,"
+		// Known HTML event attribute prefixes (all start with "on")
+		string events = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onmouseenter,onmouseleave,"
 		string result = ""
 
 		// Simple attribute extraction - find key="value" or key='value' pairs
@@ -701,7 +837,8 @@ functions:
 						result = result + attr_name
 					remaining = remaining.substring(next_space + 1, remaining.length()).trim()
 			else
-				string attr_name = remaining.substring(0, eq_pos).trim()
+				// attr_name may contain dot-modifier: onsubmit.prevent
+				string raw_attr_name = remaining.substring(0, eq_pos).trim()
 				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
 				string quote = after_eq.substring(0, 1)
 
@@ -709,14 +846,30 @@ functions:
 					integer end_quote = after_eq.indexOf(quote, 1)
 					if end_quote != -1
 						string attr_value = after_eq.substring(1, end_quote)
-						if directives.indexOf("," + attr_name + ",") == -1
+						if directives.indexOf("," + raw_attr_name + ",") == -1
 							if result != ""
 								result = result + " "
-							// Handle interpolations in attribute values
-							if attr_value.indexOf("{{") != -1
-								result = result + attr_name + "=\\\"\" + " + interpolate_attr(attr_value) + " + \"\\\""
+							// Check if this is an event attribute (raw name before modifier)
+							string base_event = raw_attr_name
+							string modifier = ""
+							integer dot_pos = raw_attr_name.indexOf(".")
+							if dot_pos != -1
+								base_event = raw_attr_name.substring(0, dot_pos)
+								modifier = raw_attr_name.substring(dot_pos + 1, raw_attr_name.length())
+							if events.indexOf("," + base_event + ",") != -1
+								// Transform event to data-on-* attribute for SSR hydration
+								// onclick -> data-on-click, onsubmit -> data-on-submit, etc.
+								string event_name = base_event.substring(2, base_event.length())
+								result = result + "data-on-" + event_name + "=\\\"" + attr_value + "\\\""
+								// Append modifier attribute if present
+								if modifier != ""
+									result = result + " data-on-" + event_name + "-" + modifier + "=\\\"true\\\""
 							else
-								result = result + attr_name + "=\\\"" + attr_value + "\\\""
+								// Handle interpolations in attribute values
+								if attr_value.indexOf("{{") != -1
+									result = result + raw_attr_name + "=\\\"\" + " + interpolate_attr(attr_value) + " + \"\\\""
+								else
+									result = result + raw_attr_name + "=\\\"" + attr_value + "\\\""
 						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
 					else
 						remaining = ""
@@ -726,10 +879,23 @@ functions:
 					if next_space == -1
 						next_space = after_eq.length()
 					string attr_value = after_eq.substring(0, next_space)
-					if directives.indexOf("," + attr_name + ",") == -1
+					if directives.indexOf("," + raw_attr_name + ",") == -1
 						if result != ""
 							result = result + " "
-						result = result + attr_name + "=\\\"" + attr_value + "\\\""
+						// Check if this is an event attribute
+						string base_event = raw_attr_name
+						string modifier = ""
+						integer dot_pos = raw_attr_name.indexOf(".")
+						if dot_pos != -1
+							base_event = raw_attr_name.substring(0, dot_pos)
+							modifier = raw_attr_name.substring(dot_pos + 1, raw_attr_name.length())
+						if events.indexOf("," + base_event + ",") != -1
+							string event_name = base_event.substring(2, base_event.length())
+							result = result + "data-on-" + event_name + "=\\\"" + attr_value + "\\\""
+							if modifier != ""
+								result = result + " data-on-" + event_name + "-" + modifier + "=\\\"true\\\""
+						else
+							result = result + raw_attr_name + "=\\\"" + attr_value + "\\\""
 					remaining = after_eq.substring(next_space, after_eq.length()).trim()
 
 		return result
@@ -1330,6 +1496,44 @@ functions:
 
 		result = result + "\t\t\tstring html = \"\"\n"
 		result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+
+		// When a layout is specified, wrap the rendered page content in the layout template.
+		// Named slots (<slot name="X">...</slot>) are extracted from the page content first
+		// and injected into their matching placeholders in the layout, then the remaining
+		// content replaces the default <slot></slot>.
+		if layout != ""
+			result = result + "\t\t\tstring __page_content = html\n"
+			result = result + "\t\t\tstring __layout_html = _ui_load_layout(\"" + layout + "\")\n"
+			result = result + "\t\t\tif __layout_html != \"\"\n"
+			// Named slot extraction loop — runs up to 10 named slots
+			result = result + "\t\t\t\tinteger __slot_i = 0\n"
+			result = result + "\t\t\t\twhile __slot_i < 10\n"
+			result = result + "\t\t\t\t\tinteger __ns_start = __page_content.indexOf(\"<slot name=\\\"\")\n"
+			result = result + "\t\t\t\t\tif __ns_start == -1\n"
+			result = result + "\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\tinteger __name_start = __ns_start + 12\n"
+			result = result + "\t\t\t\t\t\tinteger __name_end = __page_content.indexOf(\"\\\"\", __name_start)\n"
+			result = result + "\t\t\t\t\t\tif __name_end == -1\n"
+			result = result + "\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\tstring __slot_name = __page_content.substring(__name_start, __name_end)\n"
+			result = result + "\t\t\t\t\t\t\tinteger __open_end = __page_content.indexOf(\">\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\tinteger __close_start = __page_content.indexOf(\"</slot>\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\tif __open_end == -1 or __close_start == -1\n"
+			result = result + "\t\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __layout_placeholder = \"<slot name=\\\"\" + __slot_name + \"\\\"></slot>\"\n"
+			result = result + "\t\t\t\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
+			result = result + "\t\t\t\t\t\t\t\t__page_content = __before + __after\n"
+			result = result + "\t\t\t\t\t\t\t\t__slot_i = __slot_i + 1\n"
+			// Replace default slot with remaining content after named slots are extracted
+			result = result + "\t\t\t\t__layout_html = __layout_html.replace(\"<slot></slot>\", __page_content)\n"
+			result = result + "\t\t\t\thtml = __layout_html\n"
+
 		result = result + "\t\t\treturn html\n"
 
 		return result
@@ -1778,7 +1982,7 @@ functions:
 		string result = generate_screen_class_full(name, state_json, render_content, on_mount, on_unmount, on_update)
 
 		// Generate module-level render function that exports the screen's render
-		result = result + "\n// Module-level screen instance\n"
+		result = result + "\n"
 		result = result + "__Screen_" + name + " __screen_instance\n\n"
 		result = result + "functions:\n"
 		result = result + "\tstring render()\n"
@@ -1932,9 +2136,6 @@ functions:
 		result = result + "]"
 		return result
 
-	
-	
-	
 	// Extract lifecycle action code from lines
 	string extract_lifecycle_action(string lines_json)
 		list<string> lines = json_to_string_list(lines_json)
@@ -1988,47 +2189,6 @@ functions:
 			i = i + 1
 
 		result = result + "]"
-		return result
-
-	// Generate Clean class code for a screen
-	string generate_screen_class(string name, string state_json, string render_content)
-		string result = "class __Screen_" + name + "\n"
-
-		// Parse state variables from JSON
-		list<string> state_vars = json_to_object_list(state_json)
-
-		// Add state fields
-		integer i = 0
-		while i < state_vars.length()
-			string var_json = state_vars[i]
-			string var_name = extract_json_field(var_json, "name")
-			string var_type = extract_json_field(var_json, "type")
-			string var_default = extract_json_field(var_json, "default")
-
-			// Map Clean UI types to Clean types
-			string clean_type = map_ui_type(var_type)
-
-			result = result + "\t" + clean_type + " " + var_name
-			if var_default != ""
-				result = result + " = " + var_default
-			result = result + "\n"
-
-			i = i + 1
-
-		result = result + "\n"
-
-		// Add functions block
-		result = result + "\tfunctions:\n"
-
-		// Generate SSR render function
-		result = result + generate_ssr_render(name, state_json, render_content)
-
-		// Generate hydration function
-		result = result + generate_hydration_function(name, state_json, render_content)
-
-		// Generate state getter for serialization
-		result = result + generate_state_getter(name, state_json)
-
 		return result
 
 	// Map UI type names to Clean type names
@@ -2362,7 +2522,7 @@ functions:
 			i = i + 1
 		return result
 
-	// Generate hydration function for a screen (simplified, no lifecycle hooks)
+	// Generate hydration function for a screen (delegates to full version with empty hooks)
 	string generate_hydration_function(string name, string state_json, string render_content)
 		return generate_hydration_function_full(name, state_json, render_content, "", "", "")
 
@@ -2467,7 +2627,7 @@ functions:
 					string action = event_entry.substring(pipe2 + 1)
 
 					result = result + "\thandle_event_" + i.toString() + "()\n"
-					result = result + "\t\t// Event action: " + action + "\n"
+					result = result + "\t\t\n"
 					result = result + "\t\t__screen_instance." + action + "\n"
 					result = result + "\t\tinteger s = _ui_update_element(\"#screen-" + name + "\", __screen_instance.render())\n\n"
 
@@ -2747,108 +2907,6 @@ functions:
 		return result
 
 // ============================================================================
-// THEMING SYSTEM (UI-40)
-// ============================================================================
-// Parses theme blocks and generates CSS variables for theming.
-
-functions:
-	// Parse a theme block and generate CSS
-	string expand_theme(string name, string body)
-		list<string> lines = split_lines(body)
-		string css_vars = ""
-		string current_section = ""
-
-		integer i = 0
-		while i < lines.length()
-			string line = lines[i]
-			string trimmed = line.trim()
-
-			if trimmed.length() == 0
-				i = i + 1
-			else
-				// Check for section headers
-				if trimmed == "colors:"
-					current_section = "color"
-					i = i + 1
-				else if trimmed == "spacing:"
-					current_section = "spacing"
-					i = i + 1
-				else if trimmed == "typography:"
-					current_section = "typography"
-					i = i + 1
-				else if trimmed == "borders:"
-					current_section = "border"
-					i = i + 1
-				else if trimmed == "shadows:"
-					current_section = "shadow"
-					i = i + 1
-				else
-					// Parse key: value pair
-					integer colon_pos = trimmed.indexOf(":")
-					if colon_pos > 0
-						string key = trimmed.substring(0, colon_pos).trim()
-						string value = trimmed.substring(colon_pos + 1).trim()
-
-						// Remove quotes from value if present
-						if value.startsWith("\"") and value.endsWith("\"")
-							value = value.substring(1, value.length() - 1)
-
-						// Generate CSS variable
-						string var_name = "--" + current_section + "-" + key
-						css_vars = css_vars + "\t" + var_name + ": " + value + ";\n"
-
-					i = i + 1
-
-		// Generate the theme CSS
-		string result = "// Theme: " + name + "\n"
-		result = result + "string __theme_" + name + "_css = \""
-		result = result + ":root, [data-theme='" + name + "'] {\\n"
-		result = result + escape_json_string(css_vars)
-		result = result + "}\\n\"\n\n"
-
-		// Generate theme application function
-		result = result + "functions:\n"
-		result = result + "\tstring apply_theme_" + name + "()\n"
-		result = result + "\t\treturn \"<style>\" + __theme_" + name + "_css + \"</style>\"\n\n"
-
-		return result
-
-	// Generate default theme CSS with common variables
-	string generate_default_theme_css()
-		string css = ":root {\n"
-		// Colors
-		css = css + "\t--color-primary: #4a90d9;\n"
-		css = css + "\t--color-secondary: #6c757d;\n"
-		css = css + "\t--color-success: #28a745;\n"
-		css = css + "\t--color-danger: #dc3545;\n"
-		css = css + "\t--color-warning: #ffc107;\n"
-		css = css + "\t--color-info: #17a2b8;\n"
-		css = css + "\t--color-background: #ffffff;\n"
-		css = css + "\t--color-surface: #f8f9fa;\n"
-		css = css + "\t--color-text: #333333;\n"
-		css = css + "\t--color-text-muted: #6c757d;\n"
-		// Spacing
-		css = css + "\t--spacing-xs: 4px;\n"
-		css = css + "\t--spacing-sm: 8px;\n"
-		css = css + "\t--spacing-md: 16px;\n"
-		css = css + "\t--spacing-lg: 24px;\n"
-		css = css + "\t--spacing-xl: 32px;\n"
-		// Typography
-		css = css + "\t--typography-fontFamily: system-ui, -apple-system, sans-serif;\n"
-		css = css + "\t--typography-fontSize: 16px;\n"
-		css = css + "\t--typography-lineHeight: 1.5;\n"
-		// Borders
-		css = css + "\t--border-radius: 4px;\n"
-		css = css + "\t--border-width: 1px;\n"
-		css = css + "\t--border-color: #dee2e6;\n"
-		// Shadows
-		css = css + "\t--shadow-sm: 0 1px 2px rgba(0,0,0,0.05);\n"
-		css = css + "\t--shadow-md: 0 4px 6px rgba(0,0,0,0.1);\n"
-		css = css + "\t--shadow-lg: 0 10px 15px rgba(0,0,0,0.1);\n"
-		css = css + "}\n"
-		return css
-
-// ============================================================================
 // FORM VALIDATION (UI-41)
 // ============================================================================
 // Parses validate blocks and generates validation logic.
@@ -3004,24 +3062,6 @@ functions:
 			attrs = attrs + " aria-required=\\\"true\\\""
 
 		return attrs
-
-	// Generate focus management code
-	string generate_focus_trap(string container_id)
-		string code = "// Focus trap for " + container_id + "\n"
-		code = code + "const container = document.getElementById('" + container_id + "');\n"
-		code = code + "const focusables = container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])');\n"
-		code = code + "const firstFocusable = focusables[0];\n"
-		code = code + "const lastFocusable = focusables[focusables.length - 1];\n"
-		code = code + "container.addEventListener('keydown', (e) => {\n"
-		code = code + "  if (e.key === 'Tab') {\n"
-		code = code + "    if (e.shiftKey && document.activeElement === firstFocusable) {\n"
-		code = code + "      e.preventDefault(); lastFocusable.focus();\n"
-		code = code + "    } else if (!e.shiftKey && document.activeElement === lastFocusable) {\n"
-		code = code + "      e.preventDefault(); firstFocusable.focus();\n"
-		code = code + "    }\n"
-		code = code + "  }\n"
-		code = code + "});\n"
-		return code
 
 	// Generate state getter function
 	string generate_state_getter(string name, string state_json)
@@ -3425,7 +3465,7 @@ functions:
 				code = code + "\t\t\thtml = html + " + italic_text + "\n"
 			code = code + "\t\t\thtml = html + \"</em>\"\n"
 		else if widget_name == "icon"
-			// Icon (placeholder - using CSS class)
+			// Icon element using CSS class
 			string icon_name = get_prop_value(props, "name")
 			string icon_size = get_prop_value(props, "size")
 
@@ -3834,4 +3874,132 @@ functions:
 		result = result.replace("<", "&lt;")
 		result = result.replace(">", "&gt;")
 		result = result.replace("\"", "&quot;")
+		return result
+
+// ============================================================================
+// THEMING SYSTEM (ui: block with theme: sub-block)
+// Spec: 05_frame_ui.md section 10.3
+// Generates CSS custom properties injected into the page <head>
+// ============================================================================
+
+functions:
+	// Entry point for ui: block expansion.
+	// Extracts the theme: sub-block (if present) and generates the injection code.
+	string expand_ui_config(string attrs, string body)
+		string theme_block = extract_theme_block(body, "theme:")
+		if theme_block.length() == 0
+			// No theme: block — nothing to emit
+			return ""
+		return expand_theme(theme_block)
+
+	// Extract a named sub-block from a ui: body.
+	// Stops at the next peer block keyword or end of body.
+	// Peer blocks inside a ui: body are: theme:, fonts:, breakpoints:
+	string extract_theme_block(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + block_name.length()
+		integer end_pos = body.length()
+		integer search_pos = content_start
+
+		// Advance line by line; stop when we reach a peer block at the same indent level
+		while search_pos < body.length()
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				// Peek at the trimmed content of the next line
+				integer next_line_start = search_pos + 1
+				string after_newline = body.substring(next_line_start, body.length()).trim()
+				if after_newline.startsWith("theme:") or after_newline.startsWith("fonts:") or after_newline.startsWith("breakpoints:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return body.substring(content_start, end_pos).trim()
+
+	// Parse the theme block body and generate Clean code that:
+	//   1. Builds a :root { ... } CSS string from colors: and spacing: entries
+	//   2. Calls _ui_inject_head_css() to insert the stylesheet into the page head
+	string expand_theme(string theme_block)
+		// Extract colors: and spacing: sub-sections
+		string colors_section = extract_theme_section(theme_block, "colors:")
+		string spacing_section = extract_theme_section(theme_block, "spacing:")
+
+		// Guard: nothing meaningful to emit if both sections are empty
+		if colors_section.length() == 0 and spacing_section.length() == 0
+			return ""
+
+		// Build the generated Clean code
+		string code = "string __theme_css = \":root { \"\n"
+
+		// Emit color variables
+		if colors_section.length() > 0
+			code = code + parse_theme_section(colors_section, "color")
+
+		// Emit spacing variables
+		if spacing_section.length() > 0
+			code = code + parse_theme_section(spacing_section, "spacing")
+
+		code = code + "__theme_css = __theme_css + \"}\"\n"
+		code = code + "_ui_inject_head_css(__theme_css)\n"
+
+		return code
+
+	// Extract a named section (e.g. "colors:" or "spacing:") from the theme body.
+	// Stops at the next peer section keyword or end of theme body.
+	string extract_theme_section(string theme_body, string section_name)
+		integer start_pos = theme_body.indexOf(section_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + section_name.length()
+		integer end_pos = theme_body.length()
+		integer search_pos = content_start
+
+		while search_pos < theme_body.length()
+			if theme_body.substring(search_pos, search_pos + 1) == "\n"
+				integer next_start = search_pos + 1
+				string after_newline = theme_body.substring(next_start, theme_body.length()).trim()
+				if after_newline.startsWith("colors:") or after_newline.startsWith("spacing:") or after_newline.startsWith("typography:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return theme_body.substring(content_start, end_pos).trim()
+
+	// Parse a theme section (e.g. the body under colors: or spacing:) line by line.
+	// Each line is expected to match the pattern:  name: "value"
+	// Generates one __theme_css concatenation statement per variable.
+	// prefix: "color" or "spacing" — used to form the CSS variable name.
+	string parse_theme_section(string section_content, string prefix)
+		string result = ""
+		string remaining = section_content
+
+		while remaining.length() > 0
+			// Find the next newline or end of string
+			integer nl_pos = remaining.indexOf("\n")
+			string line = ""
+			if nl_pos == -1
+				line = remaining.trim()
+				remaining = ""
+			else
+				line = remaining.substring(0, nl_pos).trim()
+				remaining = remaining.substring(nl_pos + 1, remaining.length())
+
+			// Skip blank lines — only process non-empty lines
+			if line.length() != 0
+				// Parse "name: \"value\"" — locate the colon separator
+				integer colon_pos = line.indexOf(":")
+				if colon_pos != -1
+					string var_name = line.substring(0, colon_pos).trim()
+					string raw_value = line.substring(colon_pos + 1, line.length()).trim()
+
+					// Strip surrounding quotes from the value if present
+					if raw_value.startsWith("\"") and raw_value.endsWith("\"")
+						raw_value = raw_value.substring(1, raw_value.length() - 1)
+
+					// Only emit if both name and value are non-empty
+					if var_name.length() > 0 and raw_value.length() > 0
+						result = result + "__theme_css = __theme_css + \"--" + prefix + "-" + var_name + ": " + raw_value + "; \"\n"
+
 		return result

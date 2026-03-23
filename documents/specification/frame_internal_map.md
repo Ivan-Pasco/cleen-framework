@@ -1,152 +1,175 @@
-This file maps every specification document and internal module relationship in the Frame framework.
-It helps AI development tools (like Claude Code) locate relevant files, understand module boundaries, and perform contextual reasoning when generating or validating code.
+# Frame Internal Map
 
-1. Document Index
-Section	File	Description
-01	/docs/specification/01_frame_overview.md	High-level overview, architecture, and philosophy.
-02	/docs/specification/02_frame_cli.md	CLI commands, arguments, and build/deploy flow.
-03	/docs/specification/03_frame_server.md	Server runtime, Host Bridge, WASM loader, SSR pipeline.
-04	/docs/specification/04_frame_data.md	ORM system, queries, migrations, and schema validation.
-05	/docs/specification/05_frame_ui.md	UI rendering (SSR + CSR), components, theming, hydration.
-06	/docs/specification/06_frame_auth.md	Authentication system, sessions, JWT, and role guards.
-07	/docs/specification/07_frame_plugins.md	Plugin API, lifecycle hooks, and extension model.
-08	/docs/specification/08_frame_platforms.md	Multi-platform packaging (Web, PWA, Mobile, Desktop, Server, CLI).
-09	/docs/specification/09_frame_dev_guidelines.md	Developer conventions, naming, workflow, and CI/CD.
-10	/docs/specification/10_frame_future_evolution.md	Roadmap, research directions, and versioning policy.
-2. Module Relationships
+This file maps every specification document and internal module relationship in the Frame framework.
+It helps development tools locate relevant files, understand module boundaries, and perform contextual reasoning when generating or validating code.
+
+---
+
+## 1. Document Index
+
+| # | File | Description |
+|---|------|-------------|
+| 01 | [01_frame_overview.md](01_frame_overview.md) | High-level overview, architecture, and philosophy |
+| 02 | [02_frame_cli.md](02_frame_cli.md) | CLI commands and workflow |
+| 03 | [03_frame_server.md](03_frame_server.md) | Server runtime, HTTP routing, `endpoints:` blocks, SSR pipeline |
+| 04 | [04_frame_data.md](04_frame_data.md) | ORM system, block-based queries, migrations, many-to-many |
+| 05 | [05_frame_ui.md](05_frame_ui.md) | UI rendering (SSR + CSR), components, hydration, theming |
+| 06 | [06_frame_auth.md](06_frame_auth.md) | Authentication (sessions, JWT), authorization (roles, permissions) |
+| 07 | [07_frame_plugins.md](07_frame_plugins.md) | Plugin system, lifecycle hooks, extensibility |
+| 08 | [08_frame_platforms.md](08_frame_platforms.md) | Multi-platform packaging (Web, PWA, Mobile, Desktop, Server, CLI) |
+| 09 | [09_frame_dev_guidelines.md](09_frame_dev_guidelines.md) | Developer conventions, naming, workflow, CI/CD |
+| 10 | [10_compiler_plugins.md](10_compiler_plugins.md) | Compiler plugin architecture (Clean Language plugins) |
+| 11 | [11_database_plugins.md](11_database_plugins.md) | Database plugin architecture, C-ABI interface, runtime drivers |
+| 12 | [12_frame_canvas.md](12_frame_canvas.md) | Canvas rendering, animation, drawing primitives, bridge functions |
+| 13 | [13_frame_future_evolution.md](13_frame_future_evolution.md) | Roadmap, research directions, versioning policy |
+| -- | [frame_bridge_contracts.md](frame_bridge_contracts.md) | Host Bridge JSON contracts, WASM imports, platform availability |
+
+---
+
+## 2. Module Relationships
 
 Each Frame subsystem has a clear boundary and relies on the Host Bridge as the shared runtime interface.
-Below is a conceptual dependency map:
 
-┌──────────────────────────────────────┐
-│            Frame Framework            │
-├──────────────────────────────────────┤
-│  CLI        (02)                     │
-│  Server     (03) ───▶ Host Bridge    │
-│  Data       (04) ───▶ DB + Env       │
-│  UI         (05) ───▶ HTTP + FS      │
-│  Auth       (06) ───▶ Crypto + Env   │
-│  Plugins    (07) ───▶ All Layers     │
-│  Platforms  (08) ───▶ Host Wrappers  │
-│  Guidelines (09)                     │
-│  Future     (10)                     │
-└──────────────────────────────────────┘
+```
+┌────────────────────────────────────────────┐
+│              Frame Framework                │
+├────────────────────────────────────────────┤
+│  CLI              (02) → Orchestrates build│
+│  Server           (03) ──▶ Host Bridge     │
+│  Data / ORM       (04) ──▶ DB + Env        │
+│  UI               (05) ──▶ HTTP + FS       │
+│  Auth             (06) ──▶ Crypto + Env    │
+│  Plugins          (07) ──▶ All Layers      │
+│  Platforms        (08) ──▶ Host Wrappers   │
+│  Compiler Plugins (10) ──▶ Compiler        │
+│  Database Plugins (11) ──▶ Data Layer      │
+│  Canvas           (12) ──▶ Bridge (canvas) │
+│  Guidelines       (09)                     │
+│  Future           (13)                     │
+└────────────────────────────────────────────┘
+```
 
-Summary of Dependencies
-Module	Depends On	Provides
-CLI	Compiler, Config	Build, serve, test commands
-Server	WASM runtime, Bridge	Routing, SSR, API execution
-Data	DB Bridge	ORM, schema migration, validation
-UI	Server, Bridge	SSR/CSR, components, hydration
-Auth	Crypto, Env, Data	Sessions, JWT, role management
-Plugins	All	Extensibility layer
-Platforms	CLI, Server	Target packaging, runtime adapters
-3. Repository Paths
+### Dependency Summary
 
-These are the standard paths used across all Frame-based projects:
+| Module | Depends On | Provides |
+|--------|-----------|----------|
+| CLI | Compiler, Config | Build, serve, test commands |
+| Server | WASM runtime, Bridge | Routing, SSR, API execution |
+| Data | DB Bridge | ORM, schema migration, validation |
+| UI | Server, Bridge | SSR/CSR, components, hydration |
+| Auth | Crypto, Env, Data | Sessions, JWT, role management |
+| Plugins | All | Extensibility layer |
+| Platforms | CLI, Server | Target packaging, runtime adapters |
+| Compiler Plugins | Compiler | Block expansion, keyword handling |
+| Database Plugins | Data, Bridge | Driver implementations, connection pooling |
+| Canvas | Bridge | 2D rendering, animation, input handling |
 
-/app/pages/*.html        → SSR page templates (HTML with {{ }} and cl-* directives)
-/app/pages/*.cln         → Companion data loaders (paired by filename: load/guard)
-/app/components/*.cln    → Reusable UI components
-/app/layouts/*.html      → Page layout wrappers
-/app/api/*.cln           → Server endpoints
-/app/data/*.cln          → Data models / ORM
-/app/auth/*.cln          → Auth configuration
-/app/canvas/*.cln        → Canvas applications
-/public/*                → Static assets (CSS, images)
-/dist/*                  → Compiled WASM and bundles
-/docs/specification/*    → Developer and AI documentation
-/docs/specification/ai_context/* → AI context data
-/tests/*                 → Unit and integration tests
+---
 
-4. AI Context Overview
-Context Files
-File	Description
-frame_symbols.md	Stable tokens, syntax rules, and Clean keywords.
-frame_bridge_contracts.md	JSON schema of all Host Bridge operations.
-frame_internal_map.md	This file (index and module relationships).
-AI Reading Order
+## 3. Repository Paths
+
+Standard paths used across all Frame-based projects. Each path is owned by the plugin whose `plugin.toml` declares it under `[paths] owns`.
+
+```
+/app/pages/*.html              → SSR page templates (HTML with {{ }} and cl-* directives)  [frame.ui]
+/app/pages/*.cln               → Companion data loaders (paired by filename: load/guard)   [frame.ui]
+/app/components/*.cln          → Reusable UI components                                    [frame.ui]
+/app/layouts/*.html            → Page layout wrappers                                      [frame.ui]
+/app/backend/*.cln             → Server entry points                                       [frame.httpserver]
+/app/backend/api/*.cln         → HTTP API endpoints                                        [frame.httpserver]
+/app/backend/services/*.cln    → Business logic services                                   [frame.httpserver]
+/app/backend/middleware/*.cln  → Request middleware                                        [frame.httpserver]
+/app/data/*.cln                → Data models / ORM                                         [frame.data]
+/app/data/models/*.cln         → Model definitions                                         [frame.data]
+/app/data/queries/*.cln        → Reusable query definitions                                [frame.data]
+/app/data/migrations/*.cln     → Schema migration files                                    [frame.data]
+/app/data/repositories/*.cln   → Repository layer                                          [frame.data]
+/app/auth/*.cln                → Authentication and authorization configuration            [frame.auth]
+/app/canvas/*.cln              → Canvas application entry points                           [frame.canvas]
+/app/canvas/scenes/*.cln       → Scene definitions                                         [frame.canvas]
+/app/canvas/sprites/*.cln      → Sprite sheet definitions                                  [frame.canvas]
+/app/canvas/audio/*.cln        → Audio asset definitions                                   [frame.canvas]
+/public/*                      → Static assets (CSS, images, served as-is)
+/dist/*                        → Compiled WASM and bundles
+/docs/specification/*          → Specification documents
+/tests/*                       → Unit and integration tests
+```
+
+### Plugin Folder Ownership
+
+| Plugin | Owned Paths |
+|--------|-------------|
+| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
+| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.auth` | `app/auth/` |
+| `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
+
+### Plugin Block Handles
+
+Each plugin responds to specific top-level block keywords in `.cln` files:
+
+| Plugin | Block Keywords |
+|--------|----------------|
+| `frame.httpserver` | `endpoints` |
+| `frame.data` | `data` |
+| `frame.auth` | `auth`, `protected`, `login`, `roles` |
+| `frame.ui` | `component`, `screen`, `page`, `html` |
+| `frame.canvas` | `canvasScene`, `draw`, `onFrame` |
+
+---
+
+## 4. Host Bridge Reference
+
+| Namespace | Reference | Used By |
+|-----------|-----------|---------|
+| `host:http` | frame_bridge_contracts.md | Server, UI |
+| `host:db` | frame_bridge_contracts.md | Data |
+| `host:crypto` | frame_bridge_contracts.md | Auth |
+| `host:env` | frame_bridge_contracts.md | Auth, Server |
+| `host:time` | frame_bridge_contracts.md | Server, Data |
+| `host:log` | frame_bridge_contracts.md | Server, Plugins |
+| `host:fs` | frame_bridge_contracts.md | Desktop, CLI |
+| `host:sys` | frame_bridge_contracts.md | CLI, Platform |
+
+---
+
+## 5. AI Reading Order
 
 When AI agents process the repository:
 
-Start with frame_internal_map.md (to locate specs).
+1. Start with **frame_internal_map.md** (this file) to locate specs.
+2. Load module-specific docs (03_server, 04_data, etc.) as needed.
+3. Parse bridge references from **frame_bridge_contracts.md**.
+4. Cross-verify relationships between Host Bridge namespaces and Clean modules.
 
-Load module-specific docs (03_server, 04_data, etc.) as needed.
+### Task-to-Document Mapping
 
-Parse syntax and bridge references from frame_symbols.md and frame_bridge_contracts.md.
+| Task | Read These Documents |
+|------|---------------------|
+| Generate a new UI component | 05_frame_ui.md |
+| Create an API endpoint | 03_frame_server.md + 04_frame_data.md |
+| Extend ORM or migrations | 04_frame_data.md + frame_bridge_contracts.md |
+| Add new plugin hooks | 07_frame_plugins.md + 10_compiler_plugins.md |
+| Add canvas/graphics | 12_frame_canvas.md |
+| Configure authentication | 06_frame_auth.md |
+| Package for deployment | 08_frame_platforms.md |
+| Add database driver | 11_database_plugins.md |
 
-Cross-verify relationships between Host Bridge namespaces and Clean modules.
+---
 
-5. Module Integration Example
+## 6. Version Compatibility
 
-When generating a project scaffold or analyzing dependencies:
+| Component | Version Source | Notes |
+|-----------|---------------|-------|
+| Frame Core | project.toml | Declares compiler version |
+| Plugins | plugin.toml | Must declare compatible `min_compiler_version` |
+| Bridge Schema | frame_bridge_contracts.md | Standard JSON envelope format |
 
-FrameApp
- ├── CLI (02)  → orchestrates build
- ├── Server (03) → executes WASM backend
- ├── Data (04) → ORM layer
- ├── UI (05)   → renders HTML + hydration
- ├── Auth (06) → protects routes
- ├── Plugins (07) → inject hooks
- ├── Platforms (08) → outputs builds
- └── Config (shared) → .cln files for each subsystem
+---
 
+## 7. Maintenance Policy
 
-AI tools can safely:
-
-Trace calls from Data.tx to the host:db contract.
-
-Identify which modules expose functions: or render() methods.
-
-Suggest fixes or improvements by analyzing .cln files using this structure.
-
-6. Version Compatibility
-Component	Version Source	Notes
-Frame Core	frame.json or frame.lock	Declares CLI/compiler version
-Plugins	plugin.cln	Must declare compatible requires: version
-Bridge Schema	frame_bridge_contracts.md	Backward-compatible within a major version
-AI Context Files	/docs/specification/ai_context/*	Version-matched with compiler
-7. Host Bridge Reference Links
-Namespace	Reference	Used In
-host:http	frame_bridge_contracts.md	Server, UI
-host:db	frame_bridge_contracts.md	Data
-host:crypto	frame_bridge_contracts.md	Auth
-host:env	frame_bridge_contracts.md	Auth, Server
-host:time	frame_bridge_contracts.md	Server, Data
-host:log	frame_bridge_contracts.md	Server, Plugins
-host:fs	frame_bridge_contracts.md	Desktop, CLI
-host:sys	frame_bridge_contracts.md	CLI, Platform
-8. AI Reasoning Guidance
-
-When an AI agent is asked to:
-
-Generate a new component, it should read from 05_frame_ui.md + frame_symbols.md.
-
-Extend ORM or migrations, it should read from 04_frame_data.md + frame_bridge_contracts.md.
-
-Add new plugin hooks, it should use 07_frame_plugins.md and this internal map.
-
-Package for deployment, combine 08_frame_platforms.md + 02_frame_cli.md.
-
-9. Example AI Workflow
-
-Developer asks:
-“Generate a new API endpoint that fetches users from the DB.”
-
-AI checks:
-
-Internal map → finds /docs/specification/03_frame_server.md for routes.
-
-Reads /docs/specification/04_frame_data.md for ORM usage.
-
-Confirms DB bridge format via /docs/specification/ai_context/frame_bridge_contracts.md.
-
-Output is guaranteed consistent with the Frame specification.
-
-10. Maintenance Policy
-
-This file must always reference the latest spec files in /docs/specification/.
-
-Version updates or new modules (e.g. 11_frame_testing.md) should be added here.
-
-Any document removed or renamed must be reflected here before a release tag.
+- This file must always reference the latest spec files in `/docs/specification/`.
+- New modules must be added here before a release tag.
+- Any document removed or renamed must be reflected here immediately.
