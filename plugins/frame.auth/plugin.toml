@@ -121,6 +121,9 @@ functions = [
   { name = "isAuthenticated", signature = "isAuthenticated()", description = "Check if request is authenticated" },
   { name = "csrf_generate", signature = "csrf_generate()", description = "Generate CSRF token for current session" },
   { name = "csrf_validate", signature = "csrf_validate(token)", description = "Validate CSRF token against session" },
+  { name = "tenant_getId", signature = "tenant_getId()", description = "Get current tenant ID from session claims" },
+  { name = "tenant_require", signature = "tenant_require()", description = "Require a valid tenant context, returns tenant ID or empty string" },
+  { name = "tenant_matches", signature = "tenant_matches(tenantId)", description = "Check if current user belongs to the given tenant" },
 ]
 
 # Auto-completion suggestions

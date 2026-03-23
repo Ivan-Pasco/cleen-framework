@@ -111,6 +111,16 @@ functions = [
   { name = "Model.exists", signature = "Model.exists(id)", description = "Check if record exists by ID" },
   { name = "Model.findOrFail", signature = "Model.findOrFail(id)", description = "Find record by ID or throw error" },
   { name = "migrate", signature = "migrate \"name\":\n\tup:\n\t\tSQL\n\tdown:\n\t\tSQL", description = "Define a versioned schema migration" },
+  { name = "Model.validate", signature = "Model.validate(fieldName, value)", description = "Validate a field value against model constraints (min, max, email, range). Returns empty string if valid, error message if invalid." },
+  { name = "Model.save", signature = "Model.save()", description = "Insert or update the model instance" },
+  { name = "Model.delete", signature = "Model.delete()", description = "Delete the model instance by ID" },
+  { name = "Model.find", signature = "Model.find:\n\twhere:\n\t\tcondition", description = "Query records with optional where, order, limit, offset, link clauses" },
+  { name = "Model.first", signature = "Model.first:\n\twhere:\n\t\tcondition", description = "Get first matching record (adds LIMIT 1)" },
+  { name = "Model.count", signature = "Model.count:\n\twhere:\n\t\tcondition", description = "Count matching records" },
+  { name = "Model.insert", signature = "Model.insert:\n\tfield = value", description = "Insert a new record with field assignments" },
+  { name = "Model.update", signature = "Model.update:\n\tset:\n\t\tfield = value\n\twhere:\n\t\tcondition", description = "Update records matching the where clause" },
+  { name = "Model.migrate", signature = "Model.migrate()", description = "Create table if not exists based on model definition" },
+  { name = "tenant_getId", signature = "tenant_getId()", description = "Get current tenant ID from session claims (requires frame.auth)" },
 ]
 
 # Auto-completion suggestions
