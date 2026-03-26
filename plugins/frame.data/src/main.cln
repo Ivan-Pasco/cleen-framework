@@ -120,9 +120,6 @@ functions:
 		// Close the class definition
 		result = result + "\n"
 
-		// Append auto-migration diff check so schema drift is detected at startup
-		result = result + generate_migration_diff(model_name, body)
-
 		return result
 
 	// Expand a 'data:' configuration block (no model name) into _db_configure() call
@@ -1002,8 +999,7 @@ functions:
 		// Escape the field definitions for embedding in a string literal
 		string escaped_defs = field_defs.replace("\\", "\\\\").replace("\"", "\\\"")
 
-		string result = "// Auto-migration diff: compare declared schema against live database\n"
-		result = result + "string __diff_sql_" + table_name + " = _db_migration_diff(\"" + table_name + "\", \"" + escaped_defs + "\")\n"
+		string result = "string __diff_sql_" + table_name + " = _db_migration_diff(\"" + table_name + "\", \"" + escaped_defs + "\")\n"
 		result = result + "if __diff_sql_" + table_name + ".length() > 0\n"
 		result = result + "\t_db_execute(__diff_sql_" + table_name + ", \"[]\")\n"
 		result = result + "\n"
