@@ -908,30 +908,30 @@ The `loader.js` runtime is the single browser runtime for all Frame UI applicati
 **Lifecycle:**
 
 1. Loads and instantiates the WASM module with all bridge function imports
-2. Calls `_start()` — the WASM module registers event handlers via `_ui_on_event`
+2. Calls `_start()` — the WASM module registers event handlers via `_ui_onEvent`
 3. Events are dispatched via document-level delegation using CSS selectors
-4. Handlers make targeted DOM updates via bridge functions (`_ui_update_element`, `_ui_toggle_class`, etc.)
+4. Handlers make targeted DOM updates via bridge functions (`_ui_updateElement`, `_ui_toggleClass`, etc.)
 
 **Client-side code pattern:**
 
 ```clean
 start:
     integer s = 0
-    s = _ui_on_event(".btn-save", "click", 0)
-    s = _ui_on_event(".search-input", "input", 1)
+    s = _ui_onEvent(".btn-save", "click", 0)
+    s = _ui_onEvent(".search-input", "input", 1)
 
 functions:
     handle_event_0()
-        string value = _ui_event_value()
-        integer s = _ui_update_element("#status", "Saved!")
-        s = _ui_set_timeout(2, 2000)
+        string value = _ui_eventValue()
+        integer s = _ui_updateElement("#status", "Saved!")
+        s = _ui_setTimeout(2, 2000)
 
     handle_event_1()
-        string query = _ui_event_value()
-        integer s = _ui_filter_by_text(".card", "data-name", "data-desc", query)
+        string query = _ui_eventValue()
+        integer s = _ui_filterByText(".card", "data-name", "data-desc", query)
 
     handle_event_2()
-        integer s = _ui_update_element("#status", "")
+        integer s = _ui_updateElement("#status", "")
 ```
 
 All bridge functions are declared in `plugin.toml` and implemented in `loader.js`. See the Bridge Contracts specification for the complete function reference.

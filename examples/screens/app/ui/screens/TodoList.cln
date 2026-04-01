@@ -21,20 +21,20 @@ functions:
 			</div>
 
 	handle_event_0()
-		string newItem = _ui_event_value()
+		string newItem = _ui_eventValue()
 		if newItem != ""
 			items = items + newItem + "\n"
 			itemCount = itemCount + 1
-			integer s = _ui_update_element("#todo-title", "Todo List (" + itemCount.toString() + " items)")
-			s = _ui_update_element("#todo-list", "<pre>" + items + "</pre>")
+			integer s = _ui_updateElement("#todo-title", "Todo List (" + itemCount.toString() + " items)")
+			s = _ui_updateElement("#todo-list", "<pre>" + items + "</pre>")
 
 	handle_event_1()
 		items = ""
 		itemCount = 0
-		integer s = _ui_update_element("#todo-title", "Todo List (0 items)")
-		s = _ui_update_element("#todo-list", "<pre></pre>")
+		integer s = _ui_updateElement("#todo-title", "Todo List (0 items)")
+		s = _ui_updateElement("#todo-list", "<pre></pre>")
 
 start:
 	integer s = 0
-	s = _ui_on_event(".btn-add", "click", 0)
-	s = _ui_on_event(".btn-clear", "click", 1)
+	s = _ui_onEvent(".btn-add", "click", 0)
+	s = _ui_onEvent(".btn-clear", "click", 1)

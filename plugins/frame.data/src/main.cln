@@ -77,7 +77,7 @@ functions:
 
 		// Generate save() method
 		result = result + "\t\tboolean save()\n"
-		result = result + "\t\t\tif this.id == 0\n"
+		result = result + "\t\t\tif id == 0\n"
 		if has_tenant
 			// For tenant-aware models, auto-inject tenantId on INSERT
 			result = result + "\t\t\t\tstring __tenant_id = tenant_getId()\n"
@@ -87,8 +87,8 @@ functions:
 			result = result + "\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
 			result = result + "\t\t\t\tstring params = __to_params()\n"
 		result = result + "\t\t\t\tstring result = _db_query(sql, params)\n"
-		result = result + "\t\t\t\tthis.id = __extract_id(result)\n"
-		result = result + "\t\t\t\treturn this.id > 0\n"
+		result = result + "\t\t\t\tid = __extract_id(result)\n"
+		result = result + "\t\t\t\treturn id > 0\n"
 		result = result + "\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
 		result = result + "\t\t\tstring params = __to_update_params()\n"
 		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
@@ -96,7 +96,7 @@ functions:
 
 		// Generate delete() instance method
 		result = result + "\n\t\tboolean delete()\n"
-		result = result + "\t\t\tif this.id == 0\n"
+		result = result + "\t\t\tif id == 0\n"
 		result = result + "\t\t\t\treturn false\n"
 		if has_tenant
 			// Scope delete to the current tenant so cross-tenant deletes are impossible
@@ -104,7 +104,7 @@ functions:
 			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '\" + __tenant_id + \"'\"\n"
 		else
 			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
-		result = result + "\t\t\tstring params = \"[\" + this.id.toString() + \"]\"\n"
+		result = result + "\t\t\tstring params = \"[\" + id.toString() + \"]\"\n"
 		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
 		result = result + "\t\t\treturn affected > 0\n"
 
@@ -549,7 +549,7 @@ functions:
 
 		// Generate __to_update_params() - serializes id first, then other fields for UPDATE
 		result = result + "\n\t\tstring __to_update_params()\n"
-		result = result + "\t\t\tstring params = \"[\" + this.id.toString()\n"
+		result = result + "\t\t\tstring params = \"[\" + id.toString()\n"
 		result = result + generate_field_serialization(field_names, field_types, true)
 		result = result + "\t\t\tparams = params + \"]\"\n"
 		result = result + "\t\t\treturn params\n"
@@ -610,9 +610,9 @@ functions:
 					separator = ", "
 
 				if needs_quotes
-					result = result + "\t\t\tparams = params + \"" + separator + "\\\"\" + this." + field + ".toString() + \"\\\"\"\n"
+					result = result + "\t\t\tparams = params + \"" + separator + "\\\"\" + " + field + ".toString() + \"\\\"\"\n"
 				else
-					result = result + "\t\t\tparams = params + \"" + separator + "\" + this." + field + ".toString()\n"
+					result = result + "\t\t\tparams = params + \"" + separator + "\" + " + field + ".toString()\n"
 				first_added = true
 
 			pos = comma_pos + 1

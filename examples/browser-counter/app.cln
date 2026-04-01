@@ -12,31 +12,31 @@ state:
 
 start:
 	integer s = 0
-	s = _ui_on_event(".btn-increment", "click", 0)
-	s = _ui_on_event(".btn-decrement", "click", 1)
-	s = _ui_on_event(".btn-reset", "click", 2)
-	s = _ui_on_event(".btn-prog-up", "click", 3)
-	s = _ui_on_event(".btn-prog-down", "click", 4)
-	s = _ui_on_event(".btn-theme", "click", 5)
+	s = _ui_onEvent(".btn-increment", "click", 0)
+	s = _ui_onEvent(".btn-decrement", "click", 1)
+	s = _ui_onEvent(".btn-reset", "click", 2)
+	s = _ui_onEvent(".btn-prog-up", "click", 3)
+	s = _ui_onEvent(".btn-prog-down", "click", 4)
+	s = _ui_onEvent(".btn-theme", "click", 5)
 
 functions:
 	update_display()
 		integer s = 0
-		s = _ui_update_element("#count-value", count.toString())
-		s = _ui_update_element("#clicks-value", clicks.toString())
-		s = _ui_update_element("#progress-label", progress.toString() + "% complete")
-		s = _ui_set_style(".progress-bar", "width", progress.toString() + "%")
+		s = _ui_updateElement("#count-value", count.toString())
+		s = _ui_updateElement("#clicks-value", clicks.toString())
+		s = _ui_updateElement("#progress-label", progress.toString() + "% complete")
+		s = _ui_setStyle(".progress-bar", "width", progress.toString() + "%")
 
 	handle_event_0()
 		count = count + 1
 		clicks = clicks + 1
 		update_display()
 		if count == 10
-			integer s = _ui_update_element("#status-msg", "Nice! You reached 10!")
+			integer s = _ui_updateElement("#status-msg", "Nice! You reached 10!")
 		if count == 50
-			integer s = _ui_update_element("#status-msg", "On fire! 50!")
+			integer s = _ui_updateElement("#status-msg", "On fire! 50!")
 		if count == 100
-			integer s = _ui_update_element("#status-msg", "LEGENDARY! 100!")
+			integer s = _ui_updateElement("#status-msg", "LEGENDARY! 100!")
 
 	handle_event_1()
 		count = count - 1
@@ -47,7 +47,7 @@ functions:
 		count = 0
 		clicks = clicks + 1
 		update_display()
-		integer s = _ui_update_element("#status-msg", "Counter reset to zero")
+		integer s = _ui_updateElement("#status-msg", "Counter reset to zero")
 
 	handle_event_3()
 		progress = progress + 10
@@ -56,7 +56,7 @@ functions:
 			progress = 100
 		update_display()
 		if progress == 100
-			integer s = _ui_update_element("#status-msg", "Progress complete!")
+			integer s = _ui_updateElement("#status-msg", "Progress complete!")
 
 	handle_event_4()
 		progress = progress - 10
@@ -68,6 +68,6 @@ functions:
 	handle_event_5()
 		darkMode = not darkMode
 		clicks = clicks + 1
-		integer s = _ui_toggle_class(".dashboard", "dark")
-		s = _ui_toggle_class(".dashboard", "light")
+		integer s = _ui_toggleClass(".dashboard", "dark")
+		s = _ui_toggleClass(".dashboard", "light")
 		update_display()

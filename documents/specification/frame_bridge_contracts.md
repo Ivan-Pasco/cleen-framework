@@ -744,52 +744,52 @@ Browser-only bridge functions provided by the `frame.ui` plugin via `loader.js`.
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_on_event` | selector, event_type, handler_idx | integer | Register event handler via document-level delegation |
+| `_ui_onEvent` | selector, event_type, handler_idx | integer | Register event handler via document-level delegation |
 
 #### Event Context (available during event handler execution)
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_event_attr` | attr_name | string | Get attribute from current event target |
-| `_ui_event_value` | — | string | Get value (inputs) or textContent (others) of event target |
-| `_ui_event_closest_attr` | selector, attr_name | string | Find closest ancestor matching selector, get its attribute |
-| `_ui_event_type` | — | string | Get event type (click, input, etc.) |
+| `_ui_eventAttr` | attr_name | string | Get attribute from current event target |
+| `_ui_eventValue` | — | string | Get value (inputs) or textContent (others) of event target |
+| `_ui_eventClosestAttr` | selector, attr_name | string | Find closest ancestor matching selector, get its attribute |
+| `_ui_eventType` | — | string | Get event type (click, input, etc.) |
 
 #### DOM Manipulation (single element — querySelector)
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_update_element` | selector, content | integer | Set innerHTML of first matching element |
-| `_ui_update_attr` | selector, attr, value | integer | Set attribute on first matching element |
-| `_ui_get_text` | selector | string | Get textContent of first matching element |
-| `_ui_get_attr` | selector, attr | string | Get attribute of first matching element |
-| `_ui_toggle_class` | selector, class | integer | Toggle CSS class |
-| `_ui_add_class` | selector, class | integer | Add CSS class |
-| `_ui_remove_class` | selector, class | integer | Remove CSS class |
-| `_ui_set_style` | selector, property, value | integer | Set inline style |
-| `_ui_update_element_self` | content | integer | Update current event target's textContent |
+| `_ui_updateElement` | selector, content | integer | Set innerHTML of first matching element |
+| `_ui_updateAttr` | selector, attr, value | integer | Set attribute on first matching element |
+| `_ui_getText` | selector | string | Get textContent of first matching element |
+| `_ui_getAttr` | selector, attr | string | Get attribute of first matching element |
+| `_ui_toggleClass` | selector, class | integer | Toggle CSS class |
+| `_ui_addClass` | selector, class | integer | Add CSS class |
+| `_ui_removeClass` | selector, class | integer | Remove CSS class |
+| `_ui_setStyle` | selector, property, value | integer | Set inline style |
+| `_ui_updateElementSelf` | content | integer | Update current event target's textContent |
 
 #### DOM Batch (querySelectorAll)
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_query_set_style` | selector, property, value | integer | Set style on ALL matching elements |
-| `_ui_query_set_attr` | selector, attr, value | integer | Set attribute on ALL matching elements |
-| `_ui_query_add_class` | selector, class | integer | Add class to ALL matching elements |
-| `_ui_query_remove_class` | selector, class | integer | Remove class from ALL matching elements |
-| `_ui_filter_by_attr` | selector, attr, value | integer | Show elements matching attr value, hide others (`*` for all) |
-| `_ui_filter_by_text` | selector, name_attr, desc_attr, query | integer | Filter by text search across name/description attributes |
+| `_ui_querySetStyle` | selector, property, value | integer | Set style on ALL matching elements |
+| `_ui_querySetAttr` | selector, attr, value | integer | Set attribute on ALL matching elements |
+| `_ui_queryAddClass` | selector, class | integer | Add class to ALL matching elements |
+| `_ui_queryRemoveClass` | selector, class | integer | Remove class from ALL matching elements |
+| `_ui_filterByAttr` | selector, attr, value | integer | Show elements matching attr value, hide others (`*` for all) |
+| `_ui_filterByText` | selector, name_attr, desc_attr, query | integer | Filter by text search across name/description attributes |
 
 #### Browser APIs
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_clipboard_write` | text | integer | Copy text to clipboard |
-| `_ui_location_href` | url | integer | Navigate to URL |
-| `_ui_location_query` | param | string | Get URL query parameter |
-| `_ui_location_path` | — | string | Get current pathname |
-| `_ui_observe_visible` | selector, class | integer | Add class when elements scroll into view (one-shot) |
-| `_ui_set_timeout` | handler_idx, delay_ms | integer | Call `handle_event_N` after delay |
+| `_ui_clipboardWrite` | text | integer | Copy text to clipboard |
+| `_ui_locationHref` | url | integer | Navigate to URL |
+| `_ui_locationQuery` | param | string | Get URL query parameter |
+| `_ui_locationPath` | — | string | Get current pathname |
+| `_ui_observeVisible` | selector, class | integer | Add class when elements scroll into view (one-shot) |
+| `_ui_setTimeout` | handler_idx, delay_ms | integer | Call `handle_event_N` after delay |
 
 #### HTML Rendering
 
@@ -802,23 +802,23 @@ Browser-only bridge functions provided by the `frame.ui` plugin via `loader.js`.
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_register_component` | tag, class | integer | Register component by tag name |
-| `_ui_get_component` | tag | string | Get component class by tag name |
-| `_ui_set_slot` | name, content | integer | Set slot content |
-| `_ui_get_slot` | name | string | Get slot content |
+| `_ui_registerComponent` | tag, class | integer | Register component by tag name |
+| `_ui_getComponent` | tag | string | Get component class by tag name |
+| `_ui_setSlot` | name, content | integer | Set slot content |
+| `_ui_getSlot` | name | string | Get slot content |
 
 #### State Management
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_set_state` | id, json | integer | Set component state as JSON |
-| `_ui_get_state` | id | string | Get component state JSON |
+| `_ui_setState` | id, json | integer | Set component state as JSON |
+| `_ui_getState` | id | string | Get component state JSON |
 
 #### Form Binding & Validation
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_bind_input` | selector, path | integer | Bind input to state path |
+| `_ui_bindInput` | selector, path | integer | Bind input to state path |
 | `_ui_validate` | value, rule | string | Validate value against rule (required, email, url) |
 
 ---
@@ -923,8 +923,8 @@ let bridge: [String: Any] = [
 | `_http_listen` | - | tokio | - | - | - |
 | `env.get` | - | env | env | Bundle | BuildConfig |
 | `crypto.random` | WebCrypto | ring | ring | SecRandom | SecureRandom |
-| `_ui_load_layout` | - | server | - | - | - |
-| `_ui_inject_head_css` | - | server | - | - | - |
+| `_ui_loadLayout` | - | server | - | - | - |
+| `_ui_injectHeadCss` | - | server | - | - | - |
 | `_canvas_on_pointer_down` | browser | - | desktop | - | - |
 | `_canvas_on_pointer_move` | browser | - | desktop | - | - |
 | `_canvas_on_key_down` | browser | - | desktop | - | - |

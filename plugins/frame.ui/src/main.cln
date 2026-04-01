@@ -1503,7 +1503,7 @@ functions:
 		// content replaces the default <slot></slot>.
 		if layout != ""
 			result = result + "\t\t\tstring __page_content = html\n"
-			result = result + "\t\t\tstring __layout_html = _ui_load_layout(\"" + layout + "\")\n"
+			result = result + "\t\t\tstring __layout_html = _ui_loadLayout(\"" + layout + "\")\n"
 			result = result + "\t\t\tif __layout_html != \"\"\n"
 			// Named slot extraction loop — runs up to 10 named slots
 			result = result + "\t\t\t\tinteger __slot_i = 0\n"
@@ -2605,7 +2605,7 @@ functions:
 				integer pipe2 = event_entry.indexOf("|", pipe1 + 1)
 				if pipe2 > pipe1
 					string event_type = event_entry.substring(pipe1 + 1, pipe2)
-					result = result + "\t\tinteger s = _ui_on_event(\"" + selector + "\", \"" + event_type + "\", " + i.toString() + ")\n"
+					result = result + "\t\tinteger s = _ui_onEvent(\"" + selector + "\", \"" + event_type + "\", " + i.toString() + ")\n"
 
 			i = i + 1
 
@@ -2629,7 +2629,7 @@ functions:
 					result = result + "\thandle_event_" + i.toString() + "()\n"
 					result = result + "\t\t\n"
 					result = result + "\t\t__screen_instance." + action + "\n"
-					result = result + "\t\tinteger s = _ui_update_element(\"#screen-" + name + "\", __screen_instance.render())\n\n"
+					result = result + "\t\tinteger s = _ui_updateElement(\"#screen-" + name + "\", __screen_instance.render())\n\n"
 
 			i = i + 1
 
@@ -3919,7 +3919,7 @@ functions:
 
 	// Parse the theme block body and generate Clean code that:
 	//   1. Builds a :root { ... } CSS string from colors: and spacing: entries
-	//   2. Calls _ui_inject_head_css() to insert the stylesheet into the page head
+	//   2. Calls _ui_injectHeadCss() to insert the stylesheet into the page head
 	string expand_theme(string theme_block)
 		// Extract colors: and spacing: sub-sections
 		string colors_section = extract_theme_section(theme_block, "colors:")
@@ -3941,7 +3941,7 @@ functions:
 			code = code + parse_theme_section(spacing_section, "spacing")
 
 		code = code + "__theme_css = __theme_css + \"}\"\n"
-		code = code + "_ui_inject_head_css(__theme_css)\n"
+		code = code + "_ui_injectHeadCss(__theme_css)\n"
 
 		return code
 

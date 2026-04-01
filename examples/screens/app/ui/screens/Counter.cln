@@ -19,18 +19,18 @@ functions:
 
 	handle_event_0()
 		count = count + 1
-		integer s = _ui_update_element("#counter-display", label + ": " + count.toString())
+		integer s = _ui_updateElement("#counter-display", label + ": " + count.toString())
 
 	handle_event_1()
 		count = count - 1
-		integer s = _ui_update_element("#counter-display", label + ": " + count.toString())
+		integer s = _ui_updateElement("#counter-display", label + ": " + count.toString())
 
 	handle_event_2()
 		count = 0
-		integer s = _ui_update_element("#counter-display", label + ": " + count.toString())
+		integer s = _ui_updateElement("#counter-display", label + ": " + count.toString())
 
 start:
 	integer s = 0
-	s = _ui_on_event(".btn-increment", "click", 0)
-	s = _ui_on_event(".btn-decrement", "click", 1)
-	s = _ui_on_event(".btn-reset", "click", 2)
+	s = _ui_onEvent(".btn-increment", "click", 0)
+	s = _ui_onEvent(".btn-decrement", "click", 1)
+	s = _ui_onEvent(".btn-reset", "click", 2)

@@ -2,7 +2,7 @@
 // WASM loader with full browser API bridge
 // Version: 2.2.0
 //
-// All interactivity uses _ui_on_event delegation + targeted DOM updates.
+// All interactivity uses _ui_onEvent delegation + targeted DOM updates.
 // WASM _start() registers handlers, handlers update DOM via bridge functions.
 
 (async function() {
@@ -107,29 +107,29 @@
 
 			// ========== Component Registry ==========
 
-			_ui_register_component: (tagPtr, tagLen, classPtr, classLen) => {
+			_ui_registerComponent: (tagPtr, tagLen, classPtr, classLen) => {
 				componentRegistry.set(readString(tagPtr, tagLen), readString(classPtr, classLen));
 				return 0;
 			},
 
-			_ui_get_component: (tagPtr, tagLen) => {
+			_ui_getComponent: (tagPtr, tagLen) => {
 				return writeString(componentRegistry.get(readString(tagPtr, tagLen)) || '');
 			},
 
 			// ========== Slot Management ==========
 
-			_ui_set_slot: (namePtr, nameLen, contentPtr, contentLen) => {
+			_ui_setSlot: (namePtr, nameLen, contentPtr, contentLen) => {
 				slotStore.set(readString(namePtr, nameLen), readString(contentPtr, contentLen));
 				return 0;
 			},
 
-			_ui_get_slot: (namePtr, nameLen) => {
+			_ui_getSlot: (namePtr, nameLen) => {
 				return writeString(slotStore.get(readString(namePtr, nameLen)) || '');
 			},
 
 			// ========== Event Handler Registration ==========
 
-			_ui_on_event: (selectorPtr, selectorLen, eventTypePtr, eventTypeLen, handlerIdx) => {
+			_ui_onEvent: (selectorPtr, selectorLen, eventTypePtr, eventTypeLen, handlerIdx) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const eventType = readString(eventTypePtr, eventTypeLen);
 				const key = selector + '\0' + eventType;
@@ -144,24 +144,24 @@
 
 			// ========== State Management ==========
 
-			_ui_set_state: (idPtr, idLen, jsonPtr, jsonLen) => {
+			_ui_setState: (idPtr, idLen, jsonPtr, jsonLen) => {
 				stateStore.set(readString(idPtr, idLen), readString(jsonPtr, jsonLen));
 				return 0;
 			},
 
-			_ui_get_state: (idPtr, idLen) => {
+			_ui_getState: (idPtr, idLen) => {
 				return writeString(stateStore.get(readString(idPtr, idLen)) || '{}');
 			},
 
 			// ========== DOM Manipulation ==========
 
-			_ui_update_element: (selectorPtr, selectorLen, contentPtr, contentLen) => {
+			_ui_updateElement: (selectorPtr, selectorLen, contentPtr, contentLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				if (el) { el.innerHTML = readString(contentPtr, contentLen); return 0; }
 				return -1;
 			},
 
-			_ui_update_attr: (selectorPtr, selectorLen, attrPtr, attrLen, valPtr, valLen) => {
+			_ui_updateAttr: (selectorPtr, selectorLen, attrPtr, attrLen, valPtr, valLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				if (el) { el.setAttribute(readString(attrPtr, attrLen), readString(valPtr, valLen)); return 0; }
 				return -1;
@@ -169,7 +169,7 @@
 
 			// ========== Form Binding ==========
 
-			_ui_bind_input: (selectorPtr, selectorLen, pathPtr, pathLen) => {
+			_ui_bindInput: (selectorPtr, selectorLen, pathPtr, pathLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const path = readString(pathPtr, pathLen);
 				const el = document.querySelector(selector);
@@ -201,12 +201,12 @@
 
 			// ========== Event Handler Context ==========
 
-			_ui_event_attr: (attrPtr, attrLen) => {
+			_ui_eventAttr: (attrPtr, attrLen) => {
 				if (!currentEventTarget) return writeString('');
 				return writeString(currentEventTarget.getAttribute(readString(attrPtr, attrLen)) || '');
 			},
 
-			_ui_event_value: () => {
+			_ui_eventValue: () => {
 				if (!currentEventTarget) return writeString('');
 				if (currentEventTarget.tagName === 'INPUT' || currentEventTarget.tagName === 'TEXTAREA' || currentEventTarget.tagName === 'SELECT') {
 					return writeString(currentEventTarget.value || '');
@@ -214,78 +214,78 @@
 				return writeString(currentEventTarget.textContent || '');
 			},
 
-			_ui_event_closest_attr: (selectorPtr, selectorLen, attrPtr, attrLen) => {
+			_ui_eventClosestAttr: (selectorPtr, selectorLen, attrPtr, attrLen) => {
 				if (!currentEventTarget) return writeString('');
 				const el = currentEventTarget.closest(readString(selectorPtr, selectorLen));
 				if (!el) return writeString('');
 				return writeString(el.getAttribute(readString(attrPtr, attrLen)) || '');
 			},
 
-			_ui_event_type: () => {
+			_ui_eventType: () => {
 				if (!currentEvent) return writeString('');
 				return writeString(currentEvent.type);
 			},
 
 			// ========== Clipboard ==========
 
-			_ui_clipboard_write: (textPtr, textLen) => {
+			_ui_clipboardWrite: (textPtr, textLen) => {
 				navigator.clipboard.writeText(readString(textPtr, textLen)).catch(() => {});
 				return 0;
 			},
 
 			// ========== URL / Location ==========
 
-			_ui_location_href: (urlPtr, urlLen) => {
+			_ui_locationHref: (urlPtr, urlLen) => {
 				window.location.href = readString(urlPtr, urlLen);
 				return 0;
 			},
 
-			_ui_location_query: (paramPtr, paramLen) => {
+			_ui_locationQuery: (paramPtr, paramLen) => {
 				const value = new URLSearchParams(window.location.search).get(readString(paramPtr, paramLen)) || '';
 				return writeString(value);
 			},
 
-			_ui_location_path: () => {
+			_ui_locationPath: () => {
 				return writeString(window.location.pathname);
 			},
 
 			// ========== DOM Query (single element) ==========
 
-			_ui_get_text: (selectorPtr, selectorLen) => {
+			_ui_getText: (selectorPtr, selectorLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				return writeString(el ? (el.textContent || '') : '');
 			},
 
-			_ui_get_attr: (selectorPtr, selectorLen, attrPtr, attrLen) => {
+			_ui_getAttr: (selectorPtr, selectorLen, attrPtr, attrLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				return writeString(el ? (el.getAttribute(readString(attrPtr, attrLen)) || '') : '');
 			},
 
-			_ui_toggle_class: (selectorPtr, selectorLen, classPtr, classLen) => {
+			_ui_toggleClass: (selectorPtr, selectorLen, classPtr, classLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				if (el) el.classList.toggle(readString(classPtr, classLen));
 				return 0;
 			},
 
-			_ui_add_class: (selectorPtr, selectorLen, classPtr, classLen) => {
+			_ui_addClass: (selectorPtr, selectorLen, classPtr, classLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				if (el) el.classList.add(readString(classPtr, classLen));
 				return 0;
 			},
 
-			_ui_remove_class: (selectorPtr, selectorLen, classPtr, classLen) => {
+			_ui_removeClass: (selectorPtr, selectorLen, classPtr, classLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				if (el) el.classList.remove(readString(classPtr, classLen));
 				return 0;
 			},
 
-			_ui_set_style: (selectorPtr, selectorLen, propPtr, propLen, valPtr, valLen) => {
+			_ui_setStyle: (selectorPtr, selectorLen, propPtr, propLen, valPtr, valLen) => {
 				const el = document.querySelector(readString(selectorPtr, selectorLen));
 				if (el) el.style[readString(propPtr, propLen)] = readString(valPtr, valLen);
 				return 0;
 			},
 
-			_ui_update_element_self: (contentPtr, contentLen) => {
+			_ui_updateElementSelf: (contentPtr, contentLen) => {
 				if (!currentEventTarget) return -1;
 				currentEventTarget.textContent = readString(contentPtr, contentLen);
 				return 0;
@@ -293,7 +293,7 @@
 
 			// ========== DOM Batch (querySelectorAll) ==========
 
-			_ui_query_set_style: (selectorPtr, selectorLen, propPtr, propLen, valPtr, valLen) => {
+			_ui_querySetStyle: (selectorPtr, selectorLen, propPtr, propLen, valPtr, valLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const prop = readString(propPtr, propLen);
 				const val = readString(valPtr, valLen);
@@ -301,7 +301,7 @@
 				return 0;
 			},
 
-			_ui_query_set_attr: (selectorPtr, selectorLen, attrPtr, attrLen, valPtr, valLen) => {
+			_ui_querySetAttr: (selectorPtr, selectorLen, attrPtr, attrLen, valPtr, valLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const attr = readString(attrPtr, attrLen);
 				const val = readString(valPtr, valLen);
@@ -309,21 +309,21 @@
 				return 0;
 			},
 
-			_ui_query_add_class: (selectorPtr, selectorLen, classPtr, classLen) => {
+			_ui_queryAddClass: (selectorPtr, selectorLen, classPtr, classLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const cls = readString(classPtr, classLen);
 				document.querySelectorAll(selector).forEach(el => el.classList.add(cls));
 				return 0;
 			},
 
-			_ui_query_remove_class: (selectorPtr, selectorLen, classPtr, classLen) => {
+			_ui_queryRemoveClass: (selectorPtr, selectorLen, classPtr, classLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const cls = readString(classPtr, classLen);
 				document.querySelectorAll(selector).forEach(el => el.classList.remove(cls));
 				return 0;
 			},
 
-			_ui_filter_by_attr: (selectorPtr, selectorLen, attrPtr, attrLen, valPtr, valLen) => {
+			_ui_filterByAttr: (selectorPtr, selectorLen, attrPtr, attrLen, valPtr, valLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const attr = readString(attrPtr, attrLen);
 				const val = readString(valPtr, valLen);
@@ -337,7 +337,7 @@
 				return 0;
 			},
 
-			_ui_filter_by_text: (selectorPtr, selectorLen, nameAttrPtr, nameAttrLen, descAttrPtr, descAttrLen, queryPtr, queryLen) => {
+			_ui_filterByText: (selectorPtr, selectorLen, nameAttrPtr, nameAttrLen, descAttrPtr, descAttrLen, queryPtr, queryLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const nameAttr = readString(nameAttrPtr, nameAttrLen);
 				const descAttr = readString(descAttrPtr, descAttrLen);
@@ -356,7 +356,7 @@
 
 			// ========== IntersectionObserver ==========
 
-			_ui_observe_visible: (selectorPtr, selectorLen, classPtr, classLen) => {
+			_ui_observeVisible: (selectorPtr, selectorLen, classPtr, classLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const cls = readString(classPtr, classLen);
 				if (!('IntersectionObserver' in window)) {
@@ -377,7 +377,7 @@
 
 			// ========== Timers ==========
 
-			_ui_set_timeout: (handlerIdx, delayMs) => {
+			_ui_setTimeout: (handlerIdx, delayMs) => {
 				setTimeout(() => {
 					const fn = instance.exports['handle_event_' + handlerIdx];
 					if (fn) {
@@ -404,7 +404,7 @@
 			heapPtr = instance.exports.__heap_ptr.value;
 		}
 
-		// Call _start — registers event handlers via _ui_on_event
+		// Call _start — registers event handlers via _ui_onEvent
 		if (instance.exports._start) {
 			instance.exports._start();
 		} else if (instance.exports.start) {
