@@ -1,57 +1,6 @@
 // Integration Test: frame.ui + frame.client working together
 // Tests the complete flow: UI events -> form reads -> API calls -> UI updates
 
-functions:
-	// Test UI event triggers API call
-	boolean testEventToApiFlow()
-		string flow = "ui.onEvent(btn, click, loadData) -> loadData() calls api.get(url, onLoaded)"
-		return flow.contains("ui.onEvent") and flow.contains("api.get")
-
-	// Test form read + API submit flow
-	boolean testFormToApiFlow()
-		string flow = "ui.formJson(#form) reads form -> api.post(url, body, onCreated) sends data"
-		return flow.contains("ui.formJson") and flow.contains("api.post")
-
-	// Test API response updates DOM
-	boolean testApiResponseUpdatesUi()
-		string flow = "onLoaded() { name = api.json(\"name\"); ui.updateElement(#name, name) }"
-		return flow.contains("api.json") and flow.contains("ui.updateElement")
-
-	// Test auth + protected API call
-	boolean testAuthProtectedApiCall()
-		string flow = "api.auth(bearer, token) -> api.get(/protected, onData) includes Authorization header"
-		return flow.contains("api.auth") and flow.contains("Authorization")
-
-	// Test error handling: API fail updates UI
-	boolean testApiErrorUpdatesUi()
-		string flow = "if api.ok() == 0 then ui.updateElement(#error, api.json(\"message\"))"
-		return flow.contains("api.ok()") and flow.contains("ui.updateElement") and flow.contains("#error")
-
-	// Test polling: setTimeout + API call loop
-	boolean testPollingPattern()
-		string flow = "onStats() { ui.updateElement(...); ui.setTimeout(pollStats, 30000) } pollStats() { api.get(..., onStats) }"
-		return flow.contains("ui.setTimeout") and flow.contains("api.get") and flow.contains("pollStats")
-
-	// Test form clear after successful submit
-	boolean testFormClearAfterSubmit()
-		string flow = "if api.status() == 201 then ui.setInput(#name, \"\") and ui.setInput(#email, \"\")"
-		return flow.contains("api.status()") and flow.contains("ui.setInput")
-
-	// Test live connection status in UI
-	boolean testLiveStatusInUi()
-		string flow = "onChatClosed() { ui.addClass(#status, offline); ui.setTimeout(reconnect, 5000) }"
-		return flow.contains("ui.addClass") and flow.contains("ui.setTimeout") and flow.contains("reconnect")
-
-	// Test feed events update UI
-	boolean testFeedUpdatesUi()
-		string flow = "onProgress() { pct = feed.data(); ui.updateAttr(#bar, style, width:pct%) }"
-		return flow.contains("feed.data()") and flow.contains("ui.updateAttr")
-
-	// Test separate imports for each plugin
-	boolean testSeparateImports()
-		string code = "import frame.ui\nimport frame.client"
-		return code.contains("import frame.ui") and code.contains("import frame.client")
-
 start:
 	printl("=== Integration Test: UI + Client ===")
 	printl("")
@@ -131,3 +80,54 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test UI event triggers API call
+	boolean testEventToApiFlow()
+		string flow = "ui.onEvent(btn, click, loadData) -> loadData() calls api.get(url, onLoaded)"
+		return flow.contains("ui.onEvent") and flow.contains("api.get")
+
+	// Test form read + API submit flow
+	boolean testFormToApiFlow()
+		string flow = "ui.formJson reads form then api.post sends data via onCreated handler"
+		return flow.contains("ui.formJson") and flow.contains("api.post")
+
+	// Test API response updates DOM
+	boolean testApiResponseUpdatesUi()
+		string flow = "onLoaded calls api.json to get path then ui.updateElement to show name"
+		return flow.contains("api.json") and flow.contains("ui.updateElement")
+
+	// Test auth + protected API call
+	boolean testAuthProtectedApiCall()
+		string flow = "api.auth sets bearer token then api.get includes Authorization header"
+		return flow.contains("api.auth") and flow.contains("Authorization")
+
+	// Test error handling: API fail updates UI
+	boolean testApiErrorUpdatesUi()
+		string flow = "if api.ok() is 0 then ui.updateElement shows error from api.json response"
+		return flow.contains("api.ok()") and flow.contains("ui.updateElement") and flow.contains("error")
+
+	// Test polling: setTimeout + API call loop
+	boolean testPollingPattern()
+		string flow = "onStats calls ui.updateElement then ui.setTimeout calls pollStats which calls api.get with onStats"
+		return flow.contains("ui.setTimeout") and flow.contains("api.get") and flow.contains("pollStats")
+
+	// Test form clear after successful submit
+	boolean testFormClearAfterSubmit()
+		string flow = "if api.status() is 201 then ui.setInput clears name and ui.setInput clears email"
+		return flow.contains("api.status()") and flow.contains("ui.setInput")
+
+	// Test live connection status in UI
+	boolean testLiveStatusInUi()
+		string flow = "onChatClosed calls ui.addClass for offline status and ui.setTimeout for reconnect"
+		return flow.contains("ui.addClass") and flow.contains("ui.setTimeout") and flow.contains("reconnect")
+
+	// Test feed events update UI
+	boolean testFeedUpdatesUi()
+		string flow = "onProgress calls feed.data() then ui.updateAttr to update progress bar"
+		return flow.contains("feed.data()") and flow.contains("ui.updateAttr")
+
+	// Test separate imports for each plugin
+	boolean testSeparateImports()
+		string code = "import frame.ui\nimport frame.client"
+		return code.contains("import frame.ui") and code.contains("import frame.client")

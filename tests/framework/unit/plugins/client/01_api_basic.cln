@@ -1,47 +1,6 @@
 // Test: frame.client api.* namespace basics
 // Tests that HTTP API bridge functions are correctly declared and callable
 
-functions:
-	// Test api.get signature: (url, handler) -> integer
-	boolean testApiGet()
-		string sig = "api.get(url, handler) -> integer"
-		return sig.contains("api.get") and sig.contains("handler")
-
-	// Test api.post signature: (url, body, handler) -> integer
-	boolean testApiPost()
-		string sig = "api.post(url, body, handler) -> integer"
-		return sig.contains("api.post") and sig.contains("body")
-
-	// Test api.put signature: (url, body, handler) -> integer
-	boolean testApiPut()
-		string sig = "api.put(url, body, handler) -> integer"
-		return sig.contains("api.put")
-
-	// Test api.patch signature: (url, body, handler) -> integer
-	boolean testApiPatch()
-		string sig = "api.patch(url, body, handler) -> integer"
-		return sig.contains("api.patch")
-
-	// Test api.delete signature: (url, handler) -> integer
-	boolean testApiDelete()
-		string sig = "api.delete(url, handler) -> integer"
-		return sig.contains("api.delete") and not sig.contains("body")
-
-	// Test api.header signature: (name, value) -> integer
-	boolean testApiHeader()
-		string sig = "api.header(name, value) -> integer"
-		return sig.contains("api.header") and sig.contains("name") and sig.contains("value")
-
-	// Test api.timeout signature: (ms) -> integer
-	boolean testApiTimeout()
-		string sig = "api.timeout(ms) -> integer"
-		return sig.contains("api.timeout")
-
-	// Test api.submit signature: (formSelector, url, method, handler) -> integer
-	boolean testApiSubmit()
-		string sig = "api.submit(formSelector, url, method, handler) -> integer"
-		return sig.contains("api.submit") and sig.contains("formSelector") and sig.contains("method")
-
 start:
 	printl("=== Test Suite: API Basic (frame.client) ===")
 	printl("")
@@ -107,3 +66,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test api.get signature: (url, handler) -> integer
+	boolean testApiGet()
+		string sig = "api.get(url, handler) -> integer"
+		return sig.contains("api.get") and sig.contains("handler")
+
+	// Test api.post signature: (url, body, handler) -> integer
+	boolean testApiPost()
+		string sig = "api.post(url, body, handler) -> integer"
+		return sig.contains("api.post") and sig.contains("body")
+
+	// Test api.put signature: (url, body, handler) -> integer
+	boolean testApiPut()
+		string sig = "api.put(url, body, handler) -> integer"
+		return sig.contains("api.put")
+
+	// Test api.patch signature: (url, body, handler) -> integer
+	boolean testApiPatch()
+		string sig = "api.patch(url, body, handler) -> integer"
+		return sig.contains("api.patch")
+
+	// Test api.delete signature: (url, handler) -> integer
+	boolean testApiDelete()
+		string sig = "api.delete(url, handler) -> integer"
+		return sig.contains("api.delete") and not sig.contains("body")
+
+	// Test api.header signature: (name, value) -> integer
+	boolean testApiHeader()
+		string sig = "api.header(name, value) -> integer"
+		return sig.contains("api.header") and sig.contains("name") and sig.contains("value")
+
+	// Test api.timeout signature: (ms) -> integer
+	boolean testApiTimeout()
+		string sig = "api.timeout(ms) -> integer"
+		return sig.contains("api.timeout")
+
+	// Test api.submit signature: (formSelector, url, method, handler) -> integer
+	boolean testApiSubmit()
+		string sig = "api.submit(formSelector, url, method, handler) -> integer"
+		return sig.contains("api.submit") and sig.contains("formSelector") and sig.contains("method")

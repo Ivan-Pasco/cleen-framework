@@ -1,62 +1,6 @@
 // Test: frame.client feed.* SSE namespace
 // Tests Server-Sent Events connection, named events, and context
 
-functions:
-	// Test feed.open signature
-	boolean testFeedOpen()
-		string sig = "feed.open(url, onMessage, onError) -> integer connId"
-		return sig.contains("feed.open") and sig.contains("onMessage") and sig.contains("onError")
-
-	// Test feed.open has no onClose (SSE auto-reconnects)
-	boolean testFeedNoOnClose()
-		string sig = "feed.open(url, onMessage, onError)"
-		return not sig.contains("onClose")
-
-	// Test feed.on for named events
-	boolean testFeedOn()
-		string sig = "feed.on(connId, eventName, handler) -> integer"
-		return sig.contains("feed.on") and sig.contains("eventName") and sig.contains("handler")
-
-	// Test feed.close
-	boolean testFeedClose()
-		string sig = "feed.close(connId) -> integer"
-		return sig.contains("feed.close") and sig.contains("connId")
-
-	// Test feed.data context function
-	boolean testFeedData()
-		string sig = "feed.data() -> string (event data)"
-		return sig.contains("feed.data")
-
-	// Test feed.eventType context function
-	boolean testFeedEventType()
-		string sig = "feed.eventType() -> string (event type name)"
-		return sig.contains("feed.eventType")
-
-	// Test feed.lastId context function
-	boolean testFeedLastId()
-		string sig = "feed.lastId() -> string (last event ID)"
-		return sig.contains("feed.lastId")
-
-	// Test feed.connId context function
-	boolean testFeedConnId()
-		string sig = "feed.connId() -> integer"
-		return sig.contains("feed.connId")
-
-	// Test named events dispatch to different handlers
-	boolean testNamedEventDispatch()
-		string behavior = "feed.on(conn, \"progress\", onProgress) dispatches progress events to onProgress"
-		return behavior.contains("dispatches") and behavior.contains("onProgress")
-
-	// Test default message event goes to onMessage handler
-	boolean testDefaultMessageEvent()
-		string behavior = "SSE event without event: field dispatches to onMessage from feed.open"
-		return behavior.contains("without event:") and behavior.contains("onMessage")
-
-	// Test SSE auto-reconnect behavior
-	boolean testAutoReconnect()
-		string behavior = "EventSource auto-reconnects on disconnect. onError fires on each attempt."
-		return behavior.contains("auto-reconnects") and behavior.contains("onError fires")
-
 start:
 	printl("=== Test Suite: Feed SSE (frame.client) ===")
 	printl("")
@@ -143,3 +87,59 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test feed.open signature
+	boolean testFeedOpen()
+		string sig = "feed.open(url, onMessage, onError) -> integer connId"
+		return sig.contains("feed.open") and sig.contains("onMessage") and sig.contains("onError")
+
+	// Test feed.open has no onClose (SSE auto-reconnects)
+	boolean testFeedNoOnClose()
+		string sig = "feed.open(url, onMessage, onError)"
+		return not sig.contains("onClose")
+
+	// Test feed.on for named events
+	boolean testFeedOn()
+		string sig = "feed.on(connId, eventName, handler) -> integer"
+		return sig.contains("feed.on") and sig.contains("eventName") and sig.contains("handler")
+
+	// Test feed.close
+	boolean testFeedClose()
+		string sig = "feed.close(connId) -> integer"
+		return sig.contains("feed.close") and sig.contains("connId")
+
+	// Test feed.data context function
+	boolean testFeedData()
+		string sig = "feed.data() -> string (event data)"
+		return sig.contains("feed.data")
+
+	// Test feed.eventType context function
+	boolean testFeedEventType()
+		string sig = "feed.eventType() -> string (event type name)"
+		return sig.contains("feed.eventType")
+
+	// Test feed.lastId context function
+	boolean testFeedLastId()
+		string sig = "feed.lastId() -> string (last event ID)"
+		return sig.contains("feed.lastId")
+
+	// Test feed.connId context function
+	boolean testFeedConnId()
+		string sig = "feed.connId() -> integer"
+		return sig.contains("feed.connId")
+
+	// Test named events dispatch to different handlers
+	boolean testNamedEventDispatch()
+		string behavior = "feed.on(conn, \"progress\", onProgress) dispatches progress events to onProgress"
+		return behavior.contains("dispatches") and behavior.contains("onProgress")
+
+	// Test default message event goes to onMessage handler
+	boolean testDefaultMessageEvent()
+		string behavior = "SSE event without event: field dispatches to onMessage from feed.open"
+		return behavior.contains("without event:") and behavior.contains("onMessage")
+
+	// Test SSE auto-reconnect behavior
+	boolean testAutoReconnect()
+		string behavior = "EventSource auto-reconnects on disconnect. onError fires on each attempt."
+		return behavior.contains("auto-reconnects") and behavior.contains("onError fires")

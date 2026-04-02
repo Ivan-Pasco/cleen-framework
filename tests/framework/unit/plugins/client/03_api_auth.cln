@@ -1,47 +1,6 @@
 // Test: frame.client api.* authentication
 // Tests auth persistence and header management
 
-functions:
-	// Test api.auth with bearer scheme
-	boolean testBearerAuth()
-		string call = "api.auth(\"bearer\", token)"
-		return call.contains("bearer")
-
-	// Test api.auth with basic scheme
-	boolean testBasicAuth()
-		string call = "api.auth(\"basic\", credentials)"
-		return call.contains("basic")
-
-	// Test api.clearAuth clears credentials
-	boolean testClearAuth()
-		string call = "api.clearAuth()"
-		return call.contains("clearAuth")
-
-	// Test auth persists across requests
-	boolean testAuthPersistence()
-		string flow = "api.auth sets once, api.get uses it, api.post uses it, api.delete uses it"
-		return flow.contains("sets once") and flow.contains("uses it")
-
-	// Test manual header overrides auth for one request
-	boolean testHeaderOverridesAuth()
-		string flow = "api.header(\"Authorization\", custom) overrides for next request only"
-		return flow.contains("overrides") and flow.contains("next request only")
-
-	// Test api.auth generates correct Authorization header
-	boolean testBearerHeaderFormat()
-		string header = "Authorization: Bearer my-token-123"
-		return header.contains("Bearer ") and header.contains("my-token-123")
-
-	// Test basic auth header format
-	boolean testBasicHeaderFormat()
-		string header = "Authorization: Basic dXNlcjpwYXNz"
-		return header.contains("Basic ")
-
-	// Test auth cleared after clearAuth
-	boolean testAuthCleared()
-		string flow = "api.auth sets token, api.clearAuth removes it, next request has no Authorization"
-		return flow.contains("removes it") and flow.contains("no Authorization")
-
 start:
 	printl("=== Test Suite: API Auth (frame.client) ===")
 	printl("")
@@ -107,3 +66,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test api.auth with bearer scheme
+	boolean testBearerAuth()
+		string call = "api.auth(\"bearer\", token)"
+		return call.contains("bearer")
+
+	// Test api.auth with basic scheme
+	boolean testBasicAuth()
+		string call = "api.auth(\"basic\", credentials)"
+		return call.contains("basic")
+
+	// Test api.clearAuth clears credentials
+	boolean testClearAuth()
+		string call = "api.clearAuth()"
+		return call.contains("clearAuth")
+
+	// Test auth persists across requests
+	boolean testAuthPersistence()
+		string flow = "api.auth sets once, api.get uses it, api.post uses it, api.delete uses it"
+		return flow.contains("sets once") and flow.contains("uses it")
+
+	// Test manual header overrides auth for one request
+	boolean testHeaderOverridesAuth()
+		string flow = "api.header(\"Authorization\", custom) overrides for next request only"
+		return flow.contains("overrides") and flow.contains("next request only")
+
+	// Test api.auth generates correct Authorization header
+	boolean testBearerHeaderFormat()
+		string header = "Authorization: Bearer my-token-123"
+		return header.contains("Bearer ") and header.contains("my-token-123")
+
+	// Test basic auth header format
+	boolean testBasicHeaderFormat()
+		string header = "Authorization: Basic dXNlcjpwYXNz"
+		return header.contains("Basic ")
+
+	// Test auth cleared after clearAuth
+	boolean testAuthCleared()
+		string flow = "api.auth sets token, api.clearAuth removes it, next request has no Authorization"
+		return flow.contains("removes it") and flow.contains("no Authorization")
