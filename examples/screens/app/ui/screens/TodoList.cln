@@ -20,21 +20,20 @@ functions:
 				<button class="btn-clear">Clear All</button>
 			</div>
 
-	handle_event_0()
-		string newItem = _ui_eventValue()
+	addItem()
+		string newItem = ui.eventValue()
 		if newItem != ""
 			items = items + newItem + "\n"
 			itemCount = itemCount + 1
-			integer s = _ui_updateElement("#todo-title", "Todo List (" + itemCount.toString() + " items)")
-			s = _ui_updateElement("#todo-list", "<pre>" + items + "</pre>")
+			integer s = ui.updateElement("#todo-title", "Todo List (" + itemCount.toString() + " items)")
+			s = ui.updateElement("#todo-list", "<pre>" + items + "</pre>")
 
-	handle_event_1()
+	clearAll()
 		items = ""
 		itemCount = 0
-		integer s = _ui_updateElement("#todo-title", "Todo List (0 items)")
-		s = _ui_updateElement("#todo-list", "<pre></pre>")
+		integer s = ui.updateElement("#todo-title", "Todo List (0 items)")
+		s = ui.updateElement("#todo-list", "<pre></pre>")
 
 start:
-	integer s = 0
-	s = _ui_onEvent(".btn-add", "click", 0)
-	s = _ui_onEvent(".btn-clear", "click", 1)
+	integer s = ui.onEvent(".btn-add", "click", addItem)
+	s = ui.onEvent(".btn-clear", "click", clearAll)

@@ -11,63 +11,61 @@ state:
 	boolean darkMode = true
 
 start:
-	integer s = 0
-	s = _ui_onEvent(".btn-increment", "click", 0)
-	s = _ui_onEvent(".btn-decrement", "click", 1)
-	s = _ui_onEvent(".btn-reset", "click", 2)
-	s = _ui_onEvent(".btn-prog-up", "click", 3)
-	s = _ui_onEvent(".btn-prog-down", "click", 4)
-	s = _ui_onEvent(".btn-theme", "click", 5)
+	integer s = ui.onEvent(".btn-increment", "click", increment)
+	s = ui.onEvent(".btn-decrement", "click", decrement)
+	s = ui.onEvent(".btn-reset", "click", resetCount)
+	s = ui.onEvent(".btn-prog-up", "click", progressUp)
+	s = ui.onEvent(".btn-prog-down", "click", progressDown)
+	s = ui.onEvent(".btn-theme", "click", toggleTheme)
 
 functions:
-	update_display()
-		integer s = 0
-		s = _ui_updateElement("#count-value", count.toString())
-		s = _ui_updateElement("#clicks-value", clicks.toString())
-		s = _ui_updateElement("#progress-label", progress.toString() + "% complete")
-		s = _ui_setStyle(".progress-bar", "width", progress.toString() + "%")
+	updateDisplay()
+		integer s = ui.updateElement("#count-value", count.toString())
+		s = ui.updateElement("#clicks-value", clicks.toString())
+		s = ui.updateElement("#progress-label", progress.toString() + "% complete")
+		s = ui.setStyle(".progress-bar", "width", progress.toString() + "%")
 
-	handle_event_0()
+	increment()
 		count = count + 1
 		clicks = clicks + 1
-		update_display()
+		updateDisplay()
 		if count == 10
-			integer s = _ui_updateElement("#status-msg", "Nice! You reached 10!")
+			integer s = ui.updateElement("#status-msg", "Nice! You reached 10!")
 		if count == 50
-			integer s = _ui_updateElement("#status-msg", "On fire! 50!")
+			integer s = ui.updateElement("#status-msg", "On fire! 50!")
 		if count == 100
-			integer s = _ui_updateElement("#status-msg", "LEGENDARY! 100!")
+			integer s = ui.updateElement("#status-msg", "LEGENDARY! 100!")
 
-	handle_event_1()
+	decrement()
 		count = count - 1
 		clicks = clicks + 1
-		update_display()
+		updateDisplay()
 
-	handle_event_2()
+	resetCount()
 		count = 0
 		clicks = clicks + 1
-		update_display()
-		integer s = _ui_updateElement("#status-msg", "Counter reset to zero")
+		updateDisplay()
+		integer s = ui.updateElement("#status-msg", "Counter reset to zero")
 
-	handle_event_3()
+	progressUp()
 		progress = progress + 10
 		clicks = clicks + 1
 		if progress > 100
 			progress = 100
-		update_display()
+		updateDisplay()
 		if progress == 100
-			integer s = _ui_updateElement("#status-msg", "Progress complete!")
+			integer s = ui.updateElement("#status-msg", "Progress complete!")
 
-	handle_event_4()
+	progressDown()
 		progress = progress - 10
 		clicks = clicks + 1
 		if progress < 0
 			progress = 0
-		update_display()
+		updateDisplay()
 
-	handle_event_5()
+	toggleTheme()
 		darkMode = not darkMode
 		clicks = clicks + 1
-		integer s = _ui_toggleClass(".dashboard", "dark")
-		s = _ui_toggleClass(".dashboard", "light")
-		update_display()
+		integer s = ui.toggleClass(".dashboard", "dark")
+		s = ui.toggleClass(".dashboard", "light")
+		updateDisplay()
