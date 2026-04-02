@@ -63,7 +63,7 @@ functions = [
 ]
 ```
 
-**plugins/frame.httpserver/plugin.toml:**
+**plugins/frame.server/plugin.toml:**
 ```toml
 [bridge]
 functions = [

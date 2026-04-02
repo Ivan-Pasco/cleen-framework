@@ -27,7 +27,7 @@ This document describes the **compiler plugin architecture** where plugins are w
 │                         (with plugins: block)                            │
 │                                                                          │
 │   plugins:                                                               │
-│       frame.httpserver                                                   │
+│       frame.server                                                   │
 │       frame.data                                                         │
 │                                                                          │
 │   endpoints:                                                             │
@@ -41,7 +41,7 @@ This document describes the **compiler plugin architecture** where plugins are w
 │                           COMPILER                                       │
 │                                                                          │
 │   1. Parse source file                                                   │
-│   2. Extract plugins: blocks → ["frame.httpserver", "frame.data"]       │
+│   2. Extract plugins: blocks → ["frame.server", "frame.data"]       │
 │   3. Load plugins from ~/.cleen/plugins/                                 │
 │   4. For each framework block (endpoints:, data, html:):                │
 │      → Call plugin.expand_block(name, attrs, body)                      │
@@ -66,7 +66,7 @@ Plugins are installed to `~/.cleen/plugins/<name>/<version>/`:
 
 ```
 ~/.cleen/plugins/
-├── frame.httpserver/
+├── frame.server/
 │   └── 1.0.0/
 │       ├── plugin.toml       # Plugin manifest
 │       └── plugin.wasm       # Compiled plugin
@@ -84,7 +84,7 @@ Plugins are installed to `~/.cleen/plugins/<name>/<version>/`:
 
 ```toml
 [plugin]
-name = "frame.httpserver"
+name = "frame.server"
 version = "1.0.0"
 description = "HTTP server plugin for Clean Language - provides server, endpoints, and middleware DSL blocks"
 author = "Clean Language Team"
@@ -131,7 +131,7 @@ implicit_import = true
 Plugins are written in Clean Language and export an `expand_block` function:
 
 ```clean
-// plugins/frame.httpserver/src/main.cln
+// plugins/frame.server/src/main.cln
 
 // Main entry point - called by compiler for each framework block
 expand_block(block_name: string, attributes: string, body: string) -> string
@@ -181,7 +181,7 @@ Plugins are loaded through two mechanisms:
 ```clean
 // app.cln
 plugins:
-    frame.httpserver
+    frame.server
     frame.data
 ```
 
@@ -189,7 +189,7 @@ plugins:
 
 ```clean
 // app/backend/api/users.cln
-// No explicit import statement needed — frame.httpserver is declared in app.cln
+// No explicit import statement needed — frame.server is declared in app.cln
 // and processes this file because app/backend/api/ is in its owned folders
 
 endpoints:
@@ -198,7 +198,7 @@ endpoints:
             return User.all()
 ```
 
-This tells the compiler to load `frame.httpserver` and `frame.data` plugins.
+This tells the compiler to load `frame.server` and `frame.data` plugins.
 
 > **Note:** The `plugins:` block is specifically for loading framework plugins. File imports use `import "path/to/file.cln"` syntax instead.
 
@@ -417,11 +417,11 @@ functions = [
 ]
 ```
 
-#### Example: frame.httpserver Plugin
+#### Example: frame.server Plugin
 
 ```toml
 [plugin]
-name = "frame.httpserver"
+name = "frame.server"
 version = "1.0.0"
 description = "HTTP server plugin for Clean Language - provides server and endpoints DSL blocks"
 author = "Clean Language Team"
@@ -497,7 +497,7 @@ functions = [
 
 The following Host Bridge functions are available for plugins to declare. See [frame_bridge_contracts.md](frame_bridge_contracts.md) for detailed signatures and JSON formats.
 
-#### HTTP Functions (frame.httpserver)
+#### HTTP Functions (frame.server)
 
 ```clean
 // Server lifecycle
@@ -590,7 +590,7 @@ implicit_import = true
 | Plugin | Owned Folders |
 |--------|---------------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
@@ -599,12 +599,12 @@ implicit_import = true
 
 Folders are created by the CLI at these points:
 
-1. **Project Creation**: `cleen project create myapp --plugins=frame.data,frame.httpserver`
+1. **Project Creation**: `cleen project create myapp --plugins=frame.data,frame.server`
 2. **Plugin Installation**: `cleen plugin add frame.data`
 
 Example output:
 ```bash
-$ cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui
+$ cleen project create myapp --plugins=frame.data,frame.server,frame.ui
 
 Creating project 'myapp'...
   [frame.data] Creating app/data/
@@ -612,10 +612,10 @@ Creating project 'myapp'...
   [frame.data] Creating app/data/queries/
   [frame.data] Creating app/data/migrations/
   [frame.data] Creating app/data/repositories/
-  [frame.httpserver] Creating app/backend/
-  [frame.httpserver] Creating app/backend/api/
-  [frame.httpserver] Creating app/backend/services/
-  [frame.httpserver] Creating app/backend/middleware/
+  [frame.server] Creating app/backend/
+  [frame.server] Creating app/backend/api/
+  [frame.server] Creating app/backend/services/
+  [frame.server] Creating app/backend/middleware/
   [frame.ui] Creating app/pages/
   [frame.ui] Creating app/components/
   [frame.ui] Creating app/layouts/
@@ -754,7 +754,7 @@ The language server detects active plugins using these methods (in order):
 
    [plugins]
    frame.data = "2.0.0"
-   frame.httpserver = "2.0.0"
+   frame.server = "2.0.0"
    frame.ui = "2.1.0"
    ```
 
@@ -762,12 +762,12 @@ The language server detects active plugins using these methods (in order):
    ```clean
    plugins:
        frame.data
-       frame.httpserver
+       frame.server
    ```
 
 3. **Folder ownership** (for per-file plugin routing)
    - File in `app/data/` → routed to frame.data (must be declared in app.cln or project.toml)
-   - File in `app/backend/` → routed to frame.httpserver (must be declared)
+   - File in `app/backend/` → routed to frame.server (must be declared)
    - File in `app/auth/` → routed to frame.auth (must be declared)
    - File in `app/canvas/` → routed to frame.canvas (must be declared)
    - File in `app/pages/` or `app/components/` → routed to frame.ui (must be declared)
@@ -841,7 +841,7 @@ echo "Built $(basename $(pwd)) plugin → plugin.wasm"
 
 ## 8. Official Frame Plugins
 
-### frame.httpserver
+### frame.server
 
 Handles HTTP server DSL blocks. Must be declared in `app.cln`. Files in `app/backend/`, `app/backend/api/`, `app/backend/services/`, and `app/backend/middleware/` are processed by this plugin without needing per-file import statements.
 
@@ -851,13 +851,13 @@ Handles HTTP server DSL blocks. Must be declared in `app.cln`. Files in `app/bac
 ```clean
 // app.cln
 plugins:
-    frame.httpserver
+    frame.server
 ```
 
 **Usage (no import statement needed — file is in app/backend/api/):**
 ```clean
 // app/backend/api/users.cln
-// frame.httpserver is declared in app.cln and owns this folder
+// frame.server is declared in app.cln and owns this folder
 
 endpoints:
     GET /users:
@@ -969,11 +969,11 @@ cln compile app.cln -o app.wasm --plugins --plugin-dir ./local-plugins/
 ### Plugin Management (via cleen)
 
 ```bash
-cleen plugin add frame.httpserver          # Install from registry
-cleen plugin add frame.httpserver@1.0.0    # Specific version
+cleen plugin add frame.server          # Install from registry
+cleen plugin add frame.server@1.0.0    # Specific version
 cleen plugin add ./my-plugin               # Local plugin
 cleen plugin list                              # List installed
-cleen plugin remove frame.httpserver           # Uninstall
+cleen plugin remove frame.server           # Uninstall
 cleen plugin create my-plugin                  # Scaffold new plugin
 cleen plugin build                             # Build current plugin
 ```

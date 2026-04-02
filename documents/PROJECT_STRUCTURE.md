@@ -17,7 +17,7 @@ my-project/
 │   │       └── [slug].cln       # Companion loader
 │   ├── components/              # Reusable UI components (.cln)  → frame.ui
 │   ├── layouts/                 # Page layout wrappers (.html)   → frame.ui
-│   ├── backend/                 # HTTP server layer              → frame.httpserver
+│   ├── backend/                 # HTTP server layer              → frame.server
 │   │   ├── api/                 # HTTP endpoint handlers (.cln)
 │   │   ├── services/            # Business logic (.cln)
 │   │   └── middleware/          # Request filters (.cln)
@@ -44,7 +44,7 @@ Plugins must be declared in `app.cln` via the `plugins:` block. Once declared, f
 | Path Pattern | Owning Plugin |
 |---|---|
 | `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
-| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.httpserver` |
+| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.server` |
 | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `frame.data` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
@@ -143,7 +143,7 @@ Page layout wrappers referenced by pages via `<page layout="name">`. Owned by `f
 
 ### `app/backend/api/`
 
-HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.httpserver`.
+HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.server`.
 
 **Example endpoint:**
 ```clean
@@ -237,7 +237,7 @@ The top-level `app.cln` file declares plugins. This is required.
 // app.cln
 plugins:
 	frame.ui
-	frame.httpserver
+	frame.server
 	frame.data
 	frame.auth
 ```
@@ -246,7 +246,7 @@ plugins:
 
 ```bash
 # Create project
-cleen project create my-app --plugins=frame.httpserver,frame.data,frame.ui,frame.auth
+cleen project create my-app --plugins=frame.server,frame.data,frame.ui,frame.auth
 
 # Compile
 cln compile app.cln -o dist/app.wasm --plugins

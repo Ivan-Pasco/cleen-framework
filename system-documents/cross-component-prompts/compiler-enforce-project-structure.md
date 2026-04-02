@@ -365,7 +365,7 @@ pub mod enforcement;
 ## Testing Strategy
 
 1. **Unit tests for enforcement.rs**: Create programs with restricted function calls, verify warnings/errors are emitted
-2. **Integration test**: Compile a file using raw `_http_route()` with frame.httpserver plugin loaded, verify warning is emitted
+2. **Integration test**: Compile a file using raw `_http_route()` with frame.server plugin loaded, verify warning is emitted
 3. **Backward compat test**: Compile existing examples to verify they don't get false positives (they use `endpoints:` blocks properly)
 4. **Severity test**: Set severity to "error" in a test manifest, verify compilation fails for restricted functions
 

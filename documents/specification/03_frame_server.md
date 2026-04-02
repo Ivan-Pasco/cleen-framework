@@ -28,7 +28,7 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 
 ## 3. File Layout
 ```
-/app/backend/            # Owned by frame.httpserver plugin
+/app/backend/            # Owned by frame.server plugin
 /app/backend/api/*.cln   # API modules using `endpoints:`
 /app/backend/services/   # Business logic services
 /app/backend/middleware/ # Custom middleware
@@ -41,7 +41,7 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 /public/*                # Static assets
 ```
 
-**Plugin Folder Ownership:** Files placed in `app/backend/`, `app/backend/api/`, or `app/backend/services/` are processed by the `frame.httpserver` plugin. The plugin must be declared in `app.cln` via the `plugins:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
+**Plugin Folder Ownership:** Files placed in `app/backend/`, `app/backend/api/`, or `app/backend/services/` are processed by the `frame.server` plugin. The plugin must be declared in `app.cln` via the `plugins:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
 
 ---
 

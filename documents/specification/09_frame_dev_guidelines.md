@@ -62,7 +62,7 @@ myapp/
     ├── layouts/            # Page layout wrappers (frame.ui)
     │   └── main.html
     │
-    ├── backend/            # HTTP server (frame.httpserver)
+    ├── backend/            # HTTP server (frame.server)
     │   ├── api/            # API endpoints
     │   │   └── users.cln
     │   ├── services/       # Business logic
@@ -85,7 +85,7 @@ myapp/
 
 Plugin Folder Ownership:
 - frame.ui → app/pages/, app/components/, app/layouts/
-- frame.httpserver → app/backend/, app/backend/api/, app/backend/services/, app/backend/middleware/
+- frame.server → app/backend/, app/backend/api/, app/backend/services/, app/backend/middleware/
 - frame.data → app/data/, app/data/models/, app/data/queries/, app/data/migrations/, app/data/repositories/
 - frame.auth → app/auth/
 - frame.canvas → app/canvas/, app/canvas/scenes/, app/canvas/sprites/, app/canvas/audio/

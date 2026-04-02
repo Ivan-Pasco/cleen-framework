@@ -3,7 +3,7 @@
 
 plugins:
 	frame.data
-	frame.httpserver
+	frame.server
 	frame.auth
 	frame.ui
 	frame.canvas

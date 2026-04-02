@@ -131,7 +131,7 @@ Call site expands strings before calling wrapper, causing double expansion.
 - `src/plugins/registry.rs` - Registers bridge functions from plugin.toml
 
 ### Framework
-- `plugins/frame.httpserver/plugin.toml` - Declares `_http_route` with `expand_strings = true`
+- `plugins/frame.server/plugin.toml` - Declares `_http_route` with `expand_strings = true`
 - `plugins/frame.data/plugin.toml` - Declares `_db_query`, `_db_execute` with `expand_strings = true`
 
 ### Server
@@ -203,7 +203,7 @@ if self.is_expand_strings_bridge_function(&func_name) {
 **Source:** `test-http-route.cln`
 ```clean
 import:
-	frame.httpserver
+	frame.server
 
 start()
 	printl("Testing _http_route")

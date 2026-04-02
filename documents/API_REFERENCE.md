@@ -619,18 +619,18 @@ cleen db:rollback  # Roll back last migration
 
 ## Frame Server
 
-**Plugin:** `frame.httpserver`
+**Plugin:** `frame.server`
 **Owned folders:** `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/`
 **Handled blocks:** `server`, `endpoints`
 **Spec:** [03_frame_server.md](specification/03_frame_server.md)
 
 ### Plugin Registration
 
-Files placed in `app/backend/` are processed by `frame.httpserver` automatically. For explicit registration:
+Files placed in `app/backend/` are processed by `frame.server` automatically. For explicit registration:
 
 ```clean
 plugins:
-    frame.httpserver
+    frame.server
 ```
 
 ### Endpoint Blocks
@@ -1784,7 +1784,7 @@ app/
 ├── layouts/                # frame.ui → Page layout wrappers (.cln)
 │   └── MainLayout.cln
 │
-├── backend/                # frame.httpserver → API and server logic
+├── backend/                # frame.server → API and server logic
 │   ├── api/                # HTTP endpoint handlers (.cln)
 │   │   ├── users.cln
 │   │   └── posts.cln
@@ -1826,7 +1826,7 @@ Plugins must be declared in `app.cln` via the `plugins:` block. Files in plugin-
 
 | Path Pattern | Owning Plugin |
 |--------------|---------------|
-| `app/backend/`, `app/backend/api/` | `frame.httpserver` |
+| `app/backend/`, `app/backend/api/` | `frame.server` |
 | `app/data/` | `frame.data` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/` | `frame.canvas` |

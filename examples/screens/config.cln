@@ -3,7 +3,7 @@
 
 plugins:
 	frame.ui
-	frame.httpserver
+	frame.server
 
 functions:
 	string getConfig()

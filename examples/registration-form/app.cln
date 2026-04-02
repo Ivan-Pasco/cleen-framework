@@ -3,7 +3,7 @@
 
 plugins:
 	frame.ui
-	frame.httpserver
+	frame.server
 
 config:
 	name: "Registration Form"

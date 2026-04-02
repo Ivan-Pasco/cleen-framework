@@ -61,7 +61,7 @@ Plugins are installed to `~/.cleen/plugins/<name>/<version>/`:
 
 ```
 ~/.cleen/plugins/
-├── frame.httpserver/
+├── frame.server/
 │   └── 1.0.0/
 │       ├── plugin.toml       # Plugin manifest
 │       └── plugin.wasm       # Compiled plugin
@@ -285,16 +285,16 @@ cleen plugin publish
 
 Plugins are loaded via the `plugins:` block in `app.cln`. This declaration is always required. There are no `import:` blocks for plugins. When `implicit_import = true` is set in a plugin's `plugin.toml`, individual source files in the plugin's owned folders do not need to declare the plugin themselves — it is already declared in `app.cln` and the compiler knows which folders it owns.
 
-### frame.httpserver
+### frame.server
 
 **Blocks:** `endpoints`
 
-**Source:** `plugins/frame.httpserver/src/main.cln`
+**Source:** `plugins/frame.server/src/main.cln`
 
 **Owned Folders:** `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/`
 
 ```clean
-// frame.httpserver plugin - HTTP server and routing DSL
+// frame.server plugin - HTTP server and routing DSL
 
 expand_block(block_name: string, attributes: string, body: string) -> string
     if block_name == "server"
@@ -325,7 +325,7 @@ functions:
 ```clean
 // app.cln
 plugins:
-    frame.httpserver
+    frame.server
 
 server: port=3000
     endpoints:
@@ -340,7 +340,7 @@ server: port=3000
 
 ```clean
 // app/backend/api/users.cln
-// No import needed — frame.httpserver declared in app.cln, processes files in this folder
+// No import needed — frame.server declared in app.cln, processes files in this folder
 
 endpoints:
     GET /users
@@ -507,7 +507,7 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 │       plugins:                                                   │
 │           frame.ui                                               │
 │           frame.data                                             │
-│           frame.httpserver                                       │
+│           frame.server                                       │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -537,7 +537,7 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 |--------|---------------|------------|---------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` | `.html`, `.cln` | Pages, components, layouts |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `.cln` | Data models, ORM, queries, migrations |
-| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `.cln` | HTTP server, API routes, endpoints |
+| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `.cln` | HTTP server, API routes, endpoints |
 | `frame.auth` | `app/auth/` | `.cln` | Auth configuration |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `.cln` | Canvas rendering, animation, sprites, audio |
 
@@ -559,14 +559,14 @@ myapp/
     │   └── Card.cln            # Processed by frame.ui (no import needed)
     ├── layouts/                # Owned by frame.ui
     │   └── main.html           # Layout wrapper
-    ├── backend/                # Owned by frame.httpserver
+    ├── backend/                # Owned by frame.server
     │   ├── api/
-    │   │   ├── users.cln       # Processed by frame.httpserver (no import needed)
-    │   │   └── posts.cln       # Processed by frame.httpserver (no import needed)
+    │   │   ├── users.cln       # Processed by frame.server (no import needed)
+    │   │   └── posts.cln       # Processed by frame.server (no import needed)
     │   ├── services/
-    │   │   └── email.cln       # Processed by frame.httpserver (no import needed)
+    │   │   └── email.cln       # Processed by frame.server (no import needed)
     │   └── middleware/
-    │       └── cors.cln        # Processed by frame.httpserver (no import needed)
+    │       └── cors.cln        # Processed by frame.server (no import needed)
     ├── data/                   # Owned by frame.data
     │   ├── User.cln            # Processed by frame.data (no import needed)
     │   ├── Post.cln            # Processed by frame.data (no import needed)
@@ -617,7 +617,7 @@ The Clean Language compiler resolves which plugin processes each source file by 
 
 | File Path Pattern | Owning Plugin (when declared in app.cln) |
 |-------------------|------------------------------------------|
-| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.httpserver` |
+| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.server` |
 | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `frame.data` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
@@ -633,14 +633,14 @@ The Clean Language compiler resolves which plugin processes each source file by 
 **Example — file in an owned folder:**
 
 ```clean
-// app.cln — frame.httpserver must be declared here
+// app.cln — frame.server must be declared here
 plugins:
-    frame.httpserver
+    frame.server
 ```
 
 ```clean
 // File: app/backend/api/users.cln
-// No import statement needed — frame.httpserver declared in app.cln, owns this folder
+// No import statement needed — frame.server declared in app.cln, owns this folder
 
 endpoints:
     GET /users
@@ -651,7 +651,7 @@ endpoints:
         return json({"ok": true})
 ```
 
-**Important:** If `frame.httpserver` is not declared in `app.cln`, no plugin will process this file regardless of its folder path.
+**Important:** If `frame.server` is not declared in `app.cln`, no plugin will process this file regardless of its folder path.
 
 ### Folder Priority Rules
 

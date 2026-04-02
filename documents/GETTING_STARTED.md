@@ -18,7 +18,7 @@ cleen server install
 ## Create a New Project
 
 ```bash
-cleen project create my-app --plugins=frame.httpserver,frame.data,frame.ui,frame.auth
+cleen project create my-app --plugins=frame.server,frame.data,frame.ui,frame.auth
 cd my-app
 ```
 
@@ -33,7 +33,7 @@ my-app/
     │   └── index.html       # Home page (/)
     ├── components/          # Reusable UI components (.cln) → frame.ui
     ├── layouts/             # Page layout wrappers (.html) → frame.ui
-    ├── backend/             # HTTP server layer           → frame.httpserver
+    ├── backend/             # HTTP server layer           → frame.server
     │   ├── api/             # HTTP endpoints (.cln)
     │   ├── services/        # Business logic (.cln)
     │   └── middleware/      # Request filters (.cln)
@@ -181,8 +181,8 @@ Models are auto-discovered and available in your pages and API endpoints.
 | `app/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
 | `app/components/` | Reusable components (.cln) | frame.ui |
 | `app/layouts/` | Page layouts (.html) | frame.ui |
-| `app/backend/api/` | HTTP endpoints (.cln) | frame.httpserver |
-| `app/backend/services/` | Business logic (.cln) | frame.httpserver |
+| `app/backend/api/` | HTTP endpoints (.cln) | frame.server |
+| `app/backend/services/` | Business logic (.cln) | frame.server |
 | `app/data/models/` | Data model definitions (.cln) | frame.data |
 | `app/data/migrations/` | Schema migrations (.cln) | frame.data |
 | `app/auth/` | Auth configuration (.cln) | frame.auth |

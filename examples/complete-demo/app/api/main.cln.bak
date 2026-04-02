@@ -2,7 +2,7 @@
 // API endpoints for user management
 
 plugins:
-	frame.httpserver
+	frame.server
 
 endpoints Api:
 	// Register a new user

@@ -142,7 +142,7 @@ The app will query the database and display articles from the `articles` table.
 - ✅ Compiler v0.20.8 - Working correctly
 - ✅ clean-server v0.2.2 - Working correctly
 - ✅ frame.data plugin v1.0.0 - Working correctly
-- ✅ frame.httpserver plugin v1.0.0 - Working correctly
+- ✅ frame.server plugin v1.0.0 - Working correctly
 
 ## Lessons Learned
 

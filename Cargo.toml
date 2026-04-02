@@ -15,7 +15,7 @@ members = []
 #
 # See plugins/ directory for the new Clean Language plugin sources:
 #   - plugins/frame.data/      - ORM and database DSL
-#   - plugins/frame.httpserver/ - HTTP server and API endpoints
+#   - plugins/frame.server/ - HTTP server and API endpoints
 #   - plugins/frame.auth/       - Authentication and authorization
 #   - plugins/frame.ui/         - UI components and SSR rendering
 #   - plugins/frame.canvas/     - Canvas graphics and games

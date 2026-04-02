@@ -22,6 +22,7 @@ It helps development tools locate relevant files, understand module boundaries, 
 | 11 | [11_database_plugins.md](11_database_plugins.md) | Database plugin architecture, C-ABI interface, runtime drivers |
 | 12 | [12_frame_canvas.md](12_frame_canvas.md) | Canvas rendering, animation, drawing primitives, bridge functions |
 | 13 | [13_frame_future_evolution.md](13_frame_future_evolution.md) | Roadmap, research directions, versioning policy |
+| 14 | [14_frame_ui_client_communication.md](14_frame_ui_client_communication.md) | Client-side communication via frame.client plugin (api.*, live.*, feed.* namespaces) |
 | -- | [frame_bridge_contracts.md](frame_bridge_contracts.md) | Host Bridge JSON contracts, WASM imports, platform availability |
 
 ---
@@ -38,6 +39,7 @@ Each Frame subsystem has a clear boundary and relies on the Host Bridge as the s
 │  Server           (03) ──▶ Host Bridge     │
 │  Data / ORM       (04) ──▶ DB + Env        │
 │  UI               (05) ──▶ HTTP + FS       │
+│  Client Comm      (14) ──▶ api/live/feed   │
 │  Auth             (06) ──▶ Crypto + Env    │
 │  Plugins          (07) ──▶ All Layers      │
 │  Platforms        (08) ──▶ Host Wrappers   │
@@ -55,6 +57,7 @@ Each Frame subsystem has a clear boundary and relies on the Host Bridge as the s
 |--------|-----------|----------|
 | CLI | Compiler, Config | Build, serve, test commands |
 | Server | WASM runtime, Bridge | Routing, SSR, API execution |
+| Client | Browser runtime | api.*, live.*, feed.* communication |
 | Data | DB Bridge | ORM, schema migration, validation |
 | UI | Server, Bridge | SSR/CSR, components, hydration |
 | Auth | Crypto, Env, Data | Sessions, JWT, role management |
@@ -75,10 +78,10 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 /app/pages/*.cln               → Companion data loaders (paired by filename: load/guard)   [frame.ui]
 /app/components/*.cln          → Reusable UI components                                    [frame.ui]
 /app/layouts/*.html            → Page layout wrappers                                      [frame.ui]
-/app/backend/*.cln             → Server entry points                                       [frame.httpserver]
-/app/backend/api/*.cln         → HTTP API endpoints                                        [frame.httpserver]
-/app/backend/services/*.cln    → Business logic services                                   [frame.httpserver]
-/app/backend/middleware/*.cln  → Request middleware                                        [frame.httpserver]
+/app/backend/*.cln             → Server entry points                                       [frame.server]
+/app/backend/api/*.cln         → HTTP API endpoints                                        [frame.server]
+/app/backend/services/*.cln    → Business logic services                                   [frame.server]
+/app/backend/middleware/*.cln  → Request middleware                                        [frame.server]
 /app/data/*.cln                → Data models / ORM                                         [frame.data]
 /app/data/models/*.cln         → Model definitions                                         [frame.data]
 /app/data/queries/*.cln        → Reusable query definitions                                [frame.data]
@@ -100,7 +103,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 | Plugin | Owned Paths |
 |--------|-------------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
@@ -111,7 +114,7 @@ Each plugin responds to specific top-level block keywords in `.cln` files:
 
 | Plugin | Block Keywords |
 |--------|----------------|
-| `frame.httpserver` | `endpoints` |
+| `frame.server` | `endpoints` |
 | `frame.data` | `data` |
 | `frame.auth` | `auth`, `protected`, `login`, `roles` |
 | `frame.ui` | `component`, `screen`, `page`, `html` |
@@ -148,6 +151,7 @@ When AI agents process the repository:
 | Task | Read These Documents |
 |------|---------------------|
 | Generate a new UI component | 05_frame_ui.md |
+| Add client-side communication (api/live/feed) | 14_frame_ui_client_communication.md |
 | Create an API endpoint | 03_frame_server.md + 04_frame_data.md |
 | Extend ORM or migrations | 04_frame_data.md + frame_bridge_contracts.md |
 | Add new plugin hooks | 07_frame_plugins.md + 10_compiler_plugins.md |

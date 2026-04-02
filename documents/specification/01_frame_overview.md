@@ -97,7 +97,7 @@ Frame is divided into three main components:
 1. Developer declares plugins in `app.cln` and writes Clean code with framework blocks in the appropriate folder:
    ```clean
    // app/backend/api/hello.cln
-   // No import needed — frame.httpserver is declared in app.cln and owns this folder
+   // No import needed — frame.server is declared in app.cln and owns this folder
 
    endpoints:
        GET /hello
@@ -105,7 +105,7 @@ Frame is divided into three main components:
                return json({"message": "Hello World"})
    ```
 
-2. Compiler reads the `plugins:` block in `app.cln`, loads `frame.httpserver`, and uses folder ownership to determine which files that plugin processes
+2. Compiler reads the `plugins:` block in `app.cln`, loads `frame.server`, and uses folder ownership to determine which files that plugin processes
 
 3. Plugin's `expand_block` function transforms each block:
    ```
@@ -122,7 +122,7 @@ Frame is divided into three main components:
 Plugins are managed via the `cleen` CLI:
 
 ```bash
-cleen plugin add frame.httpserver       # Install from registry
+cleen plugin add frame.server       # Install from registry
 cleen plugin add frame.data@1.0.0      # Specific version
 cleen plugin list                       # Show installed
 cleen plugin create my-plugin           # Create new plugin
@@ -217,7 +217,7 @@ myapp/
     ├── layouts/            # Page layout wrappers (frame.ui)
     │   └── main.html
     │
-    ├── backend/            # HTTP server (frame.httpserver)
+    ├── backend/            # HTTP server (frame.server)
     │   ├── api/            # API endpoints
     │   │   ├── users.cln
     │   │   └── posts.cln
@@ -254,7 +254,7 @@ Each plugin declares the folders it owns in its `plugin.toml` file. When a plugi
 | Plugin | Owned Folders |
 |--------|---------------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.httpserver` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
@@ -266,7 +266,7 @@ Plugins **must** be declared in `app.cln` via the `plugins:` block:
 ```clean
 // app.cln
 plugins:
-	frame.httpserver
+	frame.server
 	frame.data
 	frame.auth
 	frame.ui
@@ -276,14 +276,14 @@ Once a plugin is declared, `implicit_import = true` in the plugin's `plugin.toml
 
 | File Location | Plugin that processes it | Import needed? |
 |---------------|--------------------------|----------------|
-| `app/backend/api/users.cln` | `frame.httpserver` (declared in app.cln) | No |
+| `app/backend/api/users.cln` | `frame.server` (declared in app.cln) | No |
 | `app/data/models/User.cln` | `frame.data` (declared in app.cln) | No |
 | `app/auth/auth.cln` | `frame.auth` (declared in app.cln) | No |
 | `app/pages/index.cln` | `frame.ui` (declared in app.cln) | No |
 | `app/components/Header.cln` | `frame.ui` (declared in app.cln) | No |
 | `app/canvas/scenes/main.cln` | `frame.canvas` (declared in app.cln) | No |
 
-This means a file at `app/backend/api/users.cln` does not need to import `frame.httpserver` explicitly — but the plugin must still be declared in `app.cln`.
+This means a file at `app/backend/api/users.cln` does not need to import `frame.server` explicitly — but the plugin must still be declared in `app.cln`.
 
 ### Folder Creation
 
@@ -320,7 +320,7 @@ Host Bridge functions are prefixed with `_` to indicate they are runtime imports
 
 | Plugin | Blocks | Purpose |
 |--------|--------|---------|
-| `frame.httpserver` | endpoints | HTTP routing and API endpoints |
+| `frame.server` | endpoints | HTTP routing and API endpoints |
 | `frame.data` | data | ORM and database |
 | `frame.auth` | auth, protected, login, roles | Authentication and authorization |
 | `frame.ui` | component, screen, page, html | UI components and SSR |
@@ -331,7 +331,7 @@ Host Bridge functions are prefixed with `_` to indicate they are runtime imports
 **`app.cln`** — project entry point:
 ```clean
 plugins:
-	frame.httpserver
+	frame.server
 	frame.data
 	frame.auth
 	frame.ui
@@ -358,7 +358,7 @@ auth:
 		expiry: 86400
 ```
 
-**`app/backend/api/users.cln`** — API endpoints (processed by `frame.httpserver`, declared in app.cln):
+**`app/backend/api/users.cln`** — API endpoints (processed by `frame.server`, declared in app.cln):
 ```clean
 endpoints:
 	POST /login:
@@ -387,7 +387,7 @@ endpoints:
 
 ```bash
 # Install plugins
-cleen plugin add frame.httpserver frame.data frame.auth frame.ui
+cleen plugin add frame.server frame.data frame.auth frame.ui
 
 # Compile with plugins
 cln compile app.cln -o app.wasm --plugins

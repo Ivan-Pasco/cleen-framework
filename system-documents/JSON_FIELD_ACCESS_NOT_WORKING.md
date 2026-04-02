@@ -192,7 +192,7 @@ File: `/tmp/test-json-simple.cln`
 
 ```clean
 import:
-	frame.httpserver
+	frame.server
 
 functions:
 	string __route_handler_0()

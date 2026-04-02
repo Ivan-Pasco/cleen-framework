@@ -1,4 +1,4 @@
-// frame.httpserver plugin - HTTP Server DSL
+// frame.server plugin - HTTP Server DSL
 // Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
 // Version: 2.0.0
 // Implements: Frame Server Specification v1.2

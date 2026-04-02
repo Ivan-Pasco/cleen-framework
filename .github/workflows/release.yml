@@ -48,8 +48,9 @@ jobs:
             ## Included Plugins
 
             - **frame.auth** - Authentication and authorization
+            - **frame.client** - Client-side communication (HTTP, WebSocket, SSE)
             - **frame.data** - ORM and database operations
-            - **frame.httpserver** - HTTP server runtime
+            - **frame.server** - HTTP server runtime
             - **frame.ui** - UI components and rendering
 
             ## What's New
@@ -70,8 +71,9 @@ jobs:
 
           # Copy all plugin directories
           cp -r plugins/frame.auth frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.client frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.data frame-plugins-${{ needs.create-release.outputs.version }}/
-          cp -r plugins/frame.httpserver frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.server frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.ui frame-plugins-${{ needs.create-release.outputs.version }}/
 
           # Create README
@@ -85,8 +87,9 @@ jobs:
 
           Included Plugins:
           - frame.auth - Authentication and authorization
+          - frame.client - Client-side communication (HTTP, WebSocket, SSE)
           - frame.data - ORM and database operations
-          - frame.httpserver - HTTP server runtime
+          - frame.server - HTTP server runtime
           - frame.ui - UI components and rendering
 
           Documentation: https://github.com/Ivan-Pasco/cleen-framework
@@ -136,8 +139,9 @@ jobs:
             "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "plugins": {
               "frame.auth": "included",
+              "frame.client": "included",
               "frame.data": "included",
-              "frame.httpserver": "included",
+              "frame.server": "included",
               "frame.ui": "included"
             },
             "download": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz"

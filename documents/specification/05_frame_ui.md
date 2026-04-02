@@ -848,7 +848,7 @@ app/
 ├── layouts/                 # Layout templates
 │   ├── main.html
 │   └── admin.html
-├── backend/                 # Backend modules (frame.httpserver)
+├── backend/                 # Backend modules (frame.server)
 │   └── api/                 # API endpoint modules
 │       └── users.cln
 ├── data/                    # Data models (frame.data)
@@ -916,25 +916,28 @@ The `loader.js` runtime is the single browser runtime for all Frame UI applicati
 
 ```clean
 start:
-    integer s = 0
-    s = _ui_onEvent(".btn-save", "click", 0)
-    s = _ui_onEvent(".search-input", "input", 1)
+    integer s = ui.onEvent(".btn-save", "click", saveItem)
+    s = ui.onEvent(".search-input", "input", searchCards)
 
 functions:
-    handle_event_0()
-        string value = _ui_eventValue()
-        integer s = _ui_updateElement("#status", "Saved!")
-        s = _ui_setTimeout(2, 2000)
+    saveItem()
+        string value = ui.eventValue()
+        integer s = ui.updateElement("#status", "Saved!")
+        s = ui.setTimeout(clearStatus, 2000)
 
-    handle_event_1()
-        string query = _ui_eventValue()
-        integer s = _ui_filterByText(".card", "data-name", "data-desc", query)
+    searchCards()
+        string query = ui.eventValue()
+        integer s = ui.filterByText(".card", "data-name", "data-desc", query)
 
-    handle_event_2()
-        integer s = _ui_updateElement("#status", "")
+    clearStatus()
+        integer s = ui.updateElement("#status", "")
 ```
 
+Handler parameters accept **function names**, not numbers. The compiler auto-assigns internal indices. See the `handler` type in plugin.toml.
+
 All bridge functions are declared in `plugin.toml` and implemented in `loader.js`. See the Bridge Contracts specification for the complete function reference.
+
+For client-server communication (HTTP, WebSocket, SSE), see [14_frame_ui_client_communication.md](14_frame_ui_client_communication.md) -- the `frame.client` plugin.
 
 ---
 

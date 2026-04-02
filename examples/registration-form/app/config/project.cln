@@ -2,7 +2,7 @@
 // Configuration file
 
 plugins:
-	frame.httpserver
+	frame.server
 	frame.ui
 
 functions:

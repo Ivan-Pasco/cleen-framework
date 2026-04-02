@@ -3,7 +3,7 @@
 
 plugins:
 	frame.data
-	frame.httpserver
+	frame.server
 
 functions:
 	string __route_handler_0()

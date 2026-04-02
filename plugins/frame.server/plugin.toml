@@ -1,7 +1,7 @@
 [plugin]
-name = "frame.httpserver"
-version = "2.0.0"
-description = "HTTP server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
+name = "frame.server"
+version = "2.1.0"
+description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
 
@@ -24,8 +24,8 @@ functions = [
   { name = "_http_listen", params = ["integer"], returns = "integer", description = "Start HTTP server on specified port" },
 
   # HTTP Server - Route Registration
-  { name = "_http_route", params = ["string", "string", "integer"], returns = "integer", description = "Register route: method, path, handler_idx", expand_strings = true },
-  { name = "_http_route_protected", params = ["string", "string", "integer", "string"], returns = "integer", description = "Register protected route with role requirement", expand_strings = true },
+  { name = "_http_route", params = ["string", "string", "handler"], returns = "integer", description = "Register route: method, path, handler function", expand_strings = true },
+  { name = "_http_route_protected", params = ["string", "string", "handler", "string"], returns = "integer", description = "Register protected route with role requirement", expand_strings = true },
 
   # Request Context - Path Parameters
   { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name (e.g., :id)", expand_strings = true },

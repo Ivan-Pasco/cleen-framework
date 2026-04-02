@@ -1,4 +1,4 @@
-# frame.httpserver Plugin
+# frame.server Plugin
 
 HTTP server plugin for Clean Language. Provides DSL blocks for building HTTP servers with routing, request handling, and authentication.
 
@@ -13,7 +13,7 @@ Defines HTTP endpoint handlers using a declarative syntax.
 **Example:**
 ```clean
 import:
-    frame.httpserver
+    frame.server
 
 endpoints:
     GET "/" -> homePage()
@@ -32,7 +32,7 @@ Creates an HTTP server configuration.
 **Example:**
 ```clean
 import:
-    frame.httpserver
+    frame.server
 
 server: port=3000
     route: method="GET" path="/"
@@ -91,5 +91,5 @@ Server-specific functions provided by clean-server:
 ## Installation
 
 ```bash
-cp -r . ~/.cleen/plugins/frame.httpserver/1.0.0/
+cp -r . ~/.cleen/plugins/frame.server/1.0.0/
 ```

@@ -7,7 +7,7 @@ A full-stack Clean Framework application demonstrating all core plugins working 
 - **Database Access** - User model with SQLite using frame.data
 - **Registration Form** - Form validation and submission using frame.ui
 - **Authentication** - Session-based auth with password hashing using frame.auth
-- **API Endpoints** - RESTful API using frame.httpserver
+- **API Endpoints** - RESTful API using frame.server
 - **Canvas Animation** - Interactive particle system using frame.canvas
 
 ## Project Structure
@@ -21,7 +21,7 @@ complete-demo/
 │   │   ├── register.html      # Registration form
 │   │   └── dashboard.html     # User dashboard
 │   │
-│   ├── api/                   # API endpoints (frame.httpserver)
+│   ├── api/                   # API endpoints (frame.server)
 │   │   └── users.cln          # User registration/login/list
 │   │
 │   ├── data/                  # Data models (frame.data)
@@ -86,7 +86,7 @@ User dashboard with:
 ## Plugins Used
 
 1. **frame.data** - ORM for User model
-2. **frame.httpserver** - API endpoints
+2. **frame.server** - API endpoints
 3. **frame.auth** - Authentication & sessions
 4. **frame.ui** - SSR pages & forms
 5. **frame.canvas** - Particle animation
@@ -96,7 +96,7 @@ User dashboard with:
 ### Folder Conventions
 Each folder maps to a specific plugin:
 - `pages/` → frame.ui (HTML pages)
-- `api/` → frame.httpserver (endpoints)
+- `api/` → frame.server (endpoints)
 - `data/` → frame.data (models)
 - `auth/` → frame.auth (config)
 - `canvas/` → frame.canvas (animations)

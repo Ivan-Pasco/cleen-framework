@@ -2,7 +2,7 @@
 // Public endpoint for service health monitoring
 
 plugins:
-	frame.httpserver
+	frame.server
 
 endpoints:
 	GET /health:

@@ -17,7 +17,7 @@ configuration:
         name = "my-app"
 
     plugins:
-    frame.httpserver
+    frame.server
     frame.data
 ```
 
@@ -33,16 +33,16 @@ The compiler transforms `endpoints:` into regular Clean functions that register 
 1. **Install Clean + a plugin using `cleen`:**
 ```bash
 cleen install latest
-cleen plugin add frame.httpserver
+cleen plugin add frame.server
 ```
 
 2. **Declare the plugin in your `app.cln` `plugins:` block:**
 ```clean
 plugins:
-    frame.httpserver
+    frame.server
 ```
 
-Plugins with `implicit_import = true` in their `plugin.toml` allow files inside their owned folders (e.g. `app/backend/api/` for `frame.httpserver`) to skip individual import statements. The plugin declaration in `app.cln` is still required — what's implicit is the per-file import, not the plugin declaration itself.
+Plugins with `implicit_import = true` in their `plugin.toml` allow files inside their owned folders (e.g. `app/backend/api/` for `frame.server`) to skip individual import statements. The plugin declaration in `app.cln` is still required — what's implicit is the per-file import, not the plugin declaration itself.
 
 3. **Use its new blocks:**
 ```clean
@@ -58,7 +58,7 @@ cln build
 The plugin converts the DSL into normal Clean code, and compilation continues normally.
 
 ### 2.2. Types of Plugins
-- **Web/API (`frame.httpserver`):** `server`, `endpoints`
+- **Web/API (`frame.server`):** `server`, `endpoints`
 - **Data/ORM (`frame.data`):** `data` (keyword-based model definition)
 - **UI/Pages (`frame.ui`):** `component`, `screen`, `page`, `html`
 - **Auth (`frame.auth`):** `auth`, `protected`, `login`, `roles`
@@ -81,12 +81,12 @@ cleen list
 ### 3.2. New Plugin Commands
 #### Install a plugin
 ```bash
-cleen plugin add frame.httpserver
+cleen plugin add frame.server
 ```
 
 #### Remove a plugin
 ```bash
-cleen plugin remove frame.httpserver
+cleen plugin remove frame.server
 ```
 
 #### List installed plugins
@@ -106,7 +106,7 @@ project:
     name = "my-app"
 
 plugins:
-    frame.httpserver
+    frame.server
     frame.data
 ```
 
@@ -218,7 +218,7 @@ my-app/
 **Key points:**
 - `app.cln` lives at the **root** and configures the project, compiler, plugins and framework.
 - The `plugins:` block in `app.cln` declares which plugins are active.
-- `app/backend/` and its subfolders are owned by `frame.httpserver` (endpoints, services, middleware).
+- `app/backend/` and its subfolders are owned by `frame.server` (endpoints, services, middleware).
 - `app/data/` and its subfolders are owned by `frame.data`.
 - `app/auth/` is owned by `frame.auth`.
 - `app/pages/`, `app/components/`, and `app/layouts/` are owned by `frame.ui`.
@@ -245,7 +245,7 @@ Each plugin can define the folder(s) it uses. When a framework project is create
 
 Examples:
 
-- `frame.httpserver` (web/API plugin) owns:
+- `frame.server` (web/API plugin) owns:
   - `app/backend/` → HTTP endpoints, services, and middleware.
   - `app/backend/api/` → endpoint handler files.
   - `app/backend/services/` → service layer files.
@@ -344,7 +344,7 @@ configuration:
         version = "latest"
 
     plugins:
-        frame.httpserver
+        frame.server
         frame.ui
 
     framework:
@@ -364,7 +364,7 @@ start:
     // No per-file import statements needed.
 ```
 
-**`app/backend/api/users.cln` (API endpoints owned by `frame.httpserver`)**
+**`app/backend/api/users.cln` (API endpoints owned by `frame.server`)**
 
 ```clean
 endpoints:
@@ -372,7 +372,7 @@ endpoints:
 
 listUsers:
     // Implementation of the handler
-    // This block is expanded by frame.httpserver into normal Clean code.
+    // This block is expanded by frame.server into normal Clean code.
 ```
 
 **`app/pages/home.html` (HTML + custom tags owned by `frame.ui`)**
@@ -396,7 +396,7 @@ In this example:
 
 - `app.cln` declares the project, compiler, plugins and framework via the `plugins:` block.
 - `main.cln` defines `start`, the entrypoint block executed by the framework runtime.
-- `app/backend/api/users.cln` is discovered by `frame.httpserver` (its owned folder) and turned into real endpoint registration code.
+- `app/backend/api/users.cln` is discovered by `frame.server` (its owned folder) and turned into real endpoint registration code.
 - `app/pages/home.html` is discovered by `frame.ui` (its owned folder) and compiled into a renderable page template.
 
 Developers do not need extra boilerplate; they only need to respect the folder structure and file conventions.

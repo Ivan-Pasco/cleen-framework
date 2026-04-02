@@ -27,7 +27,7 @@ Reference: [frame_bridge_contracts.md](documents/specification/frame_bridge_cont
 > **Note:** Bridge functions are *declared* in plugin.toml files and *implemented* in `clean-server`. The plugin declarations are complete. Runtime implementations are tracked in the clean-server repo.
 
 #### HTTP Bridge (`bridge:http`) — 🔀 Tracked in clean-server
-- 🔀 All HTTP bridge functions declared in `frame.httpserver/plugin.toml`
+- 🔀 All HTTP bridge functions declared in `frame.server/plugin.toml`
 - 🔀 Runtime implementation in `clean-server`
 
 #### Database Bridge (`bridge:db`) — 🔀 Tracked in clean-server
@@ -323,7 +323,7 @@ Reference: [07_frame_plugins.md](documents/specification/07_frame_plugins.md)
 - ✅ Plugin lifecycle (expand, validate, get_keywords)
 - ✅ Implicit import via folder ownership
 - ✅ Bridge function declarations
-- ✅ 5 production plugins: frame.data, frame.httpserver, frame.auth, frame.ui, frame.canvas
+- ✅ 5 production plugins: frame.data, frame.server, frame.auth, frame.ui, frame.canvas
 
 ### 7.2 Plugin Hooks
 
@@ -361,7 +361,7 @@ Reference: [08_frame_platforms.md](documents/specification/08_frame_platforms.md
 - ✅ frame.ui: 8 unit test files (component, hydration, events, state, etc.)
 - ✅ frame.auth: 6 unit test files (JWT, sessions, passwords, roles, etc.)
 - ✅ frame.data: 6 unit test files (models, fields, methods, queries, etc.)
-- ✅ frame.httpserver: 9 unit test files (endpoints, guards, paths, validation, etc.)
+- ✅ frame.server: 9 unit test files (endpoints, guards, paths, validation, etc.)
 - ✅ Bridge: 6 unit test files (HTTP, DB, env, crypto, time, log)
 - ✅ Integration: 3 test files (cross-plugin scenarios)
 - ✅ E2E: 4 test files (full application flows)
@@ -443,7 +443,7 @@ These bugs were discovered during Frame development and affect the compilation o
 
 **Issue**: `!=` operator in generated code causes compilation issues.
 
-**Workaround**: frame.httpserver converts `!=` to `if not (a == b)` pattern (line 406 of main.cln).
+**Workaround**: frame.server converts `!=` to `if not (a == b)` pattern (line 406 of main.cln).
 
 ### trim() Function Issues 🟡 MEDIUM
 
@@ -458,7 +458,7 @@ These bugs were discovered during Frame development and affect the compilation o
 | Plugin | Version | LOC | WASM Size | Status |
 |--------|---------|-----|-----------|--------|
 | frame.data | 2.3.0 | 1,310 | 19KB | ✅ Complete (validation, config, FK cascades, tenant isolation, migrations) |
-| frame.httpserver | 2.1.0 | 759 | 39KB | ✅ Complete (returns, cache blocks) |
+| frame.server | 2.1.0 | 759 | 39KB | ✅ Complete (returns, cache blocks) |
 | frame.auth | 2.1.0 | 461 | 19KB | ✅ Complete (multi-tenant support) |
 | frame.ui | 2.4.0 | 4,005 | 97KB | ✅ Complete (directives, events, theming, layouts, CSRF) |
 | frame.canvas | 2.1.0 | 297 | 24KB | ✅ Complete (input handling) |

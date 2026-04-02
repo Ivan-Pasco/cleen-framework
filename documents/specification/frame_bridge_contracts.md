@@ -290,7 +290,7 @@ Rollback a transaction, discarding all queued operations.
 
 ---
 
-## HTTP Bridge Functions (frame.httpserver plugin)
+## HTTP Bridge Functions (frame.server plugin)
 
 Low-level WASM imports for HTTP server operations. Implemented in `clean-server/src/bridge.rs`.
 

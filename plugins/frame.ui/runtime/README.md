@@ -5,64 +5,91 @@ This directory contains the browser runtime for Frame UI applications.
 ## Files
 
 - `shell.html` - HTML template that hosts the application
-- `loader.js` - WASM loader with full browser API bridge (framework code)
+- `loader.js` - WASM loader with plugin-extensible bridge (v3.0)
 
-## How It Works
+## Architecture: Plugin-Extensible Runtime
 
-The loader uses a single, unified approach: WASM `_start()` registers event handlers via `_ui_onEvent`, and handlers update the DOM via bridge functions. No full-page re-rendering — all updates are targeted.
+The loader uses a **shared runtime pattern** that allows multiple plugins to contribute bridge functions to a single WASM instance.
+
+### Load Order
 
 ```html
-<script src="loader.js" data-wasm="app.wasm"></script>
+<script src="bridge.js"></script>         <!-- frame.client (optional) -->
+<script src="loader.js" data-wasm="app.wasm"></script>  <!-- frame.ui (always last) -->
 ```
 
-1. Loads and instantiates the WASM module with all bridge function imports
-2. Calls `_start()` — the WASM module registers event handlers via `_ui_onEvent`
-3. Events are dispatched via document-level delegation using CSS selectors
-4. Handlers make targeted DOM updates via bridge functions (`_ui_updateElement`, `_ui_toggleClass`, etc.)
+### How It Works
+
+1. `loader.js` Phase 1 creates `window.__cleanRuntime` with shared memory helpers
+2. `loader.js` Phase 2 registers frame.ui bridge functions via `registerEnv()`
+3. Plugin bridges (e.g., `bridge.js` from frame.client) register their functions via `registerEnv()`
+4. `loader.js` Phase 3 collects all registered functions and instantiates WASM
+5. Calls `_start()` -- the WASM module registers event handlers
+6. Events dispatch to named handler functions via internal indices
+
+### Shared Runtime API (`window.__cleanRuntime`)
+
+| Method | Description |
+|--------|-------------|
+| `readString(ptr, len)` | Read string from WASM memory |
+| `writeString(str)` | Write string to WASM memory, returns pointer |
+| `memAlloc(size)` | Allocate bytes on WASM heap |
+| `getInstance()` | Get WASM instance (available after loading) |
+| `registerEnv(fns)` | Register bridge functions (call before WASM loads) |
 
 ## Bridge Functions
 
-All bridge functions use WASM pointer+length format for strings.
+All bridge functions use WASM pointer+length format for strings. Handler parameters accept function names (compiler assigns indices).
 
 ### Event Registration
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_onEvent` | selector, event_type, handler_idx | integer | Register event handler via document-level delegation |
+| `_ui_onEvent` | selector, event_type, handler | integer | Register event handler via document-level delegation |
 
-### Event Context (available during event handler execution)
+### Event Context (inside handler)
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_eventAttr` | attr_name | string | Get attribute from current event target |
-| `_ui_eventValue` | — | string | Get value (inputs) or textContent (others) of event target |
-| `_ui_eventClosestAttr` | selector, attr_name | string | Find closest ancestor matching selector, get its attribute |
-| `_ui_eventType` | — | string | Get event type (click, input, etc.) |
+| `_ui_eventAttr` | attr_name | string | Get attribute from event target |
+| `_ui_eventValue` | -- | string | Get value (inputs) or textContent of event target |
+| `_ui_eventClosestAttr` | selector, attr_name | string | Find closest ancestor, get its attribute |
+| `_ui_eventType` | -- | string | Get event type (click, input, etc.) |
 
 ### DOM Manipulation (single element)
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_updateElement` | selector, content | integer | Set innerHTML of first matching element |
-| `_ui_updateAttr` | selector, attr, value | integer | Set attribute on first matching element |
-| `_ui_getText` | selector | string | Get textContent of first matching element |
-| `_ui_getAttr` | selector, attr | string | Get attribute of first matching element |
+| `_ui_updateElement` | selector, content | integer | Set innerHTML |
+| `_ui_updateAttr` | selector, attr, value | integer | Set attribute |
+| `_ui_getText` | selector | string | Get textContent |
+| `_ui_getAttr` | selector, attr | string | Get attribute |
 | `_ui_toggleClass` | selector, class | integer | Toggle CSS class |
 | `_ui_addClass` | selector, class | integer | Add CSS class |
 | `_ui_removeClass` | selector, class | integer | Remove CSS class |
 | `_ui_setStyle` | selector, property, value | integer | Set inline style |
-| `_ui_updateElementSelf` | content | integer | Update current event target's textContent |
+| `_ui_updateElementSelf` | content | integer | Update event target's textContent |
 
 ### DOM Batch (querySelectorAll)
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
 | `_ui_querySetStyle` | selector, property, value | integer | Set style on ALL matching elements |
-| `_ui_querySetAttr` | selector, attr, value | integer | Set attribute on ALL matching elements |
-| `_ui_queryAddClass` | selector, class | integer | Add class to ALL matching elements |
-| `_ui_queryRemoveClass` | selector, class | integer | Remove class from ALL matching elements |
-| `_ui_filterByAttr` | selector, attr, value | integer | Show elements matching attr value, hide others (`*` for all) |
-| `_ui_filterByText` | selector, name_attr, desc_attr, query | integer | Filter by text search across name/description attributes |
+| `_ui_querySetAttr` | selector, attr, value | integer | Set attribute on ALL matching |
+| `_ui_queryAddClass` | selector, class | integer | Add class to ALL matching |
+| `_ui_queryRemoveClass` | selector, class | integer | Remove class from ALL matching |
+| `_ui_filterByAttr` | selector, attr, value | integer | Show matching, hide others |
+| `_ui_filterByText` | selector, name_attr, desc_attr, query | integer | Filter by text search |
+
+### Form Helpers
+
+| Function | Params | Returns | Description |
+|----------|--------|---------|-------------|
+| `_ui_inputValue` | selector | string | Get input/textarea/select value |
+| `_ui_formJson` | selector | string | Collect form as JSON string |
+| `_ui_formData` | selector | string | Collect form as URL-encoded |
+| `_ui_checked` | selector | integer | Checkbox state (0/1) |
+| `_ui_setInput` | selector, value | integer | Set input value |
 
 ### Browser APIs
 
@@ -71,9 +98,10 @@ All bridge functions use WASM pointer+length format for strings.
 | `_ui_clipboardWrite` | text | integer | Copy text to clipboard |
 | `_ui_locationHref` | url | integer | Navigate to URL |
 | `_ui_locationQuery` | param | string | Get URL query parameter |
-| `_ui_locationPath` | — | string | Get current pathname |
-| `_ui_observeVisible` | selector, class | integer | Add class when elements scroll into view (one-shot) |
-| `_ui_setTimeout` | handler_idx, delay_ms | integer | Call `handle_event_N` after delay |
+| `_ui_locationPath` | -- | string | Get current pathname |
+| `_ui_observeVisible` | selector, class | integer | Add class when visible (one-shot) |
+| `_ui_setTimeout` | handler, delay_ms | integer | Call handler after delay |
+| `_ui_injectHeadCss` | css | integer | Inject CSS into page head |
 
 ## Usage
 
@@ -85,37 +113,42 @@ cln compile app/client/main.cln -o dist/app.wasm --plugins
 
 ### Deploy
 
-Copy `loader.js` to your dist folder and add the script tag to your HTML:
+Copy runtime files to your dist folder:
 
 ```html
+<script src="bridge.js"></script>
 <script src="loader.js" data-wasm="app.wasm"></script>
 ```
 
-### Example Clean Language Client Code
+### Example
 
 ```clean
-plugins:
-    frame.ui
+import frame.ui
+import frame.client
 
 start:
-    integer s = 0
-    s = _ui_onEvent(".copy-button", "click", 0)
-    s = _ui_onEvent(".search-input", "input", 1)
-    s = _ui_observeVisible(".animate-on-scroll", "animated")
+    integer s = ui.onEvent(".copy-btn", "click", copyCode)
+    s = ui.onEvent(".search-input", "input", searchCards)
+    s = api.get("/api/data", onDataLoaded)
 
 functions:
-    handle_event_0()
-        string code = _ui_eventClosestAttr(".code-window", "data-code")
-        integer s = _ui_clipboardWrite(code)
-        s = _ui_updateElementSelf("Copied!")
-        s = _ui_setTimeout(2, 2000)
+    copyCode()
+        string code = ui.eventClosestAttr(".code-window", "data-code")
+        integer s = ui.clipboardWrite(code)
+        s = ui.updateElementSelf("Copied!")
+        s = ui.setTimeout(resetCopyBtn, 2000)
 
-    handle_event_1()
-        string query = _ui_eventValue()
-        integer s = _ui_filterByText(".card", "data-name", "data-description", query)
+    resetCopyBtn()
+        integer s = ui.updateElementSelf("Copy")
 
-    handle_event_2()
-        integer s = _ui_updateElementSelf("Copy")
+    searchCards()
+        string query = ui.eventValue()
+        integer s = ui.filterByText(".card", "data-name", "data-desc", query)
+
+    onDataLoaded()
+        if api.ok() == 1
+            string body = api.body()
+            integer s = ui.updateElement("#content", body)
 ```
 
 ## Fullstack Apps
@@ -124,10 +157,11 @@ Fullstack apps produce two WASM files:
 
 ```
 dist/
-├── index.html      (shell + loader)
-├── loader.js       (runtime)
-├── frontend.wasm   (browser - UI)
-└── backend.wasm    (server - API endpoints)
+    index.html      (shell + loader)
+    bridge.js       (frame.client runtime)
+    loader.js       (frame.ui runtime + WASM loader)
+    frontend.wasm   (browser - UI + client)
+    backend.wasm    (server - API endpoints)
 ```
 
 Run the backend with clean-server:

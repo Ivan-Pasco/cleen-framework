@@ -35,7 +35,7 @@ There is no standalone `frame` CLI. All framework functionality is accessed thro
 ### Creating a New Project
 
 ```bash
-cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui,frame.auth
+cleen project create myapp --plugins=frame.data,frame.server,frame.ui,frame.auth
 cd myapp
 ```
 
@@ -61,13 +61,13 @@ auto_create = true
 **Example Output:**
 
 ```bash
-$ cleen project create myapp --plugins=frame.data,frame.httpserver,frame.ui,frame.auth
+$ cleen project create myapp --plugins=frame.data,frame.server,frame.ui,frame.auth
 
 Creating project 'myapp'...
 
   Creating folders...
   [frame.data] Creating app/data/
-  [frame.httpserver] Creating app/backend/
+  [frame.server] Creating app/backend/
   [frame.ui] Creating app/pages/
   [frame.ui] Creating app/components/
   [frame.ui] Creating app/layouts/
@@ -79,7 +79,7 @@ Creating project 'myapp'...
   [core] Creating project.toml
   [frame.auth] Creating app/auth/auth.cln
   [frame.ui] Creating app/pages/index.html
-  [frame.httpserver] Creating app/backend/health.cln
+  [frame.server] Creating app/backend/health.cln
 
 Project created successfully!
 
@@ -220,7 +220,7 @@ cln compile app.cln -o app.wasm --plugins -O3
 
 ```bash
 # Install plugins
-cleen plugin add frame.httpserver
+cleen plugin add frame.server
 cleen plugin add frame.data@1.0.0
 
 # List installed plugins

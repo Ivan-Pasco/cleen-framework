@@ -3,7 +3,7 @@
 
 plugins:
 	frame.data
-	frame.httpserver
+	frame.server
 
 functions:
 	// Home page

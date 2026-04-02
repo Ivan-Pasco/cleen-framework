@@ -5,7 +5,7 @@ A complete REST API example demonstrating Frame Framework plugins.
 ## Plugins Used
 
 - **frame.data** - ORM with data models (User, Todo, Category)
-- **frame.httpserver** - HTTP endpoints with guards and response helpers
+- **frame.server** - HTTP endpoints with guards and response helpers
 - **frame.auth** - Session-based authentication with role-based access control
 
 ## Project Structure

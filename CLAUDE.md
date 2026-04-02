@@ -34,6 +34,7 @@ All specifications are located in `/documents/specification/`:
 11. **[11_database_plugins.md](documents/specification/11_database_plugins.md)** - Database plugin architecture, C-ABI interface, runtime drivers
 12. **[12_frame_canvas.md](documents/specification/12_frame_canvas.md)** - Canvas rendering, animation, drawing primitives, bridge functions
 13. **[13_frame_future_evolution.md](documents/specification/13_frame_future_evolution.md)** - Roadmap, research directions, versioning policy
+14. **[14_frame_ui_client_communication.md](documents/specification/14_frame_ui_client_communication.md)** - Client-side communication: frame.client plugin (api.*, live.*, feed.*)
 
 ### Reference Documents
 
@@ -96,7 +97,7 @@ app/
 │   ├── Header.cln
 │   └── Footer.cln
 │
-├── backend/            # frame.httpserver → HTTP server
+├── backend/            # frame.server → HTTP server
 │   ├── api/            # API endpoints
 │   │   ├── users.cln
 │   │   └── posts.cln
@@ -154,7 +155,7 @@ app/
    ```
 
 4. **Folder Ownership (Plugin Declaration Required)** - Plugins must always be declared in `app.cln` via the `plugins:` block. Each plugin declares folder ownership in `plugin.toml`. When `implicit_import = true`, files in owned folders don't need explicit import statements — the declared plugin processes them automatically:
-   - `backend/api/users.cln` → processed by `frame.httpserver`
+   - `backend/api/users.cln` → processed by `frame.server`
    - `data/models/User.cln` → processed by `frame.data`
    - `auth/auth.cln` → processed by `frame.auth`
    - `canvas/scenes/game.cln` → processed by `frame.canvas`
@@ -163,7 +164,7 @@ app/
    **Folder Ownership Rules (per plugin.toml `[paths]` section):**
    | Path Pattern | Owning Plugin |
    |--------------|---------------|
-   | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.httpserver` |
+   | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.server` |
    | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/` | `frame.data` |
    | `app/auth/` | `frame.auth` |
    | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
@@ -374,11 +375,12 @@ clean-framework/
 ├── plugins/                 # Core framework plugins (Clean Language)
 │   ├── frame.auth/          # Authentication & authorization plugin
 │   ├── frame.canvas/        # Canvas rendering & game dev plugin
+│   ├── frame.client/        # Client-side communication (api, live, feed)
 │   ├── frame.data/          # ORM & database plugin
-│   ├── frame.httpserver/    # HTTP server & routing plugin
+│   ├── frame.server/    # HTTP server & routing plugin (→ frame.server rename pending)
 │   └── frame.ui/            # UI components & SSR plugin
 ├── documents/
-│   ├── specification/       # All specification files (01-13)
+│   ├── specification/       # All specification files (01-14)
 │   ├── API_REFERENCE.md     # Quick API reference
 │   ├── GETTING_STARTED.md   # Quick start tutorial
 │   ├── PLUGIN_GUIDE.md      # Plugin system guide
