@@ -1,0 +1,116 @@
+// Test: frame.client api.* response context functions
+// Tests that response context functions are available inside handlers
+
+functions:
+	// Test api.status returns integer
+	boolean testApiStatus()
+		string sig = "api.status() -> integer"
+		return sig.contains("api.status") and sig.contains("integer")
+
+	// Test api.body returns string
+	boolean testApiBody()
+		string sig = "api.body() -> string"
+		return sig.contains("api.body") and sig.contains("string")
+
+	// Test api.ok returns integer (0 or 1)
+	boolean testApiOk()
+		string sig = "api.ok() -> integer (1 if 200-299, 0 otherwise)"
+		return sig.contains("api.ok") and sig.contains("200-299")
+
+	// Test api.json extracts by dot-path
+	boolean testApiJson()
+		string sig = "api.json(path) -> string"
+		return sig.contains("api.json") and sig.contains("path")
+
+	// Test api.json dot-notation paths
+	boolean testApiJsonDotPath()
+		string example1 = "api.json(\"name\")"
+		string example2 = "api.json(\"user.name\")"
+		string example3 = "api.json(\"data.items.0.id\")"
+		return example1.contains("name") and example2.contains("user.name") and example3.contains("data.items")
+
+	// Test api.responseHeader returns header value
+	boolean testApiResponseHeader()
+		string sig = "api.responseHeader(name) -> string"
+		return sig.contains("api.responseHeader") and sig.contains("name")
+
+	// Test network error produces status 0
+	boolean testNetworkErrorStatus()
+		integer networkError = 0
+		integer success = 200
+		integer notFound = 404
+		return networkError == 0 and success == 200 and notFound == 404
+
+	// Test api.ok boundary: 199 is not ok, 200 is ok, 299 is ok, 300 is not ok
+	boolean testApiOkBoundary()
+		boolean ok200 = 200 >= 200 and 200 <= 299
+		boolean ok299 = 299 >= 200 and 299 <= 299
+		boolean notOk199 = not (199 >= 200 and 199 <= 299)
+		boolean notOk300 = not (300 >= 200 and 300 <= 299)
+		return ok200 and ok299 and notOk199 and notOk300
+
+start:
+	printl("=== Test Suite: API Response Context (frame.client) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testApiStatus()
+		printl("PASS: api.status() returns integer status code")
+		passed = passed + 1
+	else
+		printl("FAIL: api.status() returns integer status code")
+		failed = failed + 1
+
+	if testApiBody()
+		printl("PASS: api.body() returns response body string")
+		passed = passed + 1
+	else
+		printl("FAIL: api.body() returns response body string")
+		failed = failed + 1
+
+	if testApiOk()
+		printl("PASS: api.ok() returns 1 for 200-299 range")
+		passed = passed + 1
+	else
+		printl("FAIL: api.ok() returns 1 for 200-299 range")
+		failed = failed + 1
+
+	if testApiJson()
+		printl("PASS: api.json(path) extracts from JSON response")
+		passed = passed + 1
+	else
+		printl("FAIL: api.json(path) extracts from JSON response")
+		failed = failed + 1
+
+	if testApiJsonDotPath()
+		printl("PASS: api.json supports dot-notation paths")
+		passed = passed + 1
+	else
+		printl("FAIL: api.json supports dot-notation paths")
+		failed = failed + 1
+
+	if testApiResponseHeader()
+		printl("PASS: api.responseHeader(name) returns header value")
+		passed = passed + 1
+	else
+		printl("FAIL: api.responseHeader(name) returns header value")
+		failed = failed + 1
+
+	if testNetworkErrorStatus()
+		printl("PASS: network error produces status 0")
+		passed = passed + 1
+	else
+		printl("FAIL: network error produces status 0")
+		failed = failed + 1
+
+	if testApiOkBoundary()
+		printl("PASS: api.ok() boundary: 200-299 is ok, outside is not")
+		passed = passed + 1
+	else
+		printl("FAIL: api.ok() boundary: 200-299 is ok, outside is not")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

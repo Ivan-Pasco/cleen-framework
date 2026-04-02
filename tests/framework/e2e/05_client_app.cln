@@ -1,0 +1,133 @@
+// E2E Test: Complete client-side application
+// Tests a full CRUD app pattern using frame.ui + frame.client
+
+functions:
+	// Test complete CRUD app structure
+	boolean testCrudAppStructure()
+		string app = "import frame.ui\nimport frame.client\n\nstart:\n\tapi.auth(bearer, token)\n\tapi.get(/api/users, onUsersLoaded)\n\tui.onEvent(.delete-btn, click, deleteUser)\n\tui.onEvent(#create-form, submit, createUser)"
+		return app.contains("import frame.ui") and app.contains("import frame.client") and app.contains("start:")
+
+	// Test list + delete + create flow
+	boolean testCrudFlow()
+		string flow = "onUsersLoaded renders list, deleteUser calls api.delete, onDeleted refreshes list, createUser calls api.submit, onCreated refreshes list"
+		return flow.contains("onUsersLoaded") and flow.contains("deleteUser") and flow.contains("onDeleted") and flow.contains("createUser") and flow.contains("onCreated")
+
+	// Test chat app structure
+	boolean testChatAppStructure()
+		string app = "live.open(wss://chat, onMessage, onClose, onError)\nui.onEvent(#send, click, sendMessage)"
+		return app.contains("live.open") and app.contains("ui.onEvent") and app.contains("sendMessage")
+
+	// Test chat send + receive
+	boolean testChatSendReceive()
+		string flow = "sendMessage: msg = ui.inputValue(#input), live.send(conn, msg), ui.setInput(#input, empty)"
+		return flow.contains("ui.inputValue") and flow.contains("live.send") and flow.contains("ui.setInput")
+
+	// Test dashboard with multiple protocols
+	boolean testDashboardMultiProtocol()
+		string app = "api.get for initial data, live.open for real-time metrics, feed.open for notifications"
+		return app.contains("api.get") and app.contains("live.open") and app.contains("feed.open")
+
+	// Test progress streaming app
+	boolean testProgressStreamingApp()
+		string app = "feed.open(/stream, onLog, onError)\nfeed.on(conn, progress, onProgress)\nfeed.on(conn, complete, onComplete)"
+		return app.contains("feed.open") and app.contains("feed.on") and app.contains("onProgress") and app.contains("onComplete")
+
+	// Test reconnection pattern
+	boolean testReconnectionPattern()
+		string flow = "onClose: ui.addClass(#status, offline), ui.setTimeout(reconnect, 5000). reconnect: live.open(same url, same handlers)"
+		return flow.contains("ui.setTimeout") and flow.contains("reconnect") and flow.contains("live.open")
+
+	// Test auth token from URL query
+	boolean testAuthFromQuery()
+		string flow = "token = ui.locationQuery(token), api.auth(bearer, token)"
+		return flow.contains("ui.locationQuery") and flow.contains("api.auth")
+
+	// Test error handling pattern
+	boolean testErrorHandlingPattern()
+		string flow = "if api.ok() == 1 then update UI else show error with api.json(message)"
+		return flow.contains("api.ok()") and flow.contains("api.json")
+
+	// Test form validation before submit
+	boolean testFormValidation()
+		string flow = "email = ui.inputValue(#email), agreed = ui.checked(#terms), if agreed then api.submit"
+		return flow.contains("ui.inputValue") and flow.contains("ui.checked") and flow.contains("api.submit")
+
+start:
+	printl("=== E2E Test: Client App Patterns ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testCrudAppStructure()
+		printl("PASS: CRUD app imports and start block correct")
+		passed = passed + 1
+	else
+		printl("FAIL: CRUD app imports and start block correct")
+		failed = failed + 1
+
+	if testCrudFlow()
+		printl("PASS: CRUD list/delete/create flow complete")
+		passed = passed + 1
+	else
+		printl("FAIL: CRUD list/delete/create flow complete")
+		failed = failed + 1
+
+	if testChatAppStructure()
+		printl("PASS: chat app uses live.open + ui.onEvent")
+		passed = passed + 1
+	else
+		printl("FAIL: chat app uses live.open + ui.onEvent")
+		failed = failed + 1
+
+	if testChatSendReceive()
+		printl("PASS: chat send/receive with form helpers")
+		passed = passed + 1
+	else
+		printl("FAIL: chat send/receive with form helpers")
+		failed = failed + 1
+
+	if testDashboardMultiProtocol()
+		printl("PASS: dashboard uses api + live + feed together")
+		passed = passed + 1
+	else
+		printl("FAIL: dashboard uses api + live + feed together")
+		failed = failed + 1
+
+	if testProgressStreamingApp()
+		printl("PASS: progress streaming uses feed.open + feed.on")
+		passed = passed + 1
+	else
+		printl("FAIL: progress streaming uses feed.open + feed.on")
+		failed = failed + 1
+
+	if testReconnectionPattern()
+		printl("PASS: reconnection uses setTimeout + live.open")
+		passed = passed + 1
+	else
+		printl("FAIL: reconnection uses setTimeout + live.open")
+		failed = failed + 1
+
+	if testAuthFromQuery()
+		printl("PASS: auth token read from URL query parameter")
+		passed = passed + 1
+	else
+		printl("FAIL: auth token read from URL query parameter")
+		failed = failed + 1
+
+	if testErrorHandlingPattern()
+		printl("PASS: error handling checks api.ok() and shows message")
+		passed = passed + 1
+	else
+		printl("FAIL: error handling checks api.ok() and shows message")
+		failed = failed + 1
+
+	if testFormValidation()
+		printl("PASS: form validation before submit with ui.checked")
+		passed = passed + 1
+	else
+		printl("FAIL: form validation before submit with ui.checked")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

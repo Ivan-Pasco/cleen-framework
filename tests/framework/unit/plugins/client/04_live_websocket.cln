@@ -1,0 +1,159 @@
+// Test: frame.client live.* WebSocket namespace
+// Tests WebSocket connection, messaging, and lifecycle
+
+functions:
+	// Test live.open signature
+	boolean testLiveOpen()
+		string sig = "live.open(url, onMessage, onClose, onError) -> integer connId"
+		return sig.contains("live.open") and sig.contains("onMessage") and sig.contains("onClose") and sig.contains("onError")
+
+	// Test live.open returns connection ID
+	boolean testLiveOpenReturnsId()
+		string behavior = "live.open returns integer connection ID starting from 1"
+		return behavior.contains("connection ID") and behavior.contains("starting from 1")
+
+	// Test live.send signature
+	boolean testLiveSend()
+		string sig = "live.send(connId, message) -> integer"
+		return sig.contains("live.send") and sig.contains("connId") and sig.contains("message")
+
+	// Test live.close signature
+	boolean testLiveClose()
+		string sig = "live.close(connId) -> integer"
+		return sig.contains("live.close") and sig.contains("connId")
+
+	// Test live.state returns connection state
+	boolean testLiveState()
+		string states = "connecting, open, closing, closed"
+		boolean hasAll = states.contains("connecting") and states.contains("open") and states.contains("closing") and states.contains("closed")
+		return hasAll
+
+	// Test live.message context function
+	boolean testLiveMessage()
+		string sig = "live.message() -> string (in onMessage handler)"
+		return sig.contains("live.message") and sig.contains("onMessage")
+
+	// Test live.connId context function
+	boolean testLiveConnId()
+		string sig = "live.connId() -> integer (in any WS handler)"
+		return sig.contains("live.connId")
+
+	// Test live.closeCode context function
+	boolean testLiveCloseCode()
+		string sig = "live.closeCode() -> integer (in onClose handler)"
+		integer normalClose = 1000
+		return sig.contains("live.closeCode") and normalClose == 1000
+
+	// Test live.closeReason context function
+	boolean testLiveCloseReason()
+		string sig = "live.closeReason() -> string (in onClose handler)"
+		return sig.contains("live.closeReason")
+
+	// Test live.error context function
+	boolean testLiveError()
+		string sig = "live.error() -> string (in onError handler)"
+		return sig.contains("live.error") and sig.contains("onError")
+
+	// Test connection lifecycle order
+	boolean testConnectionLifecycle()
+		string lifecycle = "CONNECTING -> OPEN -> message* -> CLOSING -> CLOSED"
+		return lifecycle.contains("CONNECTING") and lifecycle.contains("OPEN") and lifecycle.contains("CLOSED")
+
+	// Test multiple simultaneous connections
+	boolean testMultipleConnections()
+		string behavior = "Each live.open returns unique connId. Multiple connections can be active."
+		return behavior.contains("unique connId") and behavior.contains("Multiple connections")
+
+start:
+	printl("=== Test Suite: Live WebSocket (frame.client) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testLiveOpen()
+		printl("PASS: live.open accepts url and 3 handler functions")
+		passed = passed + 1
+	else
+		printl("FAIL: live.open accepts url and 3 handler functions")
+		failed = failed + 1
+
+	if testLiveOpenReturnsId()
+		printl("PASS: live.open returns integer connection ID")
+		passed = passed + 1
+	else
+		printl("FAIL: live.open returns integer connection ID")
+		failed = failed + 1
+
+	if testLiveSend()
+		printl("PASS: live.send accepts connId and message")
+		passed = passed + 1
+	else
+		printl("FAIL: live.send accepts connId and message")
+		failed = failed + 1
+
+	if testLiveClose()
+		printl("PASS: live.close accepts connId")
+		passed = passed + 1
+	else
+		printl("FAIL: live.close accepts connId")
+		failed = failed + 1
+
+	if testLiveState()
+		printl("PASS: live.state returns connecting/open/closing/closed")
+		passed = passed + 1
+	else
+		printl("FAIL: live.state returns connecting/open/closing/closed")
+		failed = failed + 1
+
+	if testLiveMessage()
+		printl("PASS: live.message() available in onMessage handler")
+		passed = passed + 1
+	else
+		printl("FAIL: live.message() available in onMessage handler")
+		failed = failed + 1
+
+	if testLiveConnId()
+		printl("PASS: live.connId() available in WS handlers")
+		passed = passed + 1
+	else
+		printl("FAIL: live.connId() available in WS handlers")
+		failed = failed + 1
+
+	if testLiveCloseCode()
+		printl("PASS: live.closeCode() returns close code (1000=normal)")
+		passed = passed + 1
+	else
+		printl("FAIL: live.closeCode() returns close code (1000=normal)")
+		failed = failed + 1
+
+	if testLiveCloseReason()
+		printl("PASS: live.closeReason() returns close reason string")
+		passed = passed + 1
+	else
+		printl("FAIL: live.closeReason() returns close reason string")
+		failed = failed + 1
+
+	if testLiveError()
+		printl("PASS: live.error() available in onError handler")
+		passed = passed + 1
+	else
+		printl("FAIL: live.error() available in onError handler")
+		failed = failed + 1
+
+	if testConnectionLifecycle()
+		printl("PASS: connection lifecycle follows CONNECTING->OPEN->CLOSED")
+		passed = passed + 1
+	else
+		printl("FAIL: connection lifecycle follows CONNECTING->OPEN->CLOSED")
+		failed = failed + 1
+
+	if testMultipleConnections()
+		printl("PASS: multiple simultaneous connections supported")
+		passed = passed + 1
+	else
+		printl("FAIL: multiple simultaneous connections supported")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

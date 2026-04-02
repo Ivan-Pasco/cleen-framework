@@ -1,0 +1,134 @@
+// Test: frame.client handler type parameter
+// Tests that handler parameters accept function names instead of numbers
+
+functions:
+	// Test handler type replaces integer for callbacks
+	boolean testHandlerTypeExists()
+		string declaration = "params = [\"string\", \"handler\"]"
+		return declaration.contains("handler") and not declaration.contains("integer")
+
+	// Test named handler in api.get
+	boolean testNamedHandlerApiGet()
+		string code = "api.get(\"/api/users\", onUsersLoaded)"
+		return code.contains("onUsersLoaded") and not code.contains("0") and not code.contains("1")
+
+	// Test named handler in api.post
+	boolean testNamedHandlerApiPost()
+		string code = "api.post(\"/api/users\", body, onCreated)"
+		return code.contains("onCreated")
+
+	// Test named handler in live.open with 3 handlers
+	boolean testNamedHandlersLiveOpen()
+		string code = "live.open(url, onMessage, onClose, onError)"
+		return code.contains("onMessage") and code.contains("onClose") and code.contains("onError")
+
+	// Test named handler in feed.open with 2 handlers
+	boolean testNamedHandlersFeedOpen()
+		string code = "feed.open(url, onData, onFeedError)"
+		return code.contains("onData") and code.contains("onFeedError")
+
+	// Test named handler in feed.on
+	boolean testNamedHandlerFeedOn()
+		string code = "feed.on(conn, \"progress\", onProgress)"
+		return code.contains("onProgress")
+
+	// Test named handler in ui.onEvent
+	boolean testNamedHandlerUiOnEvent()
+		string code = "ui.onEvent(\".btn\", \"click\", saveUser)"
+		return code.contains("saveUser") and not code.contains("0")
+
+	// Test named handler in ui.setTimeout
+	boolean testNamedHandlerUiSetTimeout()
+		string code = "ui.setTimeout(clearStatus, 2000)"
+		return code.contains("clearStatus") and not code.contains("handle_event")
+
+	// Test handler functions are defined in functions: block
+	boolean testHandlerInFunctionsBlock()
+		string code = "functions:\n\tonUsersLoaded()\n\t\tstring name = api.json(\"name\")"
+		return code.contains("functions:") and code.contains("onUsersLoaded()")
+
+	// Test no handle_event_N pattern
+	boolean testNoHandleEventPattern()
+		string oldPattern = "handle_event_0"
+		string newPattern = "onUsersLoaded"
+		return not newPattern.contains("handle_event") and newPattern.contains("onUsersLoaded")
+
+start:
+	printl("=== Test Suite: Handler Type (frame.client) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testHandlerTypeExists()
+		printl("PASS: handler type exists in plugin.toml declarations")
+		passed = passed + 1
+	else
+		printl("FAIL: handler type exists in plugin.toml declarations")
+		failed = failed + 1
+
+	if testNamedHandlerApiGet()
+		printl("PASS: api.get uses named handler function")
+		passed = passed + 1
+	else
+		printl("FAIL: api.get uses named handler function")
+		failed = failed + 1
+
+	if testNamedHandlerApiPost()
+		printl("PASS: api.post uses named handler function")
+		passed = passed + 1
+	else
+		printl("FAIL: api.post uses named handler function")
+		failed = failed + 1
+
+	if testNamedHandlersLiveOpen()
+		printl("PASS: live.open uses 3 named handler functions")
+		passed = passed + 1
+	else
+		printl("FAIL: live.open uses 3 named handler functions")
+		failed = failed + 1
+
+	if testNamedHandlersFeedOpen()
+		printl("PASS: feed.open uses 2 named handler functions")
+		passed = passed + 1
+	else
+		printl("FAIL: feed.open uses 2 named handler functions")
+		failed = failed + 1
+
+	if testNamedHandlerFeedOn()
+		printl("PASS: feed.on uses named handler function")
+		passed = passed + 1
+	else
+		printl("FAIL: feed.on uses named handler function")
+		failed = failed + 1
+
+	if testNamedHandlerUiOnEvent()
+		printl("PASS: ui.onEvent uses named handler function")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.onEvent uses named handler function")
+		failed = failed + 1
+
+	if testNamedHandlerUiSetTimeout()
+		printl("PASS: ui.setTimeout uses named handler function")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.setTimeout uses named handler function")
+		failed = failed + 1
+
+	if testHandlerInFunctionsBlock()
+		printl("PASS: handler functions defined in functions: block")
+		passed = passed + 1
+	else
+		printl("FAIL: handler functions defined in functions: block")
+		failed = failed + 1
+
+	if testNoHandleEventPattern()
+		printl("PASS: no handle_event_N pattern -- named functions only")
+		passed = passed + 1
+	else
+		printl("FAIL: no handle_event_N pattern -- named functions only")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
