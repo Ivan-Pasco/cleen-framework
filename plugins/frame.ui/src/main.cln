@@ -2578,7 +2578,7 @@ functions:
 
 									// Create event data entry: "evt-N|event_type|action"
 									string event_entry = "evt-" + event_counter.toString() + "|" + event_type + "|" + action
-									events = events.append(event_entry)
+									events = events.add(event_entry)
 
 								j = j + 1
 							else
