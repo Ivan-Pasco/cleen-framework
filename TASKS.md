@@ -466,6 +466,29 @@ These bugs were discovered during Frame development and affect the compilation o
 
 ---
 
+## Bug Fixes
+
+### frame.ui: HTML attribute quoting — ✅ Fixed 2026-04-03
+
+- ✅ `extract_block_attributes()` converted single-quoted HTML attrs to escaped double quotes (`\"`), causing compiler tokenizer failure
+- ✅ `extract_attributes()` had the same issue for SSR page rendering
+- ✅ All hardcoded `\\\"` for HTML attributes in widget code generation (buttons, inputs, selects, images, links, dividers, spacers, cards, headings, canvas, etc.) converted to single quotes
+- ✅ ARIA attribute generation, CSRF hidden fields, style injection, slot markers, loader script all fixed
+- ✅ Plugin recompiled with compiler 0.31.0 (plugin.wasm 100,083 bytes)
+
+**Root cause**: The compiler tokenizer does not support `\"` escape sequences in double-quoted strings in plugin output. The plugin was wrapping all HTML attribute values in escaped double quotes regardless of source quoting, and JSON serialization code was also using `\"`.
+
+**Fix (Phase 1 — HTML attributes)**: All HTML attribute values in generated Clean code now use single quotes (`'`), which are valid HTML and don't conflict with Clean double-quoted strings.
+
+**Fix (Phase 2 — JSON serialization)**: 
+- `escape_string()` now uses `&quot;` HTML entity instead of `\"`, and collapses whitespace instead of `\n`/`\t` escapes
+- Hydration JSON code uses `string __q = string.fromCharCode(34)` to produce double quote chars at runtime
+- Event JSON uses `~` placeholder replaced with `__q` at runtime
+- Validation rule JSON uses proper `"` chars (not `\"`)
+- Plugin recompiled (plugin.wasm 100,424 bytes)
+
+---
+
 ## Current Focus
 
 **Phase 3 (ORM) - feature/phase-3-orm branch**

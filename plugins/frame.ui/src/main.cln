@@ -499,7 +499,7 @@ functions:
 		// Handle cl-slot directive — content projection with named slot
 		// Renders a slot marker wrapping the default content
 		if slot_attr != ""
-			result = result + "html = html + \"<div data-slot=\\\"" + slot_attr + "\\\">\"\n"
+			result = result + "html = html + \"<div data-slot='" + slot_attr + "'>\"\n"
 			if inner_html.trim().length() > 0
 				result = result + html_to_render(inner_html, registry_json, has_data)
 			result = result + "html = html + \"</div>\"\n"
@@ -550,7 +550,7 @@ functions:
 			string method_upper = form_method.toUpperCase()
 			boolean needs_csrf = method_upper == "POST" or method_upper == "PUT" or method_upper == "PATCH" or method_upper == "DELETE" or form_method == ""
 			if needs_csrf
-				result = result + "html = html + \"<input type=\\\"hidden\\\" name=\\\"_csrf\\\" value=\\\"\" + csrf_generate() + \"\\\">\"\n"
+				result = result + "html = html + \"<input type='hidden' name='_csrf' value='\" + csrf_generate() + \"'>\"\n"
 
 		// Close tag (unless void element)
 		if is_void_element(tag_name) == false
@@ -580,10 +580,10 @@ functions:
 				attrs = before_style + "display:none;" + after_style
 			else
 				// No existing style attribute — append style="display:none"
-				attrs = attrs + " style=\\\"display:none\\\""
+				attrs = attrs + " style='display:none'"
 			result = result + " " + attrs
 		else
-			result = result + " style=\\\"display:none\\\""
+			result = result + " style='display:none'"
 
 		result = result + ">\"\n"
 
@@ -628,7 +628,7 @@ functions:
 			condition = field_ref + ".length() == 0"
 
 		result = result + "if " + condition + "\n"
-		result = result + "\thtml = html + \"<span class=\\\"cl-validation-error\\\">" + escape_string(error_msg) + "</span>\"\n"
+		result = result + "\thtml = html + \"<span class='cl-validation-error'>" + escape_string(error_msg) + "</span>\"\n"
 		return result
 
 	// Render a <screen> tag as an island
@@ -660,7 +660,7 @@ functions:
 			result = result + props_code
 
 		// Generate island wrapper
-		result = result + "\thtml = html + \"<div id=\\\"screen-" + screen_name + "\\\">\"\n"
+		result = result + "\thtml = html + \"<div id='screen-" + screen_name + "'>\"\n"
 
 		// Call screen render
 		result = result + "\thtml = html + _screen.render()\n"
@@ -860,16 +860,16 @@ functions:
 								// Transform event to data-on-* attribute for SSR hydration
 								// onclick -> data-on-click, onsubmit -> data-on-submit, etc.
 								string event_name = base_event.substring(2, base_event.length())
-								result = result + "data-on-" + event_name + "=\\\"" + attr_value + "\\\""
+								result = result + "data-on-" + event_name + "='" + attr_value + "'"
 								// Append modifier attribute if present
 								if modifier != ""
-									result = result + " data-on-" + event_name + "-" + modifier + "=\\\"true\\\""
+									result = result + " data-on-" + event_name + "-" + modifier + "='true'"
 							else
 								// Handle interpolations in attribute values
 								if attr_value.indexOf("{{") != -1
-									result = result + raw_attr_name + "=\\\"\" + " + interpolate_attr(attr_value) + " + \"\\\""
+									result = result + raw_attr_name + "='\" + " + interpolate_attr(attr_value) + " + \"'"
 								else
-									result = result + raw_attr_name + "=\\\"" + attr_value + "\\\""
+									result = result + raw_attr_name + "='" + attr_value + "'"
 						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
 					else
 						remaining = ""
@@ -891,11 +891,11 @@ functions:
 							modifier = raw_attr_name.substring(dot_pos + 1, raw_attr_name.length())
 						if events.indexOf("," + base_event + ",") != -1
 							string event_name = base_event.substring(2, base_event.length())
-							result = result + "data-on-" + event_name + "=\\\"" + attr_value + "\\\""
+							result = result + "data-on-" + event_name + "='" + attr_value + "'"
 							if modifier != ""
-								result = result + " data-on-" + event_name + "-" + modifier + "=\\\"true\\\""
+								result = result + " data-on-" + event_name + "-" + modifier + "='true'"
 						else
-							result = result + raw_attr_name + "=\\\"" + attr_value + "\\\""
+							result = result + raw_attr_name + "='" + attr_value + "'"
 					remaining = after_eq.substring(next_space, after_eq.length()).trim()
 
 		return result
@@ -1020,13 +1020,12 @@ functions:
 
 		return result
 
-	// Escape string for Clean string literal
+	// Escape string for HTML text content embedding
 	string escape_string(string input)
 		string result = input
-		result = result.replace("\\", "\\\\")
-		result = result.replace("\"", "\\\"")
-		result = result.replace("\n", "\\n")
-		result = result.replace("\t", "\\t")
+		result = result.replace("\"", "&quot;")
+		result = result.replace("\n", " ")
+		result = result.replace("\t", " ")
 		return result
 
 // ============================================================================
@@ -1225,9 +1224,9 @@ functions:
 							result = result + " "
 						// Handle interpolations in attribute values
 						if attr_value.indexOf("{") != -1
-							result = result + attr_name + "=\\\"\" + " + interpolate_block_attr(attr_value) + " + \"\\\""
+							result = result + attr_name + "='\" + " + interpolate_block_attr(attr_value) + " + \"'"
 						else
-							result = result + attr_name + "=\\\"" + attr_value + "\\\""
+							result = result + attr_name + "='" + attr_value + "'"
 						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
 					else
 						remaining = ""
@@ -1239,7 +1238,7 @@ functions:
 					string attr_value = after_eq.substring(0, next_space)
 					if result != ""
 						result = result + " "
-					result = result + attr_name + "=\\\"" + attr_value + "\\\""
+					result = result + attr_name + "='" + attr_value + "'"
 					remaining = after_eq.substring(next_space, after_eq.length()).trim()
 
 		return result
@@ -1508,12 +1507,12 @@ functions:
 			// Named slot extraction loop — runs up to 10 named slots
 			result = result + "\t\t\t\tinteger __slot_i = 0\n"
 			result = result + "\t\t\t\twhile __slot_i < 10\n"
-			result = result + "\t\t\t\t\tinteger __ns_start = __page_content.indexOf(\"<slot name=\\\"\")\n"
+			result = result + "\t\t\t\t\tinteger __ns_start = __page_content.indexOf(\"<slot name='\")\n"
 			result = result + "\t\t\t\t\tif __ns_start == -1\n"
 			result = result + "\t\t\t\t\t\t__slot_i = 10\n"
 			result = result + "\t\t\t\t\telse\n"
 			result = result + "\t\t\t\t\t\tinteger __name_start = __ns_start + 12\n"
-			result = result + "\t\t\t\t\t\tinteger __name_end = __page_content.indexOf(\"\\\"\", __name_start)\n"
+			result = result + "\t\t\t\t\t\tinteger __name_end = __page_content.indexOf(\"'\", __name_start)\n"
 			result = result + "\t\t\t\t\t\tif __name_end == -1\n"
 			result = result + "\t\t\t\t\t\t\t__slot_i = 10\n"
 			result = result + "\t\t\t\t\t\telse\n"
@@ -1524,7 +1523,7 @@ functions:
 			result = result + "\t\t\t\t\t\t\t\t__slot_i = 10\n"
 			result = result + "\t\t\t\t\t\t\telse\n"
 			result = result + "\t\t\t\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
-			result = result + "\t\t\t\t\t\t\t\tstring __layout_placeholder = \"<slot name=\\\"\" + __slot_name + \"\\\"></slot>\"\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __layout_placeholder = \"<slot name='\" + __slot_name + \"'></slot>\"\n"
 			result = result + "\t\t\t\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
 			result = result + "\t\t\t\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
 			result = result + "\t\t\t\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
@@ -1562,7 +1561,7 @@ functions:
 	// Generate runtime injection code
 	string generate_runtime_injection()
 		string result = ""
-		result = result + "html = html + \"<script src=\\\"/loader.js\\\" data-wasm=\\\"/frontend.wasm\\\"></script>\"\n"
+		result = result + "html = html + \"<script src='/loader.js' data-wasm='/frontend.wasm'></script>\"\n"
 		return result
 
 	// Expand component block (Clean syntax for component definitions)
@@ -2476,22 +2475,25 @@ functions:
 	string generate_hydration_function_full(string name, string state_json, string render_content, string on_mount, string on_unmount, string on_update)
 		string result = "\t\tstring getHydrationData()\n"
 		result = result + "\t\t\tstring json = \"{\"\n"
+		result = result + "\t\t\tstring __q = string.fromCharCode(34)\n"
 
 		// Serialize state
-		result = result + "\t\t\tjson = json + \"\\\"state\\\":{\"\n"
+		result = result + "\t\t\tjson = json + __q + \"state\" + __q + \":{\"\n"
 		result = result + generate_hydration_state_fields(state_json)
 		result = result + "\t\t\tjson = json + \"}\"\n"
 
 		// Generate events array from render content
 		list<string> lines = json_to_string_list(render_content)
 		string events_json = extract_events_from_render(lines)
-		result = result + "\t\t\tjson = json + \",\\\"events\\\":\" + \"" + events_json + "\"\n"
+		result = result + "\t\t\tstring __events = \"" + events_json + "\"\n"
+		result = result + "\t\t\t__events = __events.replace(\"~\", __q)\n"
+		result = result + "\t\t\tjson = json + \",\" + __q + \"events\" + __q + \":\" + __events\n"
 
 		// Add lifecycle hooks
-		result = result + "\t\t\tjson = json + \",\\\"lifecycle\\\":{\"\n"
-		result = result + "\t\t\tjson = json + \"\\\"onMount\\\":\\\"" + escape_json_string(on_mount) + "\\\"\"\n"
-		result = result + "\t\t\tjson = json + \",\\\"onUnmount\\\":\\\"" + escape_json_string(on_unmount) + "\\\"\"\n"
-		result = result + "\t\t\tjson = json + \",\\\"onUpdate\\\":\\\"" + escape_json_string(on_update) + "\\\"\"\n"
+		result = result + "\t\t\tjson = json + \",\" + __q + \"lifecycle\" + __q + \":{\"\n"
+		result = result + "\t\t\tjson = json + __q + \"onMount\" + __q + \":\" + __q + \"" + escape_json_string(on_mount) + "\" + __q\n"
+		result = result + "\t\t\tjson = json + \",\" + __q + \"onUnmount\" + __q + \":\" + __q + \"" + escape_json_string(on_unmount) + "\" + __q\n"
+		result = result + "\t\t\tjson = json + \",\" + __q + \"onUpdate\" + __q + \":\" + __q + \"" + escape_json_string(on_update) + "\" + __q\n"
 		result = result + "\t\t\tjson = json + \"}\"\n"
 
 		result = result + "\t\t\tjson = json + \"}\"\n"
@@ -2508,8 +2510,8 @@ functions:
 			separator = ","
 		string clean_type = map_ui_type(var_type)
 		if clean_type == "string"
-			return "\t\t\tjson = json + \"" + separator + "\\\"" + var_name + "\\\":\\\"\" + " + var_name + " + \"\\\"\"\n"
-		return "\t\t\tjson = json + \"" + separator + "\\\"" + var_name + "\\\":\" + " + var_name + ".toString()\n"
+			return "\t\t\tjson = json + \"" + separator + "\" + __q + \"" + var_name + "\" + __q + \":\" + __q + " + var_name + " + __q\n"
+		return "\t\t\tjson = json + \"" + separator + "\" + __q + \"" + var_name + "\" + __q + \":\" + " + var_name + ".toString()\n"
 
 	// Helper: generate state field serialization code
 	string generate_hydration_state_fields(string state_json)
@@ -2674,9 +2676,10 @@ functions:
 									first = false
 
 									string event_id = "evt-" + event_counter.toString()
-									result = result + "{\\\"id\\\":\\\"" + event_id + "\\\""
-									result = result + ",\\\"type\\\":\\\"" + event_type + "\\\""
-									result = result + ",\\\"action\\\":\\\"" + escape_json_string(action) + "\\\"}"
+									string safe_action = action.replace("~", "")
+									result = result + "{~id~:~" + event_id + "~"
+									result = result + ",~type~:~" + event_type + "~"
+									result = result + ",~action~:~" + safe_action + "~}"
 								j = j + 1
 							else
 								break
@@ -2979,11 +2982,11 @@ functions:
 		else
 			rule_type = rule
 
-		string result = "{\\\"type\\\":\\\"" + rule_type + "\\\""
+		string result = "{\"type\":\"" + rule_type + "\""
 		if rule_value != ""
-			result = result + ",\\\"value\\\":\\\"" + escape_json_string(rule_value) + "\\\""
+			result = result + ",\"value\":\"" + escape_json_string(rule_value) + "\""
 		if rule_message != ""
-			result = result + ",\\\"message\\\":\\\"" + escape_json_string(rule_message) + "\\\""
+			result = result + ",\"message\":\"" + escape_json_string(rule_message) + "\""
 		result = result + "}"
 
 		return result
@@ -3039,27 +3042,27 @@ functions:
 		// Add role if applicable
 		string role = get_widget_aria_role(widget_name)
 		if role != ""
-			attrs = attrs + " role=\\\"" + role + "\\\""
+			attrs = attrs + " role='" + role + "'"
 
 		// Add aria-label from label prop
 		string label = get_prop_value(props, "label")
 		if label != ""
-			attrs = attrs + " aria-label=\\\"" + label + "\\\""
+			attrs = attrs + " aria-label='" + label + "'"
 
 		// Add aria-describedby if there's a hint
 		string hint = get_prop_value(props, "hint")
 		if hint != ""
-			attrs = attrs + " aria-describedby=\\\"hint\\\""
+			attrs = attrs + " aria-describedby='hint'"
 
 		// Add disabled state
 		string disabled = get_prop_value(props, "disabled")
 		if disabled == "true"
-			attrs = attrs + " aria-disabled=\\\"true\\\""
+			attrs = attrs + " aria-disabled='true'"
 
 		// Add required state for form fields
 		string required = get_prop_value(props, "required")
 		if required == "true"
-			attrs = attrs + " aria-required=\\\"true\\\""
+			attrs = attrs + " aria-required='true'"
 
 		return attrs
 
@@ -3172,19 +3175,19 @@ functions:
 			string text_expr = props_string.trim()
 			if text_expr.startsWith("\"")
 				// Literal string
-				code = code + "\t\t\thtml = html + \"<span class=\\\"" + html_class + "\\\">\"\n"
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "'>\"\n"
 				code = code + "\t\t\thtml = html + " + text_expr + "\n"
 				code = code + "\t\t\thtml = html + \"</span>\"\n"
 			else
 				// Expression - escape it
-				code = code + "\t\t\thtml = html + \"<span class=\\\"" + html_class + "\\\">\"\n"
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "'>\"\n"
 				code = code + "\t\t\thtml = html + html.escape(" + text_expr + ".toString())\n"
 				code = code + "\t\t\thtml = html + \"</span>\"\n"
 		else if widget_name == "button"
 			// Button widget - may have onClick
-			code = code + "\t\t\thtml = html + \"<button class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<button class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
 
 			// Button text from first string prop or child
@@ -3196,26 +3199,26 @@ functions:
 			event_counter = event_counter + 1
 		else if widget_name == "textField"
 			// Text input field
-			code = code + "\t\t\thtml = html + \"<input type=\\\"text\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='text' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 
 			// Check for bind prop
 			string bind_var = get_prop_value(props, "bind")
 			if bind_var != ""
-				code = code + "\t\t\thtml = html + \" value=\\\"\" + html.escape(" + bind_var + ") + \"\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" value='\" + html.escape(" + bind_var + ") + \"'\"\n"
 
 			// Check for placeholder
 			string placeholder = get_prop_value(props, "placeholder")
 			if placeholder != ""
-				code = code + "\t\t\thtml = html + \" placeholder=\\\"" + placeholder + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" placeholder='" + placeholder + "'\"\n"
 
 			code = code + "\t\t\thtml = html + \"/>\"\n"
 			event_counter = event_counter + 1
 		else if widget_name == "checkbox"
 			// Checkbox input
-			code = code + "\t\t\thtml = html + \"<label class=\\\"" + html_class + "-wrapper\\\">\"\n"
-			code = code + "\t\t\thtml = html + \"<input type=\\\"checkbox\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<label class='" + html_class + "-wrapper'>\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='checkbox' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
 
 			// Check for bind prop
 			string bind_var = get_prop_value(props, "bind")
@@ -3228,7 +3231,7 @@ functions:
 			// Label text
 			string label_text = get_prop_value(props, "label")
 			if label_text != ""
-				code = code + "\t\t\thtml = html + \"<span class=\\\"" + html_class + "-label\\\">\" + \"" + label_text + "\" + \"</span>\"\n"
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "-label'>\" + \"" + label_text + "\" + \"</span>\"\n"
 
 			code = code + "\t\t\thtml = html + \"</label>\"\n"
 			event_counter = event_counter + 1
@@ -3238,26 +3241,26 @@ functions:
 			string label_text = get_prop_value(props, "label")
 			string name_attr = get_prop_value(props, "name")
 
-			code = code + "\t\t\thtml = html + \"<label class=\\\"" + html_class + "-wrapper\\\">\"\n"
-			code = code + "\t\t\thtml = html + \"<input type=\\\"radio\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<label class='" + html_class + "-wrapper'>\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='radio' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
 
 			if name_attr != ""
-				code = code + "\t\t\thtml = html + \" name=\\\"" + name_attr + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" name='" + name_attr + "'\"\n"
 			if radio_value != ""
-				code = code + "\t\t\thtml = html + \" value=\\\"" + radio_value + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" value='" + radio_value + "'\"\n"
 
 			code = code + "\t\t\thtml = html + \"/>\"\n"
 
 			if label_text != ""
-				code = code + "\t\t\thtml = html + \"<span class=\\\"" + html_class + "-label\\\">\" + \"" + label_text + "\" + \"</span>\"\n"
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "-label'>\" + \"" + label_text + "\" + \"</span>\"\n"
 
 			code = code + "\t\t\thtml = html + \"</label>\"\n"
 			event_counter = event_counter + 1
 		else if widget_name == "select"
 			// Select dropdown
-			code = code + "\t\t\thtml = html + \"<select class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<select class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 
 			code = code + "\t\t\thtml = html + \">\"\n"
 
@@ -3274,7 +3277,7 @@ functions:
 
 			code = code + "\t\t\thtml = html + \"<option\"\n"
 			if option_value != ""
-				code = code + "\t\t\thtml = html + \" value=\\\"" + option_value + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" value='" + option_value + "'\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
 
 			if label_text != ""
@@ -3283,9 +3286,9 @@ functions:
 			code = code + "\t\t\thtml = html + \"</option>\"\n"
 		else if widget_name == "slider"
 			// Range slider input
-			code = code + "\t\t\thtml = html + \"<input type=\\\"range\\\" class=\\\"" + html_class + " evt-" + event_counter.toString() + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='range' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 
 			// Min/max/step props
 			string min_val = get_prop_value(props, "min")
@@ -3293,16 +3296,16 @@ functions:
 			string step_val = get_prop_value(props, "step")
 
 			if min_val != ""
-				code = code + "\t\t\thtml = html + \" min=\\\"" + min_val + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" min='" + min_val + "'\"\n"
 			if max_val != ""
-				code = code + "\t\t\thtml = html + \" max=\\\"" + max_val + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" max='" + max_val + "'\"\n"
 			if step_val != ""
-				code = code + "\t\t\thtml = html + \" step=\\\"" + step_val + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" step='" + step_val + "'\"\n"
 
 			// Check for bind prop
 			string bind_var = get_prop_value(props, "bind")
 			if bind_var != ""
-				code = code + "\t\t\thtml = html + \" value=\\\"\" + " + bind_var + ".toString() + \"\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" value='\" + " + bind_var + ".toString() + \"'\"\n"
 
 			code = code + "\t\t\thtml = html + \"/>\"\n"
 			event_counter = event_counter + 1
@@ -3313,17 +3316,17 @@ functions:
 			string width = get_prop_value(props, "width")
 			string height = get_prop_value(props, "height")
 
-			code = code + "\t\t\thtml = html + \"<img class=\\\"" + html_class + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<img class='" + html_class + "'\"\n"
 			if src != ""
-				code = code + "\t\t\thtml = html + \" src=\\\"" + src + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" src='" + src + "'\"\n"
 			if alt != ""
-				code = code + "\t\t\thtml = html + \" alt=\\\"" + alt + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" alt='" + alt + "'\"\n"
 			if width != ""
-				code = code + "\t\t\thtml = html + \" width=\\\"" + width + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" width='" + width + "'\"\n"
 			if height != ""
-				code = code + "\t\t\thtml = html + \" height=\\\"" + height + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" height='" + height + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \"/>\"\n"
 		else if widget_name == "link"
 			// Anchor link
@@ -3331,13 +3334,13 @@ functions:
 			string link_text = get_prop_value(props, "text")
 			string external = get_prop_value(props, "external")
 
-			code = code + "\t\t\thtml = html + \"<a class=\\\"" + html_class + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<a class='" + html_class + "'\"\n"
 			if href != ""
-				code = code + "\t\t\thtml = html + \" href=\\\"" + href + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" href='" + href + "'\"\n"
 			if external == "true"
-				code = code + "\t\t\thtml = html + \" target=\\\"_blank\\\" rel=\\\"noopener noreferrer\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" target='_blank' rel='noopener noreferrer'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
 
 			if link_text != ""
@@ -3351,21 +3354,21 @@ functions:
 			string thickness = get_prop_value(props, "thickness")
 			string color = get_prop_value(props, "color")
 
-			code = code + "\t\t\thtml = html + \"<hr class=\\\"" + html_class + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<hr class='" + html_class + "'\"\n"
 			string divider_style = ""
 			if thickness != ""
 				divider_style = divider_style + "border-width:" + thickness + "px;"
 			if color != ""
 				divider_style = divider_style + "border-color:" + color + ";"
 			if divider_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + divider_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + divider_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \"/>\"\n"
 		else if widget_name == "spacer"
 			// Flexible or fixed spacer
 			string width = get_prop_value(props, "width")
 			string height = get_prop_value(props, "height")
 
-			code = code + "\t\t\thtml = html + \"<div class=\\\"" + html_class + "\\\" style=\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='\"\n"
 			if width != "" or height != ""
 				if width != ""
 					code = code + "\t\t\thtml = html + \"width:" + width + "px;\"\n"
@@ -3373,18 +3376,18 @@ functions:
 					code = code + "\t\t\thtml = html + \"height:" + height + "px;\"\n"
 			else
 				code = code + "\t\t\thtml = html + \"flex:1;\"\n"
-			code = code + "\t\t\thtml = html + \"\\\"></div>\"\n"
+			code = code + "\t\t\thtml = html + \"'></div>\"\n"
 		else if widget_name == "scroll"
 			// Scroll container
 			string scroll_height = get_prop_value(props, "height")
 			string scroll_width = get_prop_value(props, "width")
 
-			code = code + "\t\t\thtml = html + \"<div class=\\\"" + html_class + "\\\" style=\\\"overflow:auto;\"\n"
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='overflow:auto;\"\n"
 			if scroll_height != ""
 				code = code + "\t\t\thtml = html + \"max-height:" + scroll_height + "px;\"\n"
 			if scroll_width != ""
 				code = code + "\t\t\thtml = html + \"max-width:" + scroll_width + "px;\"\n"
-			code = code + "\t\t\thtml = html + \"\\\">\"\n"
+			code = code + "\t\t\thtml = html + \"'>\"\n"
 
 			// Render children
 			if child_lines.length() > 0
@@ -3395,13 +3398,13 @@ functions:
 			// Card with optional shadow
 			string shadow = get_prop_value(props, "shadow")
 
-			code = code + "\t\t\thtml = html + \"<div class=\\\"" + html_class + "\\\" style=\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='\"\n"
 			if html_style != ""
 				code = code + "\t\t\thtml = html + \"" + html_style + "\"\n"
 			if shadow == "true"
 				code = code + "\t\t\thtml = html + \"box-shadow:0 2px 8px rgba(0,0,0,0.15);\"\n"
 			code = code + "\t\t\thtml = html + \"border-radius:8px;background:#fff;\"\n"
-			code = code + "\t\t\thtml = html + \"\\\">\"\n"
+			code = code + "\t\t\thtml = html + \"'>\"\n"
 
 			// Render children
 			if child_lines.length() > 0
@@ -3415,9 +3418,9 @@ functions:
 			if level == ""
 				level = "1"
 
-			code = code + "\t\t\thtml = html + \"<h" + level + " class=\\\"" + html_class + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<h" + level + " class='" + html_class + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
 
 			if heading_text != ""
@@ -3426,9 +3429,9 @@ functions:
 			code = code + "\t\t\thtml = html + \"</h" + level + ">\"\n"
 		else if widget_name == "paragraph"
 			// Paragraph
-			code = code + "\t\t\thtml = html + \"<p class=\\\"" + html_class + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<p class='" + html_class + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
 
 			// Render children or text content
@@ -3440,9 +3443,9 @@ functions:
 			// Code block
 			string language = get_prop_value(props, "language")
 
-			code = code + "\t\t\thtml = html + \"<pre class=\\\"" + html_class + "\\\"><code\"\n"
+			code = code + "\t\t\thtml = html + \"<pre class='" + html_class + "'><code\"\n"
 			if language != ""
-				code = code + "\t\t\thtml = html + \" class=\\\"language-" + language + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" class='language-" + language + "'\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
 
 			// Render children as code content
@@ -3469,9 +3472,9 @@ functions:
 			string icon_name = get_prop_value(props, "name")
 			string icon_size = get_prop_value(props, "size")
 
-			code = code + "\t\t\thtml = html + \"<span class=\\\"" + html_class + " icon-" + icon_name + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<span class='" + html_class + " icon-" + icon_name + "'\"\n"
 			if icon_size != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"font-size:" + icon_size + "px;\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='font-size:" + icon_size + "px;'\"\n"
 			code = code + "\t\t\thtml = html + \"></span>\"\n"
 		else if widget_name == "canvasScene"
 			// Canvas scene for 2D graphics
@@ -3485,11 +3488,11 @@ functions:
 			if canvas_height == ""
 				canvas_height = "300"
 
-			code = code + "\t\t\thtml = html + \"<canvas id=\\\"" + canvas_id + "\\\" class=\\\"" + html_class + "\\\"\"\n"
-			code = code + "\t\t\thtml = html + \" width=\\\"" + canvas_width + "\\\" height=\\\"" + canvas_height + "\\\"\"\n"
-			code = code + "\t\t\thtml = html + \" data-canvas-id=\\\"" + canvas_id + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<canvas id='" + canvas_id + "' class='" + html_class + "'\"\n"
+			code = code + "\t\t\thtml = html + \" width='" + canvas_width + "' height='" + canvas_height + "'\"\n"
+			code = code + "\t\t\thtml = html + \" data-canvas-id='" + canvas_id + "'\"\n"
 			if animate == "true"
-				code = code + "\t\t\thtml = html + \" data-animate=\\\"true\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" data-animate='true'\"\n"
 
 			// Serialize child_lines to JSON for extraction
 			string child_lines_json = list_to_json_array(child_lines)
@@ -3497,27 +3500,27 @@ functions:
 			// Extract draw block from children
 			string draw_code = extract_canvas_draw_block(child_lines_json)
 			if draw_code != ""
-				code = code + "\t\t\thtml = html + \" data-draw=\\\"" + escape_html_attr(draw_code) + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" data-draw='\" + escape_html_attr(draw_code) + \"'\"\n"
 
 			// Extract update block from children (for animation)
 			string update_code = extract_canvas_update_block(child_lines_json)
 			if update_code != ""
-				code = code + "\t\t\thtml = html + \" data-update=\\\"" + escape_html_attr(update_code) + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" data-update='\" + escape_html_attr(update_code) + \"'\"\n"
 
 			// Extract canvas event handlers
 			string canvas_events = extract_canvas_events(child_lines_json)
 			if canvas_events != ""
-				code = code + "\t\t\thtml = html + \" data-canvas-events=\\\"" + escape_html_attr(canvas_events) + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" data-canvas-events='\" + escape_html_attr(canvas_events) + \"'\"\n"
 
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \"></canvas>\"\n"
 			event_counter = event_counter + 1
 		else
 			// Container widget (column, row, stack, etc.)
-			code = code + "\t\t\thtml = html + \"<" + html_tag + " class=\\\"" + html_class + "\\\"\"\n"
+			code = code + "\t\t\thtml = html + \"<" + html_tag + " class='" + html_class + "'\"\n"
 			if html_style != ""
-				code = code + "\t\t\thtml = html + \" style=\\\"" + html_style + "\\\"\"\n"
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
 			code = code + "\t\t\thtml = html + \">\"\n"
 
 			// Render children

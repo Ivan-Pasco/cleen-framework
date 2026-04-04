@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.3.0"
+version = "2.4.0"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
