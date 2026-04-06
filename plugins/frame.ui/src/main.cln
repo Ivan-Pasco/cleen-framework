@@ -1252,7 +1252,7 @@ functions:
 		while remaining.length() > 0
 			integer startIdx = remaining.indexOf("{")
 			if startIdx == -1
-				result = result + remaining + "\""
+				result = result + remaining
 				remaining = ""
 			else
 				if startIdx > 0
@@ -1274,6 +1274,7 @@ functions:
 
 				remaining = remaining.substring(end + 1, remaining.length())
 
+		result = result + "\""
 		return result
 
 	// Parse component body to extract html: block and other sections
