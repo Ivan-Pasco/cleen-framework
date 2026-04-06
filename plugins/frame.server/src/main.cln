@@ -44,10 +44,10 @@ functions:
 
 		// Add response helpers
 		result = result + "functions:\n"
-		result = result + "\tstring jsonResponse(any data)\n"
-		result = result + "\t\treturn _http_respond(200, \"application/json\", data.toString())\n\n"
-		result = result + "\tstring jsonResponseStatus(any data, integer status_code)\n"
-		result = result + "\t\treturn _http_respond(status_code, \"application/json\", data.toString())\n\n"
+		result = result + "\tstring jsonResponse(string data)\n"
+		result = result + "\t\treturn _http_respond(200, \"application/json\", data)\n\n"
+		result = result + "\tstring jsonResponseStatus(string data, integer status_code)\n"
+		result = result + "\t\treturn _http_respond(status_code, \"application/json\", data)\n\n"
 		result = result + "\tstring htmlResponse(string content)\n"
 		result = result + "\t\treturn _http_respond(200, \"text/html\", content)\n\n"
 		result = result + "\tstring redirectTo(string url)\n"
