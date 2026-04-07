@@ -48,6 +48,7 @@ jobs:
             ## Included Plugins
 
             - **frame.auth** - Authentication and authorization
+            - **frame.canvas** - Canvas rendering and game development
             - **frame.client** - Client-side communication (HTTP, WebSocket, SSE)
             - **frame.data** - ORM and database operations
             - **frame.server** - HTTP server runtime
@@ -71,6 +72,7 @@ jobs:
 
           # Copy all plugin directories
           cp -r plugins/frame.auth frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.canvas frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.client frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.data frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.server frame-plugins-${{ needs.create-release.outputs.version }}/
@@ -87,6 +89,7 @@ jobs:
 
           Included Plugins:
           - frame.auth - Authentication and authorization
+          - frame.canvas - Canvas rendering and game development
           - frame.client - Client-side communication (HTTP, WebSocket, SSE)
           - frame.data - ORM and database operations
           - frame.server - HTTP server runtime
@@ -139,6 +142,7 @@ jobs:
             "released_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "plugins": {
               "frame.auth": "included",
+              "frame.canvas": "included",
               "frame.client": "included",
               "frame.data": "included",
               "frame.server": "included",
