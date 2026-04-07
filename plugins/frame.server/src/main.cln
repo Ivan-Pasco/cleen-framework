@@ -1,6 +1,6 @@
 // frame.server plugin - HTTP Server DSL
 // Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
-// Version: 2.0.0
+// Version: 2.1.0
 // Implements: Frame Server Specification v1.2
 
 // ============================================================================
@@ -78,12 +78,27 @@ functions:
 		string route_calls = ""
 
 		while handler_idx < 30 and keep_going
-			// Find method (GET, POST, PUT, DELETE, PATCH)
-			integer get_pos = remaining.indexOf("GET ")
-			integer post_pos = remaining.indexOf("POST ")
-			integer put_pos = remaining.indexOf("PUT ")
-			integer delete_pos = remaining.indexOf("DELETE ")
-			integer patch_pos = remaining.indexOf("PATCH ")
+			// Find method positions — support both "GET /" and "GET/" (compiler-normalized)
+			integer get_pos = remaining.indexOf("GET/")
+			integer get_pos2 = remaining.indexOf("GET /")
+			if get_pos == -1 or (get_pos2 >= 0 and get_pos2 < get_pos)
+				get_pos = get_pos2
+			integer post_pos = remaining.indexOf("POST/")
+			integer post_pos2 = remaining.indexOf("POST /")
+			if post_pos == -1 or (post_pos2 >= 0 and post_pos2 < post_pos)
+				post_pos = post_pos2
+			integer put_pos = remaining.indexOf("PUT/")
+			integer put_pos2 = remaining.indexOf("PUT /")
+			if put_pos == -1 or (put_pos2 >= 0 and put_pos2 < put_pos)
+				put_pos = put_pos2
+			integer delete_pos = remaining.indexOf("DELETE/")
+			integer delete_pos2 = remaining.indexOf("DELETE /")
+			if delete_pos == -1 or (delete_pos2 >= 0 and delete_pos2 < delete_pos)
+				delete_pos = delete_pos2
+			integer patch_pos = remaining.indexOf("PATCH/")
+			integer patch_pos2 = remaining.indexOf("PATCH /")
+			if patch_pos == -1 or (patch_pos2 >= 0 and patch_pos2 < patch_pos)
+				patch_pos = patch_pos2
 
 			// Find earliest valid position
 			integer method_pos = -1
@@ -111,22 +126,23 @@ functions:
 				// Get substring from method position
 				string from_method = remaining.substring(method_pos, remaining.length())
 
-				// Find end of path — look for colon at end of path declaration
-				// Supports both: GET /path:  and  GET "/path":
-				integer path_start = method.length() + 1
+				// path_start: method.length() if no space, method.length()+1 if space
+				integer path_start = method.length()
+				string char_after = from_method.substring(method.length(), method.length() + 1)
+				if char_after == " "
+					path_start = method.length() + 1
 				string after_method = from_method.substring(path_start, from_method.length())
 
 				// Find the colon that terminates the path (before newline)
+				// NOTE: use indexOf (not lastIndexOf) — lastIndexOf causes infinite loop in WASM runtime
 				integer nl_pos = after_method.indexOf("\n")
 				if nl_pos == -1
 					nl_pos = after_method.length()
 				string first_line = after_method.substring(0, nl_pos)
-				integer colon_pos = first_line.lastIndexOf(":")
+				integer colon_pos = first_line.indexOf(":")
 				if colon_pos == -1
 					colon_pos = first_line.length()
 
-				// Calculate skip_chars (colon + optional space after colon)
-				integer skip_chars = 1
 				integer abs_colon = path_start + colon_pos
 
 				if colon_pos == -1 or colon_pos == first_line.length()
@@ -142,7 +158,7 @@ functions:
 						path = path.substring(0, path.length() - 1)
 
 					// Find handle: block and extract code
-					string endpoint_body = from_method.substring(abs_colon + skip_chars, from_method.length())
+					string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
 					string handler_code = extract_handle_code(endpoint_body)
 
 					// Generate handler function
@@ -159,7 +175,7 @@ functions:
 					handler_idx = handler_idx + 1
 
 					// Advance remaining past this endpoint
-					remaining = from_method.substring(abs_colon + skip_chars, from_method.length())
+					remaining = from_method.substring(abs_colon + 1, from_method.length())
 
 		result = result + "start:\n"
 		result = result + route_calls
@@ -167,58 +183,10 @@ functions:
 		return result
 
 	string extract_handle_code(string endpoint_body)
+		// Simplified handler extraction — avoids transform functions that crash in WASM
 		string result = ""
 
-		// 1. Extract and process guard: block for auth checks
-		integer guard_pos = endpoint_body.indexOf("guard :")
-		if guard_pos == -1
-			guard_pos = endpoint_body.indexOf("guard:")
-		if guard_pos != -1
-			integer guard_end = endpoint_body.indexOf("\n", guard_pos)
-			if guard_end == -1
-				guard_end = endpoint_body.length()
-			// Find guard block content (lines after guard: until next keyword)
-			string guard_content = ""
-			string guard_remaining = endpoint_body.substring(guard_end + 1, endpoint_body.length())
-			integer guard_line_count = 0
-			while guard_line_count < 10
-				guard_line_count = guard_line_count + 1
-				integer gnl = guard_remaining.indexOf("\n")
-				if gnl == -1
-					gnl = guard_remaining.length()
-				string guard_line = guard_remaining.substring(0, gnl).trim()
-				if guard_line.startsWith("returns") or guard_line.startsWith("handle") or guard_line.startsWith("cache") or guard_line.startsWith("body") or guard_line.startsWith("params")
-					break
-				if guard_line.length() > 0
-					guard_content = guard_content + guard_line + "\n"
-				if gnl >= guard_remaining.length()
-					break
-				guard_remaining = guard_remaining.substring(gnl + 1, guard_remaining.length())
-			string guard_code = generate_guard_check(guard_content)
-			if guard_code.length() > 0
-				result = result + guard_code
-
-		// 2. Extract and process returns: block (annotation only — drives OpenAPI/SDK generation)
-		string returns_annotation = extract_returns_annotation(endpoint_body)
-		if returns_annotation.length() > 0
-			result = result + returns_annotation
-
-		// 3. Extract and process cache: block — emits _http_set_cache() call
-		string cache_code = extract_cache_code(endpoint_body)
-		if cache_code.length() > 0
-			result = result + cache_code
-
-		// 4. Extract and process body: declarations
-		string body_vars = extract_body_declarations(endpoint_body)
-		if body_vars.length() > 0
-			result = result + body_vars
-
-		// 5. Extract and process params: declarations
-		string param_vars = extract_params_declarations(endpoint_body)
-		if param_vars.length() > 0
-			result = result + param_vars
-
-		// 6. Find and extract handle: block (or direct code if no handle: keyword)
+		// Find handle: block
 		integer handle_pos = endpoint_body.indexOf("handle :")
 		integer handle_skip = 8
 		if handle_pos == -1
@@ -227,19 +195,32 @@ functions:
 
 		string after_handle = ""
 		if handle_pos == -1
-			// No handle: keyword - use the direct code after the endpoint declaration
 			after_handle = endpoint_body
 		else
-			// Get everything after handle:
 			after_handle = endpoint_body.substring(handle_pos + handle_skip, endpoint_body.length())
 
 		// Find where this handler ends (next endpoint or end of input)
 		integer end_pos = after_handle.length()
 		integer next_get = after_handle.indexOf("GET /")
+		integer next_get2 = after_handle.indexOf("GET/")
+		if next_get == -1 or (next_get2 >= 0 and next_get2 < next_get)
+			next_get = next_get2
 		integer next_post = after_handle.indexOf("POST /")
+		integer next_post2 = after_handle.indexOf("POST/")
+		if next_post == -1 or (next_post2 >= 0 and next_post2 < next_post)
+			next_post = next_post2
 		integer next_put = after_handle.indexOf("PUT /")
+		integer next_put2 = after_handle.indexOf("PUT/")
+		if next_put == -1 or (next_put2 >= 0 and next_put2 < next_put)
+			next_put = next_put2
 		integer next_delete = after_handle.indexOf("DELETE /")
+		integer next_delete2 = after_handle.indexOf("DELETE/")
+		if next_delete == -1 or (next_delete2 >= 0 and next_delete2 < next_delete)
+			next_delete = next_delete2
 		integer next_patch = after_handle.indexOf("PATCH /")
+		integer next_patch2 = after_handle.indexOf("PATCH/")
+		if next_patch == -1 or (next_patch2 >= 0 and next_patch2 < next_patch)
+			next_patch = next_patch2
 
 		if next_get >= 0 and next_get < end_pos
 			end_pos = next_get
@@ -252,127 +233,13 @@ functions:
 		if next_patch >= 0 and next_patch < end_pos
 			end_pos = next_patch
 
-		// Extract handler code (use separate variable to avoid chaining issues)
-		string sub_result = after_handle.substring(0, end_pos)
-		string raw_code = sub_result.trim()
+		string handler_code = after_handle.substring(0, end_pos)
 
-		// 7. Transform the handler code
-		string transformed = transform_handler(raw_code)
-
-		result = result + transformed
-		return result
-
-	string extract_body_declarations(string endpoint_body)
-		// Find body: or body : block
-		integer body_pos = endpoint_body.indexOf("body :")
-		if body_pos == -1
-			body_pos = endpoint_body.indexOf("body:")
-		if body_pos == -1
-			return ""
-
-		// Use simple split by lines approach
-		string result = ""
-		string content = endpoint_body.substring(body_pos + 6, endpoint_body.length())
-
-		// Find first variable line (contains : but not a keyword)
-		integer line_count = 0
-		string remaining = content
-		boolean found_vars = false
-
-		while line_count < 10
-			line_count = line_count + 1
-			integer nl = remaining.indexOf("\n")
-			if nl == -1
-				nl = remaining.length()
-
-			string line = remaining.substring(0, nl)
-			string trimmed = line.trim()
-
-			// Stop at keywords
-			if trimmed.startsWith("returns") or trimmed.startsWith("handle") or trimmed.startsWith("guard")
-				return result
-
-			// Parse variable line
-			if trimmed.length() > 0 and trimmed.indexOf(" :") > 0
-				integer colon = trimmed.indexOf(" :")
-				string var_name_raw = trimmed.substring(0, colon)
-				string var_name = var_name_raw.trim()
-				string var_type_raw = trimmed.substring(colon + 2, trimmed.length())
-				string var_type = var_type_raw.trim()
-				result = result + "\t\t" + var_type + " " + var_name + " = _req_body_field(\"" + var_name + "\")\n"
-				found_vars = true
-
-			// Move to next line
-			if nl >= remaining.length()
-				return result
-			remaining = remaining.substring(nl + 1, remaining.length())
-
-		return result
-
-	string extract_params_declarations(string endpoint_body)
-		// Find params: or params : block
-		integer params_pos = endpoint_body.indexOf("params :")
-		if params_pos == -1
-			params_pos = endpoint_body.indexOf("params:")
-		if params_pos == -1
-			return ""
-
-		// Use simple split by lines approach
-		string result = ""
-		string content = endpoint_body.substring(params_pos + 8, endpoint_body.length())
-
-		integer line_count = 0
-		string remaining = content
-
-		while line_count < 10
-			line_count = line_count + 1
-			integer nl = remaining.indexOf("\n")
-			if nl == -1
-				nl = remaining.length()
-
-			string line = remaining.substring(0, nl)
-			string trimmed = line.trim()
-
-			// Stop at keywords
-			if trimmed.startsWith("returns") or trimmed.startsWith("handle") or trimmed.startsWith("guard") or trimmed.startsWith("body")
-				return result
-
-			// Parse variable line
-			if trimmed.length() > 0 and trimmed.indexOf(" :") > 0
-				integer colon = trimmed.indexOf(" :")
-				string var_name_raw = trimmed.substring(0, colon)
-				string var_name = var_name_raw.trim()
-				string var_type_raw = trimmed.substring(colon + 2, trimmed.length())
-				string var_type = var_type_raw.trim()
-				if var_type == "integer"
-					result = result + "\t\tinteger " + var_name + " = _req_param_int(\"" + var_name + "\")\n"
-				else
-					result = result + "\t\tstring " + var_name + " = _req_param(\"" + var_name + "\")\n"
-
-			// Move to next line
-			if nl >= remaining.length()
-				return result
-			remaining = remaining.substring(nl + 1, remaining.length())
-
-		return result
-
-	string transform_handler(string code)
-		// First apply semantic transforms for req.params.*, req.query.*, req.json(), json+status
-		string pre = code
-		pre = transform_req_params(pre, "")
-		pre = transform_req_query(pre)
-		pre = transform_req_json(pre)
-		pre = transform_json_status(pre)
-
-		// Then process line by line for indentation and syntax transforms
-		string result = ""
-		string remaining = pre
+		// Process line by line — just add indentation, skip empty lines
+		string remaining = handler_code
 		integer safety = 0
-		boolean in_if_block = false
-
 		while safety < 50 and remaining.length() > 0
 			safety = safety + 1
-
 			integer nl = remaining.indexOf("\n")
 			string line = ""
 			if nl == -1
@@ -381,367 +248,11 @@ functions:
 			else
 				line = remaining.substring(0, nl)
 				remaining = remaining.substring(nl + 1, remaining.length())
-
 			string trimmed = line.trim()
-
-			// Skip empty lines
-			if trimmed.length() == 0
-				result = result + ""
-			else
-				// Skip object property lines (key : value) - not code
-				boolean is_property = false
-				if trimmed.indexOf(" : ") > 0
-					if not trimmed.startsWith("if ") and not trimmed.startsWith("return")
-						is_property = true
-
-				if is_property
-					result = result + ""
-				else
-					string transformed = trimmed
-
-					// Transform return json : to return jsonResponse("{}")
-					if transformed.startsWith("return json :") or transformed.startsWith("return json:")
-						transformed = "return jsonResponse(\"{}\")"
-
-					// Transform return html ( to return htmlResponse(
-					if transformed.startsWith("return html (")
-						string rest = transformed.substring(13, transformed.length())
-						transformed = "return htmlResponse(" + rest
-					if transformed.startsWith("return html(")
-						string rest = transformed.substring(12, transformed.length())
-						transformed = "return htmlResponse(" + rest
-
-					// Check if this is an if statement
-					boolean is_if_stmt = false
-					if transformed.startsWith("if ")
-						is_if_stmt = true
-						// Workaround: compiler bug with != in plugin output
-						integer neq_pos = transformed.indexOf(" != ")
-						if neq_pos > 0
-							string before_neq = transformed.substring(3, neq_pos)
-							string after_neq = transformed.substring(neq_pos + 4, transformed.length())
-							if after_neq.endsWith(" :")
-								after_neq = after_neq.substring(0, after_neq.length() - 2)
-							if after_neq.endsWith(":")
-								after_neq = after_neq.substring(0, after_neq.length() - 1)
-							transformed = "if not (" + before_neq + " == " + after_neq + ")"
-						else
-							if transformed.endsWith(" :")
-								transformed = transformed.substring(0, transformed.length() - 2)
-							if transformed.endsWith(":")
-								transformed = transformed.substring(0, transformed.length() - 1)
-
-					// Add appropriate indentation
-					if in_if_block
-						result = result + "\t\t\t" + transformed + "\n"
-						in_if_block = false
-					else
-						result = result + "\t\t" + transformed + "\n"
-
-					if is_if_stmt
-						in_if_block = true
-
-		return result
-
-// ============================================================================
-// RETURNS AND CACHE PROCESSING
-// ============================================================================
-
-functions:
-	string extract_returns_annotation(string endpoint_body)
-		// Find returns: or returns : block
-		integer returns_pos = endpoint_body.indexOf("returns :")
-		if returns_pos == -1
-			returns_pos = endpoint_body.indexOf("returns:")
-		if returns_pos == -1
-			return ""
-
-		// Advance past the keyword and colon — skip to next line
-		integer nl_pos = endpoint_body.indexOf("\n", returns_pos)
-		if nl_pos == -1
-			return ""
-
-		// Collect content lines until the next sub-block keyword
-		string remaining = endpoint_body.substring(nl_pos + 1, endpoint_body.length())
-		string content = ""
-		integer line_count = 0
-
-		while line_count < 10
-			line_count = line_count + 1
-			integer nl = remaining.indexOf("\n")
-			if nl == -1
-				nl = remaining.length()
-			string line = remaining.substring(0, nl)
-			string trimmed = line.trim()
-
-			// Stop at the next sub-block keyword
-			if trimmed.startsWith("guard") or trimmed.startsWith("cache") or trimmed.startsWith("handle") or trimmed.startsWith("body") or trimmed.startsWith("params")
-				break
-
-			// Accumulate non-empty lines as the return type declaration
 			if trimmed.length() > 0
-				if content.length() == 0
-					content = trimmed
-				else
-					content = content + " " + trimmed
-
-			if nl >= remaining.length()
-				break
-			remaining = remaining.substring(nl + 1, remaining.length())
-
-		if content.length() == 0
-			return ""
-
-		// Emit as a comment annotation for OpenAPI/SDK tooling
-		return "\t\t// @returns " + content + "\n"
-
-	string extract_cache_code(string endpoint_body)
-		// Find cache: or cache : block
-		integer cache_pos = endpoint_body.indexOf("cache :")
-		if cache_pos == -1
-			cache_pos = endpoint_body.indexOf("cache:")
-		if cache_pos == -1
-			return ""
-
-		// Advance past the keyword and colon — skip to next line
-		integer nl_pos = endpoint_body.indexOf("\n", cache_pos)
-		if nl_pos == -1
-			return ""
-
-		// Collect content lines until the next sub-block keyword
-		string remaining = endpoint_body.substring(nl_pos + 1, endpoint_body.length())
-		integer line_count = 0
-
-		while line_count < 10
-			line_count = line_count + 1
-			integer nl = remaining.indexOf("\n")
-			if nl == -1
-				nl = remaining.length()
-			string line = remaining.substring(0, nl)
-			string trimmed = line.trim()
-
-			// Stop at the next sub-block keyword
-			if trimmed.startsWith("guard") or trimmed.startsWith("returns") or trimmed.startsWith("handle") or trimmed.startsWith("body") or trimmed.startsWith("params")
-				break
-
-			// Parse maxAge = <number>
-			if trimmed.startsWith("maxAge")
-				integer eq_pos = trimmed.indexOf("=")
-				if eq_pos != -1
-					string value_raw = trimmed.substring(eq_pos + 1, trimmed.length()).trim()
-					if value_raw.length() > 0
-						return "\t\t_http_set_cache(" + value_raw + ")\n"
-
-			// Parse noCache directive (no value expected)
-			if trimmed == "noCache"
-				return "\t\t_http_no_cache()\n"
-
-			if nl >= remaining.length()
-				break
-			remaining = remaining.substring(nl + 1, remaining.length())
-
-		// cache: block found but no recognized directive — emit no-cache as safe default
-		return ""
-
-// ============================================================================
-// GUARD PROCESSING
-// ============================================================================
-
-functions:
-	string generate_guard_check(string guard_block)
-		string result = ""
-
-		// Check for role requirement
-		if guard_block.indexOf("role in") != -1
-			// Extract roles array
-			integer bracket_start = guard_block.indexOf("[")
-			integer bracket_end = guard_block.indexOf("]")
-			if bracket_start != -1 and bracket_end != -1
-				string roles = guard_block.substring(bracket_start, bracket_end + 1)
-				result = result + "\t\tif _auth_has_any_role(\"" + roles + "\") == 0\n"
-				result = result + "\t\t\treturn forbidden()\n"
-
-		// Check for simple role requirement
-		if guard_block.indexOf("role ==") != -1
-			integer eq_pos = guard_block.indexOf("role ==")
-			string role = guard_block.substring(eq_pos + 8, guard_block.length()).trim()
-			// Remove quotes if present
-			if role.startsWith("\"")
-				role = role.substring(1, role.length())
-			if role.endsWith("\"")
-				role = role.substring(0, role.length() - 1)
-			result = result + "\t\tif _auth_require_role(\"" + role + "\") == 0\n"
-			result = result + "\t\t\treturn forbidden()\n"
-
-		// Check for authentication requirement
-		if guard_block.indexOf("authenticated") != -1 or guard_block.indexOf("auth") != -1
-			result = result + "\t\tif _auth_require_auth() == 0\n"
-			result = result + "\t\t\treturn unauthorized()\n"
+				result = result + "\t\t" + trimmed + "\n"
 
 		return result
-
-
-// ============================================================================
-// HANDLER CODE TRANSFORMATION
-// ============================================================================
-
-functions:
-	string transform_req_params(string code, string path)
-		string result = code
-
-		// Find all req.params.* patterns and replace with _req_param("*")
-		integer pos = 0
-		while pos < result.length()
-			integer param_pos = result.indexOf("req.params.", pos)
-			if param_pos == -1
-				break
-
-			// Find end of param name
-			integer name_start = param_pos + 11
-			integer name_end = name_start
-			while name_end < result.length()
-				string ch = result.substring(name_end, name_end + 1)
-				if not is_identifier_char(ch)
-					break
-				name_end = name_end + 1
-
-			string param_name = result.substring(name_start, name_end)
-			string replacement = "_req_param(\"" + param_name + "\")"
-
-			result = result.substring(0, param_pos) + replacement + result.substring(name_end, result.length())
-			pos = param_pos + replacement.length()
-
-		return result
-
-	string transform_req_query(string code)
-		string result = code
-
-		// Find all req.query.* patterns and replace with _req_query("*")
-		integer pos = 0
-		while pos < result.length()
-			integer query_pos = result.indexOf("req.query.", pos)
-			if query_pos == -1
-				break
-
-			// Find end of param name
-			integer name_start = query_pos + 10
-			integer name_end = name_start
-			while name_end < result.length()
-				string ch = result.substring(name_end, name_end + 1)
-				if not is_identifier_char(ch)
-					break
-				name_end = name_end + 1
-
-			string param_name = result.substring(name_start, name_end)
-			string replacement = "_req_query(\"" + param_name + "\")"
-
-			result = result.substring(0, query_pos) + replacement + result.substring(name_end, result.length())
-			pos = query_pos + replacement.length()
-
-		return result
-
-	string transform_req_json(string code)
-		string result = code
-
-		// Find req.json(Type) and replace with cast
-		integer pos = 0
-		while pos < result.length()
-			integer json_pos = result.indexOf("req.json(", pos)
-			if json_pos == -1
-				break
-
-			integer paren_end = result.indexOf(")", json_pos + 9)
-			if paren_end == -1
-				break
-
-			string type_name = result.substring(json_pos + 9, paren_end)
-			string replacement = "_json_decode_as_" + type_name + "(_req_body())"
-
-			result = result.substring(0, json_pos) + replacement + result.substring(paren_end + 1, result.length())
-			pos = json_pos + replacement.length()
-
-		return result
-
-	string transform_json_status(string code)
-		string result = code
-
-		// Transform "return jsonResponse(data), httpStatus(code)" to "return jsonResponseStatus(data, code)"
-		// Also handles legacy patterns with json( and status(
-		integer pos = 0
-		while pos < result.length()
-			// Look for jsonResponse( pattern (or json( for legacy support)
-			integer pattern_pos = result.indexOf("jsonResponse(", pos)
-			integer pattern_len = 13
-			if pattern_pos == -1
-				pattern_pos = result.indexOf("json(", pos)
-				pattern_len = 5
-			if pattern_pos == -1
-				break
-
-			// Find closing paren
-			integer data_start = pattern_pos + pattern_len
-			integer paren_count = 1
-			integer data_end = data_start
-			while data_end < result.length() and paren_count > 0
-				string ch = result.substring(data_end, data_end + 1)
-				if ch == "("
-					paren_count = paren_count + 1
-				if ch == ")"
-					paren_count = paren_count - 1
-				data_end = data_end + 1
-
-			// Check if followed by ", httpStatus(" or ", status("
-			string after_json = result.substring(data_end, result.length()).trim()
-			if after_json.startsWith(", httpStatus(") or after_json.startsWith(", status(")
-				string data_expr = result.substring(data_start, data_end - 1)
-				integer status_start = result.indexOf("(", data_end) + 1
-				integer status_end = result.indexOf(")", status_start)
-				string status_code = result.substring(status_start, status_end)
-
-				string replacement = "jsonResponseStatus(" + data_expr + ", " + status_code + ")"
-				integer full_end = status_end + 1
-				result = result.substring(0, pattern_pos) + replacement + result.substring(full_end, result.length())
-				pos = pattern_pos + replacement.length()
-			else
-				pos = data_end
-
-		return result
-
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-functions:
-
-	boolean is_identifier_char(string ch)
-		if ch >= "a" and ch <= "z"
-			return true
-		if ch >= "A" and ch <= "Z"
-			return true
-		if ch >= "0" and ch <= "9"
-			return true
-		if ch == "_"
-			return true
-		return false
-
-	string get_attr(string attrs, string key, string default_val)
-		string pattern = "\"" + key + "\""
-		integer pos = attrs.indexOf(pattern)
-		if pos == -1
-			return default_val
-		return extract_value(attrs, pos)
-
-	string extract_value(string json, integer key_pos)
-		integer colon_pos = json.indexOf(":", key_pos)
-		if colon_pos == -1
-			return ""
-		integer quote_start = json.indexOf("\"", colon_pos + 1)
-		if quote_start == -1
-			return ""
-		integer quote_end = json.indexOf("\"", quote_start + 1)
-		if quote_end == -1
-			return ""
-		return json.substring(quote_start + 1, quote_end)
 
 // ============================================================================
 // VALIDATION
