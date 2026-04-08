@@ -2,7 +2,7 @@
 
 endpoints Simple:
 	// Health check endpoint
-	GET "/api/health":
+	GET "/api/health" :
 		returns: json
 
 		handle:
@@ -10,7 +10,7 @@ endpoints Simple:
 				status: "ok"
 
 	// Static greeting endpoint
-	GET "/api/hello":
+	GET "/api/hello" :
 		returns: json
 
 		handle:
@@ -18,14 +18,14 @@ endpoints Simple:
 				message: "Hello, World!"
 
 	// HTML response endpoint
-	GET "/api/page":
+	GET "/api/page" :
 		returns: html
 
 		handle:
 			return html("<h1>Welcome to Clean Framework</h1>")
 
 	// Error example
-	GET "/api/error":
+	GET "/api/error" :
 		returns: json
 
 		handle:

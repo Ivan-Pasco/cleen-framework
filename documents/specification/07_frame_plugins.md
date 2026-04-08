@@ -329,10 +329,10 @@ plugins:
 
 server: port=3000
     endpoints:
-        GET /hello
+        GET "/hello" :
             return json({"message": "Hello World"})
 
-        POST /echo
+        POST "/echo" :
             return json(request.body)
 ```
 
@@ -343,11 +343,11 @@ server: port=3000
 // No import needed — frame.server declared in app.cln, processes files in this folder
 
 endpoints:
-    GET /users
+    GET "/users" :
         string result = _db_query("SELECT * FROM users", "[]")
         return json({"ok": true, "data": result})
 
-    POST /users
+    POST "/users" :
         return json({"ok": true})
 ```
 
@@ -440,7 +440,7 @@ roles:
 
 protected: role="user"
     endpoints:
-        GET /profile
+        GET "/profile" :
             return json(request.user)
 ```
 
@@ -643,11 +643,11 @@ plugins:
 // No import statement needed — frame.server declared in app.cln, owns this folder
 
 endpoints:
-    GET /users
+    GET "/users" :
         string result = _db_query("SELECT * FROM users", "[]")
         return json({"ok": true, "data": result})
 
-    POST /users
+    POST "/users" :
         return json({"ok": true})
 ```
 

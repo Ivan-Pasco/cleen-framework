@@ -31,7 +31,7 @@ This document describes the **compiler plugin architecture** where plugins are w
 │       frame.data                                                         │
 │                                                                          │
 │   endpoints:                                                             │
-│       GET /users:                                                        │
+│       GET "/users" :                                                     │
 │           handle:                                                        │
 │               return User.all()                                          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -193,7 +193,7 @@ plugins:
 // and processes this file because app/backend/api/ is in its owned folders
 
 endpoints:
-    GET /users:
+    GET "/users" :
         handle:
             return User.all()
 ```
@@ -219,7 +219,7 @@ When the compiler encounters a framework block:
 
 ```clean
 endpoints:
-    GET /users:
+    GET "/users" :
         handle:
             return User.all()
 ```
@@ -230,7 +230,7 @@ It calls the plugin's `expand_block` function:
 Input:
   - block_name: "endpoints"
   - attributes: '{}'
-  - body: 'GET /users:\n    handle:\n        return User.all()'
+  - body: 'GET "/users" :\n    handle:\n        return User.all()'
 
 Output:
   Clean Language source code that replaces the block
@@ -860,11 +860,11 @@ plugins:
 // frame.server is declared in app.cln and owns this folder
 
 endpoints:
-    GET /users:
+    GET "/users" :
         handle:
             return User.all()
 
-    POST /users:
+    POST "/users" :
         handle:
             user = User.create(request.body)
             return user

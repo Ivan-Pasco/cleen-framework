@@ -638,34 +638,34 @@ plugins:
 **`endpoints:`** - Define HTTP routes
 ```clean
 endpoints:
-    GET /users -> getUsers
-    POST /users -> createUser
-    GET /users/:id -> getUser
-    PUT /users/:id -> updateUser
-    DELETE /users/:id -> deleteUser
+    GET "/users" -> getUsers
+    POST "/users" -> createUser
+    GET "/users/:id" -> getUser
+    PUT "/users/:id" -> updateUser
+    DELETE "/users/:id" -> deleteUser
 ```
 
 **With guards and caching:**
 ```clean
 endpoints:
-    GET /admin/stats -> adminStats
+    GET "/admin/stats" -> adminStats
         guard: role("admin")
         cache: 60
 
-    POST /posts -> createPost
+    POST "/posts" -> createPost
         guard: auth
         returns: Post
 
-    GET /public/data -> publicData
+    GET "/public/data" -> publicData
         cache: 300
 ```
 
 **Full handler example** (`app/backend/api/users.cln`):
 ```clean
 endpoints:
-    GET /users -> getUsers
-    POST /users -> createUser
-    GET /users/:id -> getUser
+    GET "/users" -> getUsers
+    POST "/users" -> createUser
+    GET "/users/:id" -> getUser
 
 functions:
     list<User> getUsers(Request req)
@@ -787,11 +787,15 @@ middleware RateLimit
 **Applying middleware to endpoints:**
 ```clean
 endpoints:
-    GET /api/protected -> protectedHandler
+    GET "/api/protected" :
         middleware: [RequireAuth]
+        handle:
+            return protectedHandler()
 
-    GET /api/admin -> adminHandler
+    GET "/api/admin" :
         middleware: [RequireAuth, RequireAdmin]
+        handle:
+            return adminHandler()
 ```
 
 ### File-Based Routing
@@ -1158,14 +1162,20 @@ boolean isAdmin = auth.hasRole(user, "admin")
 **In endpoint blocks:**
 ```clean
 endpoints:
-    GET /admin/* -> adminHandler
+    GET "/admin/*" :
         guard: role("admin")
+        handle:
+            return adminHandler()
 
-    POST /api/posts/publish -> publishPost
+    POST "/api/posts/publish" :
         guard: permission("post.publish")
+        handle:
+            return publishPost()
 
-    GET /api/profile -> getProfile
+    GET "/api/profile" :
         guard: auth
+        handle:
+            return getProfile()
 ```
 
 **`protected:` block** - Protect entire sections:
@@ -1173,22 +1183,28 @@ endpoints:
 protected:
     guard: auth
     endpoints:
-        GET /dashboard -> dashboard
-        GET /profile -> profile
-        PUT /profile -> updateProfile
+        GET "/dashboard" :
+            return dashboard()
+        GET "/profile" :
+            return profile()
+        PUT "/profile" :
+            return updateProfile()
 
 protected:
     guard: role("admin")
     endpoints:
-        GET /admin -> adminDashboard
-        GET /admin/users -> listUsers
-        DELETE /admin/users/:id -> deleteUser
+        GET "/admin" :
+            return adminDashboard()
+        GET "/admin/users" :
+            return listUsers()
+        DELETE "/admin/users/:id" :
+            return deleteUser()
 ```
 
 **`login:` block** - Login flow configuration:
 ```clean
 login:
-    endpoint: POST /auth/login
+    endpoint: POST "/auth/login"
     redirect: /dashboard
     failRedirect: /login?error=1
     handler: handleLogin

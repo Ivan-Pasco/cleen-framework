@@ -51,7 +51,7 @@ Each API module exposes a single `endpoints:` block. Endpoints are declared by *
 ```clean
 # /app/backend/api/users.cln
 endpoints:
-    GET /api/users:
+    GET "/api/users" :
         list<User> users = User.find:
             where:
                 active == true
@@ -60,7 +60,7 @@ endpoints:
             limit: 50
         return json(users)
 
-    POST /api/users:
+    POST "/api/users" :
         CreateUser body = req.json(CreateUser)
         User u = User.insert:
             name  = body.name
@@ -68,7 +68,7 @@ endpoints:
             active = true
         return json(u), status(201)
 
-    GET /api/users/:id:
+    GET "/api/users/:id" :
         integer id = req.params.id
         User? u = User.first:
             where:
@@ -79,7 +79,7 @@ endpoints:
 ```
 
 **Notes**
-- The body of `METHOD /path:` is the handler. No extra `functions:` wrapper is required.
+- Paths are always quoted: `METHOD "/path" :` — this is the only accepted format.
 - The handler must `return` a Response (e.g., `json(...)`, `html(...)`, `redirect(...)`).
 
 ---
@@ -89,7 +89,7 @@ Sub‑blocks improve clarity and documentation. All are optional.
 
 ```clean
 endpoints:
-    GET /api/secure:
+    GET "/api/secure" :
         guard:
             role in ["admin", "editor"]
         returns:
@@ -153,7 +153,7 @@ Auth lives in `app/auth/auth.cln` and exposes guards usable inside `guard:` bloc
 
 ```clean
 endpoints:
-    GET /api/admin:
+    GET "/api/admin" :
         guard:
             role in ["admin"]
         handle:
@@ -244,14 +244,14 @@ cleen api:sdk      # Client SDKs
 ```clean
 # /app/backend/api/posts.cln
 endpoints:
-    GET /api/posts:
+    GET "/api/posts" :
         list<Post> posts = Post.find:
             order:
                 createdAt desc
             limit: 20
         return json(posts)
 
-    POST /api/posts:
+    POST "/api/posts" :
         CreatePost body = req.json(CreatePost)
         Post p = Post.insert:
             title   = body.title
@@ -263,7 +263,7 @@ endpoints:
 ### 17.2 Guard + Returns + Cache
 ```clean
 endpoints:
-    GET /api/reports/daily:
+    GET "/api/reports/daily" :
         guard:
             role in ["admin"]
         returns:

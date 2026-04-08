@@ -100,7 +100,7 @@ Frame is divided into three main components:
    // No import needed — frame.server is declared in app.cln and owns this folder
 
    endpoints:
-       GET /hello
+       GET "/hello" :
            handle:
                return json({"message": "Hello World"})
    ```
@@ -109,7 +109,7 @@ Frame is divided into three main components:
 
 3. Plugin's `expand_block` function transforms each block:
    ```
-   Input:  endpoints: GET /hello ...
+   Input:  endpoints: GET "/hello" : ...
    Output: Generated Clean code with _http_listen(), _http_route(), etc.
    ```
 
@@ -361,7 +361,7 @@ auth:
 **`app/backend/api/users.cln`** — API endpoints (processed by `frame.server`, declared in app.cln):
 ```clean
 endpoints:
-	POST /login:
+	POST "/login" :
 		LoginForm body = req.json(LoginForm)
 		User? user = User.first:
 			where: email == body.email
@@ -370,7 +370,7 @@ endpoints:
 		Session s = auth.session.create(user.id, claims: { email: user.email, role: user.role })
 		return auth.session.setCookie(s, redirect("/dashboard"))
 
-	GET /profile:
+	GET "/profile" :
 		guard:
 			require_auth()
 		handle:

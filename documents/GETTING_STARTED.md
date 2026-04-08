@@ -137,7 +137,7 @@ Create `app/backend/api/users.cln`:
 
 ```clean
 endpoints:
-	GET /api/users:
+	GET "/api/users" :
 		handle:
 			list users = User.find:
 				where:

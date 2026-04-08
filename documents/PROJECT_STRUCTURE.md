@@ -149,14 +149,14 @@ HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.server`.
 ```clean
 // app/backend/api/users.cln
 endpoints:
-	GET /api/users:
+	GET "/api/users" :
 		handle:
 			list users = User.find:
 				where:
 					active == true
 			return json(users)
 
-	POST /api/users:
+	POST "/api/users" :
 		body:
 			name : string
 			email : string
@@ -166,7 +166,7 @@ endpoints:
 				email = email
 			return json(u)
 
-	GET /api/users/:id:
+	GET "/api/users/:id" :
 		params:
 			id : integer
 		handle:

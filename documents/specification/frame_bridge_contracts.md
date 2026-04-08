@@ -549,7 +549,7 @@ Server-side HTTP handling (Frame Server only).
 ```clean
 // In Clean code
 endpoints:
-    GET /api/users/:id:
+    GET "/api/users/:id" :
         string id = _req_param("id")
         return "User: " + id
 ```
