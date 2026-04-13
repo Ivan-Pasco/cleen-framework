@@ -2,6 +2,8 @@
 
 This file provides guidance when working with the Frame Framework codebase. The Frame Framework is the official full-stack framework for Clean Language, compiling entirely to WebAssembly (WASM).
 
+**Read [KNOWLEDGE.md](./KNOWLEDGE.md) before modifying any framework code** — it documents known fragile areas, plugin expand function behavior, and plugin.toml contract rules.
+
 ## Project Overview
 
 Frame is a modern, full-stack web framework that unifies frontend, backend, and data layers into a single, type-safe programming model. It embodies the Clean Language philosophy: simple, declarative, and transparent code.
@@ -388,7 +390,7 @@ clean-framework/
 ├── examples/                # Example Frame applications
 ├── tests/                   # Test suites
 ├── scripts/                 # Build and test scripts
-├── system-documents/        # Internal development docs
+├── management/        # Internal development docs
 ├── CLAUDE.md                # This file
 ├── README.md                # Project overview
 └── TASKS.md                 # Development task tracker
@@ -567,7 +569,7 @@ Instead:
 
 1. **Document the issue** by creating a prompt/task description
 2. **Save the prompt** in a file that can be executed by the AI instance working in the correct folder
-3. **Location for cross-component prompts**: Save prompts in `../system-documents/cross-component-prompts/` at the project root
+3. **Location for cross-component prompts**: Save prompts in `../management/cross-component-prompts/` at the project root
 
 ### Prompt Format for Cross-Component Issues
 
