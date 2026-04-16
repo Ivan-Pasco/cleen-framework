@@ -2,17 +2,19 @@
 set -e
 cd "$(dirname "$0")"
 
-# Use compiler 0.31.0 — fixes NO-OP string stubs from 0.22.0
-# and avoids `rules` keyword conflict in 0.30.38
-CLN="${CLEEN_HOME:-$HOME/.cleen}/versions/0.31.0/cln"
+# Use compiler 0.30.48 — fixes NO-OP string stubs from 0.22.0,
+# avoids `rules` keyword conflict in 0.30.38,
+# avoids substring-in-concat bug in 0.30.7/0.31.0 (corrupts HTML attribute names),
+# avoids complex-function empty-return bug in 0.30.49+
+CLN="${CLEEN_HOME:-$HOME/.cleen}/versions/0.30.48/cln"
 if [ ! -x "$CLN" ]; then
-	echo "ERROR: Compiler 0.31.0 not found at $CLN"
-	echo "Install it with: cleen install 0.31.0"
+	echo "ERROR: Compiler 0.30.48 not found at $CLN"
+	echo "Install it with: cleen install 0.30.48"
 	exit 1
 fi
 
 "$CLN" compile src/main.cln -o plugin.wasm --target=plugin
-echo "Built frame.ui plugin -> plugin.wasm (compiler 0.31.0)"
+echo "Built frame.ui plugin -> plugin.wasm (compiler 0.30.48)"
 
 # Strip unused imports (session, auth, routing) that the compiler emits
 # unconditionally but the plugin loader doesn't provide.
