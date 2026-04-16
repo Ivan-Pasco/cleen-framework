@@ -69,15 +69,8 @@
 	// --- Bridge Object ---
 
 	const bridge = {
-		env: {
-			// Console
-			print: (ptr, len) => console.log(readString(ptr, len)),
-			printl: (ptr, len) => console.log(readString(ptr, len)),
-			'string.concat': (ptr1, len1, ptr2, len2) => {
-				return writeString(readString(ptr1, len1) + readString(ptr2, len2));
-			},
-
-			// Memory management
+		memory_runtime: {
+			// Memory management — spec: platform-architecture/HOST_BRIDGE.md
 			mem_alloc: (size) => {
 				const ptr = heapPtr;
 				heapPtr += size + (8 - (size % 8));
@@ -87,6 +80,14 @@
 			mem_release: (ptr) => {},
 			mem_scope_push: () => {},
 			mem_scope_pop: () => {},
+		},
+		env: {
+			// Console
+			print: (ptr, len) => console.log(readString(ptr, len)),
+			printl: (ptr, len) => console.log(readString(ptr, len)),
+			'string.concat': (ptr1, len1, ptr2, len2) => {
+				return writeString(readString(ptr1, len1) + readString(ptr2, len2));
+			},
 
 			// ========== HTML Rendering ==========
 
