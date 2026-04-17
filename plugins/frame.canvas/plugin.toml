@@ -1,12 +1,18 @@
 [plugin]
 name = "frame.canvas"
-version = "2.1.1"
+version = "2.1.2"
 description = "Canvas rendering plugin for Clean Language - provides drawing, animation, audio, sprites, input, and visual effects for game development"
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
 min_compiler_version = "0.15.0"
+
+# Canvas/game workloads need frame-stable memory to avoid mid-frame grow stalls.
+# Honored by compiler >= 0.30.57; older compilers silently use target defaults.
+# See platform-architecture/MEMORY_POLICY.md §3 (canvas tier: 256 initial / 1024 max pages).
+[memory]
+tier = "canvas"
 
 [exports]
 expand = "expand_block"

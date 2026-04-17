@@ -1,12 +1,18 @@
 [plugin]
 name = "frame.ui"
-version = "2.6.2"
+version = "2.6.3"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
 min_compiler_version = "0.15.0"
+
+# SSR HTML rendering can exhaust the 32 MB standard tier on large pages.
+# Honored by compiler >= 0.30.57; older compilers silently use target defaults.
+# See platform-architecture/MEMORY_POLICY.md §2.2 and §3 (heavy tier: 64 initial / 1024 max pages).
+[memory]
+tier = "heavy"
 
 [exports]
 # HTML page processing (main entry point for pages)
