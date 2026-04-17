@@ -9,9 +9,13 @@
 	const script = document.currentScript;
 	const wasmPath = script.dataset.wasm || 'frontend.wasm';
 
+	const WASM_PAGE_SIZE = 65536;
+
 	// --- State ---
 	let memory, instance;
-	let heapPtr = 4096;
+	// heapPtr MUST be initialized from the WASM module's __heap_ptr export.
+	// See platform-architecture/MEMORY_POLICY.md §7.2.
+	let heapPtr = -1;
 	let currentEvent = null;
 	let currentEventTarget = null;
 	const componentRegistry = new Map();
@@ -20,14 +24,93 @@
 	const registeredEventTypes = new Set();
 	const eventHandlers = new Map(); // "selector\0eventType" -> [handlerIdx, ...]
 
+	// --- Memory observability (MEMORY_POLICY.md §9.3) ---
+
+	const memStats = {
+		maxPages: null,
+		growCount: 0,
+		lastBufferSize: 0,
+	};
+
+	function checkMemoryGrowth() {
+		if (!memory) return;
+		const size = memory.buffer.byteLength;
+		if (size !== memStats.lastBufferSize) {
+			const fromPages = memStats.lastBufferSize / WASM_PAGE_SIZE;
+			const toPages = size / WASM_PAGE_SIZE;
+			const fromMB = (memStats.lastBufferSize / (1024 * 1024)).toFixed(1);
+			const toMB = (size / (1024 * 1024)).toFixed(1);
+			console.warn(`[clean] Memory grew: ${fromPages} → ${toPages} pages (${fromMB} MB → ${toMB} MB)`);
+			memStats.growCount++;
+			memStats.lastBufferSize = size;
+		}
+	}
+
+	function memoryStats() {
+		const size = memory ? memory.buffer.byteLength : 0;
+		return {
+			currentPages: size / WASM_PAGE_SIZE,
+			currentBytes: size,
+			maxPages: memStats.maxPages,
+			growCount: memStats.growCount,
+			heapPtr: heapPtr,
+		};
+	}
+
+	// --- WASM memory-section parsing (for maxPages) ---
+
+	function readULEB128(bytes, ref) {
+		let result = 0, shift = 0, byte;
+		do {
+			if (ref.offset >= bytes.length) throw new Error('ULEB128 truncated');
+			byte = bytes[ref.offset++];
+			result |= (byte & 0x7f) << shift;
+			shift += 7;
+			if (shift > 35) throw new Error('ULEB128 overflow');
+		} while (byte & 0x80);
+		return result >>> 0;
+	}
+
+	function readWasmString(bytes, ref) {
+		const len = readULEB128(bytes, ref);
+		ref.offset += len;
+	}
+
+	function parseMaxPages(wasmBuffer) {
+		const bytes = new Uint8Array(wasmBuffer);
+		if (bytes.length < 8) return null;
+		if (bytes[0] !== 0x00 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) return null;
+		const ref = { offset: 8 };
+		while (ref.offset < bytes.length) {
+			const sectionId = bytes[ref.offset++];
+			const sectionSize = readULEB128(bytes, ref);
+			const sectionEnd = ref.offset + sectionSize;
+			try {
+				if (sectionId === 5) {
+					const count = readULEB128(bytes, ref);
+					if (count > 0) {
+						const flags = readULEB128(bytes, ref);
+						readULEB128(bytes, ref); // initial
+						if (flags & 0x01) return readULEB128(bytes, ref);
+						return null;
+					}
+				}
+			} catch (_) { /* fall through */ }
+			ref.offset = sectionEnd;
+		}
+		return null;
+	}
+
 	// --- Memory Helpers ---
 
 	function readString(ptr, len) {
+		checkMemoryGrowth();
 		const bytes = new Uint8Array(memory.buffer, ptr, len);
 		return new TextDecoder().decode(bytes);
 	}
 
 	function writeString(str) {
+		checkMemoryGrowth();
 		const bytes = new TextEncoder().encode(str);
 		const ptr = heapPtr;
 		const view = new Uint8Array(memory.buffer, ptr, bytes.length + 8);
@@ -470,13 +553,40 @@
 	try {
 		const response = await fetch(wasmPath);
 		const bytes = await response.arrayBuffer();
+
+		memStats.maxPages = parseMaxPages(bytes);
+
 		const module = await WebAssembly.instantiate(bytes, bridge);
 		instance = module.instance;
 		memory = instance.exports.memory;
+		memStats.lastBufferSize = memory.buffer.byteLength;
 
-		if (instance.exports.__heap_ptr) {
-			heapPtr = instance.exports.__heap_ptr.value;
+		// __heap_ptr is authoritative per MEMORY_POLICY.md §7.2.
+		// A missing export means the module was compiled without the runtime heap setup —
+		// falling back to a hardcoded offset would corrupt the data section.
+		const heapPtrExport = instance.exports.__heap_ptr;
+		if (!heapPtrExport || typeof heapPtrExport.value !== 'number') {
+			throw new Error(
+				'Frame UI: WASM module missing __heap_ptr export. ' +
+				'Recompile with a compiler that emits the runtime heap pointer.'
+			);
 		}
+		heapPtr = heapPtrExport.value;
+
+		if (typeof window !== 'undefined') {
+			if (!window.__cleanRuntime) {
+				window.__cleanRuntime = {
+					_providers: [],
+					memoryStats() {
+						const p = this._providers[this._providers.length - 1];
+						return p ? p() : null;
+					}
+				};
+			}
+			window.__cleanRuntime._providers.push(memoryStats);
+		}
+
+		checkMemoryGrowth();
 
 		// Call _start — registers event handlers via _ui_on_event
 		if (instance.exports._start) {
@@ -484,6 +594,8 @@
 		} else if (instance.exports.start) {
 			instance.exports.start();
 		}
+
+		checkMemoryGrowth();
 
 	} catch (err) {
 		console.error('Frame UI Loader Error:', err);

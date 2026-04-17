@@ -20,6 +20,112 @@
   // String buffer for WASM string returns
   const STRING_BUFFER_SIZE = 65536;
   const STRING_BUFFER_OFFSET = 1024 * 1024; // 1MB offset
+  const WASM_PAGE_SIZE = 65536;
+
+  // Standard tier fallback per platform-architecture/MEMORY_POLICY.md §3
+  const CANVAS_TIER_INITIAL_PAGES = 256;
+  const CANVAS_TIER_MAX_PAGES = 1024;
+
+  // --- WASM binary parsing (reads module's declared memory) ---
+  // See platform-architecture/MEMORY_POLICY.md §6.2
+
+  function _readULEB128(bytes, ref) {
+    let result = 0, shift = 0, byte;
+    do {
+      if (ref.offset >= bytes.length) throw new Error('ULEB128 truncated');
+      byte = bytes[ref.offset++];
+      result |= (byte & 0x7f) << shift;
+      shift += 7;
+      if (shift > 35) throw new Error('ULEB128 overflow');
+    } while (byte & 0x80);
+    return result >>> 0;
+  }
+
+  function _readWasmString(bytes, ref) {
+    const len = _readULEB128(bytes, ref);
+    const str = new TextDecoder().decode(bytes.subarray(ref.offset, ref.offset + len));
+    ref.offset += len;
+    return str;
+  }
+
+  function _readMemoryLimits(bytes, ref) {
+    const flags = _readULEB128(bytes, ref);
+    const initial = _readULEB128(bytes, ref);
+    const max = (flags & 0x01) ? _readULEB128(bytes, ref) : null;
+    return { initial, max };
+  }
+
+  function parseWasmMemoryDecl(wasmBuffer) {
+    const bytes = new Uint8Array(wasmBuffer);
+    if (bytes.length < 8) return null;
+    if (bytes[0] !== 0x00 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) return null;
+
+    const ref = { offset: 8 };
+    let fromCustom = null, fromImport = null, fromMemory = null;
+
+    while (ref.offset < bytes.length) {
+      const sectionId = bytes[ref.offset++];
+      const sectionSize = _readULEB128(bytes, ref);
+      const sectionEnd = ref.offset + sectionSize;
+
+      try {
+        if (sectionId === 0) {
+          const name = _readWasmString(bytes, ref);
+          if (name === 'clean:memory') {
+            // Format: initial_pages:ULEB128, max_pages:ULEB128 (tier string may follow; ignored here)
+            const initial = _readULEB128(bytes, ref);
+            const max = _readULEB128(bytes, ref);
+            fromCustom = { initial, max, source: 'clean:memory' };
+          }
+        } else if (sectionId === 2) {
+          const count = _readULEB128(bytes, ref);
+          for (let i = 0; i < count; i++) {
+            _readWasmString(bytes, ref); // module
+            _readWasmString(bytes, ref); // name
+            const kind = bytes[ref.offset++];
+            if (kind === 0) {
+              _readULEB128(bytes, ref); // typeidx
+            } else if (kind === 1) {
+              ref.offset++; // reftype
+              _readMemoryLimits(bytes, ref);
+            } else if (kind === 2) {
+              const limits = _readMemoryLimits(bytes, ref);
+              if (!fromImport) fromImport = { ...limits, source: 'import' };
+            } else if (kind === 3) {
+              ref.offset += 2; // valtype + mut
+            }
+          }
+        } else if (sectionId === 5) {
+          const count = _readULEB128(bytes, ref);
+          if (count > 0 && !fromMemory) {
+            fromMemory = { ..._readMemoryLimits(bytes, ref), source: 'memory-section' };
+          }
+        }
+      } catch (_) {
+        // tolerate malformed section — fall through to next
+      }
+
+      ref.offset = sectionEnd;
+    }
+
+    return fromCustom || fromImport || fromMemory;
+  }
+
+  // --- window.__cleanRuntime registration (MEMORY_POLICY.md §9.3) ---
+
+  function registerCleanRuntime(statsProvider) {
+    if (typeof window === 'undefined') return;
+    if (!window.__cleanRuntime) {
+      window.__cleanRuntime = {
+        _providers: [],
+        memoryStats() {
+          const p = this._providers[this._providers.length - 1];
+          return p ? p() : null;
+        }
+      };
+    }
+    window.__cleanRuntime._providers.push(statsProvider);
+  }
 
   /**
    * Clean Canvas Application Loader
@@ -30,6 +136,36 @@
       this.memory = null;
       this.instance = null;
       this.stringAllocOffset = STRING_BUFFER_OFFSET;
+      this._initialPages = 0;
+      this._maxPages = 0;
+      this._growCount = 0;
+      this._lastBufferSize = 0;
+      this._heapPtr = 0;
+    }
+
+    _checkMemoryGrowth() {
+      if (!this.memory) return;
+      const size = this.memory.buffer.byteLength;
+      if (size !== this._lastBufferSize) {
+        const fromPages = this._lastBufferSize / WASM_PAGE_SIZE;
+        const toPages = size / WASM_PAGE_SIZE;
+        const fromMB = (this._lastBufferSize / (1024 * 1024)).toFixed(1);
+        const toMB = (size / (1024 * 1024)).toFixed(1);
+        console.warn(`[clean] Memory grew: ${fromPages} → ${toPages} pages (${fromMB} MB → ${toMB} MB)`);
+        this._growCount++;
+        this._lastBufferSize = size;
+      }
+    }
+
+    _memoryStats() {
+      const size = this.memory ? this.memory.buffer.byteLength : 0;
+      return {
+        currentPages: size / WASM_PAGE_SIZE,
+        currentBytes: size,
+        maxPages: this._maxPages,
+        growCount: this._growCount,
+        heapPtr: this._heapPtr,
+      };
     }
 
     /**
@@ -41,12 +177,36 @@
     async load(url, options = {}) {
       console.log(`[CleanCanvas] Loading ${url}...`);
 
-      // Create memory
-      const memoryPages = options.memoryPages || 256; // 16MB default
-      this.memory = new WebAssembly.Memory({
-        initial: memoryPages,
-        maximum: memoryPages * 4
-      });
+      // Fetch WASM first so we can inspect its memory declaration
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${url}: ${response.status}`);
+      }
+      const wasmBuffer = await response.arrayBuffer();
+
+      // Resolve initial/max pages per MEMORY_POLICY.md §6.2:
+      //   1. Caller override (options.memoryPages)
+      //   2. Module declaration (clean:memory custom section, then import descriptor, then memory section)
+      //   3. Canvas tier defaults (256 / 1024)
+      const decl = parseWasmMemoryDecl(wasmBuffer);
+      let initialPages, maxPages;
+      if (options.memoryPages) {
+        initialPages = options.memoryPages;
+        maxPages = options.memoryMaxPages || options.memoryPages * 4;
+      } else if (decl) {
+        initialPages = decl.initial;
+        maxPages = decl.max != null ? decl.max : CANVAS_TIER_MAX_PAGES;
+        console.log(`[CleanCanvas] Memory from WASM ${decl.source}: initial=${initialPages} max=${maxPages}`);
+      } else {
+        initialPages = CANVAS_TIER_INITIAL_PAGES;
+        maxPages = CANVAS_TIER_MAX_PAGES;
+        console.log(`[CleanCanvas] No memory declaration found; using canvas tier defaults (${initialPages}/${maxPages})`);
+      }
+
+      this._initialPages = initialPages;
+      this._maxPages = maxPages;
+      this.memory = new WebAssembly.Memory({ initial: initialPages, maximum: maxPages });
+      this._lastBufferSize = this.memory.buffer.byteLength;
 
       // Get bridge imports
       const bridgeImports = this.bridge.getImports(this.memory);
@@ -64,17 +224,19 @@
       };
 
       try {
-        // Fetch and compile WASM
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch ${url}: ${response.status}`);
-        }
-
-        const wasmBuffer = await response.arrayBuffer();
         const { instance } = await WebAssembly.instantiate(wasmBuffer, imports);
 
         this.instance = instance;
         this.bridge.setWasmInstance(instance);
+
+        if (instance.exports.__heap_ptr && typeof instance.exports.__heap_ptr.value === 'number') {
+          this._heapPtr = instance.exports.__heap_ptr.value;
+        }
+
+        // Check for module-initiated growth during instantiation/start
+        this._checkMemoryGrowth();
+
+        registerCleanRuntime(() => this._memoryStats());
 
         console.log('[CleanCanvas] WASM loaded successfully');
         console.log('[CleanCanvas] Exports:', Object.keys(instance.exports));
@@ -313,6 +475,7 @@
      */
     readString(ptr, len) {
       if (!this.memory) return '';
+      this._checkMemoryGrowth();
       const bytes = new Uint8Array(this.memory.buffer, ptr, len);
       return new TextDecoder().decode(bytes);
     }
@@ -322,6 +485,7 @@
      */
     writeString(str, ptr) {
       if (!this.memory) return 0;
+      this._checkMemoryGrowth();
       const bytes = new TextEncoder().encode(str);
       const view = new Uint8Array(this.memory.buffer, ptr, bytes.length);
       view.set(bytes);

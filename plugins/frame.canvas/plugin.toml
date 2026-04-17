@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.canvas"
-version = "2.1.0"
+version = "2.1.1"
 description = "Canvas rendering plugin for Clean Language - provides drawing, animation, audio, sprites, input, and visual effects for game development"
 author = "Clean Language Team"
 license = "MIT"
