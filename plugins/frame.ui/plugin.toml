@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.6.3"
+version = "2.6.4"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -74,7 +74,7 @@ functions = [
   { name = "_ui_get_slot", params = ["string"], returns = "string", description = "Get slot content by name", expand_strings = true },
 
   # Event Handler Registration (for client-side hydration)
-  { name = "_ui_on_event", params = ["string", "string", "handler"], returns = "integer", description = "Register event handler: selector, event type, handler function", expand_strings = true },
+  { name = "_ui_on_event", params = ["string", "string", "string"], returns = "integer", description = "Register event handler: selector, event type, exported handler function name", expand_strings = true },
 
   # State Management (for hydration)
   { name = "_ui_set_state", params = ["string", "string"], returns = "integer", description = "Set component state: component id, state JSON", expand_strings = true },
@@ -125,7 +125,7 @@ functions = [
   { name = "_ui_observe_visible", params = ["string", "string"], returns = "integer", description = "Add class to elements when they become visible (one-shot)", expand_strings = true },
 
   # Timers
-  { name = "_ui_set_timeout", params = ["handler", "integer"], returns = "integer", description = "Call handler function after delay ms: handler, delay_ms" },
+  { name = "_ui_set_timeout", params = ["string", "integer"], returns = "integer", description = "Call exported handler function by name after delay ms: handler name, delay_ms", expand_strings = true },
 
   # Theming
   { name = "_ui_inject_head_css", params = ["string"], returns = "integer", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true },
@@ -183,7 +183,7 @@ functions = [
   { name = "ui.formData", signature = "ui.formData(selector)", description = "Collect all named form inputs as URL-encoded string", maps_to = "_ui_form_data" },
   { name = "ui.checked", signature = "ui.checked(selector)", description = "Get checkbox checked state (0 or 1)" },
   { name = "ui.setInput", signature = "ui.setInput(selector, value)", description = "Set value of input/textarea/select", maps_to = "_ui_set_input" },
-  { name = "ui.onEvent", signature = "ui.onEvent(selector, eventType, handler)", description = "Register event handler for CSS selector and event type", maps_to = "_ui_on_event" },
+  { name = "ui.onEvent", signature = "ui.onEvent(selector, eventType, handlerName)", description = "Register event handler by exported function name for CSS selector and event type", maps_to = "_ui_on_event" },
   { name = "ui.toggleClass", signature = "ui.toggleClass(selector, className)", description = "Toggle CSS class on first matching element", maps_to = "_ui_toggle_class" },
   { name = "ui.addClass", signature = "ui.addClass(selector, className)", description = "Add CSS class to first matching element", maps_to = "_ui_add_class" },
   { name = "ui.removeClass", signature = "ui.removeClass(selector, className)", description = "Remove CSS class from first matching element", maps_to = "_ui_remove_class" },
@@ -200,7 +200,7 @@ functions = [
   { name = "ui.locationQuery", signature = "ui.locationQuery(param)", description = "Get URL query parameter", maps_to = "_ui_location_query" },
   { name = "ui.locationPath", signature = "ui.locationPath()", description = "Get current URL pathname", maps_to = "_ui_location_path" },
   { name = "ui.observeVisible", signature = "ui.observeVisible(selector, className)", description = "Add class when elements become visible", maps_to = "_ui_observe_visible" },
-  { name = "ui.setTimeout", signature = "ui.setTimeout(handler, delayMs)", description = "Call handler after delay", maps_to = "_ui_set_timeout" },
+  { name = "ui.setTimeout", signature = "ui.setTimeout(handlerName, delayMs)", description = "Call exported handler by name after delay", maps_to = "_ui_set_timeout" },
   { name = "ui.filterByAttr", signature = "ui.filterByAttr(selector, attr, value)", description = "Show/hide elements by attribute match", maps_to = "_ui_filter_by_attr" },
   { name = "ui.filterByText", signature = "ui.filterByText(selector, nameAttr, descAttr, query)", description = "Filter elements by text search", maps_to = "_ui_filter_by_text" },
   { name = "ui.queryAddClass", signature = "ui.queryAddClass(selector, className)", description = "Add class to ALL matching elements", maps_to = "_ui_query_add_class" },

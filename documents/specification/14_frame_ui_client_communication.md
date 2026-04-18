@@ -57,8 +57,8 @@ frame.canvas  → What you DRAW      (graphics, animation, sprites)
 // Server-side (frame.server): synchronous, returns directly
 string data = http.get("https://external-api.com/data")
 
-// Client-side (frame.client): asynchronous, dispatches to handler
-integer s = api.get("/api/users", 1)
+// Client-side (frame.client): asynchronous, dispatches to handler by name
+integer s = api.get("/api/users", "onUsersLoaded")
 ```
 
 Different plugins. Different namespaces. Different calling conventions. Clear.
@@ -75,44 +75,42 @@ Developer-facing syntax is unchanged: `endpoints:`, `req.*`, `res.*`, `json()`, 
 
 ## 3. Async Model: Named Handlers
 
-All client communication uses **named handler functions**:
+All client communication dispatches to a **named handler function** passed as a string:
 
 ```clean
 start:
-    integer s = ui.onEvent("#btn", "click", loadUsers)
+    integer s = ui.onEvent("#btn", "click", "loadUsers")
 
 functions:
     loadUsers()
-        integer s = api.get("/api/users", onUsersLoaded)
+        integer s = api.get("/api/users", "onUsersLoaded")
 
     onUsersLoaded()
         string name = api.json("name")
         integer s = ui.updateElement("#user-name", name)
 ```
 
-1. A function initiates an async operation with a **handler function name** as parameter
-2. When complete, the named function is called
+1. A function initiates an async operation with a **handler function name** (string literal) as parameter
+2. When the operation completes, the runtime calls `instance.exports[handlerName]`
 3. Context functions provide data inside the handler (`api.json()`, `live.message()`, etc.)
 
-### 3.1 The `handler` Type
+### 3.1 Handler Parameters — String Names
 
-Plugin bridge functions declare handler parameters with the `handler` type:
+Plugin bridge functions declare handler parameters as `"string"` with `expand_strings = true`:
 
 ```toml
-{ name = "_api_get", params = ["string", "handler"], ... }
+{ name = "_api_get", params = ["string", "string"], returns = "integer", expand_strings = true, ... }
 ```
 
-The compiler:
-1. Accepts a function name (not a number) in that position
-2. Validates the function exists in the current `functions:` block
-3. Auto-assigns a numeric index internally
-4. Exports the function so the runtime can dispatch to it
+The runtime:
+1. Reads the handler-name string from WASM memory (pointer + length pair)
+2. Looks up `instance.exports[handlerName]` on the active module
+3. Calls it with no arguments (context is read via `api.*`, `live.*`, `feed.*` accessors)
+4. Logs `console.error` to the browser console if the name has no matching export — mistyped names surface immediately instead of being silently dropped
 
-At the WASM level, `handler` compiles to `i32`. The runtime dispatches by index. **The developer never sees or writes indices.**
+Because top-level Clean functions are exported by default, any function declared in the module's `functions:` block is a valid handler. Handlers must be **top-level** functions — methods on classes are not callable through the export table.
 
-This is consistent with:
-- The `function` type already in Clean Language (used in `map()`, `filter()`, `reduce()`)
-- The `endpoints:` block which already maps `GET "/path" -> handlerName` to internal indices
+This replaces an earlier design that attempted to pass function references as indices into a WASM indirect function table. That design depended on compiler support for function pointers (`COMPILER_FN_POINTERS_UNIMPL`) and silently dropped every registration when the table was absent. The current design works with the compiler as shipped today.
 
 ### 3.2 Why Not Synchronous
 
@@ -195,16 +193,16 @@ _ui_setInput: (selectorPtr, selectorLen, valPtr, valLen) => {
 
 | Clean Syntax | Bridge Name | Params | Returns | Description |
 |-------------|-------------|--------|---------|-------------|
-| `api.get(url, handler)` | `_api_get` | `string, handler` | `integer` | GET request |
-| `api.post(url, body, handler)` | `_api_post` | `string, string, handler` | `integer` | POST request |
-| `api.put(url, body, handler)` | `_api_put` | `string, string, handler` | `integer` | PUT request |
-| `api.patch(url, body, handler)` | `_api_patch` | `string, string, handler` | `integer` | PATCH request |
-| `api.delete(url, handler)` | `_api_delete` | `string, handler` | `integer` | DELETE request |
+| `api.get(url, handlerName)` | `_api_get` | `string, string` | `integer` | GET request |
+| `api.post(url, body, handlerName)` | `_api_post` | `string, string, string` | `integer` | POST request |
+| `api.put(url, body, handlerName)` | `_api_put` | `string, string, string` | `integer` | PUT request |
+| `api.patch(url, body, handlerName)` | `_api_patch` | `string, string, string` | `integer` | PATCH request |
+| `api.delete(url, handlerName)` | `_api_delete` | `string, string` | `integer` | DELETE request |
 | `api.header(name, value)` | `_api_header` | `string, string` | `integer` | Set header for next request |
 | `api.timeout(ms)` | `_api_timeout` | `integer` | `integer` | Set timeout for next request |
 | `api.auth(scheme, credential)` | `_api_auth` | `string, string` | `integer` | Set auth for all requests |
 | `api.clearAuth()` | `_api_clearAuth` | none | `integer` | Clear stored auth |
-| `api.submit(formSelector, url, method, handler)` | `_api_submit` | `string, string, string, handler` | `integer` | Collect form JSON + send |
+| `api.submit(formSelector, url, method, handlerName)` | `_api_submit` | `string, string, string, string` | `integer` | Collect form JSON + send |
 
 ### 5.2 Response Context (inside handler)
 
@@ -236,9 +234,9 @@ The response handler is ALWAYS called. No separate error handler. Check `api.ok(
 api.auth("bearer", token)
 
 // These all include Authorization header automatically:
-api.get("/protected/data", onData)
-api.post("/protected/create", body, onCreated)
-api.submit("#form", "/protected/save", "POST", onSaved)
+api.get("/protected/data", "onData")
+api.post("/protected/create", body, "onCreated")
+api.submit("#form", "/protected/save", "POST", "onSaved")
 
 // Clear when done
 api.clearAuth()
@@ -255,11 +253,11 @@ Collects form fields as JSON, sets Content-Type, sends, and dispatches response:
 createUser()
     string body = ui.formJson("#create-form")
     integer s = api.header("Content-Type", "application/json")
-    s = api.post("/api/users", body, onCreated)
+    s = api.post("/api/users", body, "onCreated")
 
 // Short way:
 createUser()
-    integer s = api.submit("#create-form", "/api/users", "POST", onCreated)
+    integer s = api.submit("#create-form", "/api/users", "POST", "onCreated")
 ```
 
 ---
@@ -270,7 +268,7 @@ createUser()
 
 | Clean Syntax | Bridge Name | Params | Returns | Description |
 |-------------|-------------|--------|---------|-------------|
-| `live.open(url, onMsg, onClose, onError)` | `_live_open` | `string, handler, handler, handler` | `integer` | Open connection. Returns connection ID. |
+| `live.open(url, onMsgName, onCloseName, onErrorName)` | `_live_open` | `string, string, string, string` | `integer` | Open connection. Returns connection ID. |
 | `live.send(connId, message)` | `_live_send` | `integer, string` | `integer` | Send message |
 | `live.close(connId)` | `_live_close` | `integer` | `integer` | Close connection |
 | `live.state(connId)` | `_live_state` | `integer` | `string` | "connecting", "open", "closing", "closed" |
@@ -310,8 +308,8 @@ live.open() called
 
 | Clean Syntax | Bridge Name | Params | Returns | Description |
 |-------------|-------------|--------|---------|-------------|
-| `feed.open(url, onMsg, onError)` | `_feed_open` | `string, handler, handler` | `integer` | Open feed. Returns connection ID. |
-| `feed.on(connId, eventName, handler)` | `_feed_on` | `integer, string, handler` | `integer` | Listen for named event type |
+| `feed.open(url, onMsgName, onErrorName)` | `_feed_open` | `string, string, string` | `integer` | Open feed. Returns connection ID. |
+| `feed.on(connId, eventName, handlerName)` | `_feed_on` | `integer, string, string` | `integer` | Listen for named event type |
 | `feed.close(connId)` | `_feed_close` | `integer` | `integer` | Close feed |
 
 ### 7.2 Context Functions (inside handlers)
@@ -352,11 +350,11 @@ import frame.ui
 import frame.client
 
 start:
-    integer s = ui.onEvent("#load-btn", "click", loadUser)
+    integer s = ui.onEvent("#load-btn", "click", "loadUser")
 
 functions:
     loadUser()
-        integer s = api.get("/api/users", onUserLoaded)
+        integer s = api.get("/api/users", "onUserLoaded")
 
     onUserLoaded()
         if api.ok() == 1
@@ -375,9 +373,9 @@ import frame.client
 start:
     string token = ui.locationQuery("token")
     integer s = api.auth("bearer", token)
-    s = api.get("/api/users", onUsersLoaded)
-    s = ui.onEvent(".delete-btn", "click", deleteUser)
-    s = ui.onEvent("#create-form", "submit", createUser)
+    s = api.get("/api/users", "onUsersLoaded")
+    s = ui.onEvent(".delete-btn", "click", "deleteUser")
+    s = ui.onEvent("#create-form", "submit", "createUser")
 
 functions:
     onUsersLoaded()
@@ -387,18 +385,18 @@ functions:
 
     deleteUser()
         string id = ui.eventAttr("data-id")
-        integer s = api.delete("/api/users/" + id, onDeleted)
+        integer s = api.delete("/api/users/" + id, "onDeleted")
 
     onDeleted()
         if api.ok() == 1
-            integer s = api.get("/api/users", onUsersLoaded)
+            integer s = api.get("/api/users", "onUsersLoaded")
 
     createUser()
-        integer s = api.submit("#create-form", "/api/users", "POST", onCreated)
+        integer s = api.submit("#create-form", "/api/users", "POST", "onCreated")
 
     onCreated()
         if api.status() == 201
-            integer s = api.get("/api/users", onUsersLoaded)
+            integer s = api.get("/api/users", "onUsersLoaded")
             s = ui.setInput("#name", "")
             s = ui.setInput("#email", "")
         else
@@ -413,14 +411,14 @@ import frame.ui
 import frame.client
 
 start:
-    integer s = ui.onEvent("#send-btn", "click", sendLegacy)
+    integer s = ui.onEvent("#send-btn", "click", "sendLegacy")
 
 functions:
     sendLegacy()
         integer s = api.header("X-Api-Key", "secret-123")
         s = api.header("Content-Type", "text/xml")
         s = api.timeout(5000)
-        s = api.post("/api/legacy", "<xml>data</xml>", onLegacyResponse)
+        s = api.post("/api/legacy", "<xml>data</xml>", "onLegacyResponse")
 
     onLegacyResponse()
         integer status = api.status()
@@ -436,9 +434,9 @@ import frame.ui
 import frame.client
 
 start:
-    integer conn = live.open("wss://chat.example.com/room", onChatMessage, onChatClosed, onChatError)
+    integer conn = live.open("wss://chat.example.com/room", "onChatMessage", "onChatClosed", "onChatError")
     integer s = ui.setState("conn", conn.toString())
-    s = ui.onEvent("#send-btn", "click", sendMessage)
+    s = ui.onEvent("#send-btn", "click", "sendMessage")
 
 functions:
     onChatMessage()
@@ -452,14 +450,14 @@ functions:
         integer code = live.closeCode()
         integer s = ui.addClass("#status", "offline")
         s = ui.updateElement("#status", "Disconnected")
-        s = ui.setTimeout(reconnectChat, 5000)
+        s = ui.setTimeout("reconnectChat", 5000)
 
     onChatError()
         string err = live.error()
         integer s = ui.updateElement("#status", "Error: " + err)
 
     reconnectChat()
-        integer conn = live.open("wss://chat.example.com/room", onChatMessage, onChatClosed, onChatError)
+        integer conn = live.open("wss://chat.example.com/room", "onChatMessage", "onChatClosed", "onChatError")
         integer s = ui.setState("conn", conn.toString())
 
     sendMessage()
@@ -477,7 +475,7 @@ import frame.ui
 import frame.client
 
 start:
-    integer conn = live.open("wss://api.example.com/metrics", onMetrics, onMetricsLost, onMetricsError)
+    integer conn = live.open("wss://api.example.com/metrics", "onMetrics", "onMetricsLost", "onMetricsError")
 
 functions:
     onMetrics()
@@ -493,13 +491,13 @@ functions:
 
     onMetricsLost()
         integer s = ui.addClass("#dashboard", "offline")
-        s = ui.setTimeout(reconnectMetrics, 3000)
+        s = ui.setTimeout("reconnectMetrics", 3000)
 
     onMetricsError()
         integer s = ui.addClass("#dashboard", "error")
 
     reconnectMetrics()
-        integer conn = live.open("wss://api.example.com/metrics", onMetrics, onMetricsLost, onMetricsError)
+        integer conn = live.open("wss://api.example.com/metrics", "onMetrics", "onMetricsLost", "onMetricsError")
         integer s = ui.removeClass("#dashboard", "offline")
 ```
 
@@ -510,10 +508,10 @@ import frame.ui
 import frame.client
 
 start:
-    integer conn = feed.open("/api/build/stream", onBuildLog, onBuildFeedError)
-    integer s = feed.on(conn, "progress", onBuildProgress)
-    s = feed.on(conn, "complete", onBuildComplete)
-    s = feed.on(conn, "error", onBuildFailed)
+    integer conn = feed.open("/api/build/stream", "onBuildLog", "onBuildFeedError")
+    integer s = feed.on(conn, "progress", "onBuildProgress")
+    s = feed.on(conn, "complete", "onBuildComplete")
+    s = feed.on(conn, "error", "onBuildFailed")
     s = ui.setState("feed-conn", conn.toString())
 
 functions:
@@ -551,17 +549,17 @@ import frame.ui
 import frame.client
 
 start:
-    integer conn = feed.open("/api/notifications", onNotification, onNotificationError)
-    integer s = feed.on(conn, "info", onInfoNotification)
-    s = feed.on(conn, "warning", onWarningNotification)
-    s = feed.on(conn, "error", onErrorNotification)
+    integer conn = feed.open("/api/notifications", "onNotification", "onNotificationError")
+    integer s = feed.on(conn, "info", "onInfoNotification")
+    s = feed.on(conn, "warning", "onWarningNotification")
+    s = feed.on(conn, "error", "onErrorNotification")
 
 functions:
     onNotification()
         string msg = feed.data()
         integer s = ui.updateElement("#toast", msg)
         s = ui.addClass("#toast", "visible")
-        s = ui.setTimeout(hideToast, 3000)
+        s = ui.setTimeout("hideToast", 3000)
 
     onNotificationError()
         integer s = ui.addClass("#feed-status", "reconnecting")
@@ -572,7 +570,7 @@ functions:
         integer s = ui.updateElement("#toast", msg)
         s = ui.addClass("#toast", "visible")
         s = ui.addClass("#toast", "toast-info")
-        s = ui.setTimeout(hideToast, 3000)
+        s = ui.setTimeout("hideToast", 3000)
 
     onWarningNotification()
         string data = feed.data()
@@ -580,7 +578,7 @@ functions:
         integer s = ui.updateElement("#toast", msg)
         s = ui.addClass("#toast", "visible")
         s = ui.addClass("#toast", "toast-warning")
-        s = ui.setTimeout(hideToast, 5000)
+        s = ui.setTimeout("hideToast", 5000)
 
     onErrorNotification()
         string data = feed.data()
@@ -588,7 +586,7 @@ functions:
         integer s = ui.updateElement("#toast", msg)
         s = ui.addClass("#toast", "visible")
         s = ui.addClass("#toast", "toast-error")
-        s = ui.setTimeout(hideToast, 8000)
+        s = ui.setTimeout("hideToast", 8000)
 
     hideToast()
         integer s = ui.removeClass("#toast", "visible")
@@ -604,17 +602,17 @@ import frame.ui
 import frame.client
 
 start:
-    integer s = api.get("/api/stats", onStats)
+    integer s = api.get("/api/stats", "onStats")
 
 functions:
     onStats()
         if api.ok() == 1
             string users = api.json("activeUsers")
             integer s = ui.updateElement("#active", users)
-        integer s = ui.setTimeout(pollStats, 30000)
+        integer s = ui.setTimeout("pollStats", 30000)
 
     pollStats()
-        integer s = api.get("/api/stats", onStats)
+        integer s = api.get("/api/stats", "onStats")
 ```
 
 ### 8.9 Mixed: API + Live + Feed
@@ -625,9 +623,9 @@ import frame.client
 
 start:
     integer s = api.auth("bearer", "my-token")
-    s = api.get("/api/dashboard", onDashboard)
-    integer ws = live.open("wss://api.example.com/alerts", onAlert, onAlertLost, onAlertError)
-    integer sse = feed.open("/api/activity", onActivity, onActivityError)
+    s = api.get("/api/dashboard", "onDashboard")
+    integer ws = live.open("wss://api.example.com/alerts", "onAlert", "onAlertLost", "onAlertError")
+    integer sse = feed.open("/api/activity", "onActivity", "onActivityError")
 
 functions:
     onDashboard()

@@ -916,14 +916,14 @@ The `loader.js` runtime is the single browser runtime for all Frame UI applicati
 
 ```clean
 start:
-    integer s = ui.onEvent(".btn-save", "click", saveItem)
-    s = ui.onEvent(".search-input", "input", searchCards)
+    integer s = ui.onEvent(".btn-save", "click", "saveItem")
+    s = ui.onEvent(".search-input", "input", "searchCards")
 
 functions:
     saveItem()
         string value = ui.eventValue()
         integer s = ui.updateElement("#status", "Saved!")
-        s = ui.setTimeout(clearStatus, 2000)
+        s = ui.setTimeout("clearStatus", 2000)
 
     searchCards()
         string query = ui.eventValue()
@@ -933,7 +933,7 @@ functions:
         integer s = ui.updateElement("#status", "")
 ```
 
-Handler parameters accept **function names**, not numbers. The compiler auto-assigns internal indices. See the `handler` type in plugin.toml.
+Handler parameters are **string literals naming a top-level exported function**. The runtime dispatches via `instance.exports[handlerName]`, so the function must exist at module scope (the `functions:` block). Mis-typed names are reported to the browser console at dispatch time rather than silently dropped.
 
 All bridge functions are declared in `plugin.toml` and implemented in `loader.js`. See the Bridge Contracts specification for the complete function reference.
 

@@ -22,25 +22,35 @@
 	let currentResponseBody = null;
 	let currentResponseHeaders = null;
 
-	function dispatchResponse(resp, body, handlerIdx) {
+	function callExport(handlerName, context) {
+		const fn = rt.getInstance().exports[handlerName];
+		if (fn) {
+			fn();
+		} else {
+			console.error(
+				'[frame.client] ' + context + ' handler export "' + handlerName +
+				'" not found. Declare it as a top-level function in your Clean source.'
+			);
+		}
+	}
+
+	function dispatchResponse(resp, body, handlerName) {
 		const headers = {};
 		resp.headers.forEach((v, k) => { headers[k] = v; });
 		currentResponse = { status: resp.status, ok: resp.ok };
 		currentResponseBody = body;
 		currentResponseHeaders = headers;
-		const fn = rt.getInstance().exports['handle_event_' + handlerIdx];
-		if (fn) fn();
+		callExport(handlerName, 'api');
 		currentResponse = null;
 		currentResponseBody = null;
 		currentResponseHeaders = null;
 	}
 
-	function dispatchError(err, handlerIdx) {
+	function dispatchError(err, handlerName) {
 		currentResponse = { status: 0, ok: false };
 		currentResponseBody = JSON.stringify({ error: err.message || String(err) });
 		currentResponseHeaders = {};
-		const fn = rt.getInstance().exports['handle_event_' + handlerIdx];
-		if (fn) fn();
+		callExport(handlerName, 'api');
 		currentResponse = null;
 		currentResponseBody = null;
 		currentResponseHeaders = null;
@@ -80,11 +90,11 @@
 		return options;
 	}
 
-	function doFetch(url, method, body, handlerIdx) {
+	function doFetch(url, method, body, handlerName) {
 		const options = buildOptions(method, body);
 		fetch(url, options)
-			.then(async (resp) => dispatchResponse(resp, await resp.text(), handlerIdx))
-			.catch((err) => dispatchError(err, handlerIdx));
+			.then(async (resp) => dispatchResponse(resp, await resp.text(), handlerName))
+			.catch((err) => dispatchError(err, handlerName));
 		return 0;
 	}
 
@@ -113,24 +123,24 @@
 
 		// ========== API: HTTP Requests ==========
 
-		_api_get: (urlPtr, urlLen, handlerIdx) => {
-			return doFetch(rt.readString(urlPtr, urlLen), 'GET', null, handlerIdx);
+		_api_get: (urlPtr, urlLen, handlerPtr, handlerLen) => {
+			return doFetch(rt.readString(urlPtr, urlLen), 'GET', null, rt.readString(handlerPtr, handlerLen));
 		},
 
-		_api_post: (urlPtr, urlLen, bodyPtr, bodyLen, handlerIdx) => {
-			return doFetch(rt.readString(urlPtr, urlLen), 'POST', rt.readString(bodyPtr, bodyLen), handlerIdx);
+		_api_post: (urlPtr, urlLen, bodyPtr, bodyLen, handlerPtr, handlerLen) => {
+			return doFetch(rt.readString(urlPtr, urlLen), 'POST', rt.readString(bodyPtr, bodyLen), rt.readString(handlerPtr, handlerLen));
 		},
 
-		_api_put: (urlPtr, urlLen, bodyPtr, bodyLen, handlerIdx) => {
-			return doFetch(rt.readString(urlPtr, urlLen), 'PUT', rt.readString(bodyPtr, bodyLen), handlerIdx);
+		_api_put: (urlPtr, urlLen, bodyPtr, bodyLen, handlerPtr, handlerLen) => {
+			return doFetch(rt.readString(urlPtr, urlLen), 'PUT', rt.readString(bodyPtr, bodyLen), rt.readString(handlerPtr, handlerLen));
 		},
 
-		_api_patch: (urlPtr, urlLen, bodyPtr, bodyLen, handlerIdx) => {
-			return doFetch(rt.readString(urlPtr, urlLen), 'PATCH', rt.readString(bodyPtr, bodyLen), handlerIdx);
+		_api_patch: (urlPtr, urlLen, bodyPtr, bodyLen, handlerPtr, handlerLen) => {
+			return doFetch(rt.readString(urlPtr, urlLen), 'PATCH', rt.readString(bodyPtr, bodyLen), rt.readString(handlerPtr, handlerLen));
 		},
 
-		_api_delete: (urlPtr, urlLen, handlerIdx) => {
-			return doFetch(rt.readString(urlPtr, urlLen), 'DELETE', null, handlerIdx);
+		_api_delete: (urlPtr, urlLen, handlerPtr, handlerLen) => {
+			return doFetch(rt.readString(urlPtr, urlLen), 'DELETE', null, rt.readString(handlerPtr, handlerLen));
 		},
 
 		_api_header: (namePtr, nameLen, valPtr, valLen) => {
@@ -156,10 +166,11 @@
 			return 0;
 		},
 
-		_api_submit: (formPtr, formLen, urlPtr, urlLen, methodPtr, methodLen, handlerIdx) => {
+		_api_submit: (formPtr, formLen, urlPtr, urlLen, methodPtr, methodLen, handlerPtr, handlerLen) => {
+			const handlerName = rt.readString(handlerPtr, handlerLen);
 			const form = document.querySelector(rt.readString(formPtr, formLen));
 			if (!form) {
-				dispatchError(new Error('Form not found'), handlerIdx);
+				dispatchError(new Error('Form not found'), handlerName);
 				return -1;
 			}
 			const data = {};
@@ -168,7 +179,7 @@
 				rt.readString(urlPtr, urlLen),
 				rt.readString(methodPtr, methodLen).toUpperCase(),
 				JSON.stringify(data),
-				handlerIdx
+				handlerName
 			);
 		},
 
@@ -205,8 +216,11 @@
 
 		// ========== Live: WebSocket ==========
 
-		_live_open: (urlPtr, urlLen, onMsgIdx, onCloseIdx, onErrorIdx) => {
+		_live_open: (urlPtr, urlLen, onMsgPtr, onMsgLen, onClosePtr, onCloseLen, onErrorPtr, onErrorLen) => {
 			const url = rt.readString(urlPtr, urlLen);
+			const onMsgName = rt.readString(onMsgPtr, onMsgLen);
+			const onCloseName = rt.readString(onClosePtr, onCloseLen);
+			const onErrorName = rt.readString(onErrorPtr, onErrorLen);
 			const connId = liveNextId++;
 
 			try {
@@ -216,8 +230,7 @@
 				ws.addEventListener('message', (e) => {
 					currentLiveMessage = typeof e.data === 'string' ? e.data : '';
 					currentLiveConnId = connId;
-					const fn = rt.getInstance().exports['handle_event_' + onMsgIdx];
-					if (fn) fn();
+					callExport(onMsgName, 'live.onMessage');
 					currentLiveMessage = null;
 					currentLiveConnId = 0;
 				});
@@ -226,8 +239,7 @@
 					currentLiveConnId = connId;
 					currentLiveCloseCode = e.code;
 					currentLiveCloseReason = e.reason || '';
-					const fn = rt.getInstance().exports['handle_event_' + onCloseIdx];
-					if (fn) fn();
+					callExport(onCloseName, 'live.onClose');
 					currentLiveConnId = 0;
 					currentLiveCloseCode = 0;
 					currentLiveCloseReason = null;
@@ -237,16 +249,14 @@
 				ws.addEventListener('error', () => {
 					currentLiveConnId = connId;
 					currentLiveError = 'WebSocket error';
-					const fn = rt.getInstance().exports['handle_event_' + onErrorIdx];
-					if (fn) fn();
+					callExport(onErrorName, 'live.onError');
 					currentLiveConnId = 0;
 					currentLiveError = null;
 				});
 			} catch (err) {
 				currentLiveConnId = connId;
 				currentLiveError = err.message;
-				const fn = rt.getInstance().exports['handle_event_' + onErrorIdx];
-				if (fn) fn();
+				callExport(onErrorName, 'live.onError');
 				currentLiveConnId = 0;
 				currentLiveError = null;
 				return 0;
@@ -283,8 +293,10 @@
 
 		// ========== Feed: Server-Sent Events ==========
 
-		_feed_open: (urlPtr, urlLen, onMsgIdx, onErrorIdx) => {
+		_feed_open: (urlPtr, urlLen, onMsgPtr, onMsgLen, onErrorPtr, onErrorLen) => {
 			const url = rt.readString(urlPtr, urlLen);
+			const onMsgName = rt.readString(onMsgPtr, onMsgLen);
+			const onErrorName = rt.readString(onErrorPtr, onErrorLen);
 			const connId = feedNextId++;
 
 			try {
@@ -296,8 +308,7 @@
 					currentFeedEventType = 'message';
 					currentFeedLastId = e.lastEventId || '';
 					currentFeedConnId = connId;
-					const fn = rt.getInstance().exports['handle_event_' + onMsgIdx];
-					if (fn) fn();
+					callExport(onMsgName, 'feed.onMessage');
 					currentFeedData = null;
 					currentFeedEventType = null;
 					currentFeedLastId = null;
@@ -307,8 +318,7 @@
 				source.addEventListener('error', () => {
 					currentFeedConnId = connId;
 					currentFeedData = 'SSE connection error';
-					const fn = rt.getInstance().exports['handle_event_' + onErrorIdx];
-					if (fn) fn();
+					callExport(onErrorName, 'feed.onError');
 					currentFeedConnId = 0;
 					currentFeedData = null;
 				});
@@ -319,18 +329,18 @@
 			return connId;
 		},
 
-		_feed_on: (connId, eventPtr, eventLen, handlerIdx) => {
+		_feed_on: (connId, eventPtr, eventLen, handlerPtr, handlerLen) => {
 			const source = feedConnections.get(connId);
 			if (!source) return -1;
 			const eventName = rt.readString(eventPtr, eventLen);
+			const handlerName = rt.readString(handlerPtr, handlerLen);
 
 			source.addEventListener(eventName, (e) => {
 				currentFeedData = e.data || '';
 				currentFeedEventType = eventName;
 				currentFeedLastId = e.lastEventId || '';
 				currentFeedConnId = connId;
-				const fn = rt.getInstance().exports['handle_event_' + handlerIdx];
-				if (fn) fn();
+				callExport(handlerName, 'feed.' + eventName);
 				currentFeedData = null;
 				currentFeedEventType = null;
 				currentFeedLastId = null;

@@ -2608,7 +2608,7 @@ functions:
 				integer pipe2 = event_entry.indexOf("|", pipe1 + 1)
 				if pipe2 > pipe1
 					string event_type = event_entry.substring(pipe1 + 1, pipe2)
-					result = result + "\t\tinteger s = _ui_onEvent(\"" + selector + "\", \"" + event_type + "\", " + i.toString() + ")\n"
+					result = result + "\t\tinteger s = _ui_onEvent(\"" + selector + "\", \"" + event_type + "\", \"handle_event_" + i.toString() + "\")\n"
 
 			i = i + 1
 

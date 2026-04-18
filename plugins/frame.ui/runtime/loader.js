@@ -136,11 +136,18 @@
 
 				const target = e.target.closest(selector);
 				if (target) {
-					handlers.forEach(handlerIdx => {
+					handlers.forEach(handlerName => {
 						currentEvent = e;
 						currentEventTarget = target;
-						const fn = instance.exports['handle_event_' + handlerIdx];
-						if (fn) fn();
+						const fn = instance.exports[handlerName];
+						if (fn) {
+							fn();
+						} else {
+							console.error(
+								'[frame.ui] Event handler export "' + handlerName +
+								'" not found. Declare it as a top-level function in your Clean source.'
+							);
+						}
 						currentEvent = null;
 						currentEventTarget = null;
 					});
@@ -213,15 +220,16 @@
 
 			// ========== Event Handler Registration ==========
 
-			_ui_on_event: (selectorPtr, selectorLen, eventTypePtr, eventTypeLen, handlerIdx) => {
+			_ui_on_event: (selectorPtr, selectorLen, eventTypePtr, eventTypeLen, handlerPtr, handlerLen) => {
 				const selector = readString(selectorPtr, selectorLen);
 				const eventType = readString(eventTypePtr, eventTypeLen);
+				const handlerName = readString(handlerPtr, handlerLen);
 				const key = selector + '\0' + eventType;
 
 				if (!eventHandlers.has(key)) {
 					eventHandlers.set(key, []);
 				}
-				eventHandlers.get(key).push(handlerIdx);
+				eventHandlers.get(key).push(handlerName);
 				ensureDocumentListener(eventType);
 				return 0;
 			},
@@ -234,7 +242,8 @@
 			},
 
 			_ui_get_state: (idPtr, idLen) => {
-				return writeString(stateStore.get(readString(idPtr, idLen)) || '{}');
+				const key = readString(idPtr, idLen);
+				return writeString(stateStore.has(key) ? stateStore.get(key) : '');
 			},
 
 			// ========== DOM Manipulation ==========
@@ -461,13 +470,19 @@
 
 			// ========== Timers ==========
 
-			_ui_set_timeout: (handlerIdx, delayMs) => {
+			_ui_set_timeout: (handlerPtr, handlerLen, delayMs) => {
+				const handlerName = readString(handlerPtr, handlerLen);
 				setTimeout(() => {
-					const fn = instance.exports['handle_event_' + handlerIdx];
+					const fn = instance.exports[handlerName];
 					if (fn) {
 						currentEvent = null;
 						currentEventTarget = null;
 						fn();
+					} else {
+						console.error(
+							'[frame.ui] setTimeout handler export "' + handlerName +
+							'" not found. Declare it as a top-level function in your Clean source.'
+						);
 					}
 				}, delayMs);
 				return 0;

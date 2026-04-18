@@ -39,13 +39,13 @@ The loader uses a **shared runtime pattern** that allows multiple plugins to con
 
 ## Bridge Functions
 
-All bridge functions use WASM pointer+length format for strings. Handler parameters accept function names (compiler assigns indices).
+All bridge functions use WASM pointer+length format for strings. Handler parameters accept the exported function name as a string (looked up via `instance.exports[name]`).
 
 ### Event Registration
 
 | Function | Params | Returns | Description |
 |----------|--------|---------|-------------|
-| `_ui_onEvent` | selector, event_type, handler | integer | Register event handler via document-level delegation |
+| `_ui_onEvent` | selector, event_type, handler_name | integer | Register event handler via document-level delegation. `handler_name` must match a top-level function export. |
 
 ### Event Context (inside handler)
 
@@ -100,7 +100,7 @@ All bridge functions use WASM pointer+length format for strings. Handler paramet
 | `_ui_locationQuery` | param | string | Get URL query parameter |
 | `_ui_locationPath` | -- | string | Get current pathname |
 | `_ui_observeVisible` | selector, class | integer | Add class when visible (one-shot) |
-| `_ui_setTimeout` | handler, delay_ms | integer | Call handler after delay |
+| `_ui_setTimeout` | handler_name, delay_ms | integer | Call exported handler by name after delay |
 | `_ui_injectHeadCss` | css | integer | Inject CSS into page head |
 
 ## Usage
@@ -127,16 +127,16 @@ import frame.ui
 import frame.client
 
 start:
-    integer s = ui.onEvent(".copy-btn", "click", copyCode)
-    s = ui.onEvent(".search-input", "input", searchCards)
-    s = api.get("/api/data", onDataLoaded)
+    integer s = ui.onEvent(".copy-btn", "click", "copyCode")
+    s = ui.onEvent(".search-input", "input", "searchCards")
+    s = api.get("/api/data", "onDataLoaded")
 
 functions:
     copyCode()
         string code = ui.eventClosestAttr(".code-window", "data-code")
         integer s = ui.clipboardWrite(code)
         s = ui.updateElementSelf("Copied!")
-        s = ui.setTimeout(resetCopyBtn, 2000)
+        s = ui.setTimeout("resetCopyBtn", 2000)
 
     resetCopyBtn()
         integer s = ui.updateElementSelf("Copy")

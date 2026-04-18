@@ -11,12 +11,12 @@ state:
 	boolean darkMode = true
 
 start:
-	integer s = ui.onEvent(".btn-increment", "click", increment)
-	s = ui.onEvent(".btn-decrement", "click", decrement)
-	s = ui.onEvent(".btn-reset", "click", resetCount)
-	s = ui.onEvent(".btn-prog-up", "click", progressUp)
-	s = ui.onEvent(".btn-prog-down", "click", progressDown)
-	s = ui.onEvent(".btn-theme", "click", toggleTheme)
+	integer s = ui.onEvent(".btn-increment", "click", "increment")
+	s = ui.onEvent(".btn-decrement", "click", "decrement")
+	s = ui.onEvent(".btn-reset", "click", "resetCount")
+	s = ui.onEvent(".btn-prog-up", "click", "progressUp")
+	s = ui.onEvent(".btn-prog-down", "click", "progressDown")
+	s = ui.onEvent(".btn-theme", "click", "toggleTheme")
 
 functions:
 	updateDisplay()
