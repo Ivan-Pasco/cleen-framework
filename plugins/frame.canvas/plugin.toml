@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.canvas"
-version = "2.1.3"
+version = "2.1.4"
 description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects"
 author = "Clean Language Team"
 license = "MIT"
@@ -429,6 +429,10 @@ functions = [
   { name = "_canvas_get_time", params = [], returns = "number", description = "Get total elapsed time in seconds" },
   { name = "_canvas_get_fps", params = [], returns = "number", description = "Get current frames per second" },
 
+  # ===== Canvas Variable Storage — persistent state across frame callbacks =====
+  { name = "_canvas_var_set", params = ["string", "number"], returns = "integer", description = "Store a named number in canvas state (persists across frames)", expand_strings = true },
+  { name = "_canvas_var_get", params = ["string", "number"], returns = "number", description = "Read a named number from canvas state, returns default if not set", expand_strings = true },
+
   # ===== Basic Shapes =====
   { name = "_canvas_circle_filled", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw filled circle: canvas_id, x, y, radius, color", expand_strings = true },
   { name = "_canvas_circle_outline", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw circle outline: canvas_id, x, y, radius, color", expand_strings = true },
@@ -739,7 +743,6 @@ functions = [
 severity = "warn"
 
 restricted_functions = [
-  { name = "_canvas_init", use_instead = "canvasScene:", message = "Use 'canvasScene:' block to initialize canvas" },
   { name = "_tween_play", use_instead = "play tween \"name\"", message = "Use 'play tween \"name\"' expression instead of calling _tween_play() directly" },
   { name = "_timeline_play", use_instead = "play timeline \"name\"", message = "Use 'play timeline \"name\"' expression instead of calling _timeline_play() directly" },
 ]

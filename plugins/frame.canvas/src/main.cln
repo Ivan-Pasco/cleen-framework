@@ -1,7 +1,7 @@
 // frame.canvas plugin - Canvas Rendering and Animation DSL
 // Provides: canvasScene, assets, layers, state, init, animSprite, tween, timeline,
 //           animState, path, gradient, customEase, camera, draw, and all event handlers
-// Version: 2.2.0
+// Version: 2.1.4
 
 functions:
 	// =====================================================================

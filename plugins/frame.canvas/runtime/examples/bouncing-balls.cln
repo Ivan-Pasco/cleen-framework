@@ -1,52 +1,64 @@
 // Bouncing Ball - Clean Language Canvas Demo
-// Physics-based animation with gravity and bouncing
+// Physics, state, and rendering — all compiled from Clean Language to WebAssembly.
 
-import:
+plugins:
 	frame.canvas
 
 functions:
-	// Main entry - initialize canvas and start animation
 	void start()
-		integer canvasId = _canvas_init(800, 600)
-		integer frameId = _canvas_request_frame(canvasId)
-		print(frameId)
+		integer canvas = _canvas_init(800, 600)
+		_canvas_var_set("ballX", 400.0)
+		_canvas_var_set("ballY", 100.0)
+		_canvas_var_set("velX", 250.0)
+		_canvas_var_set("velY", 0.0)
+		_canvas_request_frame(canvas)
 
-	// Frame callback - called by runtime each frame
 	void _frame_callback(integer canvas)
-		// Update physics (gravity, velocity, collisions)
-		_physics_update()
+		number dt = _canvas_get_delta_time()
+		update(dt)
+		render(canvas)
 
-		// Get current ball position
-		number ballX = _physics_get_x()
-		number ballY = _physics_get_y()
+	void update(number dt)
+		number ballX = _canvas_var_get("ballX", 400.0)
+		number ballY = _canvas_var_get("ballY", 100.0)
+		number velX = _canvas_var_get("velX", 250.0)
+		number velY = _canvas_var_get("velY", 0.0)
+		number gravity = 800.0
+		number damp = 0.85
+		velY = velY + gravity * dt
+		ballX = ballX + velX * dt
+		ballY = ballY + velY * dt
+		if ballX < 30.0
+			ballX = 30.0
+			velX = velX * -1.0 * damp
+		if ballX > 770.0
+			ballX = 770.0
+			velX = velX * -1.0 * damp
+		if ballY > 560.0
+			ballY = 560.0
+			velY = velY * -1.0 * damp
+		if ballY < 30.0
+			ballY = 30.0
+			velY = velY * -1.0
+		_canvas_var_set("ballX", ballX)
+		_canvas_var_set("ballY", ballY)
+		_canvas_var_set("velX", velX)
+		_canvas_var_set("velY", velY)
 
-		// Render the scene
-		render(canvas, ballX, ballY)
-
-	// Render the scene
-	void render(integer canvas, number ballX, number ballY)
-		// Clear background
+	void render(integer canvas)
+		number ballX = _canvas_var_get("ballX", 400.0)
+		number ballY = _canvas_var_get("ballY", 100.0)
 		_canvas_clear_color(canvas, "#0f0f23")
-
-		// Ground
-		_canvas_rect_filled(canvas, 0.0, 590.0, 800.0, 10.0, "#1a1a3a")
-
-		// Shadow (dynamic size based on height)
-		number shadowSize = 15.0 + (ballY - 300.0) / 20.0
-		if shadowSize < 5.0
-			shadowSize = 5.0
-		if shadowSize > 40.0
-			shadowSize = 40.0
-		_canvas_circle_filled(canvas, ballX, 583.0, shadowSize, "#000000")
-
-		// Ball
+		_canvas_rect_filled(canvas, 0.0, 585.0, 800.0, 15.0, "#1a1a3a")
 		_canvas_circle_filled(canvas, ballX, ballY, 30.0, "#ff6b6b")
+		number hlX = ballX - 10.0
+		number hlY = ballY - 10.0
+		_canvas_circle_filled(canvas, hlX, hlY, 8.0, "#ffffff")
+		_canvas_text(canvas, "Bouncing Ball", 285.0, 40.0, 28.0, "#ffffff")
+		_canvas_text(canvas, "Clean Language + WebAssembly", 220.0, 75.0, 18.0, "#888888")
 
-		// Highlight
-		number highlightX = ballX - 10.0
-		number highlightY = ballY - 10.0
-		_canvas_circle_filled(canvas, highlightX, highlightY, 8.0, "#ffffff")
-
-		// Title
-		_canvas_text(canvas, "Bouncing Ball", 320.0, 40.0, 28.0, "#ffffff")
-		_canvas_text(canvas, "Clean Language + WebAssembly", 260.0, 75.0, 18.0, "#888888")
+	void _on_pointer_down(integer canvas, number mx, number my)
+		_canvas_var_set("ballX", mx)
+		_canvas_var_set("ballY", my)
+		_canvas_var_set("velX", 200.0)
+		_canvas_var_set("velY", -400.0)
