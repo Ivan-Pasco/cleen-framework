@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.canvas"
-version = "2.2.0"
+version = "2.3.0"
 description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects"
 author = "Clean Language Team"
 license = "MIT"
@@ -20,32 +20,13 @@ validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
-# Scene lifecycle and input — top-level blocks
+# Only canvasScene is a top-level block the compiler expands directly.
+# Sub-blocks (state, draw, onFrame, etc.) are nested inside canvasScene and
+# must NOT be listed here — if they were, the compiler would expand them
+# before calling expand_canvas_scene, stripping all sub-block headers from
+# the body and making the canvasScene expansion unable to find them.
 blocks = [
   "canvasScene",
-  "assets",
-  "layers",
-  "state",
-  "animSprite",
-  "particles",
-  "tween",
-  "timeline",
-  "animState",
-  "path",
-  "gradient",
-  "customEase",
-  "camera",
-  "init",
-  "draw",
-  "onFrame",
-  "onPointerDown",
-  "onPointerMove",
-  "onPointerUp",
-  "onKeyDown",
-  "onKeyUp",
-  "onExit",
-  "onPause",
-  "onResume",
 ]
 
 [language]
