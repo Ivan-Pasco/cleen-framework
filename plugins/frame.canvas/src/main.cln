@@ -97,7 +97,18 @@ functions:
 		string s_save = scene_state_save(state_body)
 		string s_init = scene_state_init(state_body)
 
-		string result = "functions:\n"
+		// start: must come before functions: per Clean Language section order rules
+		string result = "start:\n"
+		result = result + "\tinteger __cv = _canvas_init(" + width + ", " + height + ", \"" + id_str + "\")\n"
+		result = result + "\t_canvas_set_fps(__cv, " + fps_val + ")\n"
+		result = result + s_init
+		string init_trimmed = init_body.trim()
+		if init_trimmed.length() > 0
+			result = result + scene_expand_lines_start(init_body)
+		result = result + "\tinteger __rfr0 = _canvas_request_frame(__cv)\n"
+		result = result + "\n"
+
+		result = result + "functions:\n"
 
 		// _frame_callback
 		result = result + "\tvoid _frame_callback(integer __cv)\n"
@@ -141,16 +152,6 @@ functions:
 			result = result + scene_expand_lines(up_body)
 			result = result + s_save
 			result = result + "\n"
-
-		// start: block — init canvas, state, request first frame
-		result = result + "start:\n"
-		result = result + "\tinteger __cv = _canvas_init(" + width + ", " + height + ", \"" + id_str + "\")\n"
-		result = result + "\t_canvas_set_fps(__cv, " + fps_val + ")\n"
-		result = result + s_init
-		string init_trimmed = init_body.trim()
-		if init_trimmed.length() > 0
-			result = result + scene_expand_lines_start(init_body)
-		result = result + "\tinteger __rfr0 = _canvas_request_frame(__cv)\n"
 
 		return result
 
