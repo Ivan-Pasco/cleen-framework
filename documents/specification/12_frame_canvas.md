@@ -12,22 +12,7 @@
 
 ## 1. Introduction & Philosophy
 
-**Frame Canvas** is the animation and rendering platform for Clean Language — a modern successor to Flash's authoring model, built on WebAssembly and designed for the declarative programming style of Clean Language.
-
-### Design Influences
-
-Frame Canvas draws from the best ideas across the history of animation and game platforms:
-
-| Influence | What We Borrowed |
-|-----------|-----------------|
-| Macromedia Flash / ActionScript | Symbol library, scene authoring, timeline model, display list concept |
-| GSAP | Timeline sequencing, relative time positions (`after`, `together`), tween easing library |
-| Rive | Embedded animation state machines with transition conditions |
-| PIXI.js | Layer-based scenegraph, z-ordering without manual sort |
-| Motion Canvas | Coroutine-style sequencing in timelines |
-| Godot | Blend spaces, physics-friendly delta-time model |
-| Cocos2d | Composable actions, action sequences, path following |
-| Unity | Blend trees, animator state machine structure |
+**Frame Canvas** is the animation and rendering platform for Clean Language — a declarative, WebAssembly-native platform for building games, animations, data visualizations, and interactive experiences.
 
 ### Three-Layer Architecture
 
@@ -50,7 +35,7 @@ Higher layers depend on lower layers — you can use Layer 1 without Layer 2, an
 
 - **Declarative first** — Describe what you want; the runtime handles when and how
 - **State-driven** — Canvas redraws reflect state variables; no manual invalidation
-- **Flash-style authoring** — Assets declared once in `assets:`, reused everywhere
+- **Asset-driven authoring** — Assets declared once in `assets:`, reused everywhere
 - **Frame-rate independent** — All animation uses delta time; targets any frame rate
 - **No boilerplate** — A minimal canvas scene is four lines of code
 
@@ -208,7 +193,7 @@ canvasScene: width=800 height=600
 
 The `assets:` block declares all media the scene uses. It is processed before `init:` runs. The runtime fetches and decodes all assets before the first frame is drawn — eliminating pop-in.
 
-This is Frame Canvas's equivalent of Flash's symbol library: name an asset once, reference it by name everywhere.
+Assets are declared once and referenced by name everywhere in the scene.
 
 ### Asset Types
 
@@ -1263,7 +1248,7 @@ canvasScene: width=800 height=600
 
 ## 12. Tween System
 
-Tweens animate a state variable from one value to another over time. Frame Canvas's tween system is inspired by GSAP — tweens can be named and triggered, or fired inline with `animate`.
+Tweens animate a state variable from one value to another over time. Tweens can be named and triggered on demand, or fired inline with `animate`.
 
 ### Named Tween Definition
 
@@ -1422,7 +1407,7 @@ canvasScene: width=800 height=400
 
 ## 13. Timeline Sequencing
 
-Timelines sequence tweens and actions in absolute and relative time, producing GSAP-style choreography. Named timelines are defined at scene level and triggered by name.
+Timelines sequence tweens and actions in absolute and relative time, enabling precise multi-element choreography. Named timelines are defined at scene level and triggered by name.
 
 ### Timeline Syntax
 
