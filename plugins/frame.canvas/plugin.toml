@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.canvas"
-version = "2.1.0"
+version = "2.1.1"
 description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects"
 author = "Clean Language Team"
 license = "MIT"
@@ -709,6 +709,30 @@ functions = [
   # ===== Canvas/UI Bridge =====
   { name = "_page_set", params = ["string", "string"], returns = "integer", description = "Expose canvas value to surrounding UI layer: key, value (JSON-encoded)", expand_strings = true },
   { name = "_page_get", params = ["string"], returns = "string", description = "Read a value from the surrounding UI layer: key (returns JSON-encoded value)", expand_strings = true },
+
+  # ===== Named Asset Registration (assets: block) =====
+  { name = "_asset_preload_image", params = ["string", "string"], returns = "integer", description = "Register image asset by name: name, src — queues for scene preload", expand_strings = true },
+  { name = "_sprite_register_sheet", params = ["string", "string", "integer", "integer"], returns = "integer", description = "Register spritesheet by name: name, src, frameWidth, frameHeight", expand_strings = true },
+
+  # ===== AnimSprite Clip Definition (animSprite: block) =====
+  { name = "_animsprite_define", params = ["string", "string", "integer", "integer", "number", "integer"], returns = "integer", description = "Define named animation clip: clipName, sheetName, frameStart, frameEnd, fps, loop(0/1)", expand_strings = true },
+
+  # ===== Named Tween Definition (tween: block) =====
+  { name = "_tween_define_var", params = ["string", "string", "number", "number", "number", "string", "integer", "integer", "number", "string"], returns = "integer", description = "Add variable target to named tween: tweenName, varName, from, to, duration, ease, repeat, yoyo(0/1), delay, pathName", expand_strings = true },
+
+  # ===== Named Path Definition (path: block) =====
+  { name = "_path_begin", params = ["string"], returns = "integer", description = "Begin named path definition", expand_strings = true },
+  { name = "_path_move_to", params = ["string", "number", "number"], returns = "integer", description = "Add moveTo segment to named path: name, x, y", expand_strings = true },
+  { name = "_path_line_to", params = ["string", "number", "number"], returns = "integer", description = "Add lineTo segment to named path: name, x, y", expand_strings = true },
+  { name = "_path_curve_to", params = ["string", "number", "number", "number", "number"], returns = "integer", description = "Add quadratic bezier to named path: name, cpx, cpy, x, y", expand_strings = true },
+  { name = "_path_cubic_to", params = ["string", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Add cubic bezier to named path: name, cp1x, cp1y, cp2x, cp2y, x, y", expand_strings = true },
+  { name = "_path_arc_to", params = ["string", "number", "number", "number", "number", "number"], returns = "integer", description = "Add arc segment to named path: name, x, y, radius, startAngle, endAngle", expand_strings = true },
+  { name = "_path_close", params = ["string"], returns = "integer", description = "Close named path back to its start point", expand_strings = true },
+
+  # ===== Complex Animation Registration (JSON-based for timeline/animState/particles) =====
+  { name = "_timeline_define_json", params = ["string", "string"], returns = "integer", description = "Register named timeline from JSON config: name, json", expand_strings = true },
+  { name = "_animstate_define_json", params = ["string", "string"], returns = "integer", description = "Register animation state machine from JSON: name, json", expand_strings = true },
+  { name = "_particles_define_json", params = ["string", "string"], returns = "integer", description = "Register particle emitter from JSON config: name, json", expand_strings = true },
 ]
 
 [enforcement]

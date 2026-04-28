@@ -1,13 +1,24 @@
 // frame.canvas plugin - Canvas Rendering and Animation DSL
-// Provides: canvasScene, draw, onFrame, onPointerDown, onPointerMove, onKeyDown blocks
-// Also provides: canvas.* drawing commands
-// Version: 2.1.0
+// Provides: canvasScene, assets, layers, state, init, animSprite, tween, timeline,
+//           animState, path, gradient, customEase, camera, draw, and all event handlers
+// Version: 2.2.0
 
 functions:
-	// Main entry point - called by compiler for each framework block
+	// =====================================================================
+	// MAIN DISPATCH
+	// =====================================================================
+
 	string expand_block(string block_name, string attributes, string body)
 		if block_name == "canvasScene"
 			return expand_canvas_scene(attributes, body)
+		if block_name == "assets"
+			return expand_assets(attributes, body)
+		if block_name == "layers"
+			return expand_layers(attributes, body)
+		if block_name == "state"
+			return expand_state(attributes, body)
+		if block_name == "init"
+			return expand_init(attributes, body)
 		if block_name == "draw"
 			return expand_draw(attributes, body)
 		if block_name == "onFrame"
@@ -16,127 +27,290 @@ functions:
 			return expand_on_pointer_down(attributes, body)
 		if block_name == "onPointerMove"
 			return expand_on_pointer_move(attributes, body)
+		if block_name == "onPointerUp"
+			return expand_on_pointer_up(attributes, body)
 		if block_name == "onKeyDown"
 			return expand_on_key_down(attributes, body)
-		// Handle canvas.* drawing commands
+		if block_name == "onKeyUp"
+			return expand_on_key_up(attributes, body)
+		if block_name == "onExit"
+			return expand_on_exit(attributes, body)
+		if block_name == "onPause"
+			return expand_on_pause(attributes, body)
+		if block_name == "onResume"
+			return expand_on_resume(attributes, body)
+		if block_name == "animSprite"
+			return expand_anim_sprite(attributes, body)
+		if block_name == "tween"
+			return expand_tween(attributes, body)
+		if block_name == "timeline"
+			return expand_timeline(attributes, body)
+		if block_name == "animState"
+			return expand_anim_state(attributes, body)
+		if block_name == "particles"
+			return expand_particles(attributes, body)
+		if block_name == "path"
+			return expand_path(attributes, body)
+		if block_name == "gradient"
+			return expand_gradient(attributes, body)
+		if block_name == "customEase"
+			return expand_custom_ease(attributes, body)
+		if block_name == "camera"
+			return expand_camera(attributes, body)
 		if block_name.startsWith("canvas.")
 			return expand_canvas_command(block_name, attributes, body)
 		return body
 
-	// Validation entry point
 	string validate_block(string block_name, string attributes, string body)
 		if block_name == "canvasScene"
 			return validate_canvas_scene(attributes)
 		return ""
 
-	// Keywords for IDE
 	string get_keywords()
-		return "[\"canvasScene\", \"draw\", \"onFrame\", \"onPointerDown\", \"onPointerMove\", \"onKeyDown\", \"canvas\", \"clear\", \"circle\", \"rect\", \"line\", \"text\", \"image\", \"save\", \"restore\", \"translate\", \"rotate\", \"scale\", \"color\", \"radius\", \"width\", \"height\", \"stroke\", \"filled\"]"
+		return "[\"canvasScene\",\"assets\",\"layers\",\"state\",\"init\",\"animSprite\",\"tween\",\"timeline\",\"animState\",\"particles\",\"path\",\"gradient\",\"customEase\",\"camera\",\"draw\",\"onFrame\",\"onPointerDown\",\"onPointerMove\",\"onPointerUp\",\"onKeyDown\",\"onKeyUp\",\"onExit\",\"onPause\",\"onResume\",\"canvas\",\"audio\",\"input\",\"collision\",\"scene\",\"page\",\"animate\",\"play\",\"pause\",\"stop\",\"seek\",\"emit\",\"start\",\"deltaTime\",\"time\",\"clear\",\"circle\",\"rect\",\"line\",\"triangle\",\"ellipse\",\"text\",\"image\",\"sprite\",\"group\",\"clip\",\"alpha\",\"shadow\",\"blur\",\"glow\",\"blend\",\"save\",\"restore\",\"translate\",\"rotate\",\"scale\",\"moveTo\",\"lineTo\",\"curveTo\",\"arcTo\",\"closePath\",\"layer\",\"sheet\",\"frames\",\"fps\",\"loop\",\"duration\",\"ease\",\"repeat\",\"yoyo\",\"delay\",\"along\",\"orient\",\"initial\",\"transitions\",\"when\",\"at\",\"after\",\"together\",\"stagger\",\"overlap\",\"gap\",\"src\",\"frameWidth\",\"frameHeight\",\"filled\",\"radius\",\"width\",\"height\",\"stroke\",\"color\",\"from\",\"to\",\"font\",\"align\",\"baseline\",\"cornerRadius\",\"tint\",\"tintStrength\",\"flipX\",\"flipY\",\"scaleX\",\"scaleY\",\"rotation\",\"anchorX\",\"anchorY\"]"
 
-	// ========================================================================
-	// CANVAS SCENE EXPANSION
-	// ========================================================================
+	// =====================================================================
+	// SCENE LIFECYCLE
+	// =====================================================================
 
-	// Expand canvasScene block - creates canvas context and handlers
 	string expand_canvas_scene(string attrs, string body)
 		string width = get_attr(attrs, "width", "800")
 		string height = get_attr(attrs, "height", "600")
 		string id = get_attr(attrs, "id", "_canvas_0")
-
-		// Generate canvas initialization and body
-		string result = "// Canvas Scene: " + id + "\n"
-		result = result + "integer " + id + " = _canvas_init(" + width + ", " + height + ")\n"
+		string fps = get_attr(attrs, "fps", "60")
+		string result = "integer " + id + " = _canvas_init(" + width + ", " + height + ", \"" + id + "\")\n"
+		result = result + "_canvas_set_fps(" + id + ", " + fps + ")\n"
 		result = result + body + "\n"
 		result = result + "_canvas_present(" + id + ")\n"
 		return result
 
-	// Expand draw block - wraps drawing commands
-	string expand_draw(string attrs, string body)
-		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+	string expand_assets(string attrs, string body)
+		return process_assets_body(body)
 
-		// Wrap draw commands with canvas context
+	string expand_layers(string attrs, string body)
+		return process_layers_body(body)
+
+	string expand_state(string attrs, string body)
+		return body
+
+	string expand_init(string attrs, string body)
+		string result = "// Scene init\n"
+		result = result + body + "\n"
+		return result
+
+	// =====================================================================
+	// EVENT HANDLERS
+	// =====================================================================
+
+	string expand_draw(string attrs, string body)
 		string result = "// Draw block\n"
 		result = result + body + "\n"
 		return result
 
-	// Expand onFrame block - creates animation loop
 	string expand_on_frame(string attrs, string body)
 		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
 		string param = get_attr(attrs, "param", "dt")
-
-		// Generate animation frame handler
 		string result = "// Animation frame handler\n"
 		result = result + "_canvas_request_frame(" + canvas_id + ")\n"
 		result = result + "number " + param + " = _canvas_get_delta_time()\n"
 		result = result + body + "\n"
 		return result
 
-	// Expand onPointerDown block - handles mouse/touch click events
 	string expand_on_pointer_down(string attrs, string body)
 		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
-		string params = get_attr(attrs, "params", "x,y")
-
-		// Determine variable names from params attribute (comma-separated)
+		string params = get_attr(attrs, "param", "x,y")
 		string x_var = "x"
 		string y_var = "y"
 		integer comma_pos = params.indexOf(",")
 		if comma_pos != -1
 			x_var = params.substring(0, comma_pos)
 			y_var = params.substring(comma_pos + 1, params.length())
-
-		// Register pointer down handler and inject coordinate variables
-		string result = "// Pointer down event handler\n"
+		string result = "// Pointer down handler\n"
 		result = result + "_canvas_on_pointer_down(" + canvas_id + ")\n"
 		result = result + "number " + x_var + " = _canvas_event_x()\n"
 		result = result + "number " + y_var + " = _canvas_event_y()\n"
 		result = result + body + "\n"
 		return result
 
-	// Expand onPointerMove block - handles mouse/touch movement events
 	string expand_on_pointer_move(string attrs, string body)
 		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
-		string params = get_attr(attrs, "params", "x,y")
-
-		// Determine variable names from params attribute (comma-separated)
+		string params = get_attr(attrs, "param", "x,y")
 		string x_var = "x"
 		string y_var = "y"
 		integer comma_pos = params.indexOf(",")
 		if comma_pos != -1
 			x_var = params.substring(0, comma_pos)
 			y_var = params.substring(comma_pos + 1, params.length())
-
-		// Register pointer move handler and inject coordinate variables
-		string result = "// Pointer move event handler\n"
+		string result = "// Pointer move handler\n"
 		result = result + "_canvas_on_pointer_move(" + canvas_id + ")\n"
 		result = result + "number " + x_var + " = _canvas_event_x()\n"
 		result = result + "number " + y_var + " = _canvas_event_y()\n"
 		result = result + body + "\n"
 		return result
 
-	// Expand onKeyDown block - handles keyboard key press events
+	string expand_on_pointer_up(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string params = get_attr(attrs, "param", "x,y")
+		string x_var = "x"
+		string y_var = "y"
+		integer comma_pos = params.indexOf(",")
+		if comma_pos != -1
+			x_var = params.substring(0, comma_pos)
+			y_var = params.substring(comma_pos + 1, params.length())
+		string result = "// Pointer up handler\n"
+		result = result + "_canvas_on_pointer_up(" + canvas_id + ")\n"
+		result = result + "number " + x_var + " = _canvas_event_x()\n"
+		result = result + "number " + y_var + " = _canvas_event_y()\n"
+		result = result + body + "\n"
+		return result
+
 	string expand_on_key_down(string attrs, string body)
 		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
-		string params = get_attr(attrs, "params", "key")
-
-		// Determine key variable name from params attribute
+		string params = get_attr(attrs, "param", "key")
 		string key_var = params
 		integer comma_pos = params.indexOf(",")
 		if comma_pos != -1
-			// Only first param is meaningful for key events; use everything before comma
 			key_var = params.substring(0, comma_pos)
-
-		// Register key down handler and inject key string variable
-		string result = "// Key down event handler\n"
+		string result = "// Key down handler\n"
 		result = result + "_canvas_on_key_down(" + canvas_id + ")\n"
 		result = result + "string " + key_var + " = _canvas_event_key()\n"
 		result = result + body + "\n"
 		return result
 
-	// ========================================================================
-	// CANVAS COMMAND EXPANSION
-	// ========================================================================
+	string expand_on_key_up(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string params = get_attr(attrs, "param", "key")
+		string key_var = params
+		integer comma_pos = params.indexOf(",")
+		if comma_pos != -1
+			key_var = params.substring(0, comma_pos)
+		string result = "// Key up handler\n"
+		result = result + "_canvas_on_key_up(" + canvas_id + ")\n"
+		result = result + "string " + key_var + " = _canvas_event_key()\n"
+		result = result + body + "\n"
+		return result
 
-	// Expand canvas.* commands to bridge function calls
+	string expand_on_exit(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string result = "// Scene exit handler\n"
+		result = result + "_canvas_on_exit(" + canvas_id + ")\n"
+		result = result + body + "\n"
+		return result
+
+	string expand_on_pause(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string result = "// Scene pause handler\n"
+		result = result + "_canvas_on_pause(" + canvas_id + ")\n"
+		result = result + body + "\n"
+		return result
+
+	string expand_on_resume(string attrs, string body)
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		string result = "// Scene resume handler\n"
+		result = result + "_canvas_on_resume(" + canvas_id + ")\n"
+		result = result + body + "\n"
+		return result
+
+	// =====================================================================
+	// ANIMATION BLOCKS
+	// =====================================================================
+
+	string expand_anim_sprite(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		string sheet = get_body_value(body, "sheet", "")
+		string frames_val = get_body_value(body, "frames", "0..0")
+		string fps_val = get_body_value(body, "fps", "12")
+		string loop_val = get_body_value(body, "loop", "true")
+		string frame_start = get_range_start(frames_val)
+		string frame_end = get_range_end(frames_val)
+		string loop_int = "1"
+		if loop_val == "false"
+			loop_int = "0"
+		return "_animsprite_define(\"" + name + "\", \"" + sheet + "\", " + frame_start + ", " + frame_end + ", " + fps_val + ", " + loop_int + ")\n"
+
+	string expand_tween(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		return process_tween_body(name, body)
+
+	string expand_timeline(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		string safe_body = json_escape(body)
+		return "_timeline_define_json(\"" + name + "\", \"" + safe_body + "\")\n"
+
+	string expand_anim_state(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		string safe_body = json_escape(body)
+		return "_animstate_define_json(\"" + name + "\", \"" + safe_body + "\")\n"
+
+	string expand_particles(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		string safe_body = json_escape(body)
+		return "_particles_define_json(\"" + name + "\", \"" + safe_body + "\")\n"
+
+	// =====================================================================
+	// VISUAL DEFINITIONS
+	// =====================================================================
+
+	string expand_path(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		string result = "_path_begin(\"" + name + "\")\n"
+		result = result + process_path_body(name, body)
+		return result
+
+	string expand_gradient(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		string gtype = get_gradient_type(attrs)
+		string result = ""
+		if gtype == "linear"
+			string x1 = get_attr(attrs, "x1", "0")
+			string y1 = get_attr(attrs, "y1", "0")
+			string x2 = get_attr(attrs, "x2", "100")
+			string y2 = get_attr(attrs, "y2", "0")
+			result = "_gradient_linear(\"" + name + "\", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ")\n"
+		else
+			string cx = get_attr(attrs, "cx", "0")
+			string cy = get_attr(attrs, "cy", "0")
+			string r = get_attr(attrs, "r", "100")
+			result = "_gradient_radial(\"" + name + "\", " + cx + ", " + cy + ", " + r + ")\n"
+		result = result + process_gradient_stops(name, body)
+		return result
+
+	string expand_custom_ease(string attrs, string body)
+		string name = get_attr(attrs, "name", "")
+		string x1 = get_attr(attrs, "x1", "0.42")
+		string y1 = get_attr(attrs, "y1", "0.0")
+		string x2 = get_attr(attrs, "x2", "0.58")
+		string y2 = get_attr(attrs, "y2", "1.0")
+		return "_custom_ease_register(\"" + name + "\", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ")\n"
+
+	string expand_camera(string attrs, string body)
+		string result = "// Camera configuration\n"
+		string follow_x = get_body_value(body, "followX", "")
+		string follow_y = get_body_value(body, "followY", "")
+		string smoothing = get_body_value(body, "smoothing", "0.08")
+		string deadzone_w = get_body_value(body, "deadzoneWidth", "0")
+		string deadzone_h = get_body_value(body, "deadzoneHeight", "0")
+		string bounds_x = get_body_value(body, "boundsX", "")
+		string bounds_y = get_body_value(body, "boundsY", "")
+		string bounds_w = get_body_value(body, "boundsWidth", "")
+		string bounds_h = get_body_value(body, "boundsHeight", "")
+		string zoom_val = get_body_value(body, "zoom", "")
+		if follow_x != ""
+			if follow_y != ""
+				result = result + "_camera_set_follow(" + follow_x + ", " + follow_y + ", " + smoothing + ")\n"
+		if deadzone_w != "0"
+			result = result + "_camera_set_deadzone(" + deadzone_w + ", " + deadzone_h + ")\n"
+		if bounds_x != ""
+			if bounds_w != ""
+				result = result + "_camera_set_bounds(" + bounds_x + ", " + bounds_y + ", " + bounds_w + ", " + bounds_h + ")\n"
+		if zoom_val != ""
+			result = result + "_camera_set_zoom(" + zoom_val + ")\n"
+		return result
+
+	// =====================================================================
+	// CANVAS COMMAND EXPANSION
+	// =====================================================================
+
 	string expand_canvas_command(string command, string attrs, string body)
 		string cmd = command.substring(7, command.length())
 		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
@@ -155,7 +329,7 @@ functions:
 			string filled = get_attr(attrs, "filled", "true")
 			if filled == "true"
 				return "_canvas_circle_filled(" + canvas_id + ", " + x + ", " + y + ", " + radius + ", \"" + color + "\")\n"
-			return "_canvas_circle(" + canvas_id + ", " + x + ", " + y + ", " + radius + ", \"" + color + "\")\n"
+			return "_canvas_circle_outline(" + canvas_id + ", " + x + ", " + y + ", " + radius + ", \"" + color + "\")\n"
 
 		if cmd == "rect"
 			string x = get_attr(attrs, "x", "0")
@@ -164,9 +338,12 @@ functions:
 			string h = get_attr(attrs, "height", "100")
 			string color = get_attr(attrs, "color", "black")
 			string filled = get_attr(attrs, "filled", "true")
+			string corner = get_attr(attrs, "cornerRadius", "")
+			if corner != ""
+				return "_canvas_rect_rounded(" + canvas_id + ", " + x + ", " + y + ", " + w + ", " + h + ", " + corner + ", \"" + color + "\")\n"
 			if filled == "true"
 				return "_canvas_rect_filled(" + canvas_id + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + color + "\")\n"
-			return "_canvas_rect(" + canvas_id + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + color + "\")\n"
+			return "_canvas_rect_outline(" + canvas_id + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + color + "\")\n"
 
 		if cmd == "line"
 			string x1 = get_attr(attrs, "fromX", "0")
@@ -177,14 +354,50 @@ functions:
 			string color = get_attr(attrs, "color", "black")
 			return "_canvas_line(" + canvas_id + ", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ", " + stroke + ", \"" + color + "\")\n"
 
+		if cmd == "triangle"
+			string x1 = get_attr(attrs, "x1", "0")
+			string y1 = get_attr(attrs, "y1", "0")
+			string x2 = get_attr(attrs, "x2", "50")
+			string y2 = get_attr(attrs, "y2", "100")
+			string x3 = get_attr(attrs, "x3", "100")
+			string y3 = get_attr(attrs, "y3", "0")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			if filled == "true"
+				return "_canvas_triangle_filled(" + canvas_id + ", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ", " + x3 + ", " + y3 + ", \"" + color + "\")\n"
+			return "_canvas_triangle_outline(" + canvas_id + ", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ", " + x3 + ", " + y3 + ", \"" + color + "\")\n"
+
+		if cmd == "ellipse"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string rx = get_attr(attrs, "radiusX", "50")
+			string ry = get_attr(attrs, "radiusY", "25")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			if filled == "true"
+				return "_canvas_ellipse_filled(" + canvas_id + ", " + x + ", " + y + ", " + rx + ", " + ry + ", \"" + color + "\")\n"
+			return "_canvas_ellipse_outline(" + canvas_id + ", " + x + ", " + y + ", " + rx + ", " + ry + ", \"" + color + "\")\n"
+
 		if cmd == "text"
 			string text_val = get_attr(attrs, "value", body)
-			// Escape quotes and backslashes in text value for safe string literal
 			string safe_text = text_val.replace("\\", "\\\\").replace("\"", "\\\"")
 			string x = get_attr(attrs, "x", "0")
 			string y = get_attr(attrs, "y", "0")
 			string size = get_attr(attrs, "size", "16")
 			string color = get_attr(attrs, "color", "black")
+			string font = get_attr(attrs, "font", "")
+			string align = get_attr(attrs, "align", "")
+			string baseline = get_attr(attrs, "baseline", "")
+			if font != ""
+				if align == ""
+					align = "left"
+				if baseline == ""
+					baseline = "top"
+				return "_canvas_text_aligned(" + canvas_id + ", \"" + safe_text + "\", " + x + ", " + y + ", " + size + ", \"" + color + "\", \"" + align + "\", \"" + baseline + "\")\n"
+			if align != ""
+				if baseline == ""
+					baseline = "top"
+				return "_canvas_text_aligned(" + canvas_id + ", \"" + safe_text + "\", " + x + ", " + y + ", " + size + ", \"" + color + "\", \"" + align + "\", \"" + baseline + "\")\n"
 			return "_canvas_text(" + canvas_id + ", \"" + safe_text + "\", " + x + ", " + y + ", " + size + ", \"" + color + "\")\n"
 
 		if cmd == "image"
@@ -194,6 +407,31 @@ functions:
 			string w = get_attr(attrs, "width", "100")
 			string h = get_attr(attrs, "height", "100")
 			return "_canvas_image(" + canvas_id + ", \"" + src + "\", " + x + ", " + y + ", " + w + ", " + h + ")\n"
+
+		if cmd == "sprite"
+			string name = get_attr(attrs, "name", "")
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string w = get_attr(attrs, "width", "48")
+			string h = get_attr(attrs, "height", "64")
+			string clip = get_attr(attrs, "clip", "0")
+			string tint = get_attr(attrs, "tint", "")
+			string tint_strength = get_attr(attrs, "tintStrength", "1.0")
+			string flip_x = get_attr(attrs, "flipX", "false")
+			string flip_y = get_attr(attrs, "flipY", "false")
+			string fx = "0"
+			string fy = "0"
+			if flip_x == "true"
+				fx = "1"
+			if flip_y == "true"
+				fy = "1"
+			if tint != ""
+				return "_sprite_draw_tint(" + canvas_id + ", \"" + name + "\", " + clip + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + tint + "\", " + tint_strength + ")\n"
+			if fx == "1"
+				return "_sprite_draw_flipped(" + canvas_id + ", \"" + name + "\", " + clip + ", " + x + ", " + y + ", " + w + ", " + h + ", " + fx + ", " + fy + ")\n"
+			if fy == "1"
+				return "_sprite_draw_flipped(" + canvas_id + ", \"" + name + "\", " + clip + ", " + x + ", " + y + ", " + w + ", " + h + ", " + fx + ", " + fy + ")\n"
+			return "_sprite_draw(" + canvas_id + ", \"" + name + "\", " + clip + ", " + x + ", " + y + ", " + w + ", " + h + ")\n"
 
 		if cmd == "save"
 			return "_canvas_save(" + canvas_id + ")\n"
@@ -215,22 +453,273 @@ functions:
 			string y = get_attr(attrs, "y", "1")
 			return "_canvas_scale(" + canvas_id + ", " + x + ", " + y + ")\n"
 
-		// Unknown command - return as-is
+		if cmd == "group"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string rotation = get_attr(attrs, "rotation", "0")
+			string scale_x = get_attr(attrs, "scaleX", "1.0")
+			string scale_y = get_attr(attrs, "scaleY", "1.0")
+			string alpha_val = get_attr(attrs, "alpha", "1.0")
+			string result = "_canvas_group_begin(" + canvas_id + ", " + x + ", " + y + ", " + rotation + ", " + scale_x + ", " + scale_y + ", " + alpha_val + ")\n"
+			result = result + body + "\n"
+			result = result + "_canvas_group_end(" + canvas_id + ")\n"
+			return result
+
+		if cmd == "clip"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string path_name = get_attr(attrs, "path", "")
+			string r = get_attr(attrs, "radius", "")
+			string w = get_attr(attrs, "width", "100")
+			string h = get_attr(attrs, "height", "100")
+			string result = ""
+			if path_name != ""
+				result = "_canvas_clip_path(" + canvas_id + ", \"" + path_name + "\")\n"
+			else if r != ""
+				result = "_canvas_clip_circle(" + canvas_id + ", " + x + ", " + y + ", " + r + ")\n"
+			else
+				result = "_canvas_clip_rect(" + canvas_id + ", " + x + ", " + y + ", " + w + ", " + h + ")\n"
+			result = result + body + "\n"
+			result = result + "_canvas_clip_end(" + canvas_id + ")\n"
+			return result
+
+		if cmd == "alpha"
+			string value = get_attr(attrs, "value", "1.0")
+			string result = "_canvas_alpha_begin(" + canvas_id + ", " + value + ")\n"
+			result = result + body + "\n"
+			result = result + "_canvas_alpha_end(" + canvas_id + ")\n"
+			return result
+
+		if cmd == "shadow"
+			string blur = get_attr(attrs, "blur", "10")
+			string offset_x = get_attr(attrs, "offsetX", "2")
+			string offset_y = get_attr(attrs, "offsetY", "2")
+			string color = get_attr(attrs, "color", "rgba(0,0,0,0.5)")
+			string result = "_canvas_shadow_begin(" + canvas_id + ", " + blur + ", " + offset_x + ", " + offset_y + ", \"" + color + "\")\n"
+			result = result + body + "\n"
+			result = result + "_canvas_shadow_end(" + canvas_id + ")\n"
+			return result
+
+		if cmd == "blur"
+			string radius = get_attr(attrs, "radius", "4")
+			string result = "_canvas_blur_begin(" + canvas_id + ", " + radius + ")\n"
+			result = result + body + "\n"
+			result = result + "_canvas_blur_end(" + canvas_id + ")\n"
+			return result
+
+		if cmd == "glow"
+			string color = get_attr(attrs, "color", "#ffffff")
+			string blur = get_attr(attrs, "blur", "12")
+			string result = "_canvas_glow_begin(" + canvas_id + ", \"" + color + "\", " + blur + ")\n"
+			result = result + body + "\n"
+			result = result + "_canvas_glow_end(" + canvas_id + ")\n"
+			return result
+
+		if cmd == "blend"
+			string mode = get_attr(attrs, "mode", "normal")
+			string result = "_canvas_blend_begin(" + canvas_id + ", \"" + mode + "\")\n"
+			result = result + body + "\n"
+			result = result + "_canvas_blend_end(" + canvas_id + ")\n"
+			return result
+
 		return body
 
-	// ========================================================================
+	// =====================================================================
 	// VALIDATION
-	// ========================================================================
+	// =====================================================================
 
 	string validate_canvas_scene(string attrs)
-		// Canvas scene is always valid, uses defaults
 		return ""
 
-	// ========================================================================
-	// HELPER FUNCTIONS
-	// ========================================================================
+	// =====================================================================
+	// BODY PROCESSING
+	// =====================================================================
 
-	// Get attribute from attrs string (JSON format)
+	string process_assets_body(string body)
+		string result = ""
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("image ")
+				string name = get_quoted_name(trimmed, 6)
+				string src = get_body_value(trimmed, "src", "")
+				if name != ""
+					if src != ""
+						result = result + "_asset_preload_image(\"" + name + "\", \"" + src + "\")\n"
+			else if trimmed.startsWith("spritesheet ")
+				string name = get_quoted_name(trimmed, 12)
+				string src = get_body_value(trimmed, "src", "")
+				string fw = get_body_value(trimmed, "frameWidth", "32")
+				string fh = get_body_value(trimmed, "frameHeight", "32")
+				if name != ""
+					if src != ""
+						result = result + "_sprite_register_sheet(\"" + name + "\", \"" + src + "\", " + fw + ", " + fh + ")\n"
+			else if trimmed.startsWith("sound ")
+				string name = get_quoted_name(trimmed, 6)
+				string src = get_body_value(trimmed, "src", "")
+				if name != ""
+					if src != ""
+						result = result + "_audio_preload(\"" + name + "\", \"" + src + "\")\n"
+			else if trimmed.startsWith("music ")
+				string name = get_quoted_name(trimmed, 6)
+				string src = get_body_value(trimmed, "src", "")
+				if name != ""
+					if src != ""
+						result = result + "_audio_preload(\"" + name + "\", \"" + src + "\")\n"
+			else if trimmed.startsWith("font ")
+				string name = get_quoted_name(trimmed, 5)
+				string src = get_body_value(trimmed, "src", "")
+				if name != ""
+					if src != ""
+						result = result + "_font_load(\"" + name + "\", \"" + src + "\")\n"
+			i = next_i
+		return result
+
+	string process_layers_body(string body)
+		string result = ""
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("layer ")
+				string name = get_quoted_name(trimmed, 6)
+				string z_val = get_body_value(trimmed, "z", "0")
+				if name != ""
+					result = result + "_layer_declare(\"" + name + "\", " + z_val + ")\n"
+			i = next_i
+		return result
+
+	string process_path_body(string name, string body)
+		string result = ""
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("moveTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				result = result + "_path_move_to(\"" + name + "\", " + x + ", " + y + ")\n"
+			else if trimmed.startsWith("lineTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				result = result + "_path_line_to(\"" + name + "\", " + x + ", " + y + ")\n"
+			else if trimmed.startsWith("curveTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				if trimmed.contains("cp1x")
+					string cp1x = get_body_value(trimmed, "cp1x", "0")
+					string cp1y = get_body_value(trimmed, "cp1y", "0")
+					string cp2x = get_body_value(trimmed, "cp2x", "0")
+					string cp2y = get_body_value(trimmed, "cp2y", "0")
+					result = result + "_path_cubic_to(\"" + name + "\", " + cp1x + ", " + cp1y + ", " + cp2x + ", " + cp2y + ", " + x + ", " + y + ")\n"
+				else
+					string cx = get_body_value(trimmed, "cx", "0")
+					string cy = get_body_value(trimmed, "cy", "0")
+					result = result + "_path_curve_to(\"" + name + "\", " + cx + ", " + cy + ", " + x + ", " + y + ")\n"
+			else if trimmed.startsWith("arcTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				string r = get_body_value(trimmed, "radius", "50")
+				string sa = get_body_value(trimmed, "startAngle", "0")
+				string ea = get_body_value(trimmed, "endAngle", "360")
+				result = result + "_path_arc_to(\"" + name + "\", " + x + ", " + y + ", " + r + ", " + sa + ", " + ea + ")\n"
+			else if trimmed.startsWith("closePath")
+				result = result + "_path_close(\"" + name + "\")\n"
+			i = next_i
+		return result
+
+	string process_gradient_stops(string name, string body)
+		string result = ""
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("stop ")
+				string rest = trimmed.substring(5, trimmed.length())
+				string offset = get_first_word(rest)
+				integer q1 = trimmed.indexOf("\"", 5)
+				if q1 != -1
+					integer q2 = trimmed.indexOf("\"", q1 + 1)
+					if q2 != -1
+						string color = trimmed.substring(q1 + 1, q2)
+						result = result + "_gradient_add_stop(\"" + name + "\", " + offset + ", \"" + color + "\")\n"
+			i = next_i
+		return result
+
+	string process_tween_body(string name, string body)
+		string duration = get_body_value(body, "duration", "0.5")
+		string ease = get_body_value(body, "ease", "linear")
+		string repeat_val = get_body_value(body, "repeat", "0")
+		string yoyo_val = get_body_value(body, "yoyo", "false")
+		string delay_val = get_body_value(body, "delay", "0.0")
+		string path_val = get_body_value(body, "along", "")
+		string yoyo_int = "0"
+		if yoyo_val == "true"
+			yoyo_int = "1"
+		string result = ""
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				if is_tween_target_line(trimmed)
+					string var_name = get_first_word(trimmed)
+					string from_val = get_body_value(trimmed, "from", "0.0")
+					string to_val = get_body_value(trimmed, "to", "0.0")
+					result = result + "_tween_define_var(\"" + name + "\", \"" + var_name + "\", " + from_val + ", " + to_val + ", " + duration + ", \"" + ease + "\", " + repeat_val + ", " + yoyo_int + ", " + delay_val + ", \"" + path_val + "\")\n"
+			i = next_i
+		return result
+
+	// =====================================================================
+	// ATTRIBUTE + BODY PARSING HELPERS
+	// =====================================================================
+
 	string get_attr(string attrs, string key, string default_val)
 		string pattern = "\"" + key + "\""
 		integer pos = attrs.indexOf(pattern)
@@ -238,21 +727,18 @@ functions:
 			return default_val
 		return extract_value(attrs, pos)
 
-	// Extract value after key position
 	string extract_value(string json, integer key_pos)
 		integer colon_pos = json.indexOf(":", key_pos)
 		if colon_pos == -1
 			return ""
 		integer quote_start = json.indexOf("\"", colon_pos + 1)
 		if quote_start == -1
-			// Try to extract number value
 			return extract_number(json, colon_pos + 1)
 		integer quote_end = json.indexOf("\"", quote_start + 1)
 		if quote_end == -1
 			return ""
 		return json.substring(quote_start + 1, quote_end)
 
-	// Extract numeric value (for non-string attributes)
 	string extract_number(string json, integer start_pos)
 		string digits = ""
 		integer i = start_pos
@@ -268,7 +754,6 @@ functions:
 			i = i + 1
 		return digits
 
-	// Check if character is a digit or numeric punctuation
 	boolean is_digit_char(string c)
 		if c == "0"
 			return true
@@ -295,3 +780,133 @@ functions:
 		if c == "-"
 			return true
 		return false
+
+	string get_body_value(string body, string key, string default_val)
+		string pat1 = key + " ="
+		string pat2 = key + "="
+		integer pos = body.indexOf(pat1)
+		if pos == -1
+			pos = body.indexOf(pat2)
+		if pos == -1
+			return default_val
+		integer eq_pos = body.indexOf("=", pos)
+		if eq_pos == -1
+			return default_val
+		return extract_body_value_at(body, eq_pos + 1)
+
+	string extract_body_value_at(string body, integer start_pos)
+		integer i = start_pos
+		integer len = body.length()
+		while i < len
+			string c = body.substring(i, i + 1)
+			if c != " "
+				if c != "\t"
+					break
+			i = i + 1
+		if i >= len
+			return ""
+		string first = body.substring(i, i + 1)
+		if first == "\""
+			integer end_q = body.indexOf("\"", i + 1)
+			if end_q == -1
+				return ""
+			return body.substring(i + 1, end_q)
+		string result = ""
+		while i < len
+			string c = body.substring(i, i + 1)
+			if c == " "
+				break
+			if c == "\t"
+				break
+			if c == "\n"
+				break
+			if c == "\r"
+				break
+			if c == ","
+				break
+			result = result + c
+			i = i + 1
+		return result
+
+	string get_quoted_name(string s, integer after_pos)
+		integer q1 = s.indexOf("\"", after_pos)
+		if q1 == -1
+			return ""
+		integer q2 = s.indexOf("\"", q1 + 1)
+		if q2 == -1
+			return ""
+		return s.substring(q1 + 1, q2)
+
+	string get_first_word(string s)
+		string result = ""
+		integer i = 0
+		integer len = s.length()
+		while i < len
+			string c = s.substring(i, i + 1)
+			if c == " "
+				return result
+			if c == "\t"
+				return result
+			if c == "="
+				return result
+			result = result + c
+			i = i + 1
+		return result
+
+	boolean is_tween_config_line(string line)
+		if line.startsWith("duration")
+			return true
+		if line.startsWith("ease")
+			return true
+		if line.startsWith("repeat")
+			return true
+		if line.startsWith("yoyo")
+			return true
+		if line.startsWith("delay")
+			return true
+		if line.startsWith("onComplete")
+			return true
+		if line.startsWith("along")
+			return true
+		if line.startsWith("orient")
+			return true
+		if line.startsWith("//")
+			return true
+		return false
+
+	boolean is_tween_target_line(string line)
+		if line.length() == 0
+			return false
+		if line.startsWith("//")
+			return false
+		if is_tween_config_line(line)
+			return false
+		if line.contains("to=")
+			return true
+		return false
+
+	string get_gradient_type(string attrs)
+		if attrs.contains("linear")
+			return "linear"
+		if attrs.contains("radial")
+			return "radial"
+		return "linear"
+
+	string get_range_start(string range)
+		integer dot_pos = range.indexOf("..")
+		if dot_pos == -1
+			return "0"
+		return range.substring(0, dot_pos)
+
+	string get_range_end(string range)
+		integer dot_pos = range.indexOf("..")
+		if dot_pos == -1
+			return range
+		return range.substring(dot_pos + 2, range.length())
+
+	string json_escape(string s)
+		string result = s.replace("\\", "\\\\")
+		result = result.replace("\"", "\\\"")
+		result = result.replace("\n", "\\n")
+		result = result.replace("\t", "\\t")
+		return result
