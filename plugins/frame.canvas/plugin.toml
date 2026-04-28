@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.canvas"
-version = "2.1.2"
-description = "Canvas rendering plugin for Clean Language - provides drawing, animation, audio, sprites, input, and visual effects for game development"
+version = "2.1.0"
+description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects"
 author = "Clean Language Team"
 license = "MIT"
 
@@ -10,7 +10,7 @@ min_compiler_version = "0.15.0"
 
 # Canvas/game workloads need frame-stable memory to avoid mid-frame grow stalls.
 # Honored by compiler >= 0.30.57; older compilers silently use target defaults.
-# See platform-architecture/MEMORY_POLICY.md §3 (canvas tier: 256 initial / 1024 max pages).
+# See foundation/platform-architecture/MEMORY_POLICY.md §3 (canvas tier: 256 initial / 1024 max pages).
 [memory]
 tier = "canvas"
 
@@ -20,28 +20,202 @@ validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
-blocks = ["canvasScene", "draw", "onFrame", "onPointerDown", "onPointerMove", "onKeyDown"]
+# Scene lifecycle and input — top-level blocks
+blocks = [
+  "canvasScene",
+  "assets",
+  "layers",
+  "state",
+  "animSprite",
+  "particles",
+  "tween",
+  "timeline",
+  "animState",
+  "path",
+  "gradient",
+  "customEase",
+  "camera",
+  "init",
+  "draw",
+  "onFrame",
+  "onPointerDown",
+  "onPointerMove",
+  "onPointerUp",
+  "onKeyDown",
+  "onKeyUp",
+  "onExit",
+  "onPause",
+  "onResume",
+]
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["canvasScene", "draw", "onFrame", "onPointerDown", "onPointerMove", "onKeyDown"]
+blocks = [
+  "canvasScene",
+  "assets",
+  "layers",
+  "state",
+  "animSprite",
+  "particles",
+  "tween",
+  "timeline",
+  "animState",
+  "path",
+  "gradient",
+  "customEase",
+  "camera",
+  "init",
+  "draw",
+  "onFrame",
+  "onPointerDown",
+  "onPointerMove",
+  "onPointerUp",
+  "onKeyDown",
+  "onKeyUp",
+  "onExit",
+  "onPause",
+  "onResume",
+]
 
 # Keywords used within plugin context
 keywords = [
-  { name = "canvas", description = "Canvas instance reference", context = "expression" },
-  { name = "width", description = "Canvas width configuration", context = "config" },
-  { name = "height", description = "Canvas height configuration", context = "config" },
+  # canvasScene attributes
+  { name = "width", description = "Canvas width in pixels", context = "config" },
+  { name = "height", description = "Canvas height in pixels", context = "config" },
   { name = "fps", description = "Target frames per second", context = "config" },
   { name = "background", description = "Background color", context = "config" },
-  { name = "assets", description = "Asset preloading block", context = "block" },
-  { name = "init", description = "Initialization block", context = "block" },
-  { name = "update", description = "Update loop block (runs every frame)", context = "block" },
-  { name = "render", description = "Render loop block (runs every frame after update)", context = "block" },
-  { name = "scene", description = "Scene management (change, push, pop)", context = "expression" },
+  { name = "param", description = "Parameter name for event handler variable", context = "config" },
+
+  # assets sub-block keywords
+  { name = "image", description = "Load a static image asset", context = "block" },
+  { name = "spritesheet", description = "Load a tiled spritesheet asset", context = "block" },
+  { name = "sound", description = "Load a sound effect asset", context = "block" },
+  { name = "music", description = "Load a music track asset", context = "block" },
+  { name = "font", description = "Load a font asset for use with canvas.text font= attribute", context = "block" },
+  { name = "frameWidth", description = "Width of a single spritesheet frame in pixels", context = "config" },
+  { name = "frameHeight", description = "Height of a single spritesheet frame in pixels", context = "config" },
+  { name = "cols", description = "Number of columns in a spritesheet grid", context = "config" },
+  { name = "rows", description = "Number of rows in a spritesheet grid", context = "config" },
+  { name = "src", description = "Asset source path relative to public/", context = "config" },
+
+  # layers keywords
+  { name = "layer", description = "Named render layer declaration inside layers: block", context = "block" },
+  { name = "z", description = "Draw order for a named layer (lower = drawn first)", context = "config" },
+
+  # state keywords
+  { name = "state", description = "Persistent mutable variables block (inside canvasScene) or FSM state name", context = "both" },
+
+  # animSprite keywords
+  { name = "sheet", description = "Spritesheet reference for an animSprite clip", context = "config" },
+  { name = "frames", description = "Frame range for animSprite (e.g. 0..7)", context = "config" },
+  { name = "loop", description = "Whether the animation loops (true/false)", context = "config" },
+
+  # tween keywords
+  { name = "to", description = "Destination value for a tween variable (e.g. logoX from=-300 to=400)", context = "config" },
+  { name = "from", description = "Starting value for a tween variable (omit to start from current value)", context = "config" },
+  { name = "duration", description = "Tween or animation duration in seconds", context = "config" },
+  { name = "ease", description = "Easing function name string (e.g. \"easeOutElastic\", \"snap\")", context = "config" },
+  { name = "repeat", description = "Repeat count for a tween (-1 = infinite)", context = "config" },
+  { name = "yoyo", description = "Reverse direction on each repeat (true/false)", context = "config" },
+  { name = "delay", description = "Start delay in seconds before a tween begins", context = "config" },
+  { name = "along", description = "Named path reference for path-following tween", context = "config" },
+  { name = "orient", description = "Orient object to follow path direction (true/false)", context = "config" },
+  { name = "onComplete", description = "Tween or timeline completion callback (state name or expression)", context = "config" },
+
+  # timeline keywords
+  { name = "at", description = "Absolute time position in a timeline (seconds from start)", context = "block" },
+  { name = "after", description = "Relative time after previous block ends; overlap= or gap= for offset", context = "block" },
+  { name = "together", description = "All animations start simultaneously; stagger= adds cascading delay", context = "block" },
+  { name = "overlap", description = "Overlap seconds on after: block (starts that many seconds before previous ends)", context = "config" },
+  { name = "gap", description = "Gap seconds on after: block (starts that many seconds after previous ends)", context = "config" },
+  { name = "stagger", description = "Per-child delay in seconds on together: block (GSAP-style stagger)", context = "config" },
+  { name = "animate", description = "Inline animate expression: animate varName from=-300 to=400 duration=0.5 ease=\"easeOut\"", context = "expression" },
+
+  # animState keywords
+  { name = "transitions", description = "Transition rules block inside animState", context = "block" },
+  { name = "when", description = "Condition clause on animState transition: \"idle\" -> \"walk\" when speed > 10", context = "config" },
+  { name = "initial", description = "Initial state name for an animState machine", context = "config" },
+
+  # particles keywords
+  { name = "emitter", description = "Particle emitter rate/shape configuration sub-block", context = "block" },
+  { name = "lifetime", description = "Particle lifetime range (e.g. 1.0..3.0)", context = "config" },
+  { name = "overLifetime", description = "Properties animated over particle lifetime (size, alpha, color, speed)", context = "block" },
+  { name = "forces", description = "Forces applied to particles sub-block (gravity, drag, wind, turbulence, attractor)", context = "block" },
+  { name = "gravity", description = "Gravity force on particles (pixels/s²)", context = "config" },
+  { name = "drag", description = "Velocity drag multiplier applied each frame (0–1)", context = "config" },
+  { name = "wind", description = "Constant wind force: wind x= y=", context = "expression" },
+  { name = "turbulence", description = "Random turbulence force: turbulence strength= scale=", context = "expression" },
+  { name = "attractor", description = "Attractor point force: attractor x= y= strength=", context = "expression" },
+  { name = "rate", description = "Particles emitted per second", context = "config" },
+  { name = "shape", description = "Particle render shape (\"circle\" / \"square\" / \"star\")", context = "config" },
+  { name = "image", description = "Particle render image asset name (replaces shape)", context = "config" },
+  { name = "radius", description = "Particle circle radius or emitter circle radius", context = "config" },
+  { name = "size", description = "Particle image size in pixels", context = "config" },
+
+  # path keywords
+  { name = "moveTo", description = "Move path pen to position (no colon): moveTo x= y=", context = "expression" },
+  { name = "lineTo", description = "Straight line segment: lineTo x= y=", context = "expression" },
+  { name = "curveTo", description = "Cubic Bézier: curveTo x= y= cx= cy= (or cp1x= cp1y= cp2x= cp2y=)", context = "expression" },
+  { name = "arcTo", description = "Arc segment: arcTo x= y= radius= startAngle= endAngle=", context = "expression" },
+  { name = "closePath", description = "Close the current path back to start", context = "expression" },
+  { name = "closed", description = "Whether a path is automatically closed (true/false)", context = "config" },
+
+  # gradient keywords
+  { name = "linear", description = "Linear gradient type attribute: gradient \"name\" linear x1= y1= x2= y2=:", context = "config" },
+  { name = "radial", description = "Radial gradient type attribute: gradient \"name\" radial cx= cy= r=:", context = "config" },
+  { name = "stop", description = "Color stop in a gradient: stop 0.0 \"#color\"", context = "block" },
+  { name = "gradient", description = "Apply a named gradient as fill: gradient=\"gradientName\" on shape calls", context = "config" },
+
+  # customEase keyword
+  { name = "customEase", description = "Declare a named custom cubic-bezier easing: customEase \"name\" x1= y1= x2= y2=", context = "block" },
+
+  # camera keywords (flat camelCase, max 2 levels deep)
+  { name = "followX", description = "Camera follow target X (expression or state variable)", context = "config" },
+  { name = "followY", description = "Camera follow target Y (expression or state variable)", context = "config" },
+  { name = "smoothing", description = "Camera follow smoothing factor (0=instant, 1=no movement)", context = "config" },
+  { name = "deadzoneWidth", description = "Camera follow deadzone width in pixels", context = "config" },
+  { name = "deadzoneHeight", description = "Camera follow deadzone height in pixels", context = "config" },
+  { name = "boundsX", description = "World boundary left edge for camera", context = "config" },
+  { name = "boundsY", description = "World boundary top edge for camera", context = "config" },
+  { name = "boundsWidth", description = "World boundary total width for camera", context = "config" },
+  { name = "boundsHeight", description = "World boundary total height for camera", context = "config" },
+  { name = "zoom", description = "Camera zoom factor", context = "config" },
+
+  # Sprite rendering attributes
+  { name = "clip", description = "Spritesheet frame index for canvas.sprite", context = "config" },
+  { name = "tint", description = "Tint color applied to a sprite (hex or rgba string)", context = "config" },
+  { name = "tintStrength", description = "Tint blend strength (0.0 = no tint, 1.0 = full tint)", context = "config" },
+  { name = "anchorX", description = "Horizontal anchor for sprite rotation/scaling (0.0–1.0, default 0.5)", context = "config" },
+  { name = "anchorY", description = "Vertical anchor for sprite rotation/scaling (0.0–1.0, default 0.5)", context = "config" },
+  { name = "scaleX", description = "Horizontal scale factor for sprite or group", context = "config" },
+  { name = "scaleY", description = "Vertical scale factor for sprite or group", context = "config" },
+  { name = "rotation", description = "Rotation angle in degrees for sprite or group", context = "config" },
+  { name = "alpha", description = "Opacity value (0.0–1.0) for sprite or group", context = "config" },
+  { name = "flipX", description = "Mirror sprite horizontally (true/false)", context = "config" },
+  { name = "flipY", description = "Mirror sprite vertically (true/false)", context = "config" },
+
+  # Event handler blocks
+  { name = "onFrame", description = "Per-frame update logic handler", context = "block" },
   { name = "onPointerDown", description = "Handle pointer down (click/touch) events", context = "block" },
   { name = "onPointerMove", description = "Handle pointer move (mouse/touch movement) events", context = "block" },
+  { name = "onPointerUp", description = "Handle pointer up (release) events", context = "block" },
   { name = "onKeyDown", description = "Handle key press events", context = "block" },
-  { name = "params", description = "Parameter names for event handler variables", context = "config" },
+  { name = "onKeyUp", description = "Handle key release events", context = "block" },
+  { name = "onExit", description = "Called when the scene is exited (cleanup, save state)", context = "block" },
+  { name = "onPause", description = "Called when the scene loses focus (tab hidden, overlay opens)", context = "block" },
+  { name = "onResume", description = "Called when the scene regains focus after pause", context = "block" },
+
+  # Scene management
+  { name = "scene", description = "Scene management namespace (change, push, pop, set, get)", context = "expression" },
+  { name = "page", description = "Canvas/UI bridge namespace (set, get — shares values with frame.ui HTML layer)", context = "expression" },
+
+  # Control keywords for animation
+  { name = "play", description = "Play a named tween, timeline, or animSprite", context = "expression" },
+  { name = "pause", description = "Pause a named tween or timeline", context = "expression" },
+  { name = "stop", description = "Stop a named tween or timeline", context = "expression" },
+  { name = "seek", description = "Seek a timeline to a time position in seconds", context = "expression" },
+  { name = "start", description = "Start an animation state machine", context = "expression" },
+  { name = "on", description = "Route draw calls to a named layer: on layer \"name\":", context = "expression" },
 ]
 
 # Custom types provided by the plugin
@@ -51,67 +225,168 @@ types = [
   { name = "Sound", description = "Sound effect reference" },
   { name = "Music", description = "Music track reference" },
   { name = "Image", description = "Image asset reference" },
+  { name = "Font", description = "Font asset reference" },
+  { name = "Tween", description = "Named tween animation" },
+  { name = "Timeline", description = "Named sequence of tweens" },
+  { name = "AnimState", description = "Animation state machine" },
+  { name = "Particles", description = "Particle emitter definition" },
+  { name = "Gradient", description = "Named gradient fill" },
+  { name = "Path", description = "Named vector path" },
 ]
 
-# Built-in functions/expressions
+# Built-in functions/expressions (see §27 of 12_frame_canvas.md for bridge contract)
 functions = [
-  # Drawing
-  { name = "canvas.clear", signature = "canvas.clear(color?)", description = "Clear canvas with optional color" },
-  { name = "canvas.circle", signature = "canvas.circle(x, y, radius, color)", description = "Draw circle outline" },
-  { name = "canvas.circleFilled", signature = "canvas.circleFilled(x, y, radius, color)", description = "Draw filled circle" },
-  { name = "canvas.rect", signature = "canvas.rect(x, y, w, h, color)", description = "Draw rectangle outline" },
-  { name = "canvas.rectFilled", signature = "canvas.rectFilled(x, y, w, h, color)", description = "Draw filled rectangle" },
-  { name = "canvas.line", signature = "canvas.line(x1, y1, x2, y2, width, color)", description = "Draw line" },
-  { name = "canvas.text", signature = "canvas.text(text, x, y, size, color)", description = "Draw text" },
-  { name = "canvas.image", signature = "canvas.image(src, x, y, w, h)", description = "Draw image" },
-  # Sprites
-  { name = "sprite.load", signature = "sprite.load(path, frameW, frameH)", description = "Load sprite sheet" },
-  { name = "sprite.draw", signature = "sprite.draw(sheet, frame, x, y)", description = "Draw sprite frame" },
-  # Audio
-  { name = "audio.loadSound", signature = "audio.loadSound(path)", description = "Load sound effect" },
-  { name = "audio.play", signature = "audio.play(sound, volume?, loop?)", description = "Play sound" },
-  { name = "audio.loadMusic", signature = "audio.loadMusic(path)", description = "Load music track" },
-  { name = "audio.playMusic", signature = "audio.playMusic(music, volume?, loop?)", description = "Play music" },
-  # Input
-  { name = "input.mouseX", signature = "input.mouseX()", description = "Get mouse X position" },
-  { name = "input.mouseY", signature = "input.mouseY()", description = "Get mouse Y position" },
-  { name = "input.mousePressed", signature = "input.mousePressed(button)", description = "Check mouse button" },
-  { name = "input.keyDown", signature = "input.keyDown(key)", description = "Check if key is pressed" },
-  { name = "input.keyJustPressed", signature = "input.keyJustPressed(key)", description = "Check if key just pressed" },
-  # Animation
-  { name = "deltaTime", signature = "deltaTime()", description = "Get time since last frame" },
-  { name = "time", signature = "time()", description = "Get total elapsed time" },
-  { name = "fps", signature = "fps()", description = "Get current FPS" },
+  # Drawing — basic shapes
+  { name = "canvas.clear", signature = "canvas.clear\ncanvas.clear color=\"#1a1a2e\"", description = "Clear canvas. Optional color overrides background." },
+  { name = "canvas.circle", signature = "canvas.circle x=${x} y=${y} radius=${r} color=\"${color}\" filled=${true}", description = "Draw circle; filled=true (default) for filled, filled=false for outline" },
+  { name = "canvas.rect", signature = "canvas.rect x=${x} y=${y} width=${w} height=${h} color=\"${color}\" filled=${true} cornerRadius=${0}", description = "Draw rectangle; optional cornerRadius for rounded corners" },
+  { name = "canvas.line", signature = "canvas.line fromX=${x1} fromY=${y1} toX=${x2} toY=${y2} stroke=${1} color=\"${color}\"", description = "Draw line segment" },
+  { name = "canvas.triangle", signature = "canvas.triangle x1=${x1} y1=${y1} x2=${x2} y2=${y2} x3=${x3} y3=${y3} color=\"${color}\" filled=${true}", description = "Draw triangle" },
+  { name = "canvas.ellipse", signature = "canvas.ellipse x=${x} y=${y} radiusX=${rx} radiusY=${ry} color=\"${color}\" filled=${true}", description = "Draw ellipse" },
+  { name = "canvas.text", signature = "canvas.text \"${text}\" x=${x} y=${y} size=${16} color=\"${color}\" font=\"${fontName}\" align=\"${left}\" baseline=\"${top}\"", description = "Draw text; font= references a named font asset from assets: block" },
+  { name = "canvas.image", signature = "canvas.image src=\"${name}\" x=${x} y=${y} width=${w} height=${h}", description = "Draw image asset by name" },
+  { name = "canvas.sprite", signature = "canvas.sprite \"${name}\" x=${x} y=${y}\ncanvas.sprite \"${name}\" x=${x} y=${y} clip=${0}\ncanvas.sprite \"${name}\" x=${x} y=${y} state=\"${fsm}\"\ncanvas.sprite \"${name}\" x=${x} y=${y} sheet=\"${run}\" clip=${2}", description = "Draw sprite — static, by clip index, by FSM state, or by sheet+clip. Supports tint=, tintStrength=, alpha=, scaleX=, scaleY=, rotation=, anchorX=, anchorY=, flipX=, flipY=", maps_to = "_sprite_draw" },
+
+  # Drawing — transforms
+  { name = "canvas.save", signature = "canvas.save", description = "Push transform stack (pair with canvas.restore)" },
+  { name = "canvas.restore", signature = "canvas.restore", description = "Pop transform stack" },
+  { name = "canvas.translate", signature = "canvas.translate x=${x} y=${y}", description = "Translate canvas origin" },
+  { name = "canvas.rotate", signature = "canvas.rotate angle=${degrees}", description = "Rotate canvas (degrees, clockwise)" },
+  { name = "canvas.scale", signature = "canvas.scale x=${sx} y=${sy}", description = "Scale canvas" },
+
+  # Drawing — effect scopes
+  { name = "canvas.alpha", signature = "canvas.alpha value=${0.5}:\n\t// drawing commands", description = "Apply global alpha to all drawing inside the block" },
+  { name = "canvas.shadow", signature = "canvas.shadow blur=${10} offsetX=${2} offsetY=${2} color=\"${rgba(0,0,0,0.5)}\":\n\t// drawing commands", description = "Apply drop shadow to all drawing inside the block" },
+  { name = "canvas.blur", signature = "canvas.blur radius=${4}:\n\t// drawing commands", description = "Apply blur filter to all drawing inside the block" },
+  { name = "canvas.glow", signature = "canvas.glow color=\"${color}\" blur=${12}:\n\t// drawing commands", description = "Apply glow (bloom) to all drawing inside the block" },
+  { name = "canvas.blend", signature = "canvas.blend mode=\"${multiply}\":\n\t// drawing commands", description = "Apply blend mode to all drawing inside the block (multiply, screen, overlay, …)" },
+
+  # Drawing — layers
+  { name = "on layer", signature = "on layer \"${name}\":\n\t// drawing commands", description = "Route draw calls to a named layer" },
+
+  # Drawing — groups and clip regions
+  { name = "canvas.group", signature = "canvas.group x=${x} y=${y} rotation=${0} scaleX=${1.0} scaleY=${1.0} alpha=${1.0}:\n\t// child drawing commands", description = "Apply shared transform to a group of draw calls; group attributes (x, y, rotation, scaleX, scaleY, alpha) can be animated with tweens" },
+  { name = "canvas.clip", signature = "canvas.clip x=${x} y=${y} width=${w} height=${h}:\n\t// masked drawing commands", description = "Restrict drawing to a region; supports rect (x, y, width, height), circle (x, y, radius), or path (path=name)" },
+
+  # Audio — sound effects
+  { name = "audio.play", signature = "audio.play \"${name}\"\naudio.play \"${name}\" volume=${0.8} pitch=${1.0}", description = "Play a named sound effect (loaded in assets: as sound)", maps_to = "_audio_play_sound" },
+
+  # Audio — music tracks
+  { name = "audio.music.play", signature = "audio.music.play \"${name}\" loop=${true} volume=${0.8}", description = "Play a named music track (loaded in assets: as music)", maps_to = "_audio_music_play" },
+  { name = "audio.music.stop", signature = "audio.music.stop", description = "Stop current music track immediately", maps_to = "_audio_music_stop" },
+  { name = "audio.music.pause", signature = "audio.music.pause", description = "Pause current music track", maps_to = "_audio_music_pause" },
+  { name = "audio.music.resume", signature = "audio.music.resume", description = "Resume paused music track", maps_to = "_audio_music_resume" },
+  { name = "audio.music.fadeOut", signature = "audio.music.fadeOut duration=${1.0}", description = "Fade out current music track over duration seconds", maps_to = "_audio_music_fade_out" },
+  { name = "audio.music.crossfade", signature = "audio.music.crossfade \"${newTrack}\" duration=${1.5}", description = "Crossfade from current track to a new one", maps_to = "_audio_music_crossfade" },
+  { name = "audio.masterVolume", signature = "audio.masterVolume value=${0.8}", description = "Set master volume (0–1)", maps_to = "_audio_set_master_volume" },
+
+  # Input polling
+  { name = "input.mouseX", signature = "input.mouseX()", description = "Get mouse X position", maps_to = "_input_mouse_x" },
+  { name = "input.mouseY", signature = "input.mouseY()", description = "Get mouse Y position", maps_to = "_input_mouse_y" },
+  { name = "input.keyDown", signature = "input.keyDown(\"${key}\")", description = "Check if key is currently held (returns 1/0)", maps_to = "_input_key_down" },
+  { name = "input.keyJustPressed", signature = "input.keyJustPressed(\"${key}\")", description = "Check if key was pressed this frame (returns 1/0)", maps_to = "_input_key_just_pressed" },
+  { name = "input.keyJustReleased", signature = "input.keyJustReleased(\"${key}\")", description = "Check if key was released this frame (returns 1/0)", maps_to = "_input_key_just_released" },
+
+  # Tween control
+  { name = "play tween", signature = "play tween \"${name}\"", description = "Play a named tween from the beginning", maps_to = "_tween_play" },
+  { name = "pause tween", signature = "pause tween \"${name}\"", description = "Pause a running tween", maps_to = "_tween_pause" },
+  { name = "stop tween", signature = "stop tween \"${name}\"", description = "Stop and reset a tween", maps_to = "_tween_stop" },
+  { name = "resume tween", signature = "resume tween \"${name}\"", description = "Resume a paused tween", maps_to = "_tween_resume" },
+  { name = "animate", signature = "animate ${varName} to=${value} duration=${0.5} easing=${ease.easeOut}", description = "Inline animate: animates a state variable to a target value", maps_to = "_tween_animate" },
+
+  # Timeline control
+  { name = "play timeline", signature = "play timeline \"${name}\"", description = "Play a named timeline from the beginning", maps_to = "_timeline_play" },
+  { name = "pause timeline", signature = "pause timeline \"${name}\"", description = "Pause a running timeline", maps_to = "_timeline_pause" },
+  { name = "stop timeline", signature = "stop timeline \"${name}\"", description = "Stop a timeline", maps_to = "_timeline_stop" },
+  { name = "seek timeline", signature = "seek timeline \"${name}\" to=${seconds}", description = "Seek a timeline to a time position in seconds", maps_to = "_timeline_seek" },
+
+  # AnimState control
+  { name = "start animState", signature = "start animState \"${name}\"", description = "Start an animation state machine", maps_to = "_anim_state_start" },
+  { name = "animState.force", signature = "animState.force \"${name}\" to=\"${stateName}\"", description = "Force an FSM into a named state for one frame (use to= not state=)", maps_to = "_anim_state_force" },
+  { name = "animState.current", signature = "animState.current \"${name}\"", description = "Get the current state name of an FSM", maps_to = "_anim_state_current" },
+
+  # Particles control
+  { name = "emit particles", signature = "emit particles \"${name}\" x=${x} y=${y}", description = "One-shot particle burst at position", maps_to = "_particles_emit" },
+  { name = "start particles", signature = "start particles \"${name}\" x=${x} y=${y}", description = "Start continuous particle emitter at position", maps_to = "_particles_start" },
+  { name = "stop particles", signature = "stop particles \"${name}\"", description = "Stop a continuous particle emitter", maps_to = "_particles_stop" },
+
   # Collision
-  { name = "collision.circleCircle", signature = "collision.circleCircle(x1, y1, r1, x2, y2, r2)", description = "Circle vs circle collision" },
-  { name = "collision.rectRect", signature = "collision.rectRect(x1, y1, w1, h1, x2, y2, w2, h2)", description = "Rectangle vs rectangle collision" },
-  { name = "collision.pointRect", signature = "collision.pointRect(px, py, rx, ry, rw, rh)", description = "Point vs rectangle collision" },
+  { name = "collision.circles", signature = "collision.circles x1=${cx1} y1=${cy1} r1=${r1} x2=${cx2} y2=${cy2} r2=${r2}", description = "Circle vs circle collision test (returns 1/0)", maps_to = "_collision_circles" },
+  { name = "collision.rects", signature = "collision.rects x1=${x1} y1=${y1} w1=${w1} h1=${h1} x2=${x2} y2=${y2} w2=${w2} h2=${h2}", description = "AABB vs AABB collision test (returns 1/0)", maps_to = "_collision_rects" },
+  { name = "collision.pointRect", signature = "collision.pointRect px=${px} py=${py} rx=${rx} ry=${ry} rw=${rw} rh=${rh}", description = "Point in rectangle test (returns 1/0)", maps_to = "_collision_point_rect" },
+  { name = "collision.circleRect", signature = "collision.circleRect cx=${cx} cy=${cy} r=${r} rx=${rx} ry=${ry} rw=${rw} rh=${rh}", description = "Circle vs rectangle collision test (returns 1/0)", maps_to = "_collision_circle_rect" },
+  { name = "collision.pointCircle", signature = "collision.pointCircle px=${px} py=${py} cx=${cx} cy=${cy} r=${r}", description = "Point in circle test (returns 1/0)", maps_to = "_collision_point_circle" },
+  { name = "collision.rayCircle", signature = "collision.rayCircle ox=${ox} oy=${oy} dx=${dx} dy=${dy} cx=${cx} cy=${cy} r=${r}", description = "Ray vs circle — returns hit distance or -1", maps_to = "_collision_ray_circle" },
+
   # Camera
-  { name = "camera.setPosition", signature = "camera.setPosition(x, y)", description = "Set camera position" },
-  { name = "camera.setZoom", signature = "camera.setZoom(level)", description = "Set camera zoom" },
-  { name = "camera.shake", signature = "camera.shake(intensity, duration)", description = "Camera shake effect" },
-  # Easing
-  { name = "ease.linear", signature = "ease.linear(t)", description = "Linear interpolation" },
-  { name = "ease.inQuad", signature = "ease.inQuad(t)", description = "Quadratic ease in" },
-  { name = "ease.outQuad", signature = "ease.outQuad(t)", description = "Quadratic ease out" },
-  { name = "ease.inOutQuad", signature = "ease.inOutQuad(t)", description = "Quadratic ease in-out" },
-  # Scene management
-  { name = "scene.change", signature = "scene.change(name)", description = "Change to scene by name" },
-  { name = "scene.push", signature = "scene.push(name)", description = "Push scene onto stack" },
-  { name = "scene.pop", signature = "scene.pop()", description = "Pop scene from stack" },
-  { name = "scene.current", signature = "scene.current()", description = "Get current scene name" },
+  { name = "camera.setPosition", signature = "camera.setPosition x=${x} y=${y}", description = "Set camera world position", maps_to = "_camera_set_position" },
+  { name = "camera.setZoom", signature = "camera.setZoom zoom=${1.0}", description = "Set camera zoom factor", maps_to = "_camera_set_zoom" },
+  { name = "camera.shake", signature = "camera.shake intensity=${10} duration=${0.3}", description = "Trigger camera shake", maps_to = "_camera_shake" },
+
+  # Scene management and parameter passing
+  { name = "scene.change", signature = "scene.change \"${name}\"", description = "Replace current scene", maps_to = "_scene_change" },
+  { name = "scene.push", signature = "scene.push \"${name}\"", description = "Push scene onto stack", maps_to = "_scene_push" },
+  { name = "scene.pop", signature = "scene.pop()", description = "Pop top scene from stack", maps_to = "_scene_pop" },
+  { name = "scene.changeTo", signature = "scene.changeTo \"${name}\" transition=\"${fade}\" duration=${0.5}", description = "Animated scene change with transition", maps_to = "_scene_change_animated" },
+  { name = "scene.set", signature = "scene.set \"${key}\" value=${value}", description = "Store a value to pass to the next scene", maps_to = "_scene_set" },
+  { name = "scene.get", signature = "scene.get \"${key}\"", description = "Read a value passed from the previous scene", maps_to = "_scene_get" },
+
+  # Canvas/UI bridge
+  { name = "page.set", signature = "page.set \"${key}\" value=${value}", description = "Expose a canvas value to the surrounding HTML/UI layer (frame.ui {{ key }})", maps_to = "_page_set" },
+  { name = "page.get", signature = "page.get \"${key}\"", description = "Read a value set by the surrounding HTML/UI layer", maps_to = "_page_get" },
+
+  # Timing
+  { name = "deltaTime", signature = "deltaTime()", description = "Time since last frame in seconds", maps_to = "_canvas_get_delta_time" },
+  { name = "time", signature = "time()", description = "Total elapsed time since scene start in seconds", maps_to = "_canvas_get_time" },
 ]
 
 # Auto-completion suggestions
 completions = [
-  { trigger = "canvasScene:", insert = "canvasScene: width=${1:800} height=${2:600}\n\tdraw:\n\t\tcanvas.clear\n\t\t${3:// drawing commands}" },
-  { trigger = "draw:", insert = "draw:\n\tcanvas.clear\n\t${1:// drawing commands}" },
-  { trigger = "onFrame:", insert = "onFrame: param=\"dt\"\n\t${1:// per-frame update logic}" },
-  { trigger = "onPointerDown:", insert = "onPointerDown: params=\"x,y\"\n\t${1:// handle click/touch at x, y}" },
-  { trigger = "onPointerMove:", insert = "onPointerMove: params=\"x,y\"\n\t${1:// handle pointer movement}" },
-  { trigger = "onKeyDown:", insert = "onKeyDown: params=\"key\"\n\t${1:// handle key press, e.g. key == \"ArrowUp\"}" },
+  # Top-level scene block
+  { trigger = "canvasScene:", insert = "canvasScene: width=${1:800} height=${2:600} fps=${3:60}\n\n\tstate:\n\t\t${4:// persistent variables}\n\n\tdraw:\n\t\tcanvas.clear color=\"${5:#1a1a2e}\"\n\t\t${6:// drawing commands}\n\n\tonFrame: param=\"dt\"\n\t\t${7:// update logic}" },
+
+  # Sub-blocks
+  { trigger = "assets:", insert = "assets:\n\tspritesheet \"${1:hero}\" src=\"${2:sprites/hero.png}\" frameWidth=${3:48} frameHeight=${4:64}\n\tsound \"${5:jump}\" src=\"${6:sounds/jump.wav}\"" },
+  { trigger = "layers:", insert = "layers:\n\tlayer \"background\" z=0\n\tlayer \"world\" z=10\n\tlayer \"characters\" z=20\n\tlayer \"hud\" z=100" },
+  { trigger = "state:", insert = "state:\n\tnumber ${1:x} = ${2:0.0}\n\tnumber ${3:y} = ${4:0.0}" },
+  { trigger = "init:", insert = "init:\n\t${1:// one-time setup}" },
+  { trigger = "draw:", insert = "draw:\n\tcanvas.clear color=\"${1:#1a1a2e}\"\n\t${2:// drawing commands}" },
+
+  # Animation
+  { trigger = "tween \"", insert = "tween \"${1:name}\":\n\t${2:variable} from=${3:0} to=${4:100}\n\tduration = ${5:0.5}\n\tease = \"${6:easeOut}\"" },
+  { trigger = "timeline \"", insert = "timeline \"${1:name}\":\n\tat 0.0:\n\t\tanimate ${2:variable} from=${3:0} to=${4:100} duration=${5:0.5} ease=\"${6:easeOut}\"\n\tafter:\n\t\tanimate ${7:variable2} to=${8:value2} duration=${9:0.4}" },
+  { trigger = "animState \"", insert = "animState \"${1:name}\":\n\tstate \"${2:idle}\":\n\t\tcanvas.sprite \"${3:hero}\" x=heroX y=heroY\n\tstate \"${4:walk}\":\n\t\tcanvas.sprite \"${3:hero}\" x=heroX y=heroY state=\"${4:walk}\"\n\ttransitions:\n\t\t\"${2:idle}\" -> \"${4:walk}\" when ${5:speed > 10}\n\tinitial = \"${2:idle}\"" },
+  { trigger = "animSprite \"", insert = "animSprite \"${1:name}\":\n\tsheet = \"${2:spritesheetName}\"\n\tframes = ${3:0}..${4:7}\n\tfps = ${5:12}\n\tloop = ${6:true}" },
+  { trigger = "particles \"", insert = "particles \"${1:name}\":\n\temitter:\n\t\trate = ${2:60}\n\t\tshape = \"${3:point}\"\n\tlifetime = ${4:0.5}..${5:1.5}\n\tspeed = ${6:100}..${7:300}\n\tangle = ${8:-180}..${9:180}\n\tcolor = \"${10:#ffffff}\"\n\toverLifetime:\n\t\tsize = 1.0..0.0\n\t\talpha = 1.0..0.0" },
+  { trigger = "path \"", insert = "path \"${1:name}\":\n\tmoveTo x=${2:0} y=${3:0}\n\tcurveTo x=${4:300} y=${5:200} cx=${6:100} cy=${7:-50}" },
+  { trigger = "gradient \"", insert = "gradient \"${1:name}\" linear x1=${2:0} y1=${3:0} x2=${4:800} y2=${5:0}:\n\tstop 0.0 \"${6:#3b82f6}\"\n\tstop 1.0 \"${7:#8b5cf6}\"" },
+  { trigger = "customEase \"", insert = "customEase \"${1:snap}\" x1=${2:0.68} y1=${3:-0.55} x2=${4:0.265} y2=${5:1.55}" },
+  { trigger = "camera:", insert = "camera:\n\tfollowX = ${1:playerX}\n\tfollowY = ${2:playerY}\n\tsmoothing = ${3:0.08}\n\tdeadzoneWidth = ${4:200}\n\tdeadzoneHeight = ${5:100}" },
+
+  # Event handlers
+  { trigger = "onFrame:", insert = "onFrame: param=\"dt\"\n\t${1:// per-frame update logic — dt is seconds since last frame}" },
+  { trigger = "onPointerDown:", insert = "onPointerDown: param=\"x,y\"\n\t${1:// handle click/touch at x, y}" },
+  { trigger = "onPointerMove:", insert = "onPointerMove: param=\"mx,my\"\n\t${1:// handle pointer movement}" },
+  { trigger = "onPointerUp:", insert = "onPointerUp: param=\"x,y\"\n\t${1:// handle pointer release}" },
+  { trigger = "onKeyDown:", insert = "onKeyDown: param=\"key\"\n\tif key == \"${1:ArrowLeft}\"\n\t\t${2:// handle key press}" },
+  { trigger = "onKeyUp:", insert = "onKeyUp: param=\"key\"\n\tif key == \"${1:ArrowLeft}\"\n\t\t${2:// handle key release}" },
+  { trigger = "onExit:", insert = "onExit:\n\t${1:// cleanup before scene leaves}" },
+  { trigger = "onPause:", insert = "onPause:\n\t${1:// called when scene loses focus}" },
+  { trigger = "onResume:", insert = "onResume:\n\t${1:// called when scene regains focus}" },
+
+  # Drawing helpers
   { trigger = "canvas.circle", insert = "canvas.circle x=${1:0} y=${2:0} radius=${3:10} color=\"${4:blue}\"" },
   { trigger = "canvas.rect", insert = "canvas.rect x=${1:0} y=${2:0} width=${3:100} height=${4:100} color=\"${5:green}\"" },
+  { trigger = "canvas.sprite", insert = "canvas.sprite \"${1:name}\" x=${2:0} y=${3:0}" },
+  { trigger = "canvas.group", insert = "canvas.group x=${1:0} y=${2:0} rotation=${3:0} scaleX=${4:1.0} scaleY=${5:1.0}:\n\t${6:// child drawing commands}" },
+  { trigger = "canvas.clip", insert = "canvas.clip x=${1:0} y=${2:0} width=${3:200} height=${4:200}:\n\t${5:// masked drawing commands}" },
+  { trigger = "on layer", insert = "on layer \"${1:hud}\":\n\t${2:// layer drawing}" },
+  { trigger = "canvas.alpha", insert = "canvas.alpha value=${1:0.5}:\n\t${2:// drawing commands}" },
+  { trigger = "canvas.shadow", insert = "canvas.shadow blur=${1:10} offsetX=${2:2} offsetY=${3:2} color=\"${4:rgba(0,0,0,0.5)}\":\n\t${5:// drawing commands}" },
+  { trigger = "canvas.glow", insert = "canvas.glow color=\"${1:#feca57}\" blur=${2:12}:\n\t${3:// drawing commands}" },
+  { trigger = "audio.play", insert = "audio.play \"${1:sfxName}\" volume=${2:1.0}" },
+  { trigger = "audio.music.play", insert = "audio.music.play \"${1:track}\" loop=${2:true} volume=${3:0.8}" },
+  { trigger = "emit particles", insert = "emit particles \"${1:name}\" x=${2:playerX} y=${3:playerY}" },
 ]
 
 [paths]
@@ -134,157 +409,206 @@ files = [
 ]
 
 # Bridge function declarations - canvas-specific functions provided by the runtime
-# These are the drawing, animation, audio, input, and game development primitives
+# These match the WAT-level signatures expected by clean-server.
+# String params use (ptr i32, len i32) pairs when expand_strings = true.
+# See documents/specification/12_frame_canvas.md §27 for the complete bridge contract.
 [bridge]
 functions = [
   # ===== Canvas Lifecycle =====
-  { name = "_canvas_init", params = ["integer", "integer"], returns = "integer", description = "Initialize canvas with width and height, returns canvas ID" },
-  { name = "_canvas_clear", params = ["integer"], returns = "integer", description = "Clear the canvas by ID" },
-  { name = "_canvas_clear_color", params = ["integer", "string"], returns = "integer", description = "Clear canvas with specific color", expand_strings = true },
-  { name = "_canvas_present", params = ["integer"], returns = "integer", description = "Present/flush canvas buffer" },
+  { name = "_canvas_init", params = ["integer", "integer", "string"], returns = "integer", description = "Initialize canvas: width, height, id — returns canvas ID", expand_strings = true },
+  { name = "_canvas_clear", params = ["integer"], returns = "integer", description = "Clear canvas with background color" },
+  { name = "_canvas_clear_color", params = ["integer", "string"], returns = "integer", description = "Clear canvas with specified color", expand_strings = true },
+  { name = "_canvas_present", params = ["integer"], returns = "integer", description = "Flush frame to screen" },
+  { name = "_canvas_set_fps", params = ["integer", "integer"], returns = "integer", description = "Set target frame rate: canvasId, fps" },
   { name = "_canvas_resize", params = ["integer", "integer", "integer"], returns = "integer", description = "Resize canvas: canvas_id, width, height" },
   { name = "_canvas_get_width", params = ["integer"], returns = "integer", description = "Get canvas width" },
   { name = "_canvas_get_height", params = ["integer"], returns = "integer", description = "Get canvas height" },
-
-  # ===== Basic Shapes =====
-  { name = "_canvas_circle", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw circle outline: canvas_id, x, y, radius, color", expand_strings = true },
-  { name = "_canvas_circle_filled", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw filled circle", expand_strings = true },
-  { name = "_canvas_rect", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rectangle outline: canvas_id, x, y, width, height, color", expand_strings = true },
-  { name = "_canvas_rect_filled", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled rectangle", expand_strings = true },
-  { name = "_canvas_rect_rounded", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rounded rect: canvas_id, x, y, w, h, radius, color", expand_strings = true },
-  { name = "_canvas_rect_rounded_filled", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled rounded rect", expand_strings = true },
-  { name = "_canvas_line", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw line: canvas_id, x1, y1, x2, y2, stroke_width, color", expand_strings = true },
-  { name = "_canvas_ellipse", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw ellipse: canvas_id, x, y, radiusX, radiusY, color", expand_strings = true },
-  { name = "_canvas_ellipse_filled", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled ellipse", expand_strings = true },
-  { name = "_canvas_triangle", params = ["integer", "number", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw triangle: canvas_id, x1, y1, x2, y2, x3, y3, color", expand_strings = true },
-  { name = "_canvas_triangle_filled", params = ["integer", "number", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled triangle", expand_strings = true },
-  { name = "_canvas_polygon", params = ["integer", "integer", "string"], returns = "integer", description = "Draw polygon: canvas_id, points_ptr, color (points in memory)", expand_strings = true },
-  { name = "_canvas_polygon_filled", params = ["integer", "integer", "string"], returns = "integer", description = "Draw filled polygon", expand_strings = true },
-
-  # ===== Text Rendering =====
-  { name = "_canvas_text", params = ["integer", "string", "number", "number", "number", "string"], returns = "integer", description = "Draw text: canvas_id, text, x, y, size, color", expand_strings = true },
-  { name = "_canvas_text_number", params = ["integer", "integer", "number", "number", "number", "string"], returns = "integer", description = "Draw integer as text: canvas_id, number, x, y, size, color", expand_strings = true },
-  { name = "_canvas_text_font", params = ["integer", "string", "number", "number", "number", "string", "string"], returns = "integer", description = "Draw text with font: canvas_id, text, x, y, size, color, font", expand_strings = true },
-  { name = "_canvas_text_align", params = ["integer", "string"], returns = "integer", description = "Set text alignment: canvas_id, align (left/center/right)", expand_strings = true },
-  { name = "_canvas_text_baseline", params = ["integer", "string"], returns = "integer", description = "Set text baseline: canvas_id, baseline (top/middle/bottom)", expand_strings = true },
-  { name = "_canvas_measure_text", params = ["integer", "string", "number"], returns = "number", description = "Measure text width: canvas_id, text, fontSize" },
-
-  # ===== Images =====
-  { name = "_canvas_image", params = ["integer", "string", "number", "number", "number", "number"], returns = "integer", description = "Draw image: canvas_id, src, x, y, width, height", expand_strings = true },
-  { name = "_canvas_image_cropped", params = ["integer", "integer", "number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw cropped image: canvas_id, imageId, sx, sy, sw, sh, dx, dy, dw, dh" },
-  { name = "_canvas_image_rotated", params = ["integer", "integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw rotated image: canvas_id, imageId, x, y, w, h, angle" },
-
-  # ===== Transforms =====
-  { name = "_canvas_save", params = ["integer"], returns = "integer", description = "Save canvas state" },
-  { name = "_canvas_restore", params = ["integer"], returns = "integer", description = "Restore canvas state" },
-  { name = "_canvas_translate", params = ["integer", "number", "number"], returns = "integer", description = "Translate canvas: canvas_id, x, y" },
-  { name = "_canvas_rotate", params = ["integer", "number"], returns = "integer", description = "Rotate canvas: canvas_id, angle_degrees" },
-  { name = "_canvas_scale", params = ["integer", "number", "number"], returns = "integer", description = "Scale canvas: canvas_id, sx, sy" },
-  { name = "_canvas_transform", params = ["integer", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Set transform matrix: canvas_id, a, b, c, d, e, f" },
-  { name = "_canvas_reset_transform", params = ["integer"], returns = "integer", description = "Reset transform to identity" },
-
-  # ===== Animation =====
-  { name = "_canvas_request_frame", params = ["integer"], returns = "integer", description = "Request animation frame callback, returns frame ID" },
-  { name = "_canvas_cancel_frame", params = ["integer"], returns = "integer", description = "Cancel animation frame by ID" },
+  { name = "_canvas_request_frame", params = ["integer"], returns = "integer", description = "Start animation loop" },
+  { name = "_canvas_cancel_frame", params = ["integer"], returns = "integer", description = "Stop animation loop" },
   { name = "_canvas_get_delta_time", params = [], returns = "number", description = "Get time since last frame in seconds" },
   { name = "_canvas_get_time", params = [], returns = "number", description = "Get total elapsed time in seconds" },
   { name = "_canvas_get_fps", params = [], returns = "number", description = "Get current frames per second" },
 
-  # ===== Input Event Handlers =====
-  { name = "_canvas_on_pointer_down", params = ["integer"], returns = "integer", description = "Register pointer down (click/touch) event handler for canvas: canvas_id" },
-  { name = "_canvas_on_pointer_move", params = ["integer"], returns = "integer", description = "Register pointer move (mouse/touch move) event handler for canvas: canvas_id" },
-  { name = "_canvas_on_key_down", params = ["integer"], returns = "integer", description = "Register key down event handler for canvas: canvas_id" },
-  { name = "_canvas_event_x", params = [], returns = "number", description = "Get X coordinate of the current pointer event (valid inside onPointerDown/onPointerMove)" },
-  { name = "_canvas_event_y", params = [], returns = "number", description = "Get Y coordinate of the current pointer event (valid inside onPointerDown/onPointerMove)" },
-  { name = "_canvas_event_key", params = [], returns = "string", description = "Get key string of the current key event (valid inside onKeyDown, e.g. 'ArrowUp', 'Space')" },
+  # ===== Basic Shapes =====
+  { name = "_canvas_circle_filled", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw filled circle: canvas_id, x, y, radius, color", expand_strings = true },
+  { name = "_canvas_circle_outline", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw circle outline: canvas_id, x, y, radius, color", expand_strings = true },
+  { name = "_canvas_rect_filled", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled rectangle: canvas_id, x, y, width, height, color", expand_strings = true },
+  { name = "_canvas_rect_outline", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rectangle outline: canvas_id, x, y, width, height, color", expand_strings = true },
+  { name = "_canvas_rect_rounded", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw rounded rect: canvas_id, x, y, w, h, cornerRadius, color", expand_strings = true },
+  { name = "_canvas_line", params = ["integer", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw line: canvas_id, x1, y1, x2, y2, stroke_width, color", expand_strings = true },
+  { name = "_canvas_triangle_filled", params = ["integer", "number", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled triangle: canvas_id, x1, y1, x2, y2, x3, y3, color", expand_strings = true },
+  { name = "_canvas_triangle_outline", params = ["integer", "number", "number", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw triangle outline", expand_strings = true },
+  { name = "_canvas_ellipse_filled", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw filled ellipse: canvas_id, x, y, radiusX, radiusY, color", expand_strings = true },
+  { name = "_canvas_ellipse_outline", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw ellipse outline", expand_strings = true },
 
-  # ===== Audio - Sound Effects =====
-  { name = "_audio_load_sound", params = ["string"], returns = "integer", description = "Load sound effect, returns sound ID", expand_strings = true },
-  { name = "_audio_play", params = ["integer", "number", "boolean"], returns = "integer", description = "Play sound: soundId, volume (0-1), loop" },
-  { name = "_audio_stop", params = ["integer"], returns = "integer", description = "Stop sound instance" },
-  { name = "_audio_pause", params = ["integer"], returns = "integer", description = "Pause sound instance" },
-  { name = "_audio_resume", params = ["integer"], returns = "integer", description = "Resume paused sound" },
-  { name = "_audio_set_volume", params = ["integer", "number"], returns = "integer", description = "Set sound volume: instanceId, volume" },
-  { name = "_audio_set_pitch", params = ["integer", "number"], returns = "integer", description = "Set sound pitch: instanceId, pitch" },
-  { name = "_audio_set_pan", params = ["integer", "number"], returns = "integer", description = "Set sound pan: instanceId, pan (-1 to 1)" },
-  { name = "_audio_is_playing", params = ["integer"], returns = "integer", description = "Check if sound is playing (returns 1/0)" },
+  # ===== Text Rendering =====
+  { name = "_canvas_text", params = ["integer", "string", "number", "number", "number", "string"], returns = "integer", description = "Draw text: canvas_id, text, x, y, size, color", expand_strings = true },
+  { name = "_canvas_text_aligned", params = ["integer", "string", "number", "number", "number", "string", "string", "string"], returns = "integer", description = "Draw text with alignment: canvas_id, text, x, y, size, color, align, baseline", expand_strings = true },
+  { name = "_canvas_text_width", params = ["integer", "string", "number"], returns = "number", description = "Measure text width: canvas_id, text, fontSize", expand_strings = true },
 
-  # ===== Audio - Music =====
-  { name = "_audio_load_music", params = ["string"], returns = "integer", description = "Load music track, returns music ID", expand_strings = true },
-  { name = "_audio_play_music", params = ["integer", "number", "boolean"], returns = "integer", description = "Play music: musicId, volume, loop" },
-  { name = "_audio_stop_music", params = [], returns = "integer", description = "Stop current music" },
-  { name = "_audio_pause_music", params = [], returns = "integer", description = "Pause current music" },
-  { name = "_audio_resume_music", params = [], returns = "integer", description = "Resume paused music" },
-  { name = "_audio_set_music_volume", params = ["number"], returns = "integer", description = "Set music volume (0-1)" },
-  { name = "_audio_fade_music", params = ["number", "number"], returns = "integer", description = "Fade music: targetVolume, durationSeconds" },
-  { name = "_audio_crossfade", params = ["integer", "number", "number"], returns = "integer", description = "Crossfade to new music: musicId, volume, duration" },
+  # ===== Images =====
+  { name = "_canvas_image", params = ["integer", "string", "number", "number", "number", "number"], returns = "integer", description = "Draw image: canvas_id, src, x, y, width, height", expand_strings = true },
+  { name = "_canvas_image_opacity", params = ["integer", "string", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw image with opacity: canvas_id, src, x, y, w, h, opacity", expand_strings = true },
+  { name = "_canvas_image_cropped", params = ["integer", "integer", "number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw cropped image: canvas_id, imageId, sx, sy, sw, sh, dx, dy, dw, dh" },
+  { name = "_canvas_image_rotated", params = ["integer", "integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw rotated image: canvas_id, imageId, x, y, w, h, angle" },
 
-  # ===== Audio - Master Control =====
-  { name = "_audio_set_master_volume", params = ["number"], returns = "integer", description = "Set master volume (0-1)" },
-  { name = "_audio_mute_all", params = [], returns = "integer", description = "Mute all audio" },
-  { name = "_audio_unmute_all", params = [], returns = "integer", description = "Unmute all audio" },
+  # ===== Transforms =====
+  { name = "_canvas_save", params = ["integer"], returns = "integer", description = "Push transform stack" },
+  { name = "_canvas_restore", params = ["integer"], returns = "integer", description = "Pop transform stack" },
+  { name = "_canvas_translate", params = ["integer", "number", "number"], returns = "integer", description = "Translate canvas: canvas_id, x, y" },
+  { name = "_canvas_rotate", params = ["integer", "number"], returns = "integer", description = "Rotate canvas: canvas_id, angle_degrees" },
+  { name = "_canvas_scale", params = ["integer", "number", "number"], returns = "integer", description = "Scale canvas: canvas_id, sx, sy" },
+  { name = "_canvas_transform", params = ["integer", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Set full transform matrix: canvas_id, a, b, c, d, e, f" },
+  { name = "_canvas_reset_transform", params = ["integer"], returns = "integer", description = "Reset transform to identity" },
+
+  # ===== Effect Scopes =====
+  { name = "_canvas_alpha_begin", params = ["integer", "number"], returns = "integer", description = "Begin alpha scope: canvas_id, alpha (0-1)" },
+  { name = "_canvas_alpha_end", params = ["integer"], returns = "integer", description = "End alpha scope" },
+  { name = "_canvas_shadow_begin", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Begin shadow scope: canvas_id, blur, offsetX, offsetY, color", expand_strings = true },
+  { name = "_canvas_shadow_end", params = ["integer"], returns = "integer", description = "End shadow scope" },
+  { name = "_canvas_blur_begin", params = ["integer", "number"], returns = "integer", description = "Begin blur scope: canvas_id, radius" },
+  { name = "_canvas_blur_end", params = ["integer"], returns = "integer", description = "End blur scope" },
+  { name = "_canvas_glow_begin", params = ["integer", "string", "number"], returns = "integer", description = "Begin glow scope: canvas_id, color, blur", expand_strings = true },
+  { name = "_canvas_glow_end", params = ["integer"], returns = "integer", description = "End glow scope" },
+  { name = "_canvas_blend_begin", params = ["integer", "string"], returns = "integer", description = "Begin blend mode scope: canvas_id, mode (multiply/screen/overlay/…)", expand_strings = true },
+  { name = "_canvas_blend_end", params = ["integer"], returns = "integer", description = "End blend mode scope" },
+  { name = "_canvas_set_alpha", params = ["integer", "number"], returns = "integer", description = "Set persistent global alpha (not scoped): canvas_id, alpha" },
+  { name = "_canvas_set_blend_mode", params = ["integer", "string"], returns = "integer", description = "Set persistent blend mode (not scoped)", expand_strings = true },
+  { name = "_canvas_set_shadow", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Set persistent shadow: canvas_id, blur, offsetX, offsetY, color", expand_strings = true },
+  { name = "_canvas_clear_shadow", params = ["integer"], returns = "integer", description = "Clear shadow settings" },
+  { name = "_canvas_set_line_cap", params = ["integer", "string"], returns = "integer", description = "Set line cap: butt, round, square", expand_strings = true },
+  { name = "_canvas_set_line_join", params = ["integer", "string"], returns = "integer", description = "Set line join: miter, round, bevel", expand_strings = true },
+  { name = "_canvas_set_line_dash", params = ["integer", "number", "number"], returns = "integer", description = "Set line dash: canvas_id, dashLength, gapLength" },
+  { name = "_canvas_clear_line_dash", params = ["integer"], returns = "integer", description = "Clear line dash (solid lines)" },
+
+  # ===== Paths =====
+  { name = "_canvas_begin_path", params = ["integer"], returns = "integer", description = "Begin new path on canvas" },
+  { name = "_canvas_move_to", params = ["integer", "number", "number"], returns = "integer", description = "Move pen: canvas_id, x, y" },
+  { name = "_canvas_line_to", params = ["integer", "number", "number"], returns = "integer", description = "Line segment to: canvas_id, x, y" },
+  { name = "_canvas_curve_to", params = ["integer", "number", "number", "number", "number"], returns = "integer", description = "Quadratic bezier: canvas_id, cpx, cpy, x, y" },
+  { name = "_canvas_cubic_to", params = ["integer", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Cubic bezier: canvas_id, cp1x, cp1y, cp2x, cp2y, x, y" },
+  { name = "_canvas_arc", params = ["integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Arc: canvas_id, x, y, radius, startAngle, endAngle" },
+  { name = "_canvas_arc_to", params = ["integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Arc to: canvas_id, x1, y1, x2, y2, radius" },
+  { name = "_canvas_close_path", params = ["integer"], returns = "integer", description = "Close current path" },
+  { name = "_canvas_fill_path", params = ["integer", "string"], returns = "integer", description = "Fill path with color: canvas_id, color", expand_strings = true },
+  { name = "_canvas_stroke_path", params = ["integer", "string", "number"], returns = "integer", description = "Stroke path: canvas_id, color, lineWidth", expand_strings = true },
+  { name = "_canvas_draw_named_path", params = ["integer", "string", "number", "string"], returns = "integer", description = "Draw a named `path` block: canvas_id, name, strokeWidth, color", expand_strings = true },
+
+  # ===== Gradients =====
+  { name = "_gradient_linear", params = ["string", "number", "number", "number", "number"], returns = "integer", description = "Create named linear gradient: name, x1, y1, x2, y2", expand_strings = true },
+  { name = "_gradient_radial", params = ["string", "number", "number", "number"], returns = "integer", description = "Create named radial gradient: name, cx, cy, radius", expand_strings = true },
+  { name = "_gradient_add_stop", params = ["string", "number", "string"], returns = "integer", description = "Add color stop: gradientName, offset (0-1), color", expand_strings = true },
+  { name = "_gradient_ref", params = ["string"], returns = "integer", description = "Get gradient reference ID by name (used as fill color)", expand_strings = true },
+
+  # ===== Layers =====
+  { name = "_layer_declare", params = ["string", "integer"], returns = "integer", description = "Declare a named layer: name, z-order", expand_strings = true },
+  { name = "_layer_begin", params = ["string"], returns = "integer", description = "Begin routing draw calls to named layer", expand_strings = true },
+  { name = "_layer_end", params = [], returns = "integer", description = "End layer routing; return to default layer" },
 
   # ===== Sprites =====
-  { name = "_sprite_load_sheet", params = ["string", "integer", "integer"], returns = "integer", description = "Load sprite sheet: path, frameWidth, frameHeight", expand_strings = true },
-  { name = "_sprite_draw", params = ["integer", "integer", "integer", "number", "number"], returns = "integer", description = "Draw sprite: canvasId, sheetId, frameIndex, x, y" },
-  { name = "_sprite_draw_scaled", params = ["integer", "integer", "integer", "number", "number", "number", "number"], returns = "integer", description = "Draw scaled sprite: canvasId, sheetId, frameIndex, x, y, scaleX, scaleY" },
-  { name = "_sprite_draw_rotated", params = ["integer", "integer", "integer", "number", "number", "number"], returns = "integer", description = "Draw rotated sprite: canvasId, sheetId, frameIndex, x, y, angle" },
-  { name = "_sprite_draw_transformed", params = ["integer", "integer", "integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Draw transformed sprite: canvasId, sheetId, frameIndex, x, y, scaleX, scaleY, angle" },
+  { name = "_sprite_load_sheet", params = ["string", "integer", "integer"], returns = "integer", description = "Load sprite sheet: path, frameWidth, frameHeight — returns sheet ID", expand_strings = true },
+  { name = "_sprite_draw", params = ["integer", "string", "integer", "number", "number", "number", "number"], returns = "integer", description = "Draw sprite frame: canvasId, sheetName, frameIndex, x, y, w, h", expand_strings = true },
+  { name = "_sprite_draw_flipped", params = ["integer", "string", "integer", "number", "number", "number", "number", "integer", "integer"], returns = "integer", description = "Draw sprite flipped: canvasId, sheetName, frame, x, y, w, h, flipX(0/1), flipY(0/1)", expand_strings = true },
   { name = "_sprite_get_frame_count", params = ["integer"], returns = "integer", description = "Get number of frames in sprite sheet" },
-  { name = "_sprite_get_frame_width", params = ["integer"], returns = "integer", description = "Get frame width" },
-  { name = "_sprite_get_frame_height", params = ["integer"], returns = "integer", description = "Get frame height" },
+  { name = "_sprite_get_frame_width", params = ["integer"], returns = "integer", description = "Get sprite frame width" },
+  { name = "_sprite_get_frame_height", params = ["integer"], returns = "integer", description = "Get sprite frame height" },
 
-  # ===== Input - Mouse =====
+  # ===== AnimSprite =====
+  { name = "_anim_sprite_draw", params = ["integer", "string", "number", "number"], returns = "integer", description = "Draw current frame of animSprite: canvasId, clipName, x, y", expand_strings = true },
+  { name = "_anim_sprite_draw_ex", params = ["integer", "string", "number", "number", "number", "number", "integer", "integer"], returns = "integer", description = "Draw animSprite with options: canvasId, name, x, y, w, h, flipX(0/1), flipY(0/1)", expand_strings = true },
+  { name = "_anim_sprite_reset", params = ["string"], returns = "integer", description = "Reset animSprite clip to first frame", expand_strings = true },
+
+  # ===== Tweens =====
+  { name = "_tween_play", params = ["string"], returns = "integer", description = "Play a named tween from the beginning", expand_strings = true },
+  { name = "_tween_stop", params = ["string"], returns = "integer", description = "Stop a named tween", expand_strings = true },
+  { name = "_tween_pause", params = ["string"], returns = "integer", description = "Pause a named tween", expand_strings = true },
+  { name = "_tween_resume", params = ["string"], returns = "integer", description = "Resume a paused tween", expand_strings = true },
+  { name = "_tween_animate", params = ["string", "number", "number", "integer"], returns = "integer", description = "Inline animate: varName, targetValue, duration, easingId", expand_strings = true },
+
+  # ===== Timelines =====
+  { name = "_timeline_play", params = ["string"], returns = "integer", description = "Play a named timeline from the beginning", expand_strings = true },
+  { name = "_timeline_stop", params = ["string"], returns = "integer", description = "Stop a timeline", expand_strings = true },
+  { name = "_timeline_pause", params = ["string"], returns = "integer", description = "Pause a timeline", expand_strings = true },
+  { name = "_timeline_seek", params = ["string", "number"], returns = "integer", description = "Seek timeline to time position in seconds: name, position", expand_strings = true },
+
+  # ===== Animation State Machines =====
+  { name = "_anim_state_start", params = ["string"], returns = "integer", description = "Start a named animation state machine", expand_strings = true },
+  { name = "_anim_state_force", params = ["string", "string"], returns = "integer", description = "Force FSM into named state: machineName, stateName", expand_strings = true },
+  { name = "_anim_state_current", params = ["string"], returns = "string", description = "Get current FSM state name", expand_strings = true },
+
+  # ===== Particles =====
+  { name = "_particles_emit", params = ["string", "number", "number"], returns = "integer", description = "One-shot particle burst: emitterName, x, y", expand_strings = true },
+  { name = "_particles_start", params = ["string", "number", "number"], returns = "integer", description = "Start continuous emitter: emitterName, x, y", expand_strings = true },
+  { name = "_particles_stop", params = ["string"], returns = "integer", description = "Stop continuous emitter", expand_strings = true },
+
+  # ===== Input Event Handlers =====
+  { name = "_canvas_on_pointer_down", params = ["integer"], returns = "integer", description = "Register pointer down event handler: canvas_id" },
+  { name = "_canvas_on_pointer_move", params = ["integer"], returns = "integer", description = "Register pointer move event handler: canvas_id" },
+  { name = "_canvas_on_pointer_up", params = ["integer"], returns = "integer", description = "Register pointer up event handler: canvas_id" },
+  { name = "_canvas_on_key_down", params = ["integer"], returns = "integer", description = "Register key down event handler: canvas_id" },
+  { name = "_canvas_on_key_up", params = ["integer"], returns = "integer", description = "Register key up event handler: canvas_id" },
+  { name = "_canvas_event_x", params = [], returns = "number", description = "Pointer X of current event (valid inside pointer handlers)" },
+  { name = "_canvas_event_y", params = [], returns = "number", description = "Pointer Y of current event (valid inside pointer handlers)" },
+  { name = "_canvas_event_key", params = [], returns = "string", description = "Key string of current event (valid inside key handlers, e.g. 'ArrowUp')" },
+
+  # ===== Input — Mouse =====
   { name = "_input_mouse_x", params = [], returns = "number", description = "Get mouse X position" },
   { name = "_input_mouse_y", params = [], returns = "number", description = "Get mouse Y position" },
   { name = "_input_mouse_pressed", params = ["integer"], returns = "integer", description = "Check if mouse button pressed: 0=left, 1=middle, 2=right (returns 1/0)" },
   { name = "_input_mouse_just_pressed", params = ["integer"], returns = "integer", description = "Check if mouse button just pressed this frame (returns 1/0)" },
   { name = "_input_mouse_just_released", params = ["integer"], returns = "integer", description = "Check if mouse button just released this frame (returns 1/0)" },
-  { name = "_input_mouse_wheel_x", params = [], returns = "number", description = "Get horizontal scroll delta" },
   { name = "_input_mouse_wheel_y", params = [], returns = "number", description = "Get vertical scroll delta" },
 
-  # ===== Input - Keyboard =====
-  { name = "_input_key_down", params = ["string"], returns = "integer", description = "Check if key is pressed (returns 1/0)", expand_strings = true },
-  { name = "_input_key_just_pressed", params = ["string"], returns = "integer", description = "Check if key just pressed this frame (returns 1/0)", expand_strings = true },
-  { name = "_input_key_just_released", params = ["string"], returns = "integer", description = "Check if key just released this frame (returns 1/0)", expand_strings = true },
+  # ===== Input — Keyboard =====
+  { name = "_input_key_down", params = ["string"], returns = "integer", description = "Check if key is currently held (returns 1/0)", expand_strings = true },
+  { name = "_input_key_just_pressed", params = ["string"], returns = "integer", description = "Check if key was pressed this frame (returns 1/0)", expand_strings = true },
+  { name = "_input_key_just_released", params = ["string"], returns = "integer", description = "Check if key was released this frame (returns 1/0)", expand_strings = true },
   { name = "_input_get_last_key", params = [], returns = "string", description = "Get last key pressed" },
-  { name = "_input_get_text_input", params = [], returns = "string", description = "Get text input since last frame" },
 
-  # ===== Input - Touch =====
+  # ===== Input — Touch =====
   { name = "_input_touch_count", params = [], returns = "integer", description = "Get number of active touch points" },
   { name = "_input_touch_x", params = ["integer"], returns = "number", description = "Get touch X position by index" },
   { name = "_input_touch_y", params = ["integer"], returns = "number", description = "Get touch Y position by index" },
-  { name = "_input_touch_id", params = ["integer"], returns = "integer", description = "Get touch identifier by index" },
-  { name = "_input_touch_started", params = [], returns = "integer", description = "Check if new touch started this frame (returns 1/0)" },
-  { name = "_input_touch_ended", params = [], returns = "integer", description = "Check if touch ended this frame (returns 1/0)" },
 
-  # ===== Input - Gamepad =====
+  # ===== Input — Gamepad =====
   { name = "_input_gamepad_connected", params = ["integer"], returns = "integer", description = "Check if gamepad is connected (returns 1/0)" },
   { name = "_input_gamepad_button", params = ["integer", "integer"], returns = "integer", description = "Check gamepad button: gamepadIndex, buttonIndex (returns 1/0)" },
-  { name = "_input_gamepad_button_just_pressed", params = ["integer", "integer"], returns = "integer", description = "Check if button just pressed (returns 1/0)" },
   { name = "_input_gamepad_axis", params = ["integer", "integer"], returns = "number", description = "Get gamepad axis value (-1 to 1)" },
   { name = "_input_gamepad_left_stick_x", params = ["integer"], returns = "number", description = "Get left stick X" },
   { name = "_input_gamepad_left_stick_y", params = ["integer"], returns = "number", description = "Get left stick Y" },
   { name = "_input_gamepad_right_stick_x", params = ["integer"], returns = "number", description = "Get right stick X" },
   { name = "_input_gamepad_right_stick_y", params = ["integer"], returns = "number", description = "Get right stick Y" },
-  { name = "_input_gamepad_left_trigger", params = ["integer"], returns = "number", description = "Get left trigger value (0-1)" },
-  { name = "_input_gamepad_right_trigger", params = ["integer"], returns = "number", description = "Get right trigger value (0-1)" },
-  { name = "_input_gamepad_vibrate", params = ["integer", "number", "number"], returns = "integer", description = "Vibrate gamepad: gamepadIndex, intensity, duration" },
+
+  # ===== Audio — Sound Effects =====
+  { name = "_audio_play_sound", params = ["string", "number", "number"], returns = "integer", description = "Play named sound: name, volume (0-1), pitch (1.0=normal)", expand_strings = true },
+  { name = "_audio_preload", params = ["string", "string"], returns = "integer", description = "Preload audio asset: name, src", expand_strings = true },
+  { name = "_audio_stop", params = ["integer"], returns = "integer", description = "Stop sound instance by ID" },
+  { name = "_audio_pause", params = ["integer"], returns = "integer", description = "Pause sound instance by ID" },
+  { name = "_audio_resume", params = ["integer"], returns = "integer", description = "Resume paused sound instance" },
+  { name = "_audio_is_playing", params = ["integer"], returns = "integer", description = "Check if sound is playing (returns 1/0)" },
+
+  # ===== Audio — Music =====
+  { name = "_audio_music_play", params = ["string", "integer", "number"], returns = "integer", description = "Play music track: name, loop (1=loop), volume", expand_strings = true },
+  { name = "_audio_music_stop", params = ["string"], returns = "integer", description = "Stop named music track", expand_strings = true },
+  { name = "_audio_music_pause", params = ["string"], returns = "integer", description = "Pause named music track", expand_strings = true },
+  { name = "_audio_music_resume", params = ["string"], returns = "integer", description = "Resume named music track", expand_strings = true },
+  { name = "_audio_music_fade_out", params = ["string", "number"], returns = "integer", description = "Fade out music: name, durationSeconds", expand_strings = true },
+  { name = "_audio_music_crossfade", params = ["string", "string", "number"], returns = "integer", description = "Crossfade from one track to another: fromName, toName, duration", expand_strings = true },
+  { name = "_audio_music_set_volume", params = ["string", "number"], returns = "integer", description = "Set volume for named music track: name, volume (0-1)", expand_strings = true },
+
+  # ===== Audio — Master Control =====
+  { name = "_audio_set_master_volume", params = ["number"], returns = "integer", description = "Set master volume (0-1)" },
+  { name = "_audio_mute", params = [], returns = "integer", description = "Mute all audio" },
+  { name = "_audio_unmute", params = [], returns = "integer", description = "Unmute all audio" },
+  { name = "_audio_is_muted", params = [], returns = "integer", description = "Check if audio is muted (returns 1/0)" },
 
   # ===== Collision Detection =====
-  { name = "_collision_point_rect", params = ["number", "number", "number", "number", "number", "number"], returns = "integer", description = "Point vs rect: px, py, rx, ry, rw, rh (returns 1/0)" },
-  { name = "_collision_point_circle", params = ["number", "number", "number", "number", "number"], returns = "integer", description = "Point vs circle: px, py, cx, cy, radius (returns 1/0)" },
-  { name = "_collision_circle_circle", params = ["number", "number", "number", "number", "number", "number"], returns = "integer", description = "Circle vs circle: x1, y1, r1, x2, y2, r2 (returns 1/0)" },
-  { name = "_collision_rect_rect", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Rect vs rect: x1, y1, w1, h1, x2, y2, w2, h2 (returns 1/0)" },
-  { name = "_collision_circle_rect", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Circle vs rect: cx, cy, cr, rx, ry, rw, rh (returns 1/0)" },
-  { name = "_collision_line_line", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Line vs line: x1, y1, x2, y2, x3, y3, x4, y4 (returns 1/0)" },
-  { name = "_collision_line_circle", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Line vs circle: x1, y1, x2, y2, cx, cy, r (returns 1/0)" },
-  { name = "_collision_line_rect", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Line vs rect: x1, y1, x2, y2, rx, ry, rw, rh (returns 1/0)" },
-  { name = "_collision_circle_circle_overlap", params = ["number", "number", "number", "number", "number", "number"], returns = "number", description = "Get circle overlap distance (negative if no overlap)" },
-  { name = "_collision_rect_rect_overlap_x", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Get rect X overlap" },
-  { name = "_collision_rect_rect_overlap_y", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Get rect Y overlap" },
-  { name = "_collision_raycast_circle", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Raycast to circle: ox, oy, dx, dy, cx, cy, r - returns distance or -1" },
-  { name = "_collision_raycast_rect", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Raycast to rect: ox, oy, dx, dy, rx, ry, rw, rh - returns distance or -1" },
+  { name = "_collision_circles", params = ["number", "number", "number", "number", "number", "number"], returns = "integer", description = "Circle vs circle: x1, y1, r1, x2, y2, r2 (returns 1/0)" },
+  { name = "_collision_rects", params = ["number", "number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "AABB vs AABB: x1, y1, w1, h1, x2, y2, w2, h2 (returns 1/0)" },
+  { name = "_collision_point_rect", params = ["number", "number", "number", "number", "number", "number"], returns = "integer", description = "Point in rect: px, py, rx, ry, rw, rh (returns 1/0)" },
+  { name = "_collision_circle_rect", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Circle vs rect: cx, cy, r, rx, ry, rw, rh (returns 1/0)" },
+  { name = "_collision_point_circle", params = ["number", "number", "number", "number", "number"], returns = "integer", description = "Point in circle: px, py, cx, cy, r (returns 1/0)" },
+  { name = "_collision_ray_circle", params = ["number", "number", "number", "number", "number", "number", "number"], returns = "number", description = "Ray vs circle: ox, oy, dx, dy, cx, cy, r — returns hit distance or -1" },
 
   # ===== Asset Management =====
   { name = "_asset_load_image", params = ["string"], returns = "integer", description = "Load image asset, returns ID", expand_strings = true },
@@ -294,84 +618,97 @@ functions = [
   { name = "_asset_load_all", params = [], returns = "integer", description = "Start loading all queued assets" },
   { name = "_asset_get_progress", params = [], returns = "number", description = "Get loading progress (0-1)" },
   { name = "_asset_all_loaded", params = [], returns = "integer", description = "Check if all assets loaded (returns 1/0)" },
-  { name = "_asset_is_loaded", params = ["integer"], returns = "integer", description = "Check if specific asset loaded (returns 1/0)" },
   { name = "_asset_get", params = ["string"], returns = "integer", description = "Get asset ID by name", expand_strings = true },
   { name = "_asset_unload", params = ["integer"], returns = "integer", description = "Unload specific asset" },
-  { name = "_asset_unload_all", params = [], returns = "integer", description = "Unload all assets" },
 
   # ===== Camera & Viewport =====
   { name = "_camera_set_position", params = ["number", "number"], returns = "integer", description = "Set camera position: x, y" },
-  { name = "_camera_get_x", params = [], returns = "number", description = "Get camera X position" },
-  { name = "_camera_get_y", params = [], returns = "number", description = "Get camera Y position" },
+  { name = "_camera_get_x", params = [], returns = "number", description = "Get camera X" },
+  { name = "_camera_get_y", params = [], returns = "number", description = "Get camera Y" },
   { name = "_camera_set_zoom", params = ["number"], returns = "integer", description = "Set camera zoom level" },
   { name = "_camera_get_zoom", params = [], returns = "number", description = "Get camera zoom level" },
   { name = "_camera_set_rotation", params = ["number"], returns = "integer", description = "Set camera rotation in degrees" },
+  { name = "_camera_set_follow", params = ["number", "number", "number"], returns = "integer", description = "Enable follow: targetX, targetY, smoothing (0=instant)" },
+  { name = "_camera_set_offset", params = ["number", "number"], returns = "integer", description = "Follow offset: offsetX, offsetY" },
+  { name = "_camera_set_deadzone", params = ["number", "number"], returns = "integer", description = "Follow deadzone: width, height" },
+  { name = "_camera_set_bounds", params = ["number", "number", "number", "number"], returns = "integer", description = "World boundary limits: x, y, width, height" },
   { name = "_camera_apply", params = ["integer"], returns = "integer", description = "Apply camera transform to canvas" },
   { name = "_camera_reset", params = ["integer"], returns = "integer", description = "Reset camera transform" },
   { name = "_camera_screen_to_world_x", params = ["number"], returns = "number", description = "Convert screen X to world X" },
   { name = "_camera_screen_to_world_y", params = ["number"], returns = "number", description = "Convert screen Y to world Y" },
-  { name = "_camera_world_to_screen_x", params = ["number"], returns = "number", description = "Convert world X to screen X" },
-  { name = "_camera_world_to_screen_y", params = ["number"], returns = "number", description = "Convert world Y to screen Y" },
-  { name = "_camera_shake", params = ["number", "number"], returns = "integer", description = "Camera shake: intensity, duration" },
-
-  # ===== Gradients =====
-  { name = "_gradient_create_linear", params = ["number", "number", "number", "number"], returns = "integer", description = "Create linear gradient: x1, y1, x2, y2" },
-  { name = "_gradient_create_radial", params = ["number", "number", "number", "number"], returns = "integer", description = "Create radial gradient: cx, cy, innerRadius, outerRadius" },
-  { name = "_gradient_add_stop", params = ["integer", "number", "string"], returns = "integer", description = "Add color stop: gradientId, offset (0-1), color", expand_strings = true },
-  { name = "_canvas_set_fill_gradient", params = ["integer", "integer"], returns = "integer", description = "Set fill to gradient: canvasId, gradientId" },
-  { name = "_canvas_set_stroke_gradient", params = ["integer", "integer"], returns = "integer", description = "Set stroke to gradient: canvasId, gradientId" },
-
-  # ===== Paths =====
-  { name = "_path_begin", params = ["integer"], returns = "integer", description = "Begin new path on canvas" },
-  { name = "_path_move_to", params = ["integer", "number", "number"], returns = "integer", description = "Move to point: canvasId, x, y" },
-  { name = "_path_line_to", params = ["integer", "number", "number"], returns = "integer", description = "Line to point: canvasId, x, y" },
-  { name = "_path_quadratic_to", params = ["integer", "number", "number", "number", "number"], returns = "integer", description = "Quadratic curve: canvasId, cpx, cpy, x, y" },
-  { name = "_path_bezier_to", params = ["integer", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Bezier curve: canvasId, cp1x, cp1y, cp2x, cp2y, x, y" },
-  { name = "_path_arc", params = ["integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Arc: canvasId, x, y, radius, startAngle, endAngle" },
-  { name = "_path_arc_to", params = ["integer", "number", "number", "number", "number", "number"], returns = "integer", description = "Arc to: canvasId, x1, y1, x2, y2, radius" },
-  { name = "_path_close", params = ["integer"], returns = "integer", description = "Close current path" },
-  { name = "_path_fill", params = ["integer", "string"], returns = "integer", description = "Fill path with color", expand_strings = true },
-  { name = "_path_stroke", params = ["integer", "string", "number"], returns = "integer", description = "Stroke path: canvasId, color, lineWidth", expand_strings = true },
-
-  # ===== Advanced Rendering =====
-  { name = "_canvas_set_blend_mode", params = ["integer", "string"], returns = "integer", description = "Set blend mode: source-over, multiply, screen, overlay, etc.", expand_strings = true },
-  { name = "_canvas_set_alpha", params = ["integer", "number"], returns = "integer", description = "Set global alpha: canvasId, alpha (0-1)" },
-  { name = "_canvas_set_shadow", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Set shadow: canvasId, blur, offsetX, offsetY, color", expand_strings = true },
-  { name = "_canvas_clear_shadow", params = ["integer"], returns = "integer", description = "Clear shadow settings" },
-  { name = "_canvas_set_line_cap", params = ["integer", "string"], returns = "integer", description = "Set line cap: butt, round, square", expand_strings = true },
-  { name = "_canvas_set_line_join", params = ["integer", "string"], returns = "integer", description = "Set line join: miter, round, bevel", expand_strings = true },
-  { name = "_canvas_set_line_dash", params = ["integer", "number", "number"], returns = "integer", description = "Set line dash: canvasId, dashLength, gapLength" },
-  { name = "_canvas_clear_line_dash", params = ["integer"], returns = "integer", description = "Clear line dash (solid lines)" },
+  { name = "_camera_shake", params = ["number", "number", "integer"], returns = "integer", description = "Camera shake: intensity, duration, easingId" },
 
   # ===== Easing Functions =====
-  { name = "_ease_linear", params = ["number"], returns = "number", description = "Linear interpolation" },
+  { name = "_ease_linear", params = ["number"], returns = "number", description = "Linear easing" },
+  { name = "_ease_cubic_in", params = ["number"], returns = "number", description = "Cubic ease in" },
+  { name = "_ease_cubic_out", params = ["number"], returns = "number", description = "Cubic ease out" },
+  { name = "_ease_cubic_in_out", params = ["number"], returns = "number", description = "Cubic ease in-out" },
   { name = "_ease_in_quad", params = ["number"], returns = "number", description = "Quadratic ease in" },
   { name = "_ease_out_quad", params = ["number"], returns = "number", description = "Quadratic ease out" },
   { name = "_ease_in_out_quad", params = ["number"], returns = "number", description = "Quadratic ease in-out" },
-  { name = "_ease_in_cubic", params = ["number"], returns = "number", description = "Cubic ease in" },
-  { name = "_ease_out_cubic", params = ["number"], returns = "number", description = "Cubic ease out" },
-  { name = "_ease_in_out_cubic", params = ["number"], returns = "number", description = "Cubic ease in-out" },
   { name = "_ease_in_sine", params = ["number"], returns = "number", description = "Sine ease in" },
   { name = "_ease_out_sine", params = ["number"], returns = "number", description = "Sine ease out" },
   { name = "_ease_in_out_sine", params = ["number"], returns = "number", description = "Sine ease in-out" },
   { name = "_ease_in_expo", params = ["number"], returns = "number", description = "Exponential ease in" },
   { name = "_ease_out_expo", params = ["number"], returns = "number", description = "Exponential ease out" },
   { name = "_ease_in_out_expo", params = ["number"], returns = "number", description = "Exponential ease in-out" },
-  { name = "_ease_in_elastic", params = ["number"], returns = "number", description = "Elastic ease in" },
-  { name = "_ease_out_elastic", params = ["number"], returns = "number", description = "Elastic ease out" },
+  { name = "_ease_elastic_out", params = ["number"], returns = "number", description = "Elastic ease out" },
+  { name = "_ease_elastic_in", params = ["number"], returns = "number", description = "Elastic ease in" },
+  { name = "_ease_bounce_out", params = ["number"], returns = "number", description = "Bounce ease out" },
+  { name = "_ease_bounce_in", params = ["number"], returns = "number", description = "Bounce ease in" },
+  { name = "_ease_back_out", params = ["number"], returns = "number", description = "Back (overshoot) ease out" },
+  { name = "_ease_back_in", params = ["number"], returns = "number", description = "Back (overshoot) ease in" },
+  { name = "_ease_back_in_out", params = ["number"], returns = "number", description = "Back ease in-out" },
   { name = "_ease_in_out_elastic", params = ["number"], returns = "number", description = "Elastic ease in-out" },
-  { name = "_ease_in_bounce", params = ["number"], returns = "number", description = "Bounce ease in" },
-  { name = "_ease_out_bounce", params = ["number"], returns = "number", description = "Bounce ease out" },
   { name = "_ease_in_out_bounce", params = ["number"], returns = "number", description = "Bounce ease in-out" },
-  { name = "_ease_in_back", params = ["number"], returns = "number", description = "Back ease in (overshoot)" },
-  { name = "_ease_out_back", params = ["number"], returns = "number", description = "Back ease out (overshoot)" },
-  { name = "_ease_in_out_back", params = ["number"], returns = "number", description = "Back ease in-out (overshoot)" },
+
+  # ===== Canvas Group & Clip =====
+  { name = "_canvas_group_begin", params = ["integer", "number", "number", "number", "number", "number", "number"], returns = "integer", description = "Begin transform group: canvas_id, x, y, rotation, scaleX, scaleY, alpha" },
+  { name = "_canvas_group_end", params = ["integer"], returns = "integer", description = "End transform group scope" },
+  { name = "_canvas_clip_rect", params = ["integer", "number", "number", "number", "number"], returns = "integer", description = "Begin clip region (rect): canvas_id, x, y, width, height" },
+  { name = "_canvas_clip_circle", params = ["integer", "number", "number", "number"], returns = "integer", description = "Begin clip region (circle): canvas_id, x, y, radius" },
+  { name = "_canvas_clip_path", params = ["integer", "string"], returns = "integer", description = "Begin clip region (named path): canvas_id, pathName", expand_strings = true },
+  { name = "_canvas_clip_end", params = ["integer"], returns = "integer", description = "End clip region scope" },
+
+  # ===== Font Loading =====
+  { name = "_font_load", params = ["string", "string"], returns = "integer", description = "Load font asset: name, src — returns 1 on success", expand_strings = true },
+  { name = "_canvas_text_font", params = ["integer", "string", "string", "number", "number", "string", "string", "string"], returns = "integer", description = "Draw text with font: canvas_id, text, fontName, x, y, size, color, align, baseline", expand_strings = true },
+
+  # ===== Custom Easing =====
+  { name = "_custom_ease_register", params = ["string", "number", "number", "number", "number"], returns = "integer", description = "Register cubic-bezier custom easing: name, x1, y1, x2, y2", expand_strings = true },
+  { name = "_ease_custom", params = ["string", "number"], returns = "number", description = "Evaluate a registered custom easing: name, t (0–1)", expand_strings = true },
+
+  # ===== Gradient Fill =====
+  { name = "_canvas_rect_gradient", params = ["integer", "number", "number", "number", "number", "string"], returns = "integer", description = "Draw gradient-filled rect: canvas_id, x, y, w, h, gradientName", expand_strings = true },
+  { name = "_canvas_circle_gradient", params = ["integer", "number", "number", "number", "string"], returns = "integer", description = "Draw gradient-filled circle: canvas_id, x, y, radius, gradientName", expand_strings = true },
+  { name = "_canvas_fill_path_gradient", params = ["integer", "string"], returns = "integer", description = "Fill current path with gradient: canvas_id, gradientName", expand_strings = true },
+
+  # ===== Sprite Draw — Extended =====
+  { name = "_sprite_draw_tint", params = ["integer", "string", "integer", "number", "number", "number", "number", "string", "number"], returns = "integer", description = "Draw sprite with tint: canvas_id, sheet, frame, x, y, w, h, tintColor, tintStrength", expand_strings = true },
+  { name = "_sprite_draw_state", params = ["integer", "string", "string", "number", "number"], returns = "integer", description = "Draw sprite by animState current frame: canvas_id, spriteName, fsmName, x, y", expand_strings = true },
+
+  # ===== Path Animation =====
+  { name = "_tween_animate_path", params = ["string", "string", "number", "integer", "integer"], returns = "integer", description = "Tween along a named path: tweenName, pathName, duration, easingId, orient (1/0)", expand_strings = true },
+
+  # ===== Scene Lifecycle =====
+  { name = "_canvas_on_exit", params = ["integer"], returns = "integer", description = "Register onExit lifecycle callback: canvas_id" },
+  { name = "_canvas_on_pause", params = ["integer"], returns = "integer", description = "Register onPause lifecycle callback: canvas_id" },
+  { name = "_canvas_on_resume", params = ["integer"], returns = "integer", description = "Register onResume lifecycle callback: canvas_id" },
 
   # ===== Scene Management =====
   { name = "_scene_get_current", params = [], returns = "string", description = "Get current scene name" },
   { name = "_scene_change", params = ["string"], returns = "integer", description = "Change to scene by name", expand_strings = true },
+  { name = "_scene_change_animated", params = ["string", "string", "number"], returns = "integer", description = "Animated scene change: name, transition, duration", expand_strings = true },
   { name = "_scene_push", params = ["string"], returns = "integer", description = "Push scene onto stack", expand_strings = true },
   { name = "_scene_pop", params = [], returns = "integer", description = "Pop scene from stack" },
+
+  # ===== Scene Parameter Passing =====
+  { name = "_scene_set", params = ["string", "string"], returns = "integer", description = "Store a value to pass to next scene: key, value (JSON-encoded)", expand_strings = true },
+  { name = "_scene_get", params = ["string"], returns = "string", description = "Read a value from the previous scene by key (returns JSON-encoded value)", expand_strings = true },
+
+  # ===== Canvas/UI Bridge =====
+  { name = "_page_set", params = ["string", "string"], returns = "integer", description = "Expose canvas value to surrounding UI layer: key, value (JSON-encoded)", expand_strings = true },
+  { name = "_page_get", params = ["string"], returns = "string", description = "Read a value from the surrounding UI layer: key (returns JSON-encoded value)", expand_strings = true },
 ]
 
 [enforcement]
@@ -379,8 +716,14 @@ severity = "warn"
 
 restricted_functions = [
   { name = "_canvas_init", use_instead = "canvasScene:", message = "Use 'canvasScene:' block to initialize canvas" },
+  { name = "_tween_play", use_instead = "play tween \"name\"", message = "Use 'play tween \"name\"' expression instead of calling _tween_play() directly" },
+  { name = "_timeline_play", use_instead = "play timeline \"name\"", message = "Use 'play timeline \"name\"' expression instead of calling _timeline_play() directly" },
 ]
 
 block_folder_rules = [
   { block = "canvasScene", allowed_in = ["app/canvas/"], message = "canvasScene: blocks should be in app/canvas/" },
+  { block = "tween", allowed_in = ["app/canvas/"], message = "tween: blocks must be inside a canvasScene: body in app/canvas/" },
+  { block = "timeline", allowed_in = ["app/canvas/"], message = "timeline: blocks must be inside a canvasScene: body in app/canvas/" },
+  { block = "animState", allowed_in = ["app/canvas/"], message = "animState: blocks must be inside a canvasScene: body in app/canvas/" },
+  { block = "particles", allowed_in = ["app/canvas/"], message = "particles: blocks must be inside a canvasScene: body in app/canvas/" },
 ]
