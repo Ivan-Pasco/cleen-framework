@@ -1,64 +1,75 @@
 // Bouncing Ball - Clean Language Canvas Demo
-// Physics, state, and rendering — all compiled from Clean Language to WebAssembly.
+// All physics and rendering compiled from Clean Language to WebAssembly.
 
 plugins:
 	frame.canvas
 
 functions:
 	void start()
-		integer canvas = _canvas_init(800, 600)
-		_canvas_var_set("ballX", 400.0)
-		_canvas_var_set("ballY", 100.0)
-		_canvas_var_set("velX", 250.0)
-		_canvas_var_set("velY", 0.0)
-		_canvas_request_frame(canvas)
+		integer canvas = _canvas_init(800, 600, "main")
+		integer s1 = _canvas_var_set("ballX", 400.0)
+		integer s2 = _canvas_var_set("ballY", 100.0)
+		integer s3 = _canvas_var_set("velX", 250.0)
+		integer s4 = _canvas_var_set("velY", 0.0)
+		integer fr = _canvas_request_frame(canvas)
 
 	void _frame_callback(integer canvas)
 		number dt = _canvas_get_delta_time()
-		update(dt)
-		render(canvas)
-
-	void update(number dt)
 		number ballX = _canvas_var_get("ballX", 400.0)
 		number ballY = _canvas_var_get("ballY", 100.0)
 		number velX = _canvas_var_get("velX", 250.0)
 		number velY = _canvas_var_get("velY", 0.0)
-		number gravity = 800.0
-		number damp = 0.85
-		velY = velY + gravity * dt
-		ballX = ballX + velX * dt
-		ballY = ballY + velY * dt
-		if ballX < 30.0
-			ballX = 30.0
-			velX = velX * -1.0 * damp
-		if ballX > 770.0
-			ballX = 770.0
-			velX = velX * -1.0 * damp
-		if ballY > 560.0
-			ballY = 560.0
-			velY = velY * -1.0 * damp
-		if ballY < 30.0
-			ballY = 30.0
-			velY = velY * -1.0
-		_canvas_var_set("ballX", ballX)
-		_canvas_var_set("ballY", ballY)
-		_canvas_var_set("velX", velX)
-		_canvas_var_set("velY", velY)
+		number newVelY = velY + 800.0 * dt
+		number newBallX = ballX + velX * dt
+		number newBallY = ballY + newVelY * dt
+		number newVelX = velX
+		number finalBallX = clampBounceX(newBallX, newVelX)
+		number finalVelX = bounceVelX(newBallX, newVelX)
+		number finalBallY = clampBounceY(newBallY)
+		number finalVelY = bounceVelY(newBallY, newVelY)
+		integer a = _canvas_var_set("ballX", finalBallX)
+		integer b = _canvas_var_set("ballY", finalBallY)
+		integer c = _canvas_var_set("velX", finalVelX)
+		integer d = _canvas_var_set("velY", finalVelY)
+		integer cl = _canvas_clear_color(canvas, "#0f0f23")
+		integer gr = _canvas_rect_filled(canvas, 0.0, 585.0, 800.0, 15.0, "#1a1a3a")
+		integer ball = _canvas_circle_filled(canvas, finalBallX, finalBallY, 30.0, "#ff6b6b")
+		number hlX = finalBallX - 10.0
+		number hlY = finalBallY - 10.0
+		integer hl = _canvas_circle_filled(canvas, hlX, hlY, 8.0, "#ffffff")
+		integer t1 = _canvas_text(canvas, "Bouncing Ball", 285.0, 40.0, 28.0, "#ffffff")
+		integer t2 = _canvas_text(canvas, "Clean Language + WebAssembly", 220.0, 75.0, 18.0, "#888888")
 
-	void render(integer canvas)
-		number ballX = _canvas_var_get("ballX", 400.0)
-		number ballY = _canvas_var_get("ballY", 100.0)
-		_canvas_clear_color(canvas, "#0f0f23")
-		_canvas_rect_filled(canvas, 0.0, 585.0, 800.0, 15.0, "#1a1a3a")
-		_canvas_circle_filled(canvas, ballX, ballY, 30.0, "#ff6b6b")
-		number hlX = ballX - 10.0
-		number hlY = ballY - 10.0
-		_canvas_circle_filled(canvas, hlX, hlY, 8.0, "#ffffff")
-		_canvas_text(canvas, "Bouncing Ball", 285.0, 40.0, 28.0, "#ffffff")
-		_canvas_text(canvas, "Clean Language + WebAssembly", 220.0, 75.0, 18.0, "#888888")
+	number clampBounceX(number x, number vx)
+		if x < 30.0
+			return 30.0
+		if x > 770.0
+			return 770.0
+		return x
+
+	number bounceVelX(number x, number vx)
+		if x < 30.0
+			return vx * -1.0 * 0.85
+		if x > 770.0
+			return vx * -1.0 * 0.85
+		return vx
+
+	number clampBounceY(number y)
+		if y > 560.0
+			return 560.0
+		if y < 30.0
+			return 30.0
+		return y
+
+	number bounceVelY(number y, number vy)
+		if y > 560.0
+			return vy * -1.0 * 0.85
+		if y < 30.0
+			return vy * -1.0
+		return vy
 
 	void _on_pointer_down(integer canvas, number mx, number my)
-		_canvas_var_set("ballX", mx)
-		_canvas_var_set("ballY", my)
-		_canvas_var_set("velX", 200.0)
-		_canvas_var_set("velY", -400.0)
+		integer a = _canvas_var_set("ballX", mx)
+		integer b = _canvas_var_set("ballY", my)
+		integer c = _canvas_var_set("velX", 200.0)
+		integer d = _canvas_var_set("velY", -400.0)

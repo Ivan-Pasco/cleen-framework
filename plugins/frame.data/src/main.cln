@@ -45,7 +45,7 @@ functions:
 
 	// Keywords for IDE support
 	string get_keywords()
-		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"insert\", \"update\", \"delete\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"Data.tx\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\"]"
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"Data.tx\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\"]"
 
 // ============================================================================
 // DATA MODEL EXPANSION
@@ -376,6 +376,44 @@ functions:
 			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
 		result = result + "\t\t\tstring result = _db_query(sql, \"[]\")\n"
 		result = result + "\t\t\treturn __extract_count(result)\n"
+
+		// Static exists method - returns 1 if any matching record exists, 0 otherwise
+		result = result + "\n\t\tinteger exists(string where_clause)\n"
+		result = result + "\t\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\tstring __exists_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\tif __extract_count(__exists_result) > 0\n"
+		result = result + "\t\t\t\treturn 1\n"
+		result = result + "\t\t\treturn 0\n"
+
+		// Static findOrFail method - returns first matching record or throws NOT_FOUND
+		result = result + "\n\t\tstring findOrFail(string where_clause)\n"
+		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\tstring __fail_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\tif __fail_result == \"[]\"\n"
+		result = result + "\t\t\t\tthrow \"NOT_FOUND\"\n"
+		result = result + "\t\t\treturn __fail_result\n"
 
 		// Helper to extract count from query result
 		result = result + "\n\t\tinteger __extract_count(string result)\n"

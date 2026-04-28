@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Analytics Pro — Clean Language Canvas Dashboard</title>
+  <title>Orbital Gallery — Clean Language Canvas</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #04040d;
+      background: #040412;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -16,28 +16,28 @@
       justify-content: center;
       padding: 20px;
     }
-    h1 { color: #00ddff; margin-bottom: 16px; font-size: 15px; letter-spacing: 0.04em; opacity: 0.8; }
-    #canvas-container { border: 1px solid #1e2a5a; border-radius: 4px; overflow: hidden; box-shadow: 0 0 40px #0022ff22; }
+    h1 { color: #6688ff; margin-bottom: 20px; font-size: 18px; }
+    #canvas-container { border: 2px solid #1a1a3a; border-radius: 8px; overflow: hidden; }
     #canvas-container canvas { display: block; }
-    .info { margin-top: 16px; color: #334466; font-size: 11px; text-align: center; }
-    .info code { background: #0b0b1f; padding: 2px 6px; border-radius: 3px; color: #00ddff; }
-    #status { margin-top: 8px; color: #667799; font-size: 13px; }
-    .demos { margin-top: 16px; }
-    .demos a { color: #44ff88; margin: 0 10px; text-decoration: none; font-size: 12px; }
+    .info { margin-top: 20px; color: #445577; font-size: 12px; text-align: center; }
+    .info code { background: #080818; padding: 2px 6px; border-radius: 4px; color: #6688ff; }
+    #status { margin-top: 10px; color: #888; font-size: 14px; }
+    .demos { margin-top: 20px; }
+    .demos a { color: #6688ff; margin: 0 10px; text-decoration: none; }
     .demos a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
-  <h1>100% Clean Language — Compiled to WebAssembly</h1>
+  <h1>Orbital Gallery — 100% Clean Language compiled to WebAssembly</h1>
   <div id="canvas-container"></div>
-  <div id="status">Loading WASM...</div>
+  <div id="status">Initializing...</div>
   <div class="info">
-    Source: <code>dashboard.cln</code> &rarr; <code>dashboard.wasm</code>
+    Source: <code>gallery.cln</code> &rarr; <code>gallery.wasm</code> &mdash; click canvas for burst
   </div>
   <div class="demos">
+    <a href="simple-demo.html">Simple Demo</a>
     <a href="index.html">Bouncing Ball</a>
     <a href="geometry.html">Celestial Geometry</a>
-    <a href="dashboard.html">Analytics Pro</a>
     <a href="gallery.html">Orbital Gallery</a>
   </div>
 
@@ -82,6 +82,42 @@
       new DataView(memory.buffer).setInt32(ptr, bytes.length, true);
       new Uint8Array(memory.buffer, ptr + 4, bytes.length).set(bytes);
       return ptr;
+    }
+
+    // =========================================================================
+    // IMAGE CACHE — populated before WASM starts
+    // =========================================================================
+    const imageCache = {};
+
+    const GALLERY_IMAGES = [
+      'https://picsum.photos/seed/alpine/120/120',
+      'https://picsum.photos/seed/coral/120/120',
+      'https://picsum.photos/seed/cosmos/120/120',
+      'https://picsum.photos/seed/rapids/120/120',
+      'https://picsum.photos/seed/tokyo/120/120',
+      'https://picsum.photos/seed/sahara/120/120',
+    ];
+
+    async function preloadImages(onProgress) {
+      let loaded = 0;
+      await Promise.all(GALLERY_IMAGES.map(url => new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        imageCache[url] = { img, loaded: false };
+        img.onload = () => {
+          imageCache[url].loaded = true;
+          loaded++;
+          onProgress(loaded, GALLERY_IMAGES.length);
+          resolve();
+        };
+        img.onerror = () => {
+          imageCache[url].error = true;
+          loaded++;
+          onProgress(loaded, GALLERY_IMAGES.length);
+          resolve();
+        };
+        img.src = url;
+      })));
     }
 
     // =========================================================================
@@ -184,6 +220,7 @@
         c.ctx.fillRect(x, y, w, h);
         return 0;
       },
+      // Stroke-only rect outline
       _canvas_rect_outline: (id, x, y, w, h, colorPtr, colorLen) => {
         const c = canvases.get(id);
         if (!c) return -1;
@@ -244,14 +281,23 @@
         c.ctx.fill();
         return 0;
       },
-      _canvas_image: (id, srcPtr, srcLen, x, y, w, h) => 0,
+      // Real image drawing — uses pre-loaded imageCache
+      _canvas_image: (id, srcPtr, srcLen, x, y, w, h) => {
+        const c = canvases.get(id);
+        if (!c) return -1;
+        const src = readStr(srcPtr, srcLen);
+        const entry = imageCache[src];
+        if (!entry || !entry.loaded) return 0;
+        try { c.ctx.drawImage(entry.img, x, y, w, h); } catch(e) {}
+        return 1;
+      },
       _canvas_save: (id) => { const c = canvases.get(id); if (c) c.ctx.save(); return 0; },
       _canvas_restore: (id) => { const c = canvases.get(id); if (c) c.ctx.restore(); return 0; },
       _canvas_translate: (id, x, y) => { const c = canvases.get(id); if (c) c.ctx.translate(x, y); return 0; },
-      _canvas_rotate: (id, angle) => { const c = canvases.get(id); if (c) c.ctx.rotate(angle * Math.PI / 180); return 0; },
+      // angle is in radians (no conversion needed)
+      _canvas_rotate: (id, angle) => { const c = canvases.get(id); if (c) c.ctx.rotate(angle); return 0; },
       _canvas_scale: (id, sx, sy) => { const c = canvases.get(id); if (c) c.ctx.scale(sx, sy); return 0; },
       _canvas_alpha: (id, a) => { const c = canvases.get(id); if (c) c.ctx.globalAlpha = a; return 0; },
-      _canvas_set_alpha: (id, a) => { const c = canvases.get(id); if (c) c.ctx.globalAlpha = a; return 0; },
       _canvas_request_frame: (id) => {
         const c = canvases.get(id);
         if (c) c.wantsAnimation = true;
@@ -270,7 +316,7 @@
       _canvas_on_pointer: (id, cbPtr) => 0,
       _canvas_on_key: (id, cbPtr) => 0,
 
-      // Canvas variable storage — key-value store for Clean Language state persistence
+      // Canvas variable storage — dumb key-value store for Clean Language state persistence
       _canvas_var_set: (keyPtr, keyLen, value) => {
         const key = readStr(keyPtr, keyLen);
         canvasVars[key] = value;
@@ -290,7 +336,7 @@
       const status = document.getElementById('status');
       try {
         status.textContent = 'Loading WASM...';
-        const response = await fetch('dashboard.wasm');
+        const response = await fetch('gallery.wasm');
         const buffer = await response.arrayBuffer();
 
         status.textContent = 'Compiling...';
@@ -349,8 +395,6 @@
           heapPtr = instance.exports.__heap_ptr.value || 65536;
         }
 
-        status.textContent = 'Running...';
-
         let lastTime = performance.now();
         function gameLoop() {
           const now = performance.now();
@@ -371,11 +415,11 @@
           instance.exports.start();
           if (instance.exports._frame_callback) {
             requestAnimationFrame(gameLoop);
-            status.textContent = 'Analytics Pro — Live';
-            status.style.color = '#44ff88';
+            status.textContent = 'Click anywhere for a burst!';
+            status.style.color = '#6688ff';
           } else {
             status.textContent = 'Static render complete';
-            status.style.color = '#44ff88';
+            status.style.color = '#6688ff';
           }
         } else {
           status.textContent = 'Error: no start() export';
@@ -389,7 +433,19 @@
       }
     }
 
-    loadWasm();
+    // =========================================================================
+    // INIT — pre-load images then start WASM
+    // =========================================================================
+    async function init() {
+      const status = document.getElementById('status');
+      status.textContent = 'Loading images... 0/6';
+      await preloadImages((loaded, total) => {
+        status.textContent = `Loading images... ${loaded}/${total}`;
+      });
+      status.textContent = 'Initializing WASM...';
+      await loadWasm();
+    }
+    init();
   </script>
 </body>
 </html>

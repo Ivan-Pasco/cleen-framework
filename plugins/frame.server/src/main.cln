@@ -1,6 +1,6 @@
 // frame.server plugin - HTTP Server DSL
 // Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
-// Version: 2.1.0
+// Version: 2.1.1
 // Implements: Frame Server Specification v1.2
 
 // ============================================================================
@@ -8,12 +8,12 @@
 // ============================================================================
 
 functions:
-	string expand(string block_name, string attributes, string body)
+	string expand_block(string block_name, string attributes, string body)
 		if block_name == "endpoints"
 			return expand_endpoints(body)
 		return body
 
-	string validate(string block_name, string attributes, string body)
+	string validate_block(string block_name, string attributes, string body)
 		if block_name == "endpoints"
 			return validate_endpoints(body)
 		return ""
@@ -29,26 +29,9 @@ functions:
 functions:
 	string expand_endpoints(string body)
 		string result = ""
-		// Declare external host functions NOT already built-in
-		// Built-in: _req_param, _req_query, _req_body, _req_header, _http_listen
-		// See: platform-architecture/SERVER_EXTENSIONS.md
-		result = result + "external:\n"
-		result = result + "\tstring _http_respond(integer status, string content_type, string body)\n"
-		result = result + "\tstring _http_redirect(integer status, string url)\n"
-		result = result + "\tstring _http_set_header(string name, string value)\n"
-		result = result + "\tinteger _http_route(string method, string path, integer handler_idx)\n"
-		// Only declare optional externals if the body uses them
-		boolean has_body_block = body.indexOf("body:") >= 0 or body.indexOf("body :") >= 0
-		if has_body_block
-			result = result + "\tstring _req_body_field(string field_name)\n"
-		boolean has_params_block = body.indexOf("params:") >= 0 or body.indexOf("params :") >= 0
-		if has_params_block
-			result = result + "\tinteger _req_param_int(string param_name)\n"
-		boolean has_cache_block = body.indexOf("cache:") >= 0 or body.indexOf("cache :") >= 0
-		if has_cache_block
-			result = result + "\tinteger _http_set_cache(integer maxAge)\n"
-			result = result + "\tinteger _http_no_cache()\n"
-		result = result + "\n"
+		// Bridge functions (_http_respond, _http_redirect, _req_*, etc.) are declared in
+		// plugin.toml [bridge] with expand_strings = true and are imported automatically.
+		// No external: block needed — re-declaring them here would shadow the bridge ABI.
 
 		// Add response helpers
 		result = result + "functions:\n"

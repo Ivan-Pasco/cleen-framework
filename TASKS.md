@@ -140,6 +140,8 @@ Reference: [04_frame_data.md](documents/specification/04_frame_data.md)
 - ✅ Implement `limit:` for pagination
 - ✅ Implement `Model.first:` for single records
 - ✅ Implement `Model.count:` for counting
+- ✅ Implement `Model.exists:` — returns 1/0 (tenant-aware)
+- ✅ Implement `Model.findOrFail:` — returns record or throws NOT_FOUND
 - ✅ Implement `link:` for many-to-many joins
 - ✅ Write tests for query builder
 
