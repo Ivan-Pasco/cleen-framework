@@ -1,7 +1,7 @@
 // frame.canvas plugin - Canvas Rendering and Animation DSL
 // Provides: canvasScene, assets, layers, state, init, animSprite, tween, timeline,
 //           animState, path, gradient, customEase, camera, draw, and all event handlers
-// Version: 2.1.4
+// Version: 2.2.0
 
 functions:
 	// =====================================================================
@@ -76,12 +76,82 @@ functions:
 	string expand_canvas_scene(string attrs, string body)
 		string width = get_attr(attrs, "width", "800")
 		string height = get_attr(attrs, "height", "600")
-		string id = get_attr(attrs, "id", "_canvas_0")
-		string fps = get_attr(attrs, "fps", "60")
-		string result = "integer " + id + " = _canvas_init(" + width + ", " + height + ", \"" + id + "\")\n"
-		result = result + "_canvas_set_fps(" + id + ", " + fps + ")\n"
-		result = result + body + "\n"
-		result = result + "_canvas_present(" + id + ")\n"
+		string id_str = get_attr(attrs, "id", "_canvas_0")
+		string fps_val = get_attr(attrs, "fps", "60")
+
+		// Extract each sub-block body (all lines trimmed)
+		string state_body = extract_scene_subblock(body, "state")
+		string init_body = extract_scene_subblock(body, "init")
+		string frame_body = extract_scene_subblock(body, "onFrame")
+		string frame_param = extract_scene_subblock_attr(body, "onFrame", "param", "dt")
+		string draw_body = extract_scene_subblock(body, "draw")
+		string dn_body = extract_scene_subblock(body, "onPointerDown")
+		string dn_param = extract_scene_subblock_attr(body, "onPointerDown", "param", "px,py")
+		string mv_body = extract_scene_subblock(body, "onPointerMove")
+		string mv_param = extract_scene_subblock_attr(body, "onPointerMove", "param", "px,py")
+		string up_body = extract_scene_subblock(body, "onPointerUp")
+		string up_param = extract_scene_subblock_attr(body, "onPointerUp", "param", "px,py")
+
+		// State management snippets
+		string s_load = scene_state_load(state_body)
+		string s_save = scene_state_save(state_body)
+		string s_init = scene_state_init(state_body)
+
+		string result = "functions:\n"
+
+		// _frame_callback
+		result = result + "\tvoid _frame_callback(integer __cv)\n"
+		result = result + "\t\tnumber " + frame_param + " = _canvas_get_delta_time()\n"
+		result = result + s_load
+		result = result + scene_expand_lines(frame_body)
+		result = result + scene_expand_lines(draw_body)
+		result = result + s_save
+		result = result + "\t\tinteger __rfr = _canvas_request_frame(__cv)\n"
+		result = result + "\n"
+
+		// _on_pointer_down (only if declared)
+		string dn_trimmed = dn_body.trim()
+		if dn_trimmed.length() > 0
+			string dn_px = scene_param_part(dn_param, 0)
+			string dn_py = scene_param_part(dn_param, 1)
+			result = result + "\tvoid _on_pointer_down(integer __cv, number " + dn_px + ", number " + dn_py + ")\n"
+			result = result + s_load
+			result = result + scene_expand_lines(dn_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// _on_pointer_move (only if declared)
+		string mv_trimmed = mv_body.trim()
+		if mv_trimmed.length() > 0
+			string mv_px = scene_param_part(mv_param, 0)
+			string mv_py = scene_param_part(mv_param, 1)
+			result = result + "\tvoid _on_pointer_move(integer __cv, number " + mv_px + ", number " + mv_py + ")\n"
+			result = result + s_load
+			result = result + scene_expand_lines(mv_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// _on_pointer_up (only if declared)
+		string up_trimmed = up_body.trim()
+		if up_trimmed.length() > 0
+			string up_px = scene_param_part(up_param, 0)
+			string up_py = scene_param_part(up_param, 1)
+			result = result + "\tvoid _on_pointer_up(integer __cv, number " + up_px + ", number " + up_py + ")\n"
+			result = result + s_load
+			result = result + scene_expand_lines(up_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// start: block — init canvas, state, request first frame
+		result = result + "start:\n"
+		result = result + "\tinteger __cv = _canvas_init(" + width + ", " + height + ", \"" + id_str + "\")\n"
+		result = result + "\t_canvas_set_fps(__cv, " + fps_val + ")\n"
+		result = result + s_init
+		string init_trimmed = init_body.trim()
+		if init_trimmed.length() > 0
+			result = result + scene_expand_lines_start(init_body)
+		result = result + "\tinteger __rfr0 = _canvas_request_frame(__cv)\n"
+
 		return result
 
 	string expand_assets(string attrs, string body)
@@ -910,3 +980,458 @@ functions:
 		result = result.replace("\n", "\\n")
 		result = result.replace("\t", "\\t")
 		return result
+
+	// =====================================================================
+	// CANVAS SCENE DSL HELPERS
+	// =====================================================================
+
+	// Returns true if a trimmed line is a known canvasScene sub-block header
+	boolean is_scene_subblock_header(string t)
+		if t == "state:"
+			return true
+		if t == "draw:"
+			return true
+		if t == "init:"
+			return true
+		if t == "assets:"
+			return true
+		if t == "layers:"
+			return true
+		if t == "camera:"
+			return true
+		if t == "onExit:"
+			return true
+		if t == "onPause:"
+			return true
+		if t == "onResume:"
+			return true
+		if t.startsWith("onFrame")
+			return true
+		if t.startsWith("onPointerDown")
+			return true
+		if t.startsWith("onPointerMove")
+			return true
+		if t.startsWith("onPointerUp")
+			return true
+		if t.startsWith("onKeyDown")
+			return true
+		if t.startsWith("onKeyUp")
+			return true
+		if t.startsWith("animSprite")
+			return true
+		if t.startsWith("tween")
+			return true
+		if t.startsWith("timeline")
+			return true
+		if t.startsWith("animState")
+			return true
+		if t.startsWith("particles")
+			return true
+		if t.startsWith("path")
+			return true
+		if t.startsWith("gradient")
+			return true
+		if t.startsWith("customEase")
+			return true
+		return false
+
+	// Extracts the body of a named sub-block from the canvasScene body.
+	// Lines are trimmed. Returns empty string if keyword not found.
+	string extract_scene_subblock(string body, string keyword)
+		string result = ""
+		integer scan = 0
+		integer len = body.length()
+		boolean in_block = false
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string trimmed = line.trim()
+			if in_block
+				if is_scene_subblock_header(trimmed)
+					return result
+				if trimmed.length() > 0
+					result = result + trimmed + "\n"
+			else
+				if trimmed == keyword + ":"
+					in_block = true
+				else if trimmed.startsWith(keyword + " ")
+					in_block = true
+				else if trimmed.startsWith(keyword + ":")
+					in_block = true
+			scan = next_scan
+		return result
+
+	// Extracts a named attribute from a sub-block header line.
+	// e.g. extract_scene_subblock_attr(body, "onFrame", "param", "dt") → "dt"
+	string extract_scene_subblock_attr(string body, string keyword, string attr, string default_val)
+		integer scan = 0
+		integer len = body.length()
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith(keyword + " ") or trimmed.startsWith(keyword + ":")
+				string pat = attr + "=\""
+				integer pos = trimmed.indexOf(pat)
+				if pos != -1
+					integer vs = pos + pat.length()
+					integer ve = trimmed.indexOf("\"", vs)
+					if ve != -1
+						return trimmed.substring(vs, ve)
+			scan = next_scan
+		return default_val
+
+	// Parses state var name from declaration line: "number ballX = 400.0" → "ballX"
+	string scene_var_name(string line)
+		integer space1 = line.indexOf(" ")
+		if space1 == -1
+			return ""
+		string after_type = line.substring(space1 + 1, line.length()).trim()
+		integer end_pos = after_type.length()
+		integer sp2 = after_type.indexOf(" ")
+		integer eq = after_type.indexOf("=")
+		if sp2 != -1
+			if sp2 < end_pos
+				end_pos = sp2
+		if eq != -1
+			if eq < end_pos
+				end_pos = eq
+		return after_type.substring(0, end_pos).trim()
+
+	// Parses state var default from declaration line: "number ballX = 400.0" → "400.0"
+	// Normalizes boolean/integer literals to float for _canvas_var_set.
+	string scene_var_default(string line)
+		integer eq = line.indexOf("=")
+		if eq == -1
+			return "0.0"
+		string val = line.substring(eq + 1, line.length()).trim()
+		integer comment = val.indexOf("//")
+		if comment != -1
+			val = val.substring(0, comment).trim()
+		if val == "true"
+			return "1.0"
+		if val == "false"
+			return "0.0"
+		if val == "0"
+			return "0.0"
+		if val == "1"
+			return "1.0"
+		if val.contains(".")
+			return val
+		return val + ".0"
+
+	// Generates state var load statements (2-tab indent, for function bodies)
+	string scene_state_load(string state_body)
+		string result = ""
+		integer scan = 0
+		integer len = state_body.length()
+		while scan < len
+			integer nl = state_body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = state_body.substring(scan, len)
+				next_scan = len
+			else
+				line = state_body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("//") == false
+					string vname = scene_var_name(t)
+					string vdefault = scene_var_default(t)
+					if vname.length() > 0
+						result = result + "\t\tnumber " + vname + " = _canvas_var_get(\"" + vname + "\", " + vdefault + ")\n"
+			scan = next_scan
+		return result
+
+	// Generates state var save statements (2-tab indent)
+	string scene_state_save(string state_body)
+		string result = ""
+		integer scan = 0
+		integer len = state_body.length()
+		integer idx = 0
+		while scan < len
+			integer nl = state_body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = state_body.substring(scan, len)
+				next_scan = len
+			else
+				line = state_body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("//") == false
+					string vname = scene_var_name(t)
+					if vname.length() > 0
+						result = result + "\t\tinteger __sv" + idx.toString() + " = _canvas_var_set(\"" + vname + "\", " + vname + ")\n"
+						idx = idx + 1
+			scan = next_scan
+		return result
+
+	// Generates state var init in start: block (1-tab indent)
+	string scene_state_init(string state_body)
+		string result = ""
+		integer scan = 0
+		integer len = state_body.length()
+		integer idx = 0
+		while scan < len
+			integer nl = state_body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = state_body.substring(scan, len)
+				next_scan = len
+			else
+				line = state_body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("//") == false
+					string vname = scene_var_name(t)
+					string vdefault = scene_var_default(t)
+					if vname.length() > 0
+						result = result + "\tinteger __si" + idx.toString() + " = _canvas_var_set(\"" + vname + "\", " + vdefault + ")\n"
+						idx = idx + 1
+			scan = next_scan
+		return result
+
+	// Expands a body of lines for use inside a function body (2-tab indent).
+	// canvas.xxx lines are expanded to bridge calls; other lines pass through.
+	string scene_expand_lines(string body)
+		string result = ""
+		integer scan = 0
+		integer len = body.length()
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("canvas.")
+					result = result + scene_expand_cmd(t)
+				else
+					result = result + "\t\t" + t + "\n"
+			scan = next_scan
+		return result
+
+	// Expands a body of lines for use inside start: block (1-tab indent).
+	string scene_expand_lines_start(string body)
+		string result = ""
+		integer scan = 0
+		integer len = body.length()
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				result = result + "\t" + t + "\n"
+			scan = next_scan
+		return result
+
+	// Expands a single "canvas.cmd attr=val ..." line to a bridge call (2-tab indent).
+	string scene_expand_cmd(string line)
+		integer dot = line.indexOf(".")
+		if dot == -1
+			return "\t\t" + line + "\n"
+		integer sp = line.indexOf(" ", dot)
+		string cmd = ""
+		string ia = ""
+		if sp == -1
+			cmd = line.substring(dot + 1, line.length())
+			ia = ""
+		else
+			cmd = line.substring(dot + 1, sp)
+			ia = line.substring(sp + 1, line.length())
+		string cv = "__cv"
+
+		if cmd == "clear"
+			string color = get_iattr(ia, "color", "")
+			if color == ""
+				return "\t\t_canvas_clear(" + cv + ")\n"
+			return "\t\t_canvas_clear_color(" + cv + ", \"" + color + "\")\n"
+
+		if cmd == "circle"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string r_a = get_iattr(ia, "radius", "")
+			string r_b = get_iattr(ia, "r", "10")
+			string r = r_a
+			if r_a == ""
+				r = r_b
+			string color = get_iattr(ia, "color", "#000000")
+			string filled = get_iattr(ia, "filled", "true")
+			if filled == "false"
+				return "\t\t_canvas_circle_outline(" + cv + ", " + x + ", " + y + ", " + r + ", \"" + color + "\")\n"
+			return "\t\t_canvas_circle_filled(" + cv + ", " + x + ", " + y + ", " + r + ", \"" + color + "\")\n"
+
+		if cmd == "rect"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string w = get_iattr(ia, "width", "100")
+			string h = get_iattr(ia, "height", "100")
+			string color = get_iattr(ia, "color", "#000000")
+			string filled = get_iattr(ia, "filled", "true")
+			string corner = get_iattr(ia, "cornerRadius", "")
+			if corner.length() > 0
+				return "\t\t_canvas_rect_rounded(" + cv + ", " + x + ", " + y + ", " + w + ", " + h + ", " + corner + ", \"" + color + "\")\n"
+			if filled == "false"
+				return "\t\t_canvas_rect_outline(" + cv + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + color + "\")\n"
+			return "\t\t_canvas_rect_filled(" + cv + ", " + x + ", " + y + ", " + w + ", " + h + ", \"" + color + "\")\n"
+
+		if cmd == "line"
+			string x1 = get_iattr(ia, "fromX", "0")
+			string y1 = get_iattr(ia, "fromY", "0")
+			string x2 = get_iattr(ia, "toX", "100")
+			string y2 = get_iattr(ia, "toY", "100")
+			string stroke = get_iattr(ia, "stroke", "1")
+			string color = get_iattr(ia, "color", "#000000")
+			return "\t\t_canvas_line(" + cv + ", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ", " + stroke + ", \"" + color + "\")\n"
+
+		if cmd == "triangle"
+			string x1 = get_iattr(ia, "x1", "0")
+			string y1 = get_iattr(ia, "y1", "0")
+			string x2 = get_iattr(ia, "x2", "50")
+			string y2 = get_iattr(ia, "y2", "100")
+			string x3 = get_iattr(ia, "x3", "100")
+			string y3 = get_iattr(ia, "y3", "0")
+			string color = get_iattr(ia, "color", "#000000")
+			return "\t\t_canvas_triangle_filled(" + cv + ", " + x1 + ", " + y1 + ", " + x2 + ", " + y2 + ", " + x3 + ", " + y3 + ", \"" + color + "\")\n"
+
+		if cmd == "ellipse"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string rx_a = get_iattr(ia, "radiusX", "")
+			string rx_b = get_iattr(ia, "rx", "50")
+			string rx = rx_a
+			if rx_a == ""
+				rx = rx_b
+			string ry_a = get_iattr(ia, "radiusY", "")
+			string ry_b = get_iattr(ia, "ry", "25")
+			string ry = ry_a
+			if ry_a == ""
+				ry = ry_b
+			string color = get_iattr(ia, "color", "#000000")
+			return "\t\t_canvas_ellipse(" + cv + ", " + x + ", " + y + ", " + rx + ", " + ry + ", \"" + color + "\")\n"
+
+		if cmd == "text"
+			string raw_val = get_iattr_raw(ia, "value", "\"\"")
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string size = get_iattr(ia, "size", "16")
+			string color = get_iattr(ia, "color", "#000000")
+			return "\t\t_canvas_text(" + cv + ", " + raw_val + ", " + x + ", " + y + ", " + size + ", \"" + color + "\")\n"
+
+		if cmd == "save"
+			return "\t\t_canvas_save(" + cv + ")\n"
+		if cmd == "restore"
+			return "\t\t_canvas_restore(" + cv + ")\n"
+		if cmd == "translate"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			return "\t\t_canvas_translate(" + cv + ", " + x + ", " + y + ")\n"
+		if cmd == "rotate"
+			string angle = get_iattr(ia, "angle", "0")
+			return "\t\t_canvas_rotate(" + cv + ", " + angle + ")\n"
+		if cmd == "scale"
+			string x = get_iattr(ia, "x", "1")
+			string y = get_iattr(ia, "y", "1")
+			return "\t\t_canvas_scale(" + cv + ", " + x + ", " + y + ")\n"
+		if cmd == "alpha"
+			string value = get_iattr(ia, "value", "1.0")
+			return "\t\t_canvas_alpha(" + cv + ", " + value + ")\n"
+
+		return "\t\t// canvas." + cmd + " (unrecognized canvas command)\n"
+
+	// Parses key=value or key="value" from an inline attribute string.
+	// Returns the value without outer quotes. Use get_iattr_raw to preserve them.
+	string get_iattr(string ia, string key, string default_val)
+		string pat = key + "="
+		integer pos = ia.indexOf(pat)
+		if pos == -1
+			return default_val
+		integer vs = pos + pat.length()
+		if vs >= ia.length()
+			return default_val
+		string first = ia.substring(vs, vs + 1)
+		if first == "\""
+			integer ve = ia.indexOf("\"", vs + 1)
+			if ve == -1
+				return default_val
+			return ia.substring(vs + 1, ve)
+		string result = ""
+		integer i = vs
+		while i < ia.length()
+			string c = ia.substring(i, i + 1)
+			if c == " " or c == "\t" or c == "\n"
+				return result
+			result = result + c
+			i = i + 1
+		return result
+
+	// Like get_iattr but preserves outer quotes for string literals.
+	// Use this when the result goes directly into generated code as a value.
+	string get_iattr_raw(string ia, string key, string default_val)
+		string pat = key + "="
+		integer pos = ia.indexOf(pat)
+		if pos == -1
+			return default_val
+		integer vs = pos + pat.length()
+		if vs >= ia.length()
+			return default_val
+		string first = ia.substring(vs, vs + 1)
+		if first == "\""
+			integer ve = ia.indexOf("\"", vs + 1)
+			if ve == -1
+				return default_val
+			return ia.substring(vs, ve + 1)
+		string result = ""
+		integer i = vs
+		while i < ia.length()
+			string c = ia.substring(i, i + 1)
+			if c == " " or c == "\t" or c == "\n"
+				return result
+			result = result + c
+			i = i + 1
+		return result
+
+	// Returns the Nth comma-separated part of a param string like "px,py"
+	string scene_param_part(string params, integer idx)
+		string p = params.trim()
+		integer comma = p.indexOf(",")
+		if comma == -1
+			if idx == 0
+				return p
+			return "py"
+		if idx == 0
+			return p.substring(0, comma).trim()
+		return p.substring(comma + 1, p.length()).trim()
