@@ -2,9 +2,11 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language
 **Version:** 2.1
-**Location:** `/docs/specification/05_frame_ui.md`
+**Location:** `/documents/specification/05_frame_ui.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Introduction
 
@@ -56,6 +58,8 @@ This allows:
 - Zero overhead for purely static pages
 
 ### 2.2 Project Structure
+
+> **Canonical reference:** [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) — complete folder reference.
 
 Clean Framework uses automatic file discovery. Place files in the `app/` folder:
 
@@ -200,13 +204,13 @@ component: tag="user-card"
 
     html:
         <div class="user-card">
-            <img src="{this.getAvatar()}" alt="">
-            <h3>{this.userId}</h3>
+            <img src="{getAvatar()}" alt="">
+            <h3>{userId}</h3>
         </div>
 
     functions:
         string getAvatar()
-            return "/avatars/" + this.userId + ".png"
+            return "/avatars/" + userId + ".png"
 ```
 
 The plugin automatically generates a `render()` function from the `html:` block at compile time.
@@ -644,7 +648,14 @@ Page-level `client` attribute overrides component default.
 
 ### 9.2 Two-Way Binding
 
-The `cl-bind` attribute creates two-way data binding:
+The `cl-bind` attribute creates two-way data binding. **`cl-bind` requires client hydration** — components using `cl-bind` must have `client="on"` (or another active hydration mode) or the binding will not function at runtime.
+
+```html
+<!-- This component must have client="on" for cl-bind to work -->
+<search-widget client="on"></search-widget>
+```
+
+Inside a `client="on"` component:
 
 ```html
 <input type="text" cl-bind="searchQuery">
@@ -656,7 +667,28 @@ The `cl-bind` attribute creates two-way data binding:
 </select>
 ```
 
-### 9.3 Form Validation
+### 9.3 Form Helpers (frame.ui bridge functions)
+
+These bridge functions read DOM form state from within client-side handlers. They require `frame.client` to be declared alongside `frame.ui`.
+
+| Clean Syntax | Description |
+|-------------|-------------|
+| `ui.inputValue(selector)` | Get current value of an input, textarea, or select |
+| `ui.formJson(selector)` | Collect all named form inputs as a JSON string |
+| `ui.formData(selector)` | Collect all named form inputs as URL-encoded string |
+| `ui.checked(selector)` | Get checkbox checked state (1=checked, 0=unchecked) |
+| `ui.setInput(selector, value)` | Set the value of an input, textarea, or select |
+
+```clean
+functions:
+    submitForm()
+        string body = ui.formJson("#my-form")
+        integer s = api.post("/api/users", body, "onCreated")
+```
+
+See [14_frame_ui_client_communication.md](14_frame_ui_client_communication.md) for implementation details.
+
+### 9.4 Form Validation
 
 ```html
 <input
@@ -701,9 +733,14 @@ Add scoped styles within components:
 
 ### 10.3 CSS Variables (Theming)
 
-Define theme in `app.cln`:
+Define theme in `app.cln` using the `ui:` block (processed by `frame.ui`):
 
 ```clean
+// app.cln
+plugins:
+    frame.ui
+    frame.server
+
 ui:
     theme:
         colors:
@@ -812,9 +849,14 @@ Forms automatically include CSRF tokens:
 
 ### 12.3 Content Security Policy
 
-Configure CSP in `app.cln`:
+Configure CSP in `app.cln` using the `server:` block (processed by `frame.server`):
 
 ```clean
+// app.cln
+plugins:
+    frame.ui
+    frame.server
+
 server:
     security:
         csp:
@@ -1026,18 +1068,23 @@ component: tag="comment-form" client="on"
         string content = ""
         boolean submitting = false
 
-    functions:
-        string render()
-            return "<form class=\"comment-form\">" +
-                "<textarea bind=\"content\" placeholder=\"Write a comment...\"></textarea>" +
-                "<button type=\"submit\" onclick=\"submitComment\" disabled=\"" + submitting.toString() + "\">" +
-                    (if submitting then "Posting..." else "Post Comment") +
-                "</button>" +
-            "</form>"
+    html:
+        <form class="comment-form">
+            <textarea cl-bind="content" placeholder="Write a comment..."></textarea>
+            <button type="submit" onclick="submitComment" cl-if="submitting == false">
+                Post Comment
+            </button>
+            <button type="button" disabled cl-if="submitting">
+                Posting...
+            </button>
+        </form>
 
+    functions:
         void submitComment()
             submitting = true
-            Comment.create(postId: postId, content: content)
+            Comment.insert:
+                postId = postId
+                content = content
             content = ""
             submitting = false
 ```

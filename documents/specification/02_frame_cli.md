@@ -1,7 +1,7 @@
 # Frame CLI Specification (02)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
-**Location:** `/docs/specification/02_frame_cli.md`
+**Location:** `/documents/specification/02_frame_cli.md`
 
 ---
 

@@ -1,9 +1,11 @@
 # Frame Plugins Specification (07)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
-**Location:** `/docs/specification/07_frame_plugins.md`
+**Location:** `/documents/specification/07_frame_plugins.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Introduction
 

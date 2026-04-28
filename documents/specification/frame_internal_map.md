@@ -94,7 +94,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 /app/canvas/audio/*.cln        → Audio asset definitions                                   [frame.canvas]
 /public/*                      → Static assets (CSS, images, served as-is)
 /dist/*                        → Compiled WASM and bundles
-/docs/specification/*          → Specification documents
+/documents/specification/*     → Specification documents
 /tests/*                       → Unit and integration tests
 ```
 
@@ -107,18 +107,20 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
+| `frame.client` | *(no owned folders — used in component handlers and backend code)* |
 
 ### Plugin Block Handles
 
 Each plugin responds to specific top-level block keywords in `.cln` files:
 
-| Plugin | Block Keywords |
-|--------|----------------|
-| `frame.server` | `endpoints` |
-| `frame.data` | `data` |
-| `frame.auth` | `auth`, `protected`, `login`, `roles` |
-| `frame.ui` | `component`, `screen`, `page`, `html` |
-| `frame.canvas` | `canvasScene`, `draw`, `onFrame` |
+| Plugin | Block Keywords | Notes |
+|--------|----------------|-------|
+| `frame.server` | `endpoints` | |
+| `frame.data` | `data`, `migrate` | |
+| `frame.auth` | `auth`, `protected`, `login`, `roles` | |
+| `frame.ui` | `component`, `screen`, `page`, `html`, `styles`, `ui` | |
+| `frame.canvas` | `canvasScene`, `draw`, `onFrame`, `onPointerDown`, `onPointerMove`, `onKeyDown` | |
+| `frame.client` | *(none — bridge-function-only plugin)* | Provides `api.*`, `live.*`, `feed.*` namespaces |
 
 ---
 
@@ -174,6 +176,6 @@ When AI agents process the repository:
 
 ## 7. Maintenance Policy
 
-- This file must always reference the latest spec files in `/docs/specification/`.
+- This file must always reference the latest spec files in `/documents/specification/`.
 - New modules must be added here before a release tag.
 - Any document removed or renamed must be reflected here immediately.

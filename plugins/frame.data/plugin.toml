@@ -46,8 +46,8 @@ functions = [
   { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
 
   # Configuration - called once at startup from a data: config block
-  # Parameters: engine, host, port, database, user, password, pool_max, pool_idle_timeout_ms
-  { name = "_db_configure", params = ["string", "string", "integer", "string", "string", "string", "integer", "integer"], returns = "integer", description = "Configure the database connection pool; returns 0 on success, -1 on error", expand_strings = true },
+  # Parameter: JSON object with keys: engine, host, port, database, user, password, pool_max, pool_idle_timeout_ms
+  { name = "_db_configure", params = ["string"], returns = "integer", description = "Configure the database connection pool from JSON config object; returns 0 on success, -1 on error", expand_strings = true },
 
   # Migration System
   # Register a named migration for version tracking; the runtime records it in the
@@ -78,6 +78,8 @@ blocks = ["data", "migrate"]
 keywords = [
   { name = "find", description = "Query records from a model", context = "expression" },
   { name = "first", description = "Get first matching record", context = "expression" },
+  { name = "exists", description = "Check if any records match the condition (returns 1/0)", context = "expression" },
+  { name = "findOrFail", description = "Find first matching record or raise NOT_FOUND error", context = "expression" },
   { name = "count", description = "Count matching records", context = "expression" },
   { name = "insert", description = "Insert new record(s)", context = "expression" },
   { name = "update", description = "Update existing record(s)", context = "expression" },
@@ -108,8 +110,8 @@ functions = [
   { name = "Data.tx", signature = "Data.tx: block", description = "Execute block in transaction" },
   { name = "db.query", signature = "db.query: sql, params", description = "Execute raw SQL query" },
   { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model" },
-  { name = "Model.exists", signature = "Model.exists(id)", description = "Check if record exists by ID" },
-  { name = "Model.findOrFail", signature = "Model.findOrFail(id)", description = "Find record by ID or throw error" },
+  { name = "Model.exists", signature = "Model.exists:\n\twhere:\n\t\tcondition", description = "Check if record exists matching conditions (returns 1/0)" },
+  { name = "Model.findOrFail", signature = "Model.findOrFail:\n\twhere:\n\t\tcondition", description = "Find first matching record or raise a NOT_FOUND error" },
   { name = "migrate", signature = "migrate \"name\":\n\tup:\n\t\tSQL\n\tdown:\n\t\tSQL", description = "Define a versioned schema migration" },
   { name = "Model.validate", signature = "Model.validate(fieldName, value)", description = "Validate a field value against model constraints (min, max, email, range). Returns empty string if valid, error message if invalid." },
   { name = "Model.save", signature = "Model.save()", description = "Insert or update the model instance" },
@@ -127,7 +129,9 @@ functions = [
 completions = [
   { trigger = "data ", insert = "data ${1:ModelName}:\n\t${2:field}: ${3:type}" },
   { trigger = ".find:", insert = "find:\n\twhere:\n\t\t${1:condition}" },
-  { trigger = ".insert:", insert = "insert:\n\t${1:field}: ${2:value}" },
+  { trigger = ".exists:", insert = "exists:\n\twhere:\n\t\t${1:condition}" },
+  { trigger = ".findOrFail:", insert = "findOrFail:\n\twhere:\n\t\t${1:condition}" },
+  { trigger = ".insert:", insert = "insert:\n\t${1:field} = ${2:value}" },
   { trigger = "Data.tx:", insert = "Data.tx:\n\t${1:// transaction code}" },
   { trigger = "migrate ", insert = "migrate \"${1:001_migration_name}\":\n\tup:\n\t\t${2:CREATE TABLE ...}\n\tdown:\n\t\t${3:DROP TABLE ...}" },
 ]

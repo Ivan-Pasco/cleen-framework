@@ -3,7 +3,9 @@
     "allow": [
       "mcp__clean-language__run",
       "mcp__clean-language__check_reported_fixes",
-      "Bash(\"/Users/earcandy/.cleen/versions/0.30.63/cln\" check *)"
+      "Bash(\"/Users/earcandy/.cleen/versions/0.30.63/cln\" check *)",
+      "Edit(/.claude/skills/errors/**)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" status --short echo \"---\" git -C \"/Users/earcandy/Documents/Dev/Clean Language\" status --short)"
     ]
   }
 }

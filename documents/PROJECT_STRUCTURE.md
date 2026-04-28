@@ -1,6 +1,6 @@
 # Clean Framework Project Structure
 
-Complete reference for the automatic file discovery system.
+**This is the canonical reference for project folder layout and plugin folder ownership.** Other documents link here rather than duplicating the folder tree.
 
 ## Standard Structure
 
@@ -151,7 +151,7 @@ HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.server`.
 endpoints:
 	GET "/api/users" :
 		handle:
-			list users = User.find:
+			list<User> users = User.find:
 				where:
 					active == true
 			return json(users)
@@ -221,6 +221,34 @@ auth:
 		admin: ["*"]
 		editor: ["post.create", "post.edit"]
 		viewer: ["post.read"]
+```
+
+### `app/canvas/`
+
+Canvas application files. Owned by `frame.canvas`.
+
+| Sub-folder | Purpose |
+|---|---|
+| `scenes/` | Scene definitions — each `.cln` file declares a `canvasScene:` block |
+| `sprites/` | Sprite sheet configurations |
+| `audio/` | Audio asset configurations |
+
+**Example scene:**
+```clean
+// app/canvas/scenes/main.cln
+canvasScene: width=800 height=600
+	draw:
+		canvas.clear "black"
+		canvas.text "Hello Canvas" 100 100 24 "white"
+
+	onFrame: param="dt"
+		// per-frame update logic
+
+	onPointerDown: params="x,y"
+		// handle click at (x, y)
+
+	onKeyDown: params="key"
+		// handle key press
 ```
 
 ### `app/public/`

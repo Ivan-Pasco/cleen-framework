@@ -2,7 +2,7 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
 **Version:** 1.0  
-**Location:** `/docs/specification/08_frame_platforms.md`
+**Location:** `/documents/specification/08_frame_platforms.md`
 
 ---
 
@@ -206,7 +206,7 @@ cleen server:init
 ## 13. AI Development Notes
 
 - Deterministic file locations and bridge names help AI agents scaffold wrappers.
-- Use normalized **bridge contracts** (see `ai_context/frame_bridge_contracts.md`).
+- Use normalized **bridge contracts** (see [frame_bridge_contracts.md](frame_bridge_contracts.md)).
 - Prefer **JSON output** from scripts to keep logs machine‑readable.
 
 ---

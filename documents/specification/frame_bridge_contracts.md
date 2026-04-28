@@ -50,15 +50,19 @@ Each platform implements these in its native language:
 - **Server (Rust)**: `linker.func_wrap("env", "printl", |ptr| { ... })`
 - **Browser (JS)**: `{ env: { printl: (ptr) => console.log(readString(ptr)) } }`
 
-### High-Level Bridge (JSON Envelopes)
+### High-Level Bridge (JSON Envelopes) — Design Reference Only
 
-For complex operations, use JSON message passing:
+> **Status: Not currently implemented.** The JSON envelope format below is a design reference for a planned high-level abstraction layer. It is **not** the mechanism used by the actual WASM bridge today. Do not write code that expects this format to work at runtime.
+>
+> The **actual** bridge interface is the low-level WASM imports described above. All plugin bridge functions declared in `plugin.toml [bridge].functions` use direct WASM function imports with `(ptr, len)` string encoding. See [plugin-contract.md §3](../../../../foundation/spec/plugins/plugin-contract.md) for the authoritative specification.
+
+The proposed JSON envelope pattern (for reference):
 
 ```json
 { "fn": "host:<namespace>.<function>", "args": { ... } }
 ```
 
-Response format:
+Proposed response format:
 
 ```json
 // Success
@@ -453,7 +457,9 @@ Bridge functions are versioned with the framework. Breaking changes require a ma
 
 ---
 
-## Bridge Namespaces
+## Bridge Namespaces (Design Reference — JSON Envelope Format)
+
+> **Note:** Sections 1–10 below use the JSON envelope format (`{ "fn": "host:..." }`). This is a **design reference** for the planned high-level abstraction, not the current WASM implementation. For the actual WASM function signatures, refer to each plugin's `plugin.toml [bridge].functions` entries and the authoritative reference in `foundation/platform-architecture/HOST_BRIDGE.md`.
 
 ### 1. I/O Bridge (host:io)
 

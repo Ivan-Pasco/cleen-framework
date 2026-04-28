@@ -1,7 +1,7 @@
 # Compiler Plugin Architecture (10)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
-**Location:** `/docs/specification/10_compiler_plugins.md`
+**Location:** `/documents/specification/10_compiler_plugins.md`
 
 ---
 
@@ -128,45 +128,30 @@ implicit_import = true
 
 ### Plugin Source (Clean Language)
 
-Plugins are written in Clean Language and export an `expand_block` function:
+Plugins are written in Clean Language. The WASM `expand` export receives a **single JSON string** containing the block's name, content, and attributes (see [plugin-contract.md §5.1](../../../../foundation/spec/plugins/plugin-contract.md) for the full ABI). The plugin parses this JSON and returns a JSON result.
 
 ```clean
 // plugins/frame.server/src/main.cln
 
-// Main entry point - called by compiler for each framework block
-expand_block(block_name: string, attributes: string, body: string) -> string
-    if block_name == "server"
-        return expand_server(attributes, body)
-    if block_name == "endpoints"
-        return expand_endpoints(attributes, body)
-    return body
+functions:
+    // WASM export name declared in plugin.toml: expand = "expand"
+    // Input JSON: {"name":"endpoints","content":"GET /users:\n\t...","attributes":[]}
+    // Output JSON: {"statements":"<generated Clean code>"} or {"error":"..."}
+    string expand(string input)
+        string blockName = _json_get(input, "name")
+        string content = _json_get(input, "content")
+        if blockName == "endpoints"
+            return expand_endpoints(content)
+        return "{\"error\":\"Unknown block: " + blockName + "\"}"
 
-// Server block expansion
-expand_server(attrs: string, body: string) -> string
-    port = get_attr(attrs, "port", "8080")
-    host = get_attr(attrs, "host", "localhost")
-
-    return "
-// Generated server code
-start:
-    print(\"Server starting on " + host + ":" + port + "\")
-    " + body + "
-    _http_listen(\"" + host + "\", " + port + ")
-"
-
-// Endpoints block expansion
-expand_endpoints(attrs: string, body: string) -> string
-    return "
-_http_register_endpoints((request) -> any
-    " + body + "
-)
-"
-
-// Helper to parse JSON attributes
-get_attr(json: string, key: string, default_val: string) -> string
-    // Simplified - real implementation would parse JSON
-    return default_val
+    string expand_endpoints(string body)
+        // Parse each route line from body and generate registration calls
+        // Returns a JSON object with the "statements" key
+        string generated = build_route_registrations(body)
+        return "{\"statements\":\"" + generated + "\"}"
 ```
+
+> **Key rule:** The plugin's exported function always receives one JSON string and returns one JSON string. Do **not** write a function with three separate string parameters — that is not the actual WASM ABI. See [plugin-contract.md §5](../../../../foundation/spec/plugins/plugin-contract.md) for the complete specification.
 
 ---
 
@@ -224,17 +209,23 @@ endpoints:
             return User.all()
 ```
 
-It calls the plugin's `expand_block` function:
+It serializes the block into a JSON string and calls the plugin's `expand` WASM export:
 
-```
-Input:
-  - block_name: "endpoints"
-  - attributes: '{}'
-  - body: 'GET "/users" :\n    handle:\n        return User.all()'
+```json
+Input JSON:
+{
+  "name": "endpoints",
+  "content": "GET \"/users\" :\n\thandle:\n\t\treturn User.all()",
+  "attributes": []
+}
 
-Output:
-  Clean Language source code that replaces the block
+Output JSON (success):
+{
+  "statements": "// Generated route registrations\n_http_route(\"GET\", \"/users\", handler_0)\n..."
+}
 ```
+
+The compiler re-parses the `statements` value as Clean Language source and inserts it at the block's location.
 
 ### Step 4: Recursive Expansion
 
@@ -252,26 +243,45 @@ The fully expanded Clean code continues through the standard compilation pipelin
 
 ## 5. Plugin API
 
-### Required Export: `expand_block`
+### Required Export: `expand` (or custom name declared in `plugin.toml`)
 
-```clean
-expand_block(block_name: string, attributes: string, body: string) -> string
+**WASM-level signature:**
+```wat
+(export "expand" (func (param i32 i32) (result i32)))
+; param 0: pointer to length-prefixed JSON input string
+; param 1: length of JSON input in bytes
+; result:  pointer to length-prefixed JSON result string
 ```
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `block_name` | string | The block identifier (e.g., "server", "route") |
-| `attributes` | string | JSON object of block attributes |
-| `body` | string | Raw content inside the block |
-| **Returns** | string | Clean Language source code |
-
-### Optional Export: `validate_block`
-
-```clean
-validate_block(block_name: string, attributes: string, body: string) -> string
+**JSON input** (one string, containing all block data):
+```json
+{
+  "name": "endpoints",
+  "content": "GET \"/users\" :\n\treturn json(users)",
+  "attributes": [{ "name": "auth", "value": null }]
+}
 ```
 
-Returns empty string if valid, or error message if invalid. Called before `expand_block`.
+**JSON output on success:**
+```json
+{ "statements": "<generated Clean Language source code>" }
+```
+
+**JSON output on error:**
+```json
+{ "error": "Descriptive message", "line": 2, "column": 5 }
+```
+
+The function name exported from the WASM module is declared in `plugin.toml` via `[exports].expand`. It may be any valid identifier (e.g., `"expand"`, `"expand_block"`).
+
+### Optional Export: `validate` (or custom name declared in `plugin.toml`)
+
+Same WASM signature as `expand`. Called before `expand` when declared in `[exports].validate`.
+
+Returns empty string `""` on success, or a JSON error object on failure:
+```json
+{ "error": "Descriptive validation error", "line": 1, "column": 1 }
+```
 
 ### Optional Export: `get_keywords`
 

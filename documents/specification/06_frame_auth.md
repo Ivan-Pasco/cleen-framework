@@ -2,9 +2,11 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
 **Version:** 1.0  
-**Location:** `/docs/specification/06_frame_auth.md`
+**Location:** `/documents/specification/06_frame_auth.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Introduction
 
@@ -43,9 +45,9 @@ Auth is designed to be **simple by default** (cookies + sessions) and **extensib
 auth:
     session:
         cookie = "frame.sid"
-        sameSite = "Lax"         # Lax | Strict | None
-        secure = true            # use HTTPS-only cookies
-        httpOnly = true          # inaccessible to JS
+        sameSite = "Lax"         // Lax | Strict | None
+        secure = true            // use HTTPS-only cookies
+        httpOnly = true          // inaccessible to JS
         domain? = null
         path = "/"
         timeoutMinutes = 60
@@ -55,7 +57,7 @@ auth:
         secret = env("JWT_SECRET")
         alg = "HS256"
         ttlMinutes = 60
-        refreshTtlMinutes = 43200   # 30 days
+        refreshTtlMinutes = 43200   // 30 days
 
     roles:
         admin: ["*"]
@@ -83,22 +85,36 @@ roles:
 
 ### Example: Login handler (Clean)
 ```clean
-functions:
-    Response postLogin(LoginForm form)
-        User? u = User.where(email == form.email).first()
-        if u == null or not checkPassword(form.password, u.hash)
-            return error(401, "Invalid credentials")
+// app/backend/api/auth.cln
+endpoints:
+    POST "/auth/login" :
+        LoginForm form = req.json(LoginForm)
+        User? u = User.first:
+            where:
+                email == form.email
+        if u == null or not verifyPassword(form.password, u.hash)
+            return badRequest("Invalid credentials")
 
         Session s = auth.session.create(u.id, claims: { email: u.email, role: u.role })
         return auth.session.setCookie(s, redirect("/dashboard"))
-```
 
-### Logout
-```clean
-functions:
-    Response postLogout()
+    POST "/auth/logout" :
         auth.session.destroyCurrent()
         return redirect("/login")
+```
+
+### Refresh Token Endpoint
+
+```clean
+endpoints:
+    POST "/auth/refresh" :
+        string? refreshToken = req.cookie("frame.refresh")
+        if refreshToken == null
+            return unauthorized()
+        string newToken = auth.jwt.refresh(refreshToken)
+        if newToken == ""
+            return unauthorized()
+        return json({ token: newToken })
 ```
 
 ### CSRF
@@ -154,10 +170,15 @@ if not auth.can(user, "post.publish")
     return error(403, "Forbidden")
 ```
 
-### Guard Decorators (Simple)
+### Guard in Endpoints
 ```clean
-route /admin/publish
-    guard: role("editor", "admin")
+endpoints:
+    POST "/admin/publish" :
+        guard:
+            role in ["editor", "admin"]
+        handle:
+            // handler logic
+            return json({ ok: true })
 ```
 
 ### Policy Functions (Pro)
@@ -182,7 +203,9 @@ Session s = auth.session.create(u.id, claims: { tenantId: u.tenantId, role: u.ro
 ```
 Applied to queries:
 ```clean
-User.where(tenantId == ctx.claims.tenantId)
+list<User> tenantUsers = User.find:
+    where:
+        tenantId == ctx.claims.tenantId
 ```
 Database schemas or row‑level security can be used depending on scale.
 

@@ -2,9 +2,11 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
 **Version:** 1.2 (adopts `endpoints:` for HTTP APIs)  
-**Location (repo):** `/docs/specification/03_frame_server.md`
+**Location (repo):** `/documents/specification/03_frame_server.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Purpose
 The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code to the Host via **Host Bridge**, and renders SSR HTML for Frame UI. This version standardizes API declaration using a single, declarative block: **`endpoints:`**.
@@ -27,6 +29,9 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 ---
 
 ## 3. File Layout
+
+> **Canonical reference:** [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) — complete folder reference.
+
 ```
 /app/backend/            # Owned by frame.server plugin
 /app/backend/api/*.cln   # API modules using `endpoints:`
@@ -49,7 +54,7 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 Each API module exposes a single `endpoints:` block. Endpoints are declared by **METHOD + PATH** and the block body handles the request.
 
 ```clean
-# /app/backend/api/users.cln
+// /app/backend/api/users.cln
 endpoints:
     GET "/api/users" :
         list<User> users = User.find:
@@ -73,7 +78,7 @@ endpoints:
         User? u = User.first:
             where:
                 id == id
-        if u == null:
+        if u == null
             return notFound()
         return json(u)
 ```
@@ -215,7 +220,7 @@ The Clean code never calls host APIs directly—only via these bridges.
 
 ## 14. Testing
 - Unit: call handler blocks with mock `req`.
-- Integration: spin dev server (`frame serve`) and hit endpoints.
+- Integration: spin dev server (`cleen serve`) and hit endpoints.
 - E2E: verify SSR + hydration + API flows together.
 
 ---
@@ -230,7 +235,61 @@ cleen api:sdk      # Client SDKs
 
 ---
 
-## 16. Security
+## 16. Middleware
+
+Middleware files live in `app/backend/middleware/`. They inspect or modify requests before the endpoint handler runs.
+
+```clean
+// app/backend/middleware/RateLimit.cln
+middleware RateLimit
+    functions:
+        Request handle(Request req)
+            string key = "rate:" + req.ip
+            integer count = cache.get(key).toInteger()
+            if count > 100
+                return error(429, "Too many requests")
+            cache.set(key, (count + 1).toString(), ttl: 60)
+            return req
+```
+
+Register middleware in `app.cln` or per-endpoint:
+
+```clean
+endpoints:
+    GET "/api/data" :
+        middleware: [RateLimit, VerifyJWT]
+        handle:
+            return json({ ok: true })
+```
+
+---
+
+## 17. Server-Side HTTP Client
+
+The server can make outbound HTTP requests using the `http.*` bridge functions. This is separate from client-side communication (`frame.client`).
+
+```clean
+// app/backend/api/proxy.cln
+endpoints:
+    GET "/api/weather" :
+        handle:
+            string city = req.query.city
+            string url = "https://weather.example.com/api?city=" + city
+            string response = http.get(url)
+            return json(response)
+
+    POST "/api/notify" :
+        handle:
+            string body = req.json(string)
+            string result = http.postJson("https://notify.example.com/send", body)
+            return json({ sent: true })
+```
+
+Available: `http.get(url)`, `http.postJson(url, body)`, `http.put(url, body)`, `http.delete(url)`.
+
+---
+
+## 18. Security
 - Enforce HTTPS at host; set HSTS as appropriate.
 - Use `HttpOnly` + `SameSite` cookies for sessions.
 - Limit CORS; expose only required origins/headers.
@@ -238,11 +297,11 @@ cleen api:sdk      # Client SDKs
 
 ---
 
-## 17. Examples
+## 19. Examples
 
-### 17.1 Simple CRUD
+### 19.1 Simple CRUD
 ```clean
-# /app/backend/api/posts.cln
+// /app/backend/api/posts.cln
 endpoints:
     GET "/api/posts" :
         list<Post> posts = Post.find:
@@ -260,7 +319,7 @@ endpoints:
         return json(p), status(201)
 ```
 
-### 17.2 Guard + Returns + Cache
+### 19.2 Guard + Returns + Cache
 ```clean
 endpoints:
     GET "/api/reports/daily" :

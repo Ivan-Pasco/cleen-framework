@@ -18,7 +18,7 @@ Known considerations. Read before modifying framework code.
 
 **What:** `plugin.toml` defines the contract between the compiler, the framework plugin, and the runtime server. It declares blocks, keywords, bridge functions, types, enforcement rules, and path conventions. The compiler reads this at compile time; the server implements the bridge functions at runtime.
 
-**Watch for:** Any change to plugin.toml affects three systems (compiler, framework, server). Use the spec/plugins/*.ebnf files as the authoritative syntax reference.
+**Watch for:** Any change to plugin.toml affects three systems (compiler, framework, server). Use the foundation/spec/plugins/*.ebnf files as the authoritative syntax reference.
 
 ---
 

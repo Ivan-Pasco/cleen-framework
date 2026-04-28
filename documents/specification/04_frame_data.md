@@ -2,9 +2,11 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
 **Version:** 1.2 (Unified Query Syntax + Many-to-Many)  
-**Location:** `/docs/specification/04_frame_data.md`
+**Location:** `/documents/specification/04_frame_data.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Purpose
 
@@ -110,6 +112,73 @@ integer total = User.count:
         active == true
 ```
 
+### 3.6 Find or Fail
+
+Throws `NOT_FOUND` if no record matches. Use when existence is required.
+
+```clean
+User u = User.findOrFail:
+    where:
+        id == userId
+```
+
+### 3.7 Exists
+
+Returns `true` if at least one matching record exists.
+
+```clean
+boolean taken = User.exists:
+    where:
+        email == newEmail
+```
+
+### 3.8 Select (Partial Fields)
+
+Retrieve only specific fields using the `select:` sub-block.
+
+```clean
+list<User> users = User.find:
+    select:
+        id
+        name
+        email
+    where:
+        active == true
+```
+
+### 3.9 Offset and Pagination
+
+Use `offset:` with `limit:` for page-based pagination.
+
+```clean
+integer page = 3
+integer pageSize = 20
+
+list<User> users = User.find:
+    where:
+        active == true
+    order:
+        createdAt desc
+    limit: pageSize
+    offset: (page - 1) * pageSize
+```
+
+### 3.10 Include (Eager Loading)
+
+Load related records in a single query using the `include:` sub-block.
+
+```clean
+list<Post> posts = Post.find:
+    include:
+        author
+        tags
+    where:
+        published == true
+    order:
+        createdAt desc
+    limit: 10
+```
+
 ---
 
 ## 4. Transactions
@@ -166,9 +235,9 @@ User.migrate()
 Post.migrate()
 ```
 
-**Migration files** live under `/db/migrations/`:
+**Migration files** live under `app/data/migrations/`:
 ```
-/db/migrations/
+app/data/migrations/
   001_init.sql
   002_add_posts.sql
 ```
@@ -308,7 +377,7 @@ list<User> users = User.find:
         UserRole.role != null
 ```
 
-### 9.4 Counting or Aggregating
+### 9.5 Counting or Aggregating
 
 ```clean
 list<map<string, any>> counts = db.query:
@@ -358,7 +427,7 @@ Data.tx:
 
 ## 10. Seeds
 
-`/db/seed.cln`
+`app/data/seed.cln`
 ```clean
 functions:
     seed()
@@ -467,12 +536,6 @@ It turns database interaction into clean, declarative statements — readable fo
 - `insert` operations auto-inject the current tenant ID
 - Tenant ID is read from the session via `tenant_getId()` (requires frame.auth)
 - If no session exists (unauthenticated request), tenant-scoped queries will use an empty tenant ID
-
-### 16.4 Slot Content in Components
-
-- Default slot content is rendered when no content is provided by the parent
-- Named slots (`<slot name="X">`) must match exactly between layout and page
-- Unmatched named slots retain their default content
 
 ---
 

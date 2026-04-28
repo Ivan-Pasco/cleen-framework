@@ -10,7 +10,7 @@ min_compiler_version = "0.15.0"
 
 # SSR HTML rendering can exhaust the 32 MB standard tier on large pages.
 # Honored by compiler >= 0.30.57; older compilers silently use target defaults.
-# See platform-architecture/MEMORY_POLICY.md §2.2 and §3 (heavy tier: 64 initial / 1024 max pages).
+# See foundation/platform-architecture/MEMORY_POLICY.md §2.2 and §3 (heavy tier: 64 initial / 1024 max pages).
 [memory]
 tier = "heavy"
 
@@ -31,7 +31,7 @@ get_page_meta = "get_page_meta"
 get_keywords = "get_keywords"
 
 [handles]
-blocks = ["component", "screen", "page", "html"]
+blocks = ["component", "screen", "page", "html", "styles", "ui"]
 
 [html]
 # File extensions processed as HTML pages
@@ -47,8 +47,8 @@ events = ["onclick", "oninput", "onchange", "onsubmit", "onfocus", "onblur", "on
 event_modifiers = ["prevent", "stop", "once", "enter", "escape", "space"]
 
 # Interpolation syntax
-interpolation_escaped = "{{}}"
-interpolation_raw = "{{{}}}"
+interpolation_escaped = "{}"
+interpolation_raw = "{!}"
 
 # Hydration modes
 hydration_modes = ["off", "on", "visible", "idle", "only"]
@@ -163,6 +163,10 @@ keywords = [
   { name = "theme", description = "Theme configuration sub-block inside ui:", context = "block" },
   { name = "colors", description = "Color variables sub-block inside theme:", context = "block" },
   { name = "spacing", description = "Spacing variables sub-block inside theme:", context = "block" },
+  { name = "layout", description = "Page layout name (used in <page layout='name'> attribute)", context = "page-attribute" },
+  { name = "auth", description = "Require authentication for page", context = "page-attribute" },
+  { name = "roles", description = "Required roles for page access", context = "page-attribute" },
+  { name = "cache", description = "Page cache max-age in seconds", context = "page-attribute" },
 ]
 
 # Custom types provided by the plugin
@@ -181,7 +185,7 @@ functions = [
   { name = "ui.inputValue", signature = "ui.inputValue(selector)", description = "Get value of input/textarea/select by CSS selector", maps_to = "_ui_input_value" },
   { name = "ui.formJson", signature = "ui.formJson(selector)", description = "Collect all named form inputs as JSON object string", maps_to = "_ui_form_json" },
   { name = "ui.formData", signature = "ui.formData(selector)", description = "Collect all named form inputs as URL-encoded string", maps_to = "_ui_form_data" },
-  { name = "ui.checked", signature = "ui.checked(selector)", description = "Get checkbox checked state (0 or 1)" },
+  { name = "ui.checked", signature = "ui.checked(selector)", description = "Get checkbox checked state (0 or 1)", maps_to = "_ui_checked" },
   { name = "ui.setInput", signature = "ui.setInput(selector, value)", description = "Set value of input/textarea/select", maps_to = "_ui_set_input" },
   { name = "ui.onEvent", signature = "ui.onEvent(selector, eventType, handlerName)", description = "Register event handler by exported function name for CSS selector and event type", maps_to = "_ui_on_event" },
   { name = "ui.toggleClass", signature = "ui.toggleClass(selector, className)", description = "Toggle CSS class on first matching element", maps_to = "_ui_toggle_class" },
@@ -209,7 +213,7 @@ functions = [
 
 # Auto-completion suggestions
 completions = [
-  { trigger = "component ", insert = "component ${1:Name}:\n\tstate:\n\t\t${2:field}: ${3:value}\n\n\trender:\n\t\t${4:// template}" },
+  { trigger = "component ", insert = "component: tag=\"${1:my-tag}\"\n\tprops:\n\t\t${2:string} ${3:name}\n\n\thtml:\n\t\t<div>\n\t\t\t${4:content}\n\t\t</div>" },
   { trigger = "styles ", insert = "styles ${1:Name}:\n\tvariables:\n\t\t${2:color-primary}: \"${3:#3b82f6}\"" },
   { trigger = "state:", insert = "state:\n\t${1:field}: ${2:value}" },
   { trigger = "render:", insert = "render:\n\t${1:// template}" },

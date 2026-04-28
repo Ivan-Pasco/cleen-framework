@@ -53,7 +53,7 @@ All specifications are located in `/documents/specification/`:
 ### Parent-Level Documentation
 
 For project-wide docs (architecture, contributing, platform), see the parent folder:
-- **[platform-architecture/](../platform-architecture/)** - Execution layers, Host Bridge, memory model
+- **[platform-architecture/](../foundation/platform-architecture/)** - Execution layers, Host Bridge, memory model
 - **[README.md](../README.md)** - Project overview
 - **[CLAUDE.md](../CLAUDE.md)** - Cross-component work policy
 
@@ -87,92 +87,24 @@ A file outside its expected folder will NOT be compiled by the appropriate plugi
 
 #### Standard Project Structure
 
-```
-app/
-├── pages/              # frame.ui → SSR pages (standard HTML)
-│   ├── index.html
-│   ├── about.html
-│   └── blog/
-│       └── [slug].html
-│
-├── components/         # frame.ui → Reusable UI components
-│   ├── Header.cln
-│   └── Footer.cln
-│
-├── backend/            # frame.server → HTTP server
-│   ├── api/            # API endpoints
-│   │   ├── users.cln
-│   │   └── posts.cln
-│   ├── services/       # Business logic
-│   └── middleware/      # Middleware
-│
-├── data/               # frame.data → Data models/ORM
-│   ├── models/
-│   │   ├── User.cln
-│   │   └── Post.cln
-│   ├── queries/
-│   ├── migrations/
-│   └── repositories/
-│
-├── auth/               # frame.auth → Auth configuration
-│   └── auth.cln
-│
-├── canvas/             # frame.canvas → Canvas applications
-│   ├── scenes/
-│   ├── sprites/
-│   └── audio/
-│
-└── public/             # Static assets (served as-is)
-    ├── css/
-    │   └── style.css
-    ├── js/
-    └── images/
-```
-
-#### File Extensions by Content Type
-
-| Content Type | Extension | Folder | Editor Support |
-|-------------|-----------|--------|----------------|
-| SSR Pages | `.html` | `pages/` | Full (any HTML editor) |
-| Stylesheets | `.css` | `public/css/` | Full (any CSS editor) |
-| Components | `.cln` | `components/` | Clean Language |
-| API Endpoints | `.cln` | `backend/api/` | Clean Language |
-| Data Models | `.cln` | `data/models/` | Clean Language |
-| Auth Config | `.cln` | `auth/` | Clean Language |
-| Canvas Apps | `.cln` | `canvas/` | Clean Language |
+See **[PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md)** — canonical reference for folder layout, plugin ownership, and file extension conventions.
 
 #### Key Rules
 
-1. **Standard HTML for pages** - Use `.html` extension for SSR pages. This ensures full editor support (syntax highlighting, Emmet, autocomplete, Prettier).
+1. **Standard HTML for pages** — Use `.html` in `app/pages/`. Full editor support (Emmet, Prettier, syntax highlighting).
 
-2. **Standard CSS for styles** - Use `.css` extension in `public/css/`. No inline `<style>` tags in HTML pages. Styles must be in separate CSS files.
+2. **Standard CSS for styles** — Use `.css` in `public/css/`. No inline `<style>` tags. No CSS in HTML files.
 
-3. **Clean templating in HTML** - Use `{{ variable }}` for interpolation and `cl-*` attributes for directives:
+3. **Clean templating in HTML** — Use `{{ variable }}` for interpolation and `cl-*` attributes for directives:
    ```html
    <h1>Welcome, {{ user.name }}</h1>
-   <ul cl-iterate="post in posts">
-       <li>{{ post.title }}</li>
-   </ul>
+   <ul cl-iterate="post in posts"><li>{{ post.title }}</li></ul>
    <div cl-if="user.isAdmin">Admin Panel</div>
    ```
 
-4. **Folder Ownership (Plugin Declaration Required)** - Plugins must always be declared in `app.cln` via the `plugins:` block. Each plugin declares folder ownership in `plugin.toml`. When `implicit_import = true`, files in owned folders don't need explicit import statements — the declared plugin processes them automatically:
-   - `backend/api/users.cln` → processed by `frame.server`
-   - `data/models/User.cln` → processed by `frame.data`
-   - `auth/auth.cln` → processed by `frame.auth`
-   - `canvas/scenes/game.cln` → processed by `frame.canvas`
-   - `components/Button.cln` → processed by `frame.ui`
+4. **Folder Ownership** — Plugins must be declared in `app.cln` via the `plugins:` block. Files in plugin-owned folders are processed automatically (`implicit_import = true`) — no per-file imports needed. See [PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md) for the ownership table.
 
-   **Folder Ownership Rules (per plugin.toml `[paths]` section):**
-   | Path Pattern | Owning Plugin |
-   |--------------|---------------|
-   | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.server` |
-   | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/` | `frame.data` |
-   | `app/auth/` | `frame.auth` |
-   | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
-   | `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
-
-5. **No CSS in HTML** - Inline styles are prohibited. All CSS must be in `public/css/` and linked via `<link>` tags.
+5. **No CSS in HTML** — Inline styles are prohibited. All CSS in `public/css/`, linked via `<link>` tags.
 
 ### Examples and Demos Policy
 
@@ -291,6 +223,13 @@ Reference: [06_frame_auth.md](documents/specification/06_frame_auth.md)
 - Implement role-based access control
 - Provide CSRF protection by default
 
+#### Frame Canvas (`frame.canvas/`)
+Reference: [12_frame_canvas.md](documents/specification/12_frame_canvas.md)
+- `canvasScene:` is the root block; all sub-blocks (`assets:`, `tween`, `timeline`, `animState`, `particles`, `draw:`, event handlers, etc.) live inside it
+- Canvas files go in `app/canvas/` (auto-imported when `frame.canvas` is declared in `app.cln`)
+- All drawing, audio, animation, and input calls go through the Host Bridge — never write raw JS
+- `draw:` is immediate-mode per-frame rendering; `onFrame:` is per-frame update logic; state lives in `state:`
+
 #### Host Bridge (`host-bridge/`)
 Reference: [frame_bridge_contracts.md](documents/specification/frame_bridge_contracts.md)
 - Use standard envelope: `{"fn": "bridge:namespace.function", "args": {...}}`
@@ -379,7 +318,7 @@ clean-framework/
 │   ├── frame.canvas/        # Canvas rendering & game dev plugin
 │   ├── frame.client/        # Client-side communication (api, live, feed)
 │   ├── frame.data/          # ORM & database plugin
-│   ├── frame.server/    # HTTP server & routing plugin (→ frame.server rename pending)
+│   ├── frame.server/        # HTTP server & routing plugin
 │   └── frame.ui/            # UI components & SSR plugin
 ├── documents/
 │   ├── specification/       # All specification files (01-14)
@@ -390,7 +329,7 @@ clean-framework/
 ├── examples/                # Example Frame applications
 ├── tests/                   # Test suites
 ├── scripts/                 # Build and test scripts
-├── management/        # Internal development docs
+├── foundation/management/        # Internal development docs
 ├── CLAUDE.md                # This file
 ├── README.md                # Project overview
 └── TASKS.md                 # Development task tracker
@@ -442,7 +381,7 @@ The clean-server enforces all host function signatures via `clean-server/host-br
 ### Authoritative References
 
 - WAT spec guard: `clean-server/host-bridge/tests/spec_compliance.wat`
-- Host Bridge documentation: `platform-architecture/HOST_BRIDGE.md`
+- Host Bridge documentation: `foundation/platform-architecture/HOST_BRIDGE.md`
 
 ## Security Requirements
 
@@ -569,7 +508,7 @@ Instead:
 
 1. **Document the issue** by creating a prompt/task description
 2. **Save the prompt** in a file that can be executed by the AI instance working in the correct folder
-3. **Location for cross-component prompts**: Save prompts in `../management/cross-component-prompts/` at the project root
+3. **Location for cross-component prompts**: Save prompts in `../foundation/management/cross-component-prompts/` at the project root
 
 ### Prompt Format for Cross-Component Issues
 
@@ -607,14 +546,14 @@ Files Affected: [List of files in the target component that need changes]
 
 ## Documentation Sync Protocol
 
-Facts about the language live in `spec/` (at the project root). Facts about the platform live in `platform-architecture/`. Do not duplicate them here — link to them instead.
+Facts about the language live in `foundation/spec/` (at the project root). Facts about the platform live in `foundation/platform-architecture/`. Do not duplicate them here — link to them instead.
 
 **When you make a change in this component, update the corresponding spec file in the same commit:**
 
 | Change type | Update required |
 |-------------|-----------------|
-| New or changed plugin contract | `spec/plugins/plugin-contract.md` |
-| New or changed host bridge function | `platform-architecture/HOST_BRIDGE.md` |
-| New or changed execution layer | `platform-architecture/EXECUTION_LAYERS.md` |
+| New or changed plugin contract | `foundation/spec/plugins/plugin-contract.md` |
+| New or changed host bridge function | `foundation/platform-architecture/HOST_BRIDGE.md` |
+| New or changed execution layer | `foundation/platform-architecture/EXECUTION_LAYERS.md` |
 
 The spec files are the single source of truth. Component documentation explains implementation — it does not redefine language rules.

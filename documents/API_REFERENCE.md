@@ -1785,68 +1785,7 @@ onError err
 
 ## Project Structure Reference
 
-```
-app/
-├── pages/                  # frame.ui → SSR pages (.html)
-│   ├── index.html
-│   ├── about.html
-│   └── blog/
-│       └── [slug].html
-│
-├── components/             # frame.ui → Reusable UI components (.cln)
-│   ├── Header.cln
-│   └── Footer.cln
-│
-├── layouts/                # frame.ui → Page layout wrappers (.cln)
-│   └── MainLayout.cln
-│
-├── backend/                # frame.server → API and server logic
-│   ├── api/                # HTTP endpoint handlers (.cln)
-│   │   ├── users.cln
-│   │   └── posts.cln
-│   ├── services/           # Business logic services (.cln)
-│   │   └── UserService.cln
-│   └── middleware/         # Custom middleware (.cln)
-│       └── RateLimit.cln
-│
-├── data/                   # frame.data → Data models and queries
-│   ├── models/             # Model definitions (.cln)
-│   │   ├── User.cln
-│   │   └── Post.cln
-│   ├── queries/            # Named query definitions (.cln)
-│   │   └── UserQueries.cln
-│   ├── migrations/         # Auto-generated migrations
-│   └── repositories/       # Repository pattern (.cln)
-│       └── UserRepository.cln
-│
-├── auth/                   # frame.auth → Auth configuration (.cln)
-│   ├── auth.cln
-│   └── roles.cln
-│
-├── canvas/                 # frame.canvas → Canvas apps and scenes
-│   ├── game.cln
-│   └── scenes/
-│       ├── MenuScene.cln
-│       └── GameScene.cln
-│
-└── public/                 # Static assets (served as-is)
-    ├── css/
-    │   └── style.css
-    ├── js/                 # Static JS only (no simulation code)
-    └── images/
-```
-
-### Plugin Folder Ownership
-
-Plugins must be declared in `app.cln` via the `plugins:` block. Files in plugin-owned folders then skip individual import statements.
-
-| Path Pattern | Owning Plugin |
-|--------------|---------------|
-| `app/backend/`, `app/backend/api/` | `frame.server` |
-| `app/data/` | `frame.data` |
-| `app/auth/` | `frame.auth` |
-| `app/canvas/` | `frame.canvas` |
-| `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
+See **[PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)** — canonical reference for folder layout, plugin ownership, and file extension conventions.
 
 ---
 

@@ -63,13 +63,9 @@ integer s = api.get("/api/users", "onUsersLoaded")
 
 Different plugins. Different namespaces. Different calling conventions. Clear.
 
-### 2.5 Rename: frame.server → frame.server
+### 2.5 Plugin Naming
 
-| Before | After | Why |
-|--------|-------|-----|
-| `import frame.server` | `import frame.server` | Shorter, simpler, says exactly what it is |
-
-Developer-facing syntax is unchanged: `endpoints:`, `req.*`, `res.*`, `json()`, `redirect()`.
+Developer-facing syntax for `frame.server` is unchanged: `endpoints:`, `req.*`, `json()`, `redirect()`. See [03_frame_server.md](03_frame_server.md) for the full server API.
 
 ---
 
@@ -441,8 +437,8 @@ start:
 functions:
     onChatMessage()
         string data = live.message()
-        string user = json.get(data, "user")
-        string msg = json.get(data, "message")
+        string user = _json_get(data, "user")
+        string msg = _json_get(data, "message")
         string current = ui.getText("#messages")
         integer s = ui.updateElement("#messages", current + "<div><b>" + user + ":</b> " + msg + "</div>")
 
@@ -480,9 +476,9 @@ start:
 functions:
     onMetrics()
         string data = live.message()
-        string cpu = json.get(data, "cpu")
-        string mem = json.get(data, "memory")
-        string reqs = json.get(data, "requestsPerSec")
+        string cpu = _json_get(data, "cpu")
+        string mem = _json_get(data, "memory")
+        string reqs = _json_get(data, "requestsPerSec")
         integer s = ui.updateElement("#cpu", cpu + "%")
         s = ui.updateElement("#mem", mem + "%")
         s = ui.updateElement("#reqs", reqs + "/s")
@@ -524,7 +520,7 @@ functions:
 
     onBuildProgress()
         string data = feed.data()
-        string pct = json.get(data, "percent")
+        string pct = _json_get(data, "percent")
         integer s = ui.updateAttr("#progress", "style", "width:" + pct + "%")
         s = ui.updateElement("#pct-text", pct + "%")
 
@@ -537,7 +533,7 @@ functions:
 
     onBuildFailed()
         string data = feed.data()
-        string msg = json.get(data, "message")
+        string msg = _json_get(data, "message")
         integer s = ui.addClass("#progress", "failed")
         s = ui.updateElement("#pct-text", "Failed: " + msg)
 ```
@@ -566,7 +562,7 @@ functions:
 
     onInfoNotification()
         string data = feed.data()
-        string msg = json.get(data, "message")
+        string msg = _json_get(data, "message")
         integer s = ui.updateElement("#toast", msg)
         s = ui.addClass("#toast", "visible")
         s = ui.addClass("#toast", "toast-info")
@@ -574,7 +570,7 @@ functions:
 
     onWarningNotification()
         string data = feed.data()
-        string msg = json.get(data, "message")
+        string msg = _json_get(data, "message")
         integer s = ui.updateElement("#toast", msg)
         s = ui.addClass("#toast", "visible")
         s = ui.addClass("#toast", "toast-warning")
@@ -582,7 +578,7 @@ functions:
 
     onErrorNotification()
         string data = feed.data()
-        string msg = json.get(data, "message")
+        string msg = _json_get(data, "message")
         integer s = ui.updateElement("#toast", msg)
         s = ui.addClass("#toast", "visible")
         s = ui.addClass("#toast", "toast-error")
@@ -635,8 +631,8 @@ functions:
 
     onAlert()
         string data = live.message()
-        string level = json.get(data, "level")
-        string msg = json.get(data, "message")
+        string level = _json_get(data, "level")
+        string msg = _json_get(data, "message")
         integer s = ui.updateElement("#alert", msg)
         s = ui.addClass("#alert", "alert-" + level)
 
@@ -648,8 +644,8 @@ functions:
 
     onActivity()
         string data = feed.data()
-        string action = json.get(data, "action")
-        string user = json.get(data, "user")
+        string action = _json_get(data, "action")
+        string user = _json_get(data, "user")
         string current = ui.getText("#activity-log")
         integer s = ui.updateElement("#activity-log", "<div>" + user + " " + action + "</div>" + current)
 
@@ -714,7 +710,7 @@ Each protocol has its own context. No ambiguity:
 
 ### Handler Type
 
-All functions accepting callbacks use the `handler` param type. The compiler resolves function names to indices automatically. The developer writes named functions, never numbers. See cross-component prompt: `compiler-handler-type-for-plugins.md`.
+All functions accepting callbacks use a `string` parameter naming a top-level exported function. The runtime dispatches via `instance.exports[handlerName]`. The developer writes named functions in the `functions:` block — no indices or pointers required.
 
 ---
 
@@ -736,7 +732,6 @@ All functions accepting callbacks use the `handler` param type. The compiler res
 | **Create** | `plugins/frame.client/runtime/loader.js` |
 | **Modify** | `plugins/frame.ui/plugin.toml` -- add 5 form helpers |
 | **Modify** | `plugins/frame.ui/runtime/loader.js` -- add form helper implementations |
-| **Rename** | `plugins/frame.server/` → `plugins/frame.server/` |
 
 ### Cross-Component
 

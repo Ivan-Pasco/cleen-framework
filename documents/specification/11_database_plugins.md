@@ -2,7 +2,7 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language
 **Version:** 1.1
-**Location:** `/docs/specification/11_database_plugins.md`
+**Location:** `/documents/specification/11_database_plugins.md`
 
 ---
 

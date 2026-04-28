@@ -289,8 +289,8 @@ None available. Bridge functions with `expand_strings = true` cannot work until 
 ## References
 
 - Platform Architecture: `/Users/earcandy/Documents/Dev/Clean Language/platform-architecture/`
-- Host Bridge Spec: `platform-architecture/HOST_BRIDGE.md`
-- Server Extensions: `platform-architecture/SERVER_EXTENSIONS.md`
+- Host Bridge Spec: `foundation/platform-architecture/HOST_BRIDGE.md`
+- Server Extensions: `foundation/platform-architecture/SERVER_EXTENSIONS.md`
 - Plugin Bridge Contract: `documents/specification/frame_bridge_contracts.md`
 
 ---

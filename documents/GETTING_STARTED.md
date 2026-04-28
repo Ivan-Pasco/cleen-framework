@@ -10,9 +10,9 @@ Install Clean Language and the server runtime:
 # Install cleen (version manager)
 curl -fsSL https://cleen.dev/install.sh | bash
 
-# Install compiler and server
+# Install compiler and all framework plugins
 cleen install latest
-cleen server install
+cleen frame install latest
 ```
 
 ## Create a New Project
@@ -30,22 +30,14 @@ my-app/
 ├── project.toml             # Project configuration
 └── app/
     ├── pages/               # SSR pages (.html)          → frame.ui
-    │   └── index.html       # Home page (/)
-    ├── components/          # Reusable UI components (.cln) → frame.ui
-    ├── layouts/             # Page layout wrappers (.html) → frame.ui
-    ├── backend/             # HTTP server layer           → frame.server
-    │   ├── api/             # HTTP endpoints (.cln)
-    │   ├── services/        # Business logic (.cln)
-    │   └── middleware/      # Request filters (.cln)
-    ├── data/                # ORM layer                   → frame.data
-    │   ├── models/          # Data model definitions (.cln)
-    │   ├── queries/         # Reusable queries (.cln)
-    │   ├── migrations/      # Schema migrations (.cln)
-    │   └── repositories/    # Data access layer (.cln)
-    ├── auth/                # Auth configuration (.cln)   → frame.auth
-    └── public/              # Static files (CSS, images)
-        └── css/
+    ├── components/          # Reusable UI components     → frame.ui
+    ├── backend/api/         # HTTP endpoints (.cln)      → frame.server
+    ├── data/models/         # Data model definitions     → frame.data
+    ├── auth/                # Auth configuration         → frame.auth
+    └── public/css/          # Static styles
 ```
+
+For the full folder reference, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md).
 
 ## Your First Page
 
