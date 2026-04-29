@@ -155,7 +155,7 @@ functions:
 					result = result + "\n"
 
 					// Collect route registration call for start block
-					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", " + handler_idx.toString() + ")\n"
+					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
 
 					handler_idx = handler_idx + 1
 
