@@ -1045,7 +1045,7 @@ functions:
 	string extract_scene_subblock(string body, string keyword)
 		// If body has no newlines, use flat extraction
 		if body.indexOf("\n") == -1
-			return extract_scene_subblock_flat(body, keyword)
+			return extract_scene_subblock_flat(body.replace("\t", " "), keyword)
 		// Multi-line mode (original logic)
 		string result = ""
 		integer scan = 0
@@ -1080,7 +1080,7 @@ functions:
 	string extract_scene_subblock_attr(string body, string keyword, string attr, string default_val)
 		// Flat body mode
 		if body.indexOf("\n") == -1
-			return extract_scene_subblock_attr_flat(body, keyword, attr, default_val)
+			return extract_scene_subblock_attr_flat(body.replace("\t", " "), keyword, attr, default_val)
 		// Multi-line mode (original logic)
 		integer scan = 0
 		integer len = body.length()
@@ -1467,7 +1467,7 @@ functions:
 		string result = ""
 		string effective_body = state_body
 		if state_body.indexOf("\n") == -1 and state_body.trim().length() > 0
-			effective_body = scene_state_split_flat(state_body)
+			effective_body = scene_state_split_flat(state_body.replace("\t", " "))
 		integer scan = 0
 		integer len = effective_body.length()
 		while scan < len
@@ -1495,7 +1495,7 @@ functions:
 		string result = ""
 		string effective_body = state_body
 		if state_body.indexOf("\n") == -1 and state_body.trim().length() > 0
-			effective_body = scene_state_split_flat(state_body)
+			effective_body = scene_state_split_flat(state_body.replace("\t", " "))
 		integer scan = 0
 		integer len = effective_body.length()
 		integer idx = 0
@@ -1524,7 +1524,7 @@ functions:
 		string result = ""
 		string effective_body = state_body
 		if state_body.indexOf("\n") == -1 and state_body.trim().length() > 0
-			effective_body = scene_state_split_flat(state_body)
+			effective_body = scene_state_split_flat(state_body.replace("\t", " "))
 		integer scan = 0
 		integer len = effective_body.length()
 		integer idx = 0
@@ -1554,7 +1554,7 @@ functions:
 	// Handles both multi-line (newlines) and flat (space-joined) bodies.
 	string scene_expand_lines(string body)
 		if body.indexOf("\n") == -1 and body.trim().length() > 0
-			return scene_expand_lines_flat(body)
+			return scene_expand_lines_flat(body.replace("\t", " "))
 		string result = ""
 		integer scan = 0
 		integer len = body.length()
