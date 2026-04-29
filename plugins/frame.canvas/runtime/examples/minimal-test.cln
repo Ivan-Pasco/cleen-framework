@@ -1,17 +1,17 @@
-// Minimal Canvas Test - consume return values
-import:
+// Minimal Canvas Test - moving circle
+plugins:
 	frame.canvas
 
-state:
-	integer canvasId = 0
-	number x = 100.0
+canvasScene: width=800 height=600 id="main"
 
-functions:
-	void _frame_callback(integer canvasId)
-		integer r1 = _canvas_clear_color(canvasId, "#1a1a2e")
-		integer r2 = _canvas_circle_filled(canvasId, x, 300.0, 50.0, "#ff6b6b")
-		x = x + 0.5
+	state:
+		number x = 100.0
 
-start:
-	canvasId = _canvas_init(800, 600)
-	integer r = _canvas_request_frame(canvasId)
+	onFrame: param="dt"
+		x = x + 30.0 * dt
+		if x > 750.0
+			x = 50.0
+
+	draw:
+		canvas.clear color="#1a1a2e"
+		canvas.circle x=x y=300.0 radius=50.0 color="#ff6b6b"

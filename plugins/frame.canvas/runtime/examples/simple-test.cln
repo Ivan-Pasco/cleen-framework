@@ -1,20 +1,18 @@
-// Simple Canvas Test - minimal example
+// Simple Canvas Test - moving circle
 plugins:
 	frame.canvas
 
-state:
-	integer canvasId = 0
-	number x = 100.0
-	number y = 100.0
+canvasScene: width=800 height=600 id="main"
 
-functions:
-	void _frame_callback(integer canvasId)
-		_canvas_clear_color(canvasId, "#1a1a2e")
-		_canvas_circle_filled(canvasId, x, y, 50.0, "#ff6b6b")
-		x = x + 1.0
-		if x > 700.0
-			x = 100.0
+	state:
+		number x = 100.0
+		number y = 300.0
 
-start:
-	canvasId = _canvas_init(800, 600)
-	_canvas_request_frame(canvasId)
+	onFrame: param="dt"
+		x = x + 60.0 * dt
+		if x > 750.0
+			x = 50.0
+
+	draw:
+		canvas.clear color="#1a1a2e"
+		canvas.circle x=x y=y radius=50.0 color="#ff6b6b"
