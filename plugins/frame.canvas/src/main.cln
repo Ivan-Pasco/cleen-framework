@@ -1,7 +1,7 @@
 // frame.canvas plugin - Canvas Rendering and Animation DSL
 // Provides: canvasScene, assets, layers, state, init, animSprite, tween, timeline,
 //           animState, path, gradient, customEase, camera, draw, and all event handlers
-// Version: 2.3.0
+// Version: 2.4.0
 
 functions:
 	// =====================================================================
@@ -9,60 +9,62 @@ functions:
 	// =====================================================================
 
 	string expand_block(string block_name, string attributes, string body)
-		if block_name == "canvasScene"
+		// Use startsWith instead of == to avoid pointer-equality failures on large plugins
+		// where string literals land beyond the compiler's data-section scan range (32 KB).
+		if block_name.startsWith("canvasScene")
 			return expand_canvas_scene(attributes, body)
-		if block_name == "assets"
+		if block_name.startsWith("assets")
 			return expand_assets(attributes, body)
-		if block_name == "layers"
+		if block_name.startsWith("layers")
 			return expand_layers(attributes, body)
-		if block_name == "state"
-			return expand_state(attributes, body)
-		if block_name == "init"
-			return expand_init(attributes, body)
-		if block_name == "draw"
-			return expand_draw(attributes, body)
-		if block_name == "onFrame"
-			return expand_on_frame(attributes, body)
-		if block_name == "onPointerDown"
-			return expand_on_pointer_down(attributes, body)
-		if block_name == "onPointerMove"
-			return expand_on_pointer_move(attributes, body)
-		if block_name == "onPointerUp"
-			return expand_on_pointer_up(attributes, body)
-		if block_name == "onKeyDown"
-			return expand_on_key_down(attributes, body)
-		if block_name == "onKeyUp"
-			return expand_on_key_up(attributes, body)
-		if block_name == "onExit"
-			return expand_on_exit(attributes, body)
-		if block_name == "onPause"
-			return expand_on_pause(attributes, body)
-		if block_name == "onResume"
-			return expand_on_resume(attributes, body)
-		if block_name == "animSprite"
+		if block_name.startsWith("animSprite")
 			return expand_anim_sprite(attributes, body)
-		if block_name == "tween"
-			return expand_tween(attributes, body)
-		if block_name == "timeline"
-			return expand_timeline(attributes, body)
-		if block_name == "animState"
+		if block_name.startsWith("animState")
 			return expand_anim_state(attributes, body)
-		if block_name == "particles"
+		if block_name.startsWith("onPointerDown")
+			return expand_on_pointer_down(attributes, body)
+		if block_name.startsWith("onPointerMove")
+			return expand_on_pointer_move(attributes, body)
+		if block_name.startsWith("onPointerUp")
+			return expand_on_pointer_up(attributes, body)
+		if block_name.startsWith("onKeyDown")
+			return expand_on_key_down(attributes, body)
+		if block_name.startsWith("onKeyUp")
+			return expand_on_key_up(attributes, body)
+		if block_name.startsWith("onFrame")
+			return expand_on_frame(attributes, body)
+		if block_name.startsWith("onExit")
+			return expand_on_exit(attributes, body)
+		if block_name.startsWith("onPause")
+			return expand_on_pause(attributes, body)
+		if block_name.startsWith("onResume")
+			return expand_on_resume(attributes, body)
+		if block_name.startsWith("timeline")
+			return expand_timeline(attributes, body)
+		if block_name.startsWith("tween")
+			return expand_tween(attributes, body)
+		if block_name.startsWith("particles")
 			return expand_particles(attributes, body)
-		if block_name == "path"
-			return expand_path(attributes, body)
-		if block_name == "gradient"
-			return expand_gradient(attributes, body)
-		if block_name == "customEase"
+		if block_name.startsWith("customEase")
 			return expand_custom_ease(attributes, body)
-		if block_name == "camera"
+		if block_name.startsWith("camera")
 			return expand_camera(attributes, body)
+		if block_name.startsWith("gradient")
+			return expand_gradient(attributes, body)
+		if block_name.startsWith("path")
+			return expand_path(attributes, body)
+		if block_name.startsWith("state")
+			return expand_state(attributes, body)
+		if block_name.startsWith("init")
+			return expand_init(attributes, body)
+		if block_name.startsWith("draw")
+			return expand_draw(attributes, body)
 		if block_name.startsWith("canvas.")
 			return expand_canvas_command(block_name, attributes, body)
 		return body
 
 	string validate_block(string block_name, string attributes, string body)
-		if block_name == "canvasScene"
+		if block_name.startsWith("canvasScene")
 			return validate_canvas_scene(attributes)
 		return ""
 
@@ -1039,8 +1041,12 @@ functions:
 		return false
 
 	// Extracts the body of a named sub-block from the canvasScene body.
-	// Lines are trimmed. Returns empty string if keyword not found.
+	// Handles both multi-line (newline-preserved) and flat (space-joined) bodies.
 	string extract_scene_subblock(string body, string keyword)
+		// If body has no newlines, use flat extraction
+		if body.indexOf("\n") == -1
+			return extract_scene_subblock_flat(body, keyword)
+		// Multi-line mode (original logic)
 		string result = ""
 		integer scan = 0
 		integer len = body.length()
@@ -1062,18 +1068,20 @@ functions:
 				if trimmed.length() > 0
 					result = result + trimmed + "\n"
 			else
-				if trimmed == keyword + ":"
+				if trimmed.startsWith(keyword + ":")
 					in_block = true
 				else if trimmed.startsWith(keyword + " ")
-					in_block = true
-				else if trimmed.startsWith(keyword + ":")
 					in_block = true
 			scan = next_scan
 		return result
 
 	// Extracts a named attribute from a sub-block header line.
-	// e.g. extract_scene_subblock_attr(body, "onFrame", "param", "dt") → "dt"
+	// Handles both multi-line and flat bodies.
 	string extract_scene_subblock_attr(string body, string keyword, string attr, string default_val)
+		// Flat body mode
+		if body.indexOf("\n") == -1
+			return extract_scene_subblock_attr_flat(body, keyword, attr, default_val)
+		// Multi-line mode (original logic)
 		integer scan = 0
 		integer len = body.length()
 		while scan < len
@@ -1097,6 +1105,323 @@ functions:
 						return trimmed.substring(vs, ve)
 			scan = next_scan
 		return default_val
+
+	// =====================================================================
+	// FLAT BODY EXTRACTION (compiler strips newlines — handle space-joined format)
+	// =====================================================================
+
+	// Returns position of the first space at or after pos in s.
+	// Uses indexOf (content-based, not pointer equality).
+	integer flat_next_space(string s, integer pos)
+		return s.indexOf(" ", pos)
+
+	// Returns true if s has a space character at exactly pos.
+	boolean flat_space_at(string s, integer pos)
+		integer next = s.indexOf(" ", pos)
+		if next == pos
+			return true
+		return false
+
+	// Returns true if s starts with " keyword:" (space then keyword then colon).
+	boolean flat_kw_at_start(string s, string kw)
+		if s.startsWith(kw + ":")
+			return true
+		if s.startsWith(kw + " ")
+			return true
+		return false
+
+	// Find the start position of a sub-block keyword in the flat body.
+	// Returns position of the keyword character (not the preceding space), or -1.
+	integer flat_find_kw(string body, string kw)
+		string kw_col = " " + kw + ":"
+		integer pos = body.indexOf(kw_col)
+		if pos >= 0
+			return pos + 1
+		string kw_sp = " " + kw + " "
+		pos = body.indexOf(kw_sp)
+		if pos >= 0
+			return pos + 1
+		// Check at position 0
+		if body.startsWith(kw + ":")
+			return 0
+		if body.startsWith(kw + " ")
+			return 0
+		return -1
+
+	// Find where the current sub-block content ends — position of the NEXT sub-block header.
+	// Returns the position of the space before the next keyword, or content.length().
+	integer flat_find_next_block_end(string content)
+		integer end = content.length()
+		integer pos = -1
+		pos = flat_find_kw(content, "state")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onFrame")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "draw")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onPointerDown")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onPointerMove")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onPointerUp")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onKeyDown")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onKeyUp")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "init")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "animSprite")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "tween")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "timeline")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "animState")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "particles")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "camera")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "layers")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "assets")
+		if pos >= 0 and pos < end
+			end = pos
+		return end
+
+	// Skip optional key="value" attribute at start of string s.
+	// Returns position after the attribute (and any trailing space), or 0 if no attr found.
+	integer flat_skip_one_attr(string s)
+		integer eq_q = s.indexOf("=\"")
+		if eq_q == -1
+			return 0
+		// Key before =" must contain no spaces
+		string key = s.substring(0, eq_q)
+		if key.indexOf(" ") >= 0
+			return 0
+		integer close = s.indexOf("\"", eq_q + 2)
+		if close == -1
+			return 0
+		integer end = close + 1
+		// Skip trailing space
+		if end < s.length()
+			integer sp = s.indexOf(" ", end)
+			if sp == end
+				end = end + 1
+		return end
+
+	// Extract content for sub-block keyword from flat (space-joined) body.
+	// Returns the raw flat content (no newlines) for that sub-block, or "".
+	string extract_scene_subblock_flat(string body, string keyword)
+		// Find keyword header position
+		integer kpos = flat_find_kw(body, keyword)
+		if kpos == -1
+			return ""
+		// Skip past "keyword:" (or "keyword ") and any quoted attributes
+		string kw_colon = keyword + ":"
+		integer after_kw = kpos + kw_colon.length()
+		// If the keyword was found with a space (e.g. "onFrame "), adjust
+		if after_kw > body.length()
+			after_kw = body.length()
+		string rest = body.substring(after_kw, body.length()).trim()
+		integer attr_skip = flat_skip_one_attr(rest)
+		string content = rest.substring(attr_skip, rest.length()).trim()
+		// Find end of this sub-block
+		integer end = flat_find_next_block_end(content)
+		return content.substring(0, end).trim()
+
+	// Extract an attribute value from a sub-block header in the flat body.
+	// e.g. flat body contains "onFrame: param=\"dt\"" → returns "dt"
+	string extract_scene_subblock_attr_flat(string body, string keyword, string attr, string default_val)
+		integer kpos = flat_find_kw(body, keyword)
+		if kpos == -1
+			return default_val
+		// Get the header: everything from kpos until the first real content token
+		// (content tokens don't start with identifier=)
+		string kw_colon = keyword + ":"
+		integer after_kw = kpos + kw_colon.length()
+		if after_kw > body.length()
+			return default_val
+		string rest = body.substring(after_kw, body.length()).trim()
+		// Look for attr="value" in rest
+		string pat = attr + "=\""
+		integer pos = rest.indexOf(pat)
+		if pos == -1
+			return default_val
+		integer vs = pos + pat.length()
+		integer ve = rest.indexOf("\"", vs)
+		if ve == -1
+			return default_val
+		return rest.substring(vs, ve)
+
+	// Find where the condition ends in "if COND BODY..." (3-token condition: LHS OP RHS).
+	// Returns position right after the 3rd space (where body starts).
+	integer flat_if_body_start(string s)
+		// Skip "if " (3 chars), then skip 3 space-separated tokens (LHS, OP, RHS)
+		integer scan_from = 3
+		integer spaces = 0
+		integer i = scan_from
+		integer len = s.length()
+		while i < len and spaces < 3
+			integer sp = s.indexOf(" ", i)
+			if sp == -1
+				return len
+			spaces = spaces + 1
+			i = sp + 1
+		return i
+
+	// Find position of next "if " or start of next canvas command in body (for if-body end).
+	integer flat_find_if_end(string body)
+		integer end = body.length()
+		integer pos = body.indexOf(" if ")
+		if pos >= 0 and pos < end
+			end = pos + 1
+		// Also stop at next sub-block
+		integer blk = flat_find_next_block_end(body)
+		if blk < end
+			end = blk
+		return end
+
+	// Find position of next statement start in s after search_from position.
+	// A new statement starts where " IDENTIFIER = " (assignment) appears.
+	integer flat_find_next_stmt(string s, integer search_from)
+		integer len = s.length()
+		integer scan = search_from + 1
+		while scan < len
+			// Find " = " pattern (assignment boundary)
+			integer eq = s.indexOf(" = ", scan)
+			if eq == -1
+				return len
+			// Make sure it's not == (check char after " = ")
+			boolean is_double = false
+			if eq + 3 < len
+				string after = s.substring(eq + 3, eq + 4)
+				if after.startsWith("=")
+					is_double = true
+			if is_double == false
+				// Walk backward from eq to find the start of the identifier
+				integer look = eq - 1
+				boolean found_sp = false
+				while look >= search_from and found_sp == false
+					integer sp = s.indexOf(" ", look)
+					if sp == look
+						found_sp = true
+					else
+						look = look - 1
+				integer id_start = look + 1
+				if id_start > search_from
+					return id_start
+				// Identifier at or before search_from — skip
+			scan = eq + 1
+		return len
+
+	// Expand flat assignment/if-block body (for use inside function body, 2-tab indent).
+	// Handles: simple assignments, if statements with single or multi-assignment bodies.
+	string scene_expand_lines_flat(string body)
+		string result = ""
+		string rem = body.trim()
+		integer safety = 0
+		while rem.length() > 0 and safety < 80
+			safety = safety + 1
+			// Canvas command
+			if rem.startsWith("canvas.")
+				integer cmd_end = rem.length()
+				integer next_c = rem.indexOf(" canvas.", 1)
+				if next_c >= 0 and next_c < cmd_end
+					cmd_end = next_c
+				integer next_i = rem.indexOf(" if ", 0)
+				if next_i >= 0 and next_i < cmd_end
+					cmd_end = next_i
+				integer blk_end = flat_find_next_block_end(rem)
+				if blk_end < cmd_end
+					cmd_end = blk_end
+				string cmd = rem.substring(0, cmd_end).trim()
+				result = result + scene_expand_cmd(cmd)
+				rem = rem.substring(cmd_end, rem.length()).trim()
+			// If statement
+			else if rem.startsWith("if ")
+				integer bstart = flat_if_body_start(rem)
+				string condition = rem.substring(3, bstart).trim()
+				rem = rem.substring(bstart, rem.length()).trim()
+				// Find end of if body
+				integer bend = flat_find_if_end(rem)
+				string if_body = rem.substring(0, bend).trim()
+				rem = rem.substring(bend, rem.length()).trim()
+				result = result + "\t\tif " + condition + "\n"
+				// Expand if body lines (3-tab indent)
+				string body_rem = if_body
+				integer bsafety = 0
+				while body_rem.length() > 0 and bsafety < 20
+					bsafety = bsafety + 1
+					integer next = flat_find_next_stmt(body_rem, 0)
+					string bstmt = body_rem.substring(0, next).trim()
+					if bstmt.length() > 0
+						result = result + "\t\t\t" + bstmt + "\n"
+					body_rem = body_rem.substring(next, body_rem.length()).trim()
+			// Simple statement (assignment or function call)
+			else
+				integer next = flat_find_next_stmt(rem, 0)
+				string stmt = rem.substring(0, next).trim()
+				if stmt.length() > 0
+					result = result + "\t\t" + stmt + "\n"
+				rem = rem.substring(next, rem.length()).trim()
+		return result
+
+	// =====================================================================
+	// Splits a flat (space-joined) state body into newline-separated declarations.
+	// Input:  "number ballX = 400.0 number ballY = 100.0 ..."
+	// Output: "number ballX = 400.0\nnumber ballY = 100.0\n..."
+	string scene_state_split_flat(string body)
+		string result = ""
+		string remaining = body.trim()
+		integer safety = 0
+		while safety < 50 and remaining.length() > 0
+			safety = safety + 1
+			integer next_num = remaining.indexOf(" number ")
+			integer next_int = remaining.indexOf(" integer ")
+			integer next_str = remaining.indexOf(" string ")
+			integer next_bool = remaining.indexOf(" boolean ")
+			integer next_decl = -1
+			if next_num != -1
+				if next_decl == -1 or next_num < next_decl
+					next_decl = next_num
+			if next_int != -1
+				if next_decl == -1 or next_int < next_decl
+					next_decl = next_int
+			if next_str != -1
+				if next_decl == -1 or next_str < next_decl
+					next_decl = next_str
+			if next_bool != -1
+				if next_decl == -1 or next_bool < next_decl
+					next_decl = next_bool
+			if next_decl == -1
+				string decl = remaining.trim()
+				if decl.length() > 0
+					result = result + decl + "\n"
+				remaining = ""
+			else
+				string decl = remaining.substring(0, next_decl).trim()
+				if decl.length() > 0
+					result = result + decl + "\n"
+				remaining = remaining.substring(next_decl + 1, remaining.length())
+		return result
 
 	// Parses state var name from declaration line: "number ballX = 400.0" → "ballX"
 	string scene_var_name(string line)
@@ -1140,17 +1465,20 @@ functions:
 	// Generates state var load statements (2-tab indent, for function bodies)
 	string scene_state_load(string state_body)
 		string result = ""
+		string effective_body = state_body
+		if state_body.indexOf("\n") == -1 and state_body.trim().length() > 0
+			effective_body = scene_state_split_flat(state_body)
 		integer scan = 0
-		integer len = state_body.length()
+		integer len = effective_body.length()
 		while scan < len
-			integer nl = state_body.indexOf("\n", scan)
+			integer nl = effective_body.indexOf("\n", scan)
 			string line = ""
 			integer next_scan = 0
 			if nl == -1
-				line = state_body.substring(scan, len)
+				line = effective_body.substring(scan, len)
 				next_scan = len
 			else
-				line = state_body.substring(scan, nl)
+				line = effective_body.substring(scan, nl)
 				next_scan = nl + 1
 			string t = line.trim()
 			if t.length() > 0
@@ -1165,18 +1493,21 @@ functions:
 	// Generates state var save statements (2-tab indent)
 	string scene_state_save(string state_body)
 		string result = ""
+		string effective_body = state_body
+		if state_body.indexOf("\n") == -1 and state_body.trim().length() > 0
+			effective_body = scene_state_split_flat(state_body)
 		integer scan = 0
-		integer len = state_body.length()
+		integer len = effective_body.length()
 		integer idx = 0
 		while scan < len
-			integer nl = state_body.indexOf("\n", scan)
+			integer nl = effective_body.indexOf("\n", scan)
 			string line = ""
 			integer next_scan = 0
 			if nl == -1
-				line = state_body.substring(scan, len)
+				line = effective_body.substring(scan, len)
 				next_scan = len
 			else
-				line = state_body.substring(scan, nl)
+				line = effective_body.substring(scan, nl)
 				next_scan = nl + 1
 			string t = line.trim()
 			if t.length() > 0
@@ -1191,18 +1522,21 @@ functions:
 	// Generates state var init in start: block (1-tab indent)
 	string scene_state_init(string state_body)
 		string result = ""
+		string effective_body = state_body
+		if state_body.indexOf("\n") == -1 and state_body.trim().length() > 0
+			effective_body = scene_state_split_flat(state_body)
 		integer scan = 0
-		integer len = state_body.length()
+		integer len = effective_body.length()
 		integer idx = 0
 		while scan < len
-			integer nl = state_body.indexOf("\n", scan)
+			integer nl = effective_body.indexOf("\n", scan)
 			string line = ""
 			integer next_scan = 0
 			if nl == -1
-				line = state_body.substring(scan, len)
+				line = effective_body.substring(scan, len)
 				next_scan = len
 			else
-				line = state_body.substring(scan, nl)
+				line = effective_body.substring(scan, nl)
 				next_scan = nl + 1
 			string t = line.trim()
 			if t.length() > 0
@@ -1217,7 +1551,10 @@ functions:
 
 	// Expands a body of lines for use inside a function body (2-tab indent).
 	// canvas.xxx lines are expanded to bridge calls; other lines pass through.
+	// Handles both multi-line (newlines) and flat (space-joined) bodies.
 	string scene_expand_lines(string body)
+		if body.indexOf("\n") == -1 and body.trim().length() > 0
+			return scene_expand_lines_flat(body)
 		string result = ""
 		integer scan = 0
 		integer len = body.length()
