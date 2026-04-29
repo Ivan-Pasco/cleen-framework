@@ -1327,7 +1327,29 @@ functions:
 						look = look - 1
 				integer id_start = look + 1
 				if id_start > search_from
-					return id_start
+					// Check if the word immediately before id_start is a type keyword.
+					// "integer x = 1" must NOT split at 'x' — the whole thing is one statement.
+					integer look2 = look - 1
+					boolean found_sp2 = false
+					while look2 >= search_from and found_sp2 == false
+						integer sp2 = s.indexOf(" ", look2)
+						if sp2 == look2
+							found_sp2 = true
+						else
+							look2 = look2 - 1
+					integer word_start = look2 + 1
+					integer type_start = id_start
+					if word_start < look
+						string prev_word = s.substring(word_start, look)
+						boolean is_type = false
+						if prev_word == "integer" or prev_word == "number"
+							is_type = true
+						if prev_word == "string" or prev_word == "boolean"
+							is_type = true
+						if is_type == true
+							type_start = word_start
+					if type_start > search_from
+						return type_start
 				// Identifier at or before search_from — skip
 			scan = eq + 1
 		return len
