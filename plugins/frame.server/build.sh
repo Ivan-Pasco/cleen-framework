@@ -2,16 +2,10 @@
 set -e
 cd "$(dirname "$0")"
 
-# Use compiler 0.31.0 — matches frame.ui build configuration
-CLN="${CLEEN_HOME:-$HOME/.cleen}/versions/0.31.0/cln"
-if [ ! -x "$CLN" ]; then
-	echo "ERROR: Compiler 0.31.0 not found at $CLN"
-	echo "Install it with: cleen install 0.31.0"
-	exit 1
-fi
+CLN="${CLN_COMPILER:-cln}"
 
 "$CLN" compile src/main.cln -o plugin.wasm --target=plugin
-echo "Built frame.server plugin -> plugin.wasm (compiler 0.31.0)"
+echo "Built frame.server plugin -> plugin.wasm"
 
 # Strip unused imports (session, auth, HTTP client, file I/O, math, etc.)
 # that the compiler emits unconditionally but the plugin loader doesn't provide.
