@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.1.2"
+version = "2.1.3"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"

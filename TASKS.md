@@ -429,11 +429,11 @@ Reference: [08_frame_platforms.md](documents/specification/08_frame_platforms.md
 
 These bugs were discovered during Frame development and affect the compilation of Frame applications. Tracked here for reference; fixes belong in `clean-language-compiler`.
 
-### Compiler Return Value Bug 🔴 CRITICAL
+### ✅ Method Call as Statement — Fixed in compiler v0.30.98
 
-**Issue**: When a function call returns a value but the return value is not used, the compiler does not emit code to drop the value from the WASM stack. Causes WASM validation error.
+**Issue**: `variable.method(args)` used as a standalone statement failed to parse with "Unexpected token: Dot". The MIR codegen already emitted a temp-local for unused return values (no WASM stack imbalance), so the real root was a parser bug: the fallback in the Identifier statement arm restored the cursor only to the dot, not to the identifier.
 
-**Workaround**: Always assign return values to a variable.
+**Fix**: `src/parser/token_parser/statements.rs` — track `first_cursor` before consuming the identifier, use it as the expression-statement fallback restore point. Test: `tests/cln/bugfixes/method_call_as_statement.cln`.
 
 ### Nested If-Else Generates Unreachable 🔴 CRITICAL
 

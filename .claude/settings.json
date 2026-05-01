@@ -5,7 +5,25 @@
       "mcp__clean-language__check_reported_fixes",
       "Bash(\"/Users/earcandy/.cleen/versions/0.30.63/cln\" check *)",
       "Edit(/.claude/skills/errors/**)",
-      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" status --short echo \"---\" git -C \"/Users/earcandy/Documents/Dev/Clean Language\" status --short)"
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" status --short echo \"---\" git -C \"/Users/earcandy/Documents/Dev/Clean Language\" status --short)",
+      "Bash(cln dev-queue *)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" diff)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" add plugins/frame.canvas/plugin.toml plugins/frame.canvas/plugin.wasm plugins/frame.canvas/src/main.cln)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" tag --sort=-version:refname)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" add plugins/frame.canvas/plugin.toml)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" commit --amend --no-edit)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" tag v2.10.17)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" push)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" push --tags)",
+      "Bash(~/.cleen/versions/0.30.87/cln compile *)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" add plugins/frame.canvas/plugin.toml plugins/frame.canvas/plugin.wasm)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" commit -m \"fix\\(frame.canvas\\): bump version to 2.1.3 to supersede installed 2.1.2\")",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" tag v2.10.18)",
+      "Bash(kill 8726)",
+      "Bash(python3 -m http.server 8765)",
+      "Bash(git restore *)",
+      "Bash(~/.cleen/versions/0.30.90/cln compile *)",
+      "Bash(mkdir -p /tmp/canvas_app/app/canvas)"
     ]
   }
 }
