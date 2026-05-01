@@ -19,13 +19,18 @@ echo "Built frame.ui plugin -> plugin.wasm (compiler 0.30.48)"
 # Strip unused imports (session, auth, routing) that the compiler emits
 # unconditionally but the plugin loader doesn't provide.
 # Requires: wasm-tools (cargo install wasm-tools)
-if command -v wasm-tools &>/dev/null && command -v python3 &>/dev/null; then
-	wasm-tools print plugin.wasm > /tmp/frame_ui_strip.wat
-	python3 ../../scripts/strip-unused-wasm-imports.py /tmp/frame_ui_strip.wat /tmp/frame_ui_stripped.wat
-	wasm-tools parse /tmp/frame_ui_stripped.wat -o plugin.wasm
-	rm -f /tmp/frame_ui_strip.wat /tmp/frame_ui_stripped.wat
-	echo "Stripped unused imports from plugin.wasm"
-else
-	echo "WARNING: wasm-tools or python3 not found, skipping import stripping"
-	echo "Plugin may fail to load if compiler emits unused host function imports"
+if ! command -v wasm-tools &>/dev/null; then
+	echo "ERROR: wasm-tools not found. Install with: cargo install wasm-tools"
+	echo "This step is required — without it, server bridge imports remain in the plugin"
+	echo "and cause instantiation failures in UI-only projects."
+	exit 1
 fi
+if ! command -v python3 &>/dev/null; then
+	echo "ERROR: python3 not found. Install Python 3 to continue."
+	exit 1
+fi
+wasm-tools print plugin.wasm > /tmp/frame_ui_strip.wat
+python3 ../../scripts/strip-unused-wasm-imports.py /tmp/frame_ui_strip.wat /tmp/frame_ui_stripped.wat
+wasm-tools parse /tmp/frame_ui_stripped.wat -o plugin.wasm
+rm -f /tmp/frame_ui_strip.wat /tmp/frame_ui_stripped.wat
+echo "Stripped unused imports from plugin.wasm"
