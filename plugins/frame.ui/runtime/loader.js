@@ -560,6 +560,73 @@
 				return 0;
 			},
 
+			// ========== Stdlib Bridge (compiler-emitted imports) ==========
+			// These functions are emitted as WASM imports for any program that
+			// uses string ops, float formatting, or list operations. The browser
+			// host must provide them so the module can instantiate.
+
+			// String operations
+			string_compare: (ptr1, len1, ptr2, len2) => {
+				const a = readString(ptr1, len1);
+				const b = readString(ptr2, len2);
+				return a < b ? -1 : a > b ? 1 : 0;
+			},
+
+			string_replace: (strPtr, strLen, fromPtr, fromLen, toPtr, toLen) => {
+				const str = readString(strPtr, strLen);
+				const from = readString(fromPtr, fromLen);
+				const to = readString(toPtr, toLen);
+				return writeString(from === '' ? str : str.split(from).join(to));
+			},
+
+			'string.split': (strPtr, strLen, sepPtr, sepLen) => {
+				const str = readString(strPtr, strLen);
+				const sep = readString(sepPtr, sepLen);
+				const parts = sep === '' ? [str] : str.split(sep);
+				const count = parts.length;
+				// Allocate list header (16 bytes) + pointer slots (count * 4 bytes each)
+				const listPtr = heapPtr;
+				heapPtr += 16 + count * 4;
+				// Write each part string, collect pointers (after all allocs, buffer may grow)
+				const ptrs = parts.map(p => writeString(p));
+				// Write list header using fresh DataView (memory may have grown)
+				const dv = new DataView(memory.buffer);
+				dv.setInt32(listPtr,      count, true); // length
+				dv.setInt32(listPtr + 4,  count, true); // capacity
+				dv.setInt32(listPtr + 8,  1,     true); // type_id = 1 (string)
+				dv.setInt32(listPtr + 12, 0,     true); // padding
+				for (let i = 0; i < count; i++) {
+					new DataView(memory.buffer).setInt32(listPtr + 16 + i * 4, ptrs[i], true);
+				}
+				return listPtr;
+			},
+
+			// Type conversions
+			float_to_string: (value) => {
+				return writeString(String(value));
+			},
+
+			string_to_float: (ptr, len) => {
+				const n = parseFloat(readString(ptr, len));
+				return Number.isNaN(n) ? 0.0 : n;
+			},
+
+			// List operations — layout: [length:i32][capacity:i32][type_id:i32][pad:i32][elements...]
+			'list.push_f64': (listPtr, value) => {
+				const dv = new DataView(memory.buffer);
+				const len = dv.getInt32(listPtr, true);
+				dv.setFloat64(listPtr + 16 + len * 8, value, true);
+				dv.setInt32(listPtr, len + 1, true);
+				return listPtr;
+			},
+
+			// Console input — no-op stubs (browser has no console input)
+			input:         (_ptr) => writeString(''),
+			input_integer: (_ptr) => 0,
+			input_float:   (_ptr) => 0.0,
+			input_yesno:   (_ptr) => 0,
+			input_range:   (_ptr, _a, _b, _c) => 0,
+
 		}
 	};
 
