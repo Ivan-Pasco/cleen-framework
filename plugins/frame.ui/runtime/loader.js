@@ -113,11 +113,10 @@
 		checkMemoryGrowth();
 		const bytes = new TextEncoder().encode(str);
 		const ptr = heapPtr;
-		const view = new Uint8Array(memory.buffer, ptr, bytes.length + 8);
+		const view = new Uint8Array(memory.buffer, ptr, bytes.length + 4);
 		new DataView(memory.buffer).setUint32(ptr, bytes.length, true);
-		new DataView(memory.buffer).setUint32(ptr + 4, bytes.length, true);
-		view.set(bytes, 8);
-		heapPtr += bytes.length + 8 + (8 - (bytes.length % 8));
+		view.set(bytes, 4);
+		heapPtr += bytes.length + 4 + ((4 - (bytes.length % 4)) % 4);
 		return ptr;
 	}
 
