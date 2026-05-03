@@ -174,8 +174,11 @@
 			// Console
 			print: (ptr, len) => console.log(readString(ptr, len)),
 			printl: (ptr, len) => console.log(readString(ptr, len)),
-			'string.concat': (ptr1, len1, ptr2, len2) => {
-				return writeString(readString(ptr1, len1) + readString(ptr2, len2));
+			'string.concat': (hptr1, hptr2) => {
+				const dv = new DataView(memory.buffer);
+				const s1 = readString(hptr1 + 4, dv.getUint32(hptr1, true));
+				const s2 = readString(hptr2 + 4, dv.getUint32(hptr2, true));
+				return writeString(s1 + s2);
 			},
 
 			// ========== HTML Rendering ==========
@@ -565,9 +568,10 @@
 			// host must provide them so the module can instantiate.
 
 			// String operations
-			string_compare: (ptr1, len1, ptr2, len2) => {
-				const a = readString(ptr1, len1);
-				const b = readString(ptr2, len2);
+			string_compare: (hptr1, hptr2) => {
+				const dv = new DataView(memory.buffer);
+				const a = readString(hptr1 + 4, dv.getUint32(hptr1, true));
+				const b = readString(hptr2 + 4, dv.getUint32(hptr2, true));
 				return a < b ? -1 : a > b ? 1 : 0;
 			},
 
