@@ -1,6 +1,6 @@
 // frame.ui plugin - HTML-First UI Framework
 // Provides: HTML page processing, component definitions, SSR rendering
-// Version: 2.2.0
+// Version: 2.6.9
 
 // ============================================================================
 // MAIN ENTRY POINTS
@@ -1090,6 +1090,10 @@ functions:
 
 					if tag_content.startsWith("/")
 						// Closing tag - skip (handled by opening tag)
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if tag_name.startsWith("!")
+						// Declarations like <!DOCTYPE html> — emit as raw literal, no closing tag
+						result = result + "__html = __html + \"<" + tag_content + ">\"\n"
 						remaining = remaining.substring(tag_end + 1, remaining.length())
 					else if self_closing
 						result = result + process_block_element(tag_content, "")

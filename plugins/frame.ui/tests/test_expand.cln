@@ -80,3 +80,11 @@ test_html_block_raw_interpolation()
 	assert(result.contains("raw_content"))
 	// Raw interpolation must NOT use _html_escape
 	assert(result.contains("_html_escape(raw_content)") == false)
+
+// SSR001: <!DOCTYPE html> must not produce a spurious </!DOCTYPE> closing tag
+test_html_block_doctype_no_spurious_close()
+	result = expand_block("html", "{}", "<!DOCTYPE html><html><body><p>hello</p></body></html>")
+	// DOCTYPE must appear exactly once as a raw literal
+	assert(result.contains("\"<!DOCTYPE html>\""))
+	// Must NOT contain any closing tag for DOCTYPE
+	assert(result.contains("</!DOCTYPE>") == false)

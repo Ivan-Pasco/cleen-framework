@@ -1,0 +1,23 @@
+// Test: frame.ui/html_doctype_ssr
+// Verifies SSR001: <!DOCTYPE html> must not produce a spurious </!DOCTYPE> closing tag
+// Expected output:
+//   <!DOCTYPE html><html><head><title>Test</title></head><body><p>Hello</p></body></html>
+
+plugins:
+	frame.ui
+
+start:
+	print(buildPage())
+
+functions:
+	string buildPage()
+		html:
+			<!DOCTYPE html>
+			<html>
+			<head>
+				<title>Test</title>
+			</head>
+			<body>
+				<p>Hello</p>
+			</body>
+			</html>
