@@ -23,7 +23,13 @@
       "Bash(python3 -m http.server 8765)",
       "Bash(git restore *)",
       "Bash(~/.cleen/versions/0.30.90/cln compile *)",
-      "Bash(mkdir -p /tmp/canvas_app/app/canvas)"
+      "Bash(mkdir -p /tmp/canvas_app/app/canvas)",
+      "Bash(sort -t. -k3 -n)",
+      "Bash(cat plugins/frame.server/package.clean.toml)",
+      "Bash(cat plugins/frame.server/plugin.toml)",
+      "Bash(cln check *)",
+      "Bash(export ERROR_API_KEY=$\\(cat ~/.cleen/error-api-key\\))",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" log --all --grep=\"SSR001\" --format=\"%h %s\" -n 5)"
     ]
   }
 }
