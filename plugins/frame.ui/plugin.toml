@@ -253,3 +253,37 @@ block_folder_rules = [
   { block = "component", allowed_in = ["app/components/"], message = "component: blocks should be in app/components/" },
   { block = "screen", allowed_in = ["app/pages/", "app/components/"], message = "screen: blocks should be in app/pages/ or app/components/" },
 ]
+
+[ai]
+description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. Use styles: for theming. Never write inline JavaScript."
+constraints = [
+  "Pages go in app/pages/ as .html files — not as .cln files",
+  "Reusable elements belong in component: blocks in app/components/",
+  "Use cl-iterate for lists — never build HTML strings by concatenation",
+  "Use ui.formJson() to collect form inputs — never access DOM fields manually",
+  "Event handlers must be exported Clean functions — never inline JS",
+]
+
+[[ai.patterns]]
+name = "form-with-validation"
+use_when = "any user input form that must show per-field errors before submission"
+anti_pattern = "validating only on submit and showing one generic error — validate on blur per field using cl-validate, show inline errors next to each field so users know exactly what to fix"
+example = "patterns/form-with-validation.cln"
+
+[[ai.patterns]]
+name = "data-table"
+use_when = "displaying a queryable, sortable, filterable list of records"
+anti_pattern = "fetching all rows into the page and filtering client-side — for large datasets this is slow and leaks data; paginate server-side and pass page + sort as query params"
+example = "patterns/data-table.cln"
+
+[[ai.patterns]]
+name = "live-search"
+use_when = "a search or filter input that should narrow results as the user types"
+anti_pattern = "re-fetching on every keystroke — debounce the input (wait 300ms after the user stops typing) and use cl-iterate to render results without a full page reload"
+example = "patterns/live-search.cln"
+
+[[ai.patterns]]
+name = "modal-confirm"
+use_when = "any destructive action (delete, deactivate, cancel subscription) triggered by a button click"
+anti_pattern = "triggering the destructive action immediately on click — always show a confirm modal first; users click the wrong button, and destructive actions must require explicit confirmation"
+example = "patterns/modal-confirm.cln"

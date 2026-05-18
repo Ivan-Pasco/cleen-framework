@@ -1,0 +1,66 @@
+// Pattern: role-based-access
+// Use when: different user types have different permissions to routes or features
+// Anti-pattern: DON'T check roles inline: if user.role == "admin" { ... }
+//   Inline checks scatter auth logic across handlers, are easy to forget, and
+//   can't be audited in one place. Declare roles in auth: roles: block and
+//   use guard: sub-blocks — the check is enforced before the handler runs.
+
+plugins:
+	frame.server
+	frame.auth
+
+// Declare all roles and their permissions in one place
+auth:
+	session:
+		cookie = "app.sid"
+		timeoutMinutes = 60
+
+roles:
+	admin:
+		permissions = ["users.read", "users.write", "users.delete", "reports.read", "settings.write"]
+	editor:
+		permissions = ["users.read", "reports.read"]
+	viewer:
+		permissions = ["reports.read"]
+
+endpoints:
+	// Public — no guard needed
+	GET "/":
+		return json({"message" to "Welcome"})
+
+	// Any authenticated user
+	GET "/profile":
+		guard:
+			require auth
+		let user = auth.getCurrentUser()
+		return json({"user_id" to user.id, "role" to user.role})
+
+	// Editor or admin
+	GET "/reports":
+		guard:
+			role in ["admin", "editor"]
+		return json({"reports" to []})
+
+	// Admin only — by role name
+	GET "/admin/users":
+		guard:
+			role in ["admin"]
+		return json({"users" to []})
+
+	// Permission-based check — more granular than role-based
+	DELETE "/admin/users/:id":
+		guard:
+			role in ["admin"]
+		let id = req.params.id
+		// auth.can checks if the current user's role has the "users.delete" permission
+		if auth.can("users.delete") == 0
+			return unauthorized("Insufficient permissions")
+		return json({"deleted" to id})
+
+	// Settings — only admin with specific permission
+	PUT "/settings":
+		guard:
+			role in ["admin"]
+		if auth.can("settings.write") == 0
+			return unauthorized("settings.write permission required")
+		return json({"updated" to true})

@@ -166,3 +166,54 @@ block_folder_rules = [
   { block = "data", allowed_in = ["app/data/", "app/backend/", "app/server/"], message = "data models should be in app/data/ or app/backend/" },
   { block = "migrate", allowed_in = ["app/data/migrations/"], message = "migrate blocks must be in app/data/migrations/" },
 ]
+
+[ai]
+description = "ORM and database plugin. Use ORM blocks (Model.find, Model.insert, etc.) for all CRUD. Reserve db.query/db.queryAs for complex aggregations that ORM cannot express. Never call _db_query or _db_execute directly."
+constraints = [
+  "Always use ORM blocks for CRUD — never call _db_query or _db_execute directly",
+  "data model files belong in app/data/models/, migrations in app/data/migrations/",
+  "Every multi-step mutation must be wrapped in Data.tx: to ensure atomicity",
+  "Always include tenant_id in every model and every query when building a multi-tenant app",
+]
+
+[[ai.patterns]]
+name = "multilingual-site"
+use_when = "app serves content in more than one language"
+anti_pattern = "storing translations as a JSON column on the content row — prevents SQL-level filtering by locale, cannot be indexed, breaks FK integrity, and forces app-side deserialization on every read"
+example = "patterns/multilingual-site.cln"
+
+[[ai.patterns]]
+name = "cms-page-content"
+use_when = "a website serves the same pages in multiple languages and content is managed as a flat key-value table (Page × Language × field_key)"
+anti_pattern = "storing all page content in a JSON blob per language — cannot be queried field-by-field, has no FK integrity, makes translation completeness checks impossible without parsing every row. Also: never use dot notation in field keys, never hardcode user-visible strings in Clean code"
+example = "patterns/cms-page-content.cln"
+
+[[ai.patterns]]
+name = "soft-delete"
+use_when = "records must be deactivatable without permanent removal (compliance, undo, audit trails)"
+anti_pattern = "boolean is_deleted column — loses the deletion timestamp; use deleted_at: datetime nullable instead so you always know WHEN it was deleted"
+example = "patterns/soft-delete.cln"
+
+[[ai.patterns]]
+name = "audit-log"
+use_when = "every state change on a record must be traceable for compliance, debugging, or undo"
+anti_pattern = "overwriting rows in place — history is lost; use an append-only *_events or *_log table where you only INSERT, never UPDATE or DELETE"
+example = "patterns/audit-log.cln"
+
+[[ai.patterns]]
+name = "multi-tenant"
+use_when = "one database instance serves multiple isolated customer organisations"
+anti_pattern = "no tenant scoping — one tenant can read another's data; every model needs a tenant_id FK and every query must filter by it using tenant_getId()"
+example = "patterns/multi-tenant.cln"
+
+[[ai.patterns]]
+name = "pagination"
+use_when = "endpoints that return lists of records that can grow large"
+anti_pattern = "deep OFFSET pagination — past page ~10 it table-scans from row 0 on every request; use cursor pagination (last seen id) instead"
+example = "patterns/pagination.cln"
+
+[[ai.patterns]]
+name = "tree-structure"
+use_when = "data has a parent-child hierarchy: categories, menus, org charts, comment threads"
+anti_pattern = "recursive self-joins at query time for deep trees — use parent_id for shallow trees (≤3 levels); for deep trees use a closure table (separate ancestor/descendant pairs table)"
+example = "patterns/tree-structure.cln"

@@ -1,0 +1,82 @@
+// Pattern: tree-structure
+// Use when: data has a parent-child hierarchy — categories, menus, org charts,
+//   comment threads, folder structures
+// Anti-pattern: DON'T use recursive self-joins at query time for deep trees.
+//   Self-join recursion requires multiple round trips or a WITH RECURSIVE query
+//   that re-scans the table per level. For shallow trees (≤3 levels) parent_id
+//   is fine. For deep or frequently-traversed trees, add a closure table:
+//   a separate table of (ancestor_id, descendant_id, depth) pairs that makes
+//   "all descendants" a single indexed lookup.
+
+plugins:
+	frame.data
+
+// Shallow tree (≤3 levels) — parent_id is sufficient
+data Category:
+	id: integer pk auto
+	parent_id: integer nullable     // null = root category
+	name: string
+	slug: string unique
+	sort_order: integer default 0
+	created_at: datetime auto
+
+// Closure table for deep trees — one row per ancestor-descendant pair
+// Populate with a trigger or explicitly on insert/move
+data CategoryClosure:
+	id: integer pk auto
+	ancestor_id: integer            // FK to Category
+	descendant_id: integer          // FK to Category
+	depth: integer                  // 0 = self, 1 = direct child, 2 = grandchild ...
+
+functions:
+	// SHALLOW TREE: get direct children (one query, fast)
+	list<pairs> get_children(integer parent_id)
+		return Category.find:
+			where:
+				parent_id == parent_id
+			order:
+				sort_order asc
+
+	// SHALLOW TREE: get full root-level menu (two levels max)
+	list<pairs> get_menu_roots()
+		return Category.find:
+			where:
+				parent_id == null
+			order:
+				sort_order asc
+
+	// DEEP TREE via closure table: all descendants of a node (any depth)
+	// This is a single indexed join — no recursion, O(descendants) not O(depth)
+	list<pairs> get_all_descendants(integer ancestor_id)
+		return db.queryAs(Category):
+			SELECT c.* FROM categories c
+			INNER JOIN category_closures cl ON cl.descendant_id = c.id
+			WHERE cl.ancestor_id = ? AND cl.depth > 0
+			ORDER BY cl.depth ASC, c.sort_order ASC
+			[ancestor_id]
+
+	// DEEP TREE: insert a new node and populate closure table in one transaction
+	integer insert_category(integer parent_id, string name, string slug)
+		let new_id = 0
+
+		Data.tx:
+			new_id = Category.insert:
+				parent_id = parent_id
+				name = name
+				slug = slug
+
+			// Self-reference (depth 0)
+			CategoryClosure.insert:
+				ancestor_id = new_id
+				descendant_id = new_id
+				depth = 0
+
+			// Copy ancestors from parent, incrementing depth by 1
+			db.query:
+				INSERT INTO category_closures (ancestor_id, descendant_id, depth)
+				SELECT ancestor_id, ?, depth + 1
+				FROM category_closures
+				WHERE descendant_id = ?
+				[new_id, parent_id]
+
+		return new_id

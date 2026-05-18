@@ -1,0 +1,63 @@
+// Pattern: form-with-validation
+// Use when: any user input form that must show per-field errors
+// Anti-pattern: DON'T validate only on submit with one generic error.
+//   Users don't know which field failed. Use cl-validate on each input
+//   to show inline errors per field, and only enable submit when all valid.
+
+plugins:
+	frame.ui
+	frame.server
+
+// Component: reusable validated text input
+component: tag="validated-input"
+	props:
+		string name
+		string label
+		string type = "text"
+		string validation = ""
+
+	state:
+		string error = ""
+		boolean touched = false
+
+	handlers:
+		void onBlur()
+			state.touched = true
+			let val = ui.inputValue("#input-" + props.name)
+			if props.validation == "required" and val.length() == 0
+				state.error = props.label + " is required"
+			else if props.validation == "email" and val.indexOf("@") == -1
+				state.error = "Enter a valid email address"
+			else
+				state.error = ""
+
+	html:
+		<div class="field">
+			<label>{props.label}</label>
+			<input
+				id="input-{props.name}"
+				name="{props.name}"
+				type="{props.type}"
+				onblur="onBlur"
+				cl-validate="{props.validation}"
+			>
+			<span class="error" cl-show="{state.error.length() > 0}">{state.error}</span>
+		</div>
+
+// Server endpoint
+endpoints:
+	POST "/register":
+		let email = req.body_field("email")
+		let password = req.body_field("password")
+		let name = req.body_field("name")
+
+		if email.length() == 0 or email.indexOf("@") == -1
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "email", "message" to "Valid email required"}))
+
+		if password.length() < 8
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "password", "message" to "Password must be at least 8 characters"}))
+
+		if name.length() == 0
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "Name is required"}))
+
+		return json({"message" to "Account created"})

@@ -735,3 +735,37 @@ block_folder_rules = [
   { block = "animState", allowed_in = ["app/canvas/"], message = "animState: blocks must be inside a canvasScene: body in app/canvas/" },
   { block = "particles", allowed_in = ["app/canvas/"], message = "particles: blocks must be inside a canvasScene: body in app/canvas/" },
 ]
+
+[ai]
+description = "Canvas animation plugin. All game/animation logic lives inside canvasScene: blocks. Use onFrame: for per-frame updates with deltaTime. Use tween/timeline for animations — never animate manually in onFrame. Use layers: for draw order."
+constraints = [
+  "All scene logic belongs inside canvasScene: — never put game logic in endpoints: or functions: at file level",
+  "Always use deltaTime() in onFrame: for frame-rate-independent movement",
+  "Use tween: or timeline: for animations — never manually increment values in onFrame to animate",
+  "Declare all assets in the assets: block — never hardcode src paths in draw calls",
+  "Use layers: to control draw order — never rely on call order for z-depth",
+]
+
+[[ai.patterns]]
+name = "game-loop"
+use_when = "any scene that moves, animates, or responds to input over time"
+anti_pattern = "updating positions by a fixed pixel amount per frame — if the frame rate drops, movement slows; always multiply movement by deltaTime() to get frame-rate-independent physics"
+example = "patterns/game-loop.cln"
+
+[[ai.patterns]]
+name = "sprite-animation"
+use_when = "a character or object that has multiple animation states (idle, walk, run, attack)"
+anti_pattern = "manually tracking frame index and frame timer in state: variables — use animSprite: clips and animState: FSM; the engine handles frame timing, looping, and transitions automatically"
+example = "patterns/sprite-animation.cln"
+
+[[ai.patterns]]
+name = "scene-transition"
+use_when = "navigating between game screens (menu → game, game → game-over, level → level)"
+anti_pattern = "abruptly swapping scenes with scene.change — use scene.changeTo with a transition (fade, slide) so the visual change is smooth; pass data between scenes with scene.set / scene.get"
+example = "patterns/scene-transition.cln"
+
+[[ai.patterns]]
+name = "parallax-layers"
+use_when = "a scrolling background with depth (side-scrollers, endless runners, space shooters)"
+anti_pattern = "drawing all background layers at the same scroll speed — layers at different depths must scroll at different speeds (far = slow, near = fast) to create the illusion of depth; use layers: with different scroll multipliers"
+example = "patterns/parallax-layers.cln"

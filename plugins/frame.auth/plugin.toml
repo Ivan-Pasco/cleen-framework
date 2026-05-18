@@ -164,3 +164,36 @@ restricted_functions = [
 block_folder_rules = [
   { block = "auth", allowed_in = ["app/auth/", "app/backend/", "app/server/"], message = "auth: config should be in app/auth/" },
 ]
+
+[ai]
+description = "Authentication and authorization plugin. Use the auth: block for configuration, guard: for route protection, and auth.* functions for session/JWT/role checks. Never implement your own password hashing or token signing."
+constraints = [
+  "Always use auth.hashPassword / auth.verifyPassword — never implement your own hashing",
+  "Never sign JWTs manually — use auth.jwt.sign with the secret from $ENV",
+  "Role checks belong in guard: sub-blocks, not inline if statements in handlers",
+  "Read tenant_id from auth.tenant.getId() — never from user-supplied body or query params",
+]
+
+[[ai.patterns]]
+name = "role-based-access"
+use_when = "different user types (admin, editor, viewer) have different permissions to routes or features"
+anti_pattern = "checking user.role == 'admin' inline inside handler logic — declare roles in the auth: roles: block and use guard: sub-blocks so the check is enforced before the handler runs"
+example = "patterns/role-based-access.cln"
+
+[[ai.patterns]]
+name = "password-reset"
+use_when = "users need a way to recover access when they forget their password"
+anti_pattern = "emailing a plain temporary password or a short numeric code — generate a signed, single-use token with a short TTL (15 min), store its hash, and invalidate on use"
+example = "patterns/password-reset.cln"
+
+[[ai.patterns]]
+name = "session-scoped-tenant"
+use_when = "a multi-tenant app where each session belongs to exactly one tenant"
+anti_pattern = "accepting tenant_id from the request body or query string — an attacker can forge it; always read it from the authenticated session via auth.tenant.getId()"
+example = "patterns/session-scoped-tenant.cln"
+
+[[ai.patterns]]
+name = "csrf-protection"
+use_when = "any server-rendered form that mutates state (login, settings, payments)"
+anti_pattern = "no CSRF protection on POST endpoints — a third-party site can submit a form as the logged-in user; generate a token with auth.csrf.generate(), embed it in the form, and validate with auth.csrf.validate() on every mutation"
+example = "patterns/csrf-protection.cln"

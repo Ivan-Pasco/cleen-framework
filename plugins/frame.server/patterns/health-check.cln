@@ -1,0 +1,58 @@
+// Pattern: health-check
+// Use when: any deployed service behind a load balancer, orchestrator, or monitor
+// Anti-pattern: DON'T skip the health endpoint.
+//   Without it, orchestrators (Kubernetes, ECS, Fly.io) have no way to know if
+//   your service is ready to receive traffic. They will send requests to crashed
+//   or cold instances. Always expose GET /health.
+
+plugins:
+	frame.server
+	frame.data
+
+endpoints:
+	// Liveness probe — is the process alive?
+	// Returns 200 immediately. If this fails, restart the container.
+	GET "/health":
+		return json({
+			"status" to "ok",
+			"service" to "api",
+			"version" to "1.0.0"
+		})
+
+	// Readiness probe — is the service ready to handle traffic?
+	// Checks dependencies (DB, cache). If this fails, remove from load balancer.
+	GET "/health/ready":
+		// Check database connectivity
+		let db_ok = true
+		let db_error = ""
+
+		let result = db.query:
+			SELECT 1
+			[]
+
+		if result == ""
+			db_ok = false
+			db_error = "database unreachable"
+
+		if db_ok == false
+			return status(503, json({
+				"status" to "not_ready",
+				"checks" to {
+					"database" to {"ok" to false, "error" to db_error}
+				}
+			}))
+
+		return json({
+			"status" to "ready",
+			"checks" to {
+				"database" to {"ok" to true}
+			}
+		})
+
+	// Startup probe — has the service completed initialization?
+	// Used by orchestrators that support a separate startup check.
+	GET "/health/startup":
+		return json({
+			"status" to "started",
+			"uptime_seconds" to 0
+		})

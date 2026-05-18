@@ -1,0 +1,75 @@
+// Pattern: game-loop
+// Use when: any scene that moves, animates, or responds to input
+// Anti-pattern: DON'T move objects by a fixed pixel amount per frame.
+//   If the frame rate drops from 60fps to 30fps, movement halves.
+//   Multiply ALL movement, velocity, and physics by deltaTime() so behavior
+//   is identical regardless of frame rate.
+
+plugins:
+	frame.canvas
+
+canvasScene: width=800 height=600 fps=60
+
+	assets:
+		image "player" src="sprites/player.png"
+
+	layers:
+		layer "background" z=0
+		layer "entities" z=10
+		layer "hud" z=100
+
+	state:
+		// Position in world units
+		number playerX = 100.0
+		number playerY = 300.0
+
+		// Velocity in pixels per second — NOT pixels per frame
+		number velX = 0.0
+		number velY = 0.0
+
+		// Physics constants
+		number speed = 200.0       // pixels/second
+		number gravity = 600.0     // pixels/second²
+		number jump_force = -400.0
+		boolean on_ground = true
+
+	onFrame: param="dt"
+		// dt = deltaTime() in seconds (e.g. 0.016 at 60fps, 0.033 at 30fps)
+		// Multiplying by dt makes movement frame-rate-independent
+
+		// Horizontal input
+		velX = 0.0
+		if input.keyDown("ArrowLeft")
+			velX = -speed
+		if input.keyDown("ArrowRight")
+			velX = speed
+
+		// Jump
+		if input.keyJustPressed("Space") and on_ground
+			velY = jump_force
+			on_ground = false
+
+		// Apply gravity — accumulate over time, scaled by dt
+		if on_ground == false
+			velY = velY + gravity * dt
+
+		// Integrate velocity into position — always scaled by dt
+		playerX = playerX + velX * dt
+		playerY = playerY + velY * dt
+
+		// Ground collision (simple floor at y=500)
+		if playerY >= 500.0
+			playerY = 500.0
+			velY = 0.0
+			on_ground = true
+
+		// Draw
+		on layer "background":
+			canvas.rect x=0 y=0 width=800 height=600 color="#1a1a2e"
+			canvas.rect x=0 y=520 width=800 height=80 color="#2d5a27"
+
+		on layer "entities":
+			canvas.image src="player" x=playerX y=playerY width=48 height=64
+
+		on layer "hud":
+			canvas.text "x={playerX.toInteger()} y={playerY.toInteger()}" x=10 y=20 size=14 color="white"

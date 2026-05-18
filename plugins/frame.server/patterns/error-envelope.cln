@@ -1,0 +1,69 @@
+// Pattern: error-envelope
+// Use when: building any API consumed by web, mobile, or third-party clients
+// Anti-pattern: DON'T return ad-hoc error strings or vary the error shape by route.
+//   Clients need a consistent shape to handle errors programmatically.
+//   Use {code, message, field?} everywhere — code is machine-readable,
+//   message is human-readable, field identifies which input caused the error.
+
+plugins:
+	frame.server
+
+// Every error response in the system uses this shape:
+// { "code": "ERROR_CODE", "message": "Human readable", "field": "fieldName" (optional) }
+
+endpoints:
+	POST "/orders":
+		let product_id = req.body_field("product_id")
+		let quantity = req.body_field("quantity")
+
+		// Validation error — includes field
+		if product_id.length() == 0
+			return badRequest(json({
+				"code" to "VALIDATION_ERROR",
+				"message" to "product_id is required",
+				"field" to "product_id"
+			}))
+
+		let qty = quantity.toInteger()
+		if qty <= 0
+			return badRequest(json({
+				"code" to "VALIDATION_ERROR",
+				"message" to "quantity must be greater than zero",
+				"field" to "quantity"
+			}))
+
+		// Business rule error — no field, but still structured
+		if qty > 100
+			return status(422, json({
+				"code" to "QUANTITY_LIMIT_EXCEEDED",
+				"message" to "Maximum order quantity is 100 units"
+			}))
+
+		// Resource not found — consistent 404 shape
+		let product_exists = false  // would normally query DB
+		if product_exists == false
+			return notFound(json({
+				"code" to "NOT_FOUND",
+				"message" to "Product not found"
+			}))
+
+		// Success — consistent success shape
+		return json({
+			"order_id" to "ord-123",
+			"product_id" to product_id,
+			"quantity" to qty,
+			"status" to "pending"
+		})
+
+	GET "/orders/:id":
+		let id = req.params.id
+		if id == "0"
+			return notFound(json({
+				"code" to "NOT_FOUND",
+				"message" to "Order not found"
+			}))
+
+		return json({
+			"order_id" to id,
+			"status" to "shipped"
+		})

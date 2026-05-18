@@ -1,0 +1,85 @@
+// Pattern: live-search
+// Use when: a search/filter input that should narrow results as the user types
+// Anti-pattern: DON'T fire a server request on every keystroke.
+//   Debounce: wait 300ms after the user stops typing before sending the request.
+//   Use cl-iterate to re-render the result list without a full page reload.
+
+plugins:
+	frame.ui
+	frame.server
+	frame.data
+
+endpoints:
+	GET "/api/search/users":
+		let q = req.query.q
+		if q.length() < 2
+			return json({"results" to []})
+
+		let results = User.find:
+			where:
+				name like q
+			order:
+				name asc
+			limit:
+				10
+
+		return json({"results" to results})
+
+component: tag="live-search"
+	props:
+		string placeholder = "Search..."
+		string api_url = "/api/search/users"
+
+	state:
+		list results = []
+		boolean loading = false
+		string query = ""
+		integer debounce_timer = 0
+
+	handlers:
+		// Debounce: cancel previous timer, start a new 300ms countdown
+		void onInput()
+			state.query = ui.inputValue(".search-input")
+			state.loading = true
+			state.results = []
+
+			// Cancel previous pending search
+			if state.debounce_timer != 0
+				_ui_set_timeout("cancelTimer", 0)
+
+			// Schedule search after 300ms of inactivity
+			ui.setTimeout("doSearch", 300)
+
+		void doSearch()
+			if state.query.length() < 2
+				state.results = []
+				state.loading = false
+				return
+
+			let url = props.api_url + "?q=" + state.query
+			let data = http.get(url)
+			state.results = data.results
+			state.loading = false
+
+	html:
+		<div class="live-search">
+			<input
+				class="search-input"
+				type="search"
+				placeholder="{props.placeholder}"
+				oninput="onInput"
+			>
+
+			<div class="search-spinner" cl-show="{state.loading}">Searching...</div>
+
+			<ul class="search-results" cl-show="{state.results.length() > 0}">
+				<li cl-iterate="{state.results}">
+					<a href="/users/{item.id}">{item.name}</a>
+					<span class="email">{item.email}</span>
+				</li>
+			</ul>
+
+			<p class="no-results" cl-show="{state.query.length() >= 2 and state.results.length() == 0 and state.loading == false}">
+				No results for "{state.query}"
+			</p>
+		</div>

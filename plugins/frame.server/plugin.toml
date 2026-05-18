@@ -230,3 +230,42 @@ block_folder_rules = [
   { block = "middleware", allowed_in = ["app/backend/middleware/", "app/backend/"], message = "middleware: block should be in app/backend/middleware/" },
   { block = "server", allowed_in = ["app/backend/", "app/server/", "app/"], message = "server: block should be in backend or app root" },
 ]
+
+[ai]
+description = "HTTP server plugin. Define all routes inside endpoints: blocks. Use guard: for auth checks. Use response helpers (json, html, redirect) — never call _http_respond or _http_route directly."
+constraints = [
+  "All routes must be declared inside endpoints: blocks — never call _http_route() directly",
+  "Protected routes must use guard: sub-block, not inline role checks",
+  "Always return a response helper (json, html, redirect, notFound) — never leave a handler without a return",
+  "Validate request body at the endpoint boundary before passing to service functions",
+]
+
+[[ai.patterns]]
+name = "versioned-api"
+use_when = "building a public or partner-facing API that must remain stable as the app evolves"
+anti_pattern = "no versioning prefix — a breaking change in your route or response shape breaks all clients with no migration path; prefix all public routes with /v1/ from day one"
+example = "patterns/versioned-api.cln"
+
+[[ai.patterns]]
+name = "request-validation"
+use_when = "any endpoint that accepts user-supplied input (body, query params, path params)"
+anti_pattern = "validating only in the model or service layer — invalid input reaches business logic, causing confusing errors; validate at the endpoint boundary and return 400 immediately"
+example = "patterns/request-validation.cln"
+
+[[ai.patterns]]
+name = "error-envelope"
+use_when = "any API that must be consumed by clients (web, mobile, third-party)"
+anti_pattern = "ad-hoc error strings with inconsistent shapes — clients can't reliably handle errors; use a consistent {code, message, field?} envelope across all endpoints"
+example = "patterns/error-envelope.cln"
+
+[[ai.patterns]]
+name = "health-check"
+use_when = "any deployed service behind a load balancer, orchestrator, or uptime monitor"
+anti_pattern = "no health endpoint — the orchestrator has no way to know if the service is ready and will send traffic to broken instances; always expose GET /health"
+example = "patterns/health-check.cln"
+
+[[ai.patterns]]
+name = "outbound-webhook"
+use_when = "your service needs to notify external systems when events occur (payment completed, order shipped, user created)"
+anti_pattern = "calling http.post inline in the handler — if the call fails the request fails; send webhook calls from a background job with retry, and always sign the payload with HMAC"
+example = "patterns/outbound-webhook.cln"

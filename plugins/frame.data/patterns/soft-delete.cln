@@ -1,0 +1,58 @@
+// Pattern: soft-delete
+// Use when: records must be deactivatable without permanent removal
+//   (compliance requirements, undo flows, audit trails)
+// Anti-pattern: DON'T use a boolean is_deleted column.
+//   A boolean loses the deletion timestamp — you can never answer "when was
+//   this deleted?". Use deleted_at: datetime nullable instead. NULL means
+//   active; a datetime value means deleted (and tells you when).
+
+plugins:
+	frame.data
+
+data User:
+	id: integer pk auto
+	email: string unique
+	name: string
+	deleted_at: datetime nullable   // NULL = active, datetime = soft-deleted
+	created_at: datetime auto
+
+functions:
+	// Soft-delete a user — never hard-delete unless legally required
+	integer soft_delete_user(integer user_id)
+		User.update:
+			set:
+				deleted_at = now()
+			where:
+				id == user_id
+		return user_id
+
+	// Restore a soft-deleted user
+	integer restore_user(integer user_id)
+		User.update:
+			set:
+				deleted_at = null
+			where:
+				id == user_id
+		return user_id
+
+	// Query only active users — ALWAYS filter deleted_at in production queries
+	list<pairs> list_active_users()
+		return User.find:
+			where:
+				deleted_at == null
+			order:
+				name asc
+
+	// Admin view: include deleted users with their deletion date
+	list<pairs> list_all_users_with_status()
+		return User.find:
+			order:
+				deleted_at asc
+				name asc
+
+	// Hard delete only when legally required (e.g. GDPR right to erasure)
+	integer hard_delete_user(integer user_id)
+		User.delete:
+			where:
+				id == user_id
+		return user_id
