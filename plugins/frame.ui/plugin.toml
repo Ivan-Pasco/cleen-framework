@@ -265,6 +265,12 @@ constraints = [
 ]
 
 [[ai.patterns]]
+name = "ssr-page-with-islands"
+use_when = "building any page — this is the foundational structure pattern, read it first"
+anti_pattern = "putting logic or data loading in the HTML file, or adding client='on' to every component — the HTML is a static shell; all data comes from the page endpoint; most content should stay client='off' and ship zero JS; only opt into hydration where genuine interactivity is needed"
+example = "patterns/ssr-page-with-islands.cln"
+
+[[ai.patterns]]
 name = "form-with-validation"
 use_when = "any user input form that must show per-field errors before submission"
 anti_pattern = "validating only on submit and showing one generic error — validate on blur per field using cl-validate, show inline errors next to each field so users know exactly what to fix"
