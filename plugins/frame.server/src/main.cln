@@ -20,7 +20,7 @@ functions:
 
 	string get_keywords()
 		// NOTE: Avoid keywords that conflict with built-in namespaces (json, string, http, etc.)
-		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\"]"
+		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\"]"
 
 // ============================================================================
 // ENDPOINTS BLOCK EXPANSION
@@ -61,6 +61,10 @@ functions:
 		result = result + "\t\treturn _http_respond(403, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"PERMISSION_DENIED\\\",\\\"message\\\":\\\"Access denied\\\"}}\")\n\n"
 		result = result + "\tstring httpHeader(string name, string value)\n"
 		result = result + "\t\treturn _http_set_header(name, value)\n\n"
+		result = result + "\tstring render(string template_name)\n"
+		result = result + "\t\treturn _http_respond(200, \"text/html\", _ui_render_page(template_name, \"{}\"))\n\n"
+		result = result + "\tstring renderWith(string template_name, string data_json)\n"
+		result = result + "\t\treturn _http_respond(200, \"text/html\", _ui_render_page(template_name, data_json))\n\n"
 
 		// Parse endpoints - find methods and paths
 		string remaining = body

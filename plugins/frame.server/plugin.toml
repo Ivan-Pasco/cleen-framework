@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.1.4"
+version = "2.2.0"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -76,6 +76,11 @@ functions = [
   { name = "_http_set_cache", params = ["integer"], returns = "integer", description = "Set Cache-Control max-age header" },
   { name = "_http_no_cache", params = [], returns = "integer", description = "Set no-cache headers" },
 
+  # HTML Page Rendering (SSR)
+  # Renders app/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
+  # Implemented by clean-server: resolves the page template, substitutes interpolations, returns HTML.
+  { name = "_ui_render_page", params = ["string", "string"], returns = "string", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/pages/<name>.html", expand_strings = true },
+
   # JSON Encoding/Decoding
   { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true },
   { name = "_json_decode", params = ["string"], returns = "string", description = "Decode JSON string to value", expand_strings = true },
@@ -150,6 +155,8 @@ types = [
 # Built-in functions/expressions
 functions = [
   # Response helpers
+  { name = "render", signature = "render(name)", description = "Render HTML page from app/pages/<name>.html and return as 200 text/html response" },
+  { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page with JSON data string for {{ key }} template substitution" },
   { name = "json", signature = "json(data)", description = "Return JSON response with Content-Type: application/json" },
   { name = "html", signature = "html(content)", description = "Return HTML response" },
   { name = "redirect", signature = "redirect(url, status?)", description = "Redirect to URL (default 302)" },
