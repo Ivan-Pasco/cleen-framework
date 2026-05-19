@@ -73,6 +73,14 @@ roles:
     viewer: ["post.read"]
 ```
 
+### Session Store
+
+The default session store is **in-memory**, suitable for single-instance deployments (development, single-server production). For production multi-instance deployments (load-balanced or horizontally-scaled), a persistent session store must be configured via the session store adapter interface to ensure sessions are shared across all instances. Redis and database-backed session stores are the recommended production adapters; the configuration key for the adapter is `session.store` (not shown in the basic config above — omitting it selects the in-memory default).
+
+### Password Hashing
+
+Password hashing and verification use `host:crypto` functions (`hash` and `verify`). The implementation uses platform-native cryptography; the specific library is host-adapter dependent (commonly argon2 or bcrypt). Custom algorithms must not be used — see AUTH-C007.
+
 ---
 
 ## 5. Session Authentication (Cookie-based)
@@ -159,6 +167,8 @@ middleware VerifyJWT
 ### Refresh Flow
 - Short-lived access tokens; long-lived refresh tokens (HTTP-only cookie or secure storage).  
 - Endpoint `/auth/refresh` issues a new access token if the refresh token is valid.
+
+**Refresh token policy — single use:** Refresh tokens are single-use. After a refresh token is used to obtain a new access token, it is immediately invalidated and a new refresh token is issued alongside the new access token. A second attempt to use the same refresh token returns an empty string (failure). This ensures that token theft is detectable: if an attacker reuses a refresh token that the legitimate client has already consumed, the server can detect the replay and revoke the session.
 
 ---
 

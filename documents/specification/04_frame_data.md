@@ -529,6 +529,8 @@ It turns database interaction into clean, declarative statements — readable fo
 - If a transaction block throws, the entire transaction is rolled back automatically
 - Long-running transactions may time out depending on the database driver configuration
 
+> **Constraint — no nested transactions:** A `Data.tx:` block cannot be started inside another `Data.tx:` block. Attempting to nest transactions is a compile-time error. The outer transaction must complete (commit or roll back) before a new one can be started. Service functions that each use `Data.tx:` internally must not be composed inside a single outer `Data.tx:` — extract the composed logic into a single flat transaction block.
+
 ### 16.3 Tenant Isolation
 
 - Models with a `tenantId` field or `: tenant` constraint are automatically tenant-scoped

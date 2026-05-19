@@ -1097,6 +1097,15 @@ onFrame: param="dt"
 |--------------|--------------|------|-------------|
 | `"dt"` (default) | `dt` | number | Seconds since last frame |
 
+**`return` inside `onFrame:`:** A `return` statement inside `onFrame:` immediately exits the frame callback — all remaining statements in that `onFrame:` block are skipped for the current frame. The next animation frame will call `onFrame:` normally from the beginning. This is guaranteed behavior, not implementation-specific. The idiomatic use is early exit on a pause or game-over condition:
+
+```clean
+onFrame: param="dt"
+	if paused
+		return   // skips all physics for this frame; next frame starts normally
+	ballX = ballX + velocityX * dt
+```
+
 ### `onPointerDown:`
 
 Fires when the user presses the mouse button or starts a touch.
