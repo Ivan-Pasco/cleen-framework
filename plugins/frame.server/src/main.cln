@@ -1,6 +1,6 @@
 // frame.server plugin - HTTP Server DSL
 // Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
-// Version: 2.1.1
+// Version: 2.1.2
 // Implements: Frame Server Specification v1.2
 
 // ============================================================================
@@ -20,7 +20,7 @@ functions:
 
 	string get_keywords()
 		// NOTE: Avoid keywords that conflict with built-in namespaces (json, string, http, etc.)
-		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\"]"
+		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\", \"error\"]"
 
 // ============================================================================
 // ENDPOINTS BLOCK EXPANSION
@@ -61,6 +61,14 @@ functions:
 		result = result + "\t\treturn _http_respond(403, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"PERMISSION_DENIED\\\",\\\"message\\\":\\\"Access denied\\\"}}\")\n\n"
 		result = result + "\tstring httpHeader(string name, string value)\n"
 		result = result + "\t\treturn _http_set_header(name, value)\n\n"
+		result = result + "\tstring error(integer status_code, string message)\n"
+		result = result + "\t\treturn _http_respond(status_code, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"HTTP_ERROR\\\",\\\"message\\\":\\\"\" + __json_escape(message) + \"\\\"}}\")\n\n"
+		result = result + "\tstring httpStatus(integer code, string body)\n"
+		result = result + "\t\treturn _http_respond(code, \"application/json\", body)\n\n"
+		result = result + "\tstring render(string name)\n"
+		result = result + "\t\treturn _ui_render_page(name, \"{}\")\n\n"
+		result = result + "\tstring renderWith(string name, string data)\n"
+		result = result + "\t\treturn _ui_render_page(name, data)\n\n"
 
 		// Parse endpoints - find methods and paths
 		string remaining = body

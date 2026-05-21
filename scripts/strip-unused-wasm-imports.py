@@ -16,12 +16,17 @@ import re
 import sys
 
 
-# Server-specific runtime functions that the plugin loader never provides.
+# Imports that the plugin loader never provides.
 # These must be stripped from plugin WASMs unconditionally.
+# The compiler emits print_integer/print_float/print_boolean unconditionally for
+# some code patterns, but the plugin sandbox only provides print/printl.
 FORCE_STRIP_NAMES = {
     '_server_sleep',
     '_async_fire',
     '_async_await',
+    'print_integer',
+    'print_float',
+    'print_boolean',
 }
 
 
