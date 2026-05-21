@@ -1,90 +1,109 @@
 // Tests for frame.ui plugin
+// Fixed: functions were declared at top level — spec (grammar.ebnf) requires functions: block
 
-test_component_expansion()
-	body = "props:\n\tstring label\n\nrender()\n\treturn \"<button>\" + label + \"</button>\""
-	result = expand_block("component", "{\"name\": \"Button\"}", body)
-	assert(result.contains("class Button"))
-	assert(result.contains("render() -> string"))
-	assert(result.contains("renderSSR()"))
+start:
+	test_component_expansion()
+	test_component_with_state()
+	test_component_with_hydration()
+	test_layout_expansion()
+	test_page_expansion()
+	test_page_with_layout()
+	test_component_validation_missing_name()
+	test_component_validation_missing_render()
+	test_component_validation_invalid_client()
+	test_page_validation_missing_path()
+	test_unknown_block_passthrough()
+	test_html_block_default()
+	test_html_block_with_var()
+	test_html_block_raw_interpolation()
+	test_html_block_doctype_no_spurious_close()
 
-test_component_with_state()
-	body = "state:\n\tinteger count = 0\n\nrender()\n\treturn count.toString()"
-	result = expand_block("component", "{\"name\": \"Counter\"}", body)
-	assert(result.contains("_count"))
-	assert(result.contains("count() -> integer"))
-	assert(result.contains("setCount"))
+functions:
+	test_component_expansion()
+		body = "props:\n\tstring label\n\nrender()\n\treturn \"<button>\" + label + \"</button>\""
+		result = expand_block("component", "{\"name\": \"Button\"}", body)
+		assert(result.contains("class Button"))
+		assert(result.contains("render() -> string"))
+		assert(result.contains("renderSSR()"))
 
-test_component_with_hydration()
-	body = "render()\n\treturn \"<div></div>\""
-	result = expand_block("component", "{\"name\": \"Widget\", \"client\": \"visible\"}", body)
-	assert(result.contains("_hydration_mode = \"visible\""))
-	assert(result.contains("class Widget"))
+	test_component_with_state()
+		body = "state:\n\tinteger count = 0\n\nrender()\n\treturn count.toString()"
+		result = expand_block("component", "{\"name\": \"Counter\"}", body)
+		assert(result.contains("_count"))
+		assert(result.contains("count() -> integer"))
+		assert(result.contains("setCount"))
 
-test_layout_expansion()
-	result = expand_block("layout", "{\"name\": \"MainLayout\"}", "return \"<html>\" + _slot() + \"</html>\"")
-	assert(result.contains("class MainLayout"))
-	assert(result.contains("_slot_content"))
-	assert(result.contains("slot(content: string)"))
+	test_component_with_hydration()
+		body = "render()\n\treturn \"<div></div>\""
+		result = expand_block("component", "{\"name\": \"Widget\", \"client\": \"visible\"}", body)
+		assert(result.contains("_hydration_mode = \"visible\""))
+		assert(result.contains("class Widget"))
 
-test_page_expansion()
-	result = expand_block("page", "{\"name\": \"HomePage\", \"path\": \"/\", \"title\": \"Home\"}", "return \"<h1>Home</h1>\"")
-	assert(result.contains("class HomePage"))
-	assert(result.contains("_path = \"/\""))
-	assert(result.contains("_title = \"Home\""))
-	assert(result.contains("renderPage()"))
+	test_layout_expansion()
+		result = expand_block("layout", "{\"name\": \"MainLayout\"}", "return \"<html>\" + _slot() + \"</html>\"")
+		assert(result.contains("class MainLayout"))
+		assert(result.contains("_slot_content"))
+		assert(result.contains("slot(content: string)"))
 
-test_page_with_layout()
-	result = expand_block("page", "{\"name\": \"AboutPage\", \"path\": \"/about\", \"layout\": \"MainLayout\"}", "return \"<h1>About</h1>\"")
-	assert(result.contains("MainLayout().slot(html).render()"))
+	test_page_expansion()
+		result = expand_block("page", "{\"name\": \"HomePage\", \"path\": \"/\", \"title\": \"Home\"}", "return \"<h1>Home</h1>\"")
+		assert(result.contains("class HomePage"))
+		assert(result.contains("_path = \"/\""))
+		assert(result.contains("_title = \"Home\""))
+		assert(result.contains("renderPage()"))
 
-test_component_validation_missing_name()
-	result = validate_block("component", "{}", "render()\n\treturn \"\"")
-	assert(result.contains("name attribute is required"))
+	test_page_with_layout()
+		result = expand_block("page", "{\"name\": \"AboutPage\", \"path\": \"/about\", \"layout\": \"MainLayout\"}", "return \"<h1>About</h1>\"")
+		assert(result.contains("MainLayout().slot(html).render()"))
 
-test_component_validation_missing_render()
-	result = validate_block("component", "{\"name\": \"Test\"}", "props:\n\tstring x")
-	assert(result.contains("render() block is required"))
+	test_component_validation_missing_name()
+		result = validate_block("component", "{}", "render()\n\treturn \"\"")
+		assert(result.contains("name attribute is required"))
 
-test_component_validation_invalid_client()
-	result = validate_block("component", "{\"name\": \"Test\", \"client\": \"invalid\"}", "render()\n\treturn \"\"")
-	assert(result.contains("client must be one of"))
+	test_component_validation_missing_render()
+		result = validate_block("component", "{\"name\": \"Test\"}", "props:\n\tstring x")
+		assert(result.contains("render() block is required"))
 
-test_page_validation_missing_path()
-	result = validate_block("page", "{\"name\": \"Test\"}", "")
-	assert(result.contains("path attribute is required"))
+	test_component_validation_invalid_client()
+		result = validate_block("component", "{\"name\": \"Test\", \"client\": \"invalid\"}", "render()\n\treturn \"\"")
+		assert(result.contains("client must be one of"))
 
-test_unknown_block_passthrough()
-	result = expand_block("unknown", "{}", "original body")
-	assert(result == "original body")
+	test_page_validation_missing_path()
+		result = validate_block("page", "{\"name\": \"Test\"}", "")
+		assert(result.contains("path attribute is required"))
 
-// html: block tests
+	test_unknown_block_passthrough()
+		result = expand_block("unknown", "{}", "original body")
+		assert(result == "original body")
 
-test_html_block_default()
-	result = expand_block("html", "{}", "<p>{message}</p>")
-	assert(result.contains("string __html = \"\""))
-	assert(result.contains("return __html"))
-	assert(result.contains("_html_escape(message)"))
+	// html: block tests
 
-test_html_block_with_var()
-	result = expand_block("html", "{\"var\": \"header\"}", "<nav><a href=\"/\">{brand}</a></nav>")
-	assert(result.contains("string header = \"\""))
-	assert(result.contains("header = header +"))
-	assert(result.contains("_html_escape(brand)"))
-	// Named var mode must NOT generate return
-	assert(result.contains("return") == false)
-	// Must not contain __html — replaced with var name
-	assert(result.contains("__html") == false)
+	test_html_block_default()
+		result = expand_block("html", "{}", "<p>{message}</p>")
+		assert(result.contains("string __html = \"\""))
+		assert(result.contains("return __html"))
+		assert(result.contains("_html_escape(message)"))
 
-test_html_block_raw_interpolation()
-	result = expand_block("html", "{}", "<div>{!raw_content}</div>")
-	assert(result.contains("raw_content"))
-	// Raw interpolation must NOT use _html_escape
-	assert(result.contains("_html_escape(raw_content)") == false)
+	test_html_block_with_var()
+		result = expand_block("html", "{\"var\": \"header\"}", "<nav><a href=\"/\">{brand}</a></nav>")
+		assert(result.contains("string header = \"\""))
+		assert(result.contains("header = header +"))
+		assert(result.contains("_html_escape(brand)"))
+		// Named var mode must NOT generate return
+		assert(result.contains("return") == false)
+		// Must not contain __html — replaced with var name
+		assert(result.contains("__html") == false)
 
-// SSR001: <!DOCTYPE html> must not produce a spurious </!DOCTYPE> closing tag
-test_html_block_doctype_no_spurious_close()
-	result = expand_block("html", "{}", "<!DOCTYPE html><html><body><p>hello</p></body></html>")
-	// DOCTYPE must appear exactly once as a raw literal
-	assert(result.contains("\"<!DOCTYPE html>\""))
-	// Must NOT contain any closing tag for DOCTYPE
-	assert(result.contains("</!DOCTYPE>") == false)
+	test_html_block_raw_interpolation()
+		result = expand_block("html", "{}", "<div>{!raw_content}</div>")
+		assert(result.contains("raw_content"))
+		// Raw interpolation must NOT use _html_escape
+		assert(result.contains("_html_escape(raw_content)") == false)
+
+	// SSR001: <!DOCTYPE html> must not produce a spurious </!DOCTYPE> closing tag
+	test_html_block_doctype_no_spurious_close()
+		result = expand_block("html", "{}", "<!DOCTYPE html><html><body><p>hello</p></body></html>")
+		// DOCTYPE must appear exactly once as a raw literal
+		assert(result.contains("\"<!DOCTYPE html>\""))
+		// Must NOT contain any closing tag for DOCTYPE
+		assert(result.contains("</!DOCTYPE>") == false)

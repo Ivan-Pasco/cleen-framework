@@ -8,6 +8,20 @@
 // ============================================================================
 
 functions:
+	// Extract plain model name from compiler-formatted JSON attributes.
+	// The compiler passes attributes as {"ModelName":true}; this returns "ModelName".
+	// If the raw value is already a plain identifier, it is returned as-is.
+	string extract_model_name(string raw)
+		if not raw.startsWith("{")
+			return raw.trim()
+		integer first_quote = raw.indexOf("\"")
+		if first_quote == -1
+			return raw.trim()
+		integer second_quote = raw.indexOf("\"", first_quote + 1)
+		if second_quote == -1
+			return raw.trim()
+		return raw.substring(first_quote + 1, second_quote)
+
 	// Main entry point - called by compiler for each framework block
 	string expand_block(string block_name, string attributes, string body)
 		// Handle 'data' model definitions and configuration blocks
@@ -15,7 +29,7 @@ functions:
 			// If attributes is empty or "config", treat as database configuration block
 			if attributes.length() == 0 or attributes.trim() == "config"
 				return expand_data_config(body)
-			return expand_data_model(attributes, body)
+			return expand_data_model(extract_model_name(attributes), body)
 
 		// Handle 'migrate' migration definition blocks
 		if block_name == "migrate"
@@ -38,7 +52,7 @@ functions:
 	// Validation entry point
 	string validate_block(string block_name, string attributes, string body)
 		if block_name == "data"
-			return validate_data_model(attributes, body)
+			return validate_data_model(extract_model_name(attributes), body)
 		if block_name == "migrate"
 			return validate_migrate_block(attributes, body)
 		return ""
@@ -1065,6 +1079,11 @@ functions:
 		string up_content = extract_subblock(body, "up:")
 		if up_content.trim().length() == 0
 			return "migrate \"" + migration_name + "\": up: block is required and must contain SQL"
+
+		// Require a down: block — spec DAT-C007 mandates both up and down
+		string down_content = extract_subblock(body, "down:")
+		if down_content.trim().length() == 0
+			return "migrate \"" + migration_name + "\": down: block is required (spec DAT-C007) — add SQL to reverse this migration"
 
 		return ""
 

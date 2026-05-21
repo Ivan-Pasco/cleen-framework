@@ -265,11 +265,182 @@ functions:
 
 functions:
 	string validate_endpoints(string body)
-		// Validate that each endpoint has a return statement
-		string errors = ""
-
-		// Basic validation for now
 		if body.trim().length() == 0
-			errors = "endpoints: block is empty"
+			return "endpoints: block is empty"
 
-		return errors
+		string remaining = body
+		integer safety = 0
+
+		while safety < 500 and remaining.length() > 0
+			safety = safety + 1
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			string trimmed = line.trim()
+
+			// Item 7 — middleware: must be followed by a valid function name (alphanumeric/underscore only)
+			integer mw_pos = trimmed.indexOf("middleware:")
+			if mw_pos != -1
+				string after_mw = trimmed.substring(mw_pos + 11, trimmed.length()).trim()
+				boolean mw_valid = after_mw.length() > 0
+				if mw_valid
+					integer ci = 0
+					while ci < after_mw.length()
+						string ch = after_mw.substring(ci, ci + 1)
+						boolean is_alpha = ch >= "a" and ch <= "z"
+						boolean is_upper = ch >= "A" and ch <= "Z"
+						boolean is_digit = ch >= "0" and ch <= "9"
+						boolean is_under = ch == "_"
+						if not (is_alpha or is_upper or is_digit or is_under)
+							mw_valid = false
+						ci = ci + 1
+				if not mw_valid
+					return "endpoints: middleware: must be a function name"
+
+			// Item 8 — cache: value validation
+			integer cache_pos = trimmed.indexOf("cache:")
+			if cache_pos != -1
+				string after_cache = trimmed.substring(cache_pos + 6, trimmed.length()).trim()
+				// If nothing on same line, peek at the next non-empty line
+				if after_cache.length() == 0
+					string peek = remaining
+					integer peek_safety = 0
+					while peek_safety < 20 and peek.length() > 0
+						peek_safety = peek_safety + 1
+						integer pnl = peek.indexOf("\n")
+						string pline = ""
+						if pnl == -1
+							pline = peek
+							peek = ""
+						else
+							pline = peek.substring(0, pnl)
+							peek = peek.substring(pnl + 1, peek.length())
+						string ptrimmed = pline.trim()
+						if ptrimmed.length() > 0
+							// Only accept if more indented than cache: line (sub-value)
+							integer cache_indent = 0
+							while cache_indent < line.length() and line.substring(cache_indent, cache_indent + 1) == "\t"
+								cache_indent = cache_indent + 1
+							integer pline_indent = 0
+							while pline_indent < pline.length() and pline.substring(pline_indent, pline_indent + 1) == "\t"
+								pline_indent = pline_indent + 1
+							if pline_indent > cache_indent
+								after_cache = ptrimmed
+							peek = ""
+
+				if after_cache.length() > 0
+					// Strip surrounding quotes for quoted forms
+					string cache_val = after_cache
+					boolean is_quoted = cache_val.startsWith("\"") and cache_val.endsWith("\"")
+					if is_quoted
+						cache_val = cache_val.substring(1, cache_val.length() - 1)
+
+					boolean cache_ok = false
+
+					// Plain integer check (all digits)
+					if not is_quoted
+						boolean all_digits = cache_val.length() > 0
+						integer di = 0
+						while di < cache_val.length()
+							string dch = cache_val.substring(di, di + 1)
+							if dch < "0" or dch > "9"
+								all_digits = false
+							di = di + 1
+						if all_digits
+							cache_ok = true
+
+					// Quoted keyword forms: "no-store", "no-cache", "public", "private"
+					if is_quoted and cache_val == "no-store"
+						cache_ok = true
+					if is_quoted and cache_val == "no-cache"
+						cache_ok = true
+					if is_quoted and cache_val == "public"
+						cache_ok = true
+					if is_quoted and cache_val == "private"
+						cache_ok = true
+
+					// Quoted duration forms: Nd, Nh, Nm (one or more digits + d/h/m)
+					if is_quoted and not cache_ok and cache_val.length() >= 2
+						string last_char = cache_val.substring(cache_val.length() - 1, cache_val.length())
+						boolean valid_suffix = last_char == "d" or last_char == "h" or last_char == "m"
+						if valid_suffix
+							string num_part = cache_val.substring(0, cache_val.length() - 1)
+							boolean num_digits = num_part.length() > 0
+							integer ni = 0
+							while ni < num_part.length()
+								string nch = num_part.substring(ni, ni + 1)
+								if nch < "0" or nch > "9"
+									num_digits = false
+								ni = ni + 1
+							if num_digits
+								cache_ok = true
+
+					if not cache_ok
+						return "endpoints: invalid cache value \"" + after_cache + "\" — use an integer (seconds), \"Nm\"/\"Nh\"/\"Nd\", or \"no-store\""
+
+		// Item 3 — guard: block must contain a recognizable directive
+		string guard_scan = body
+		integer gsafety = 0
+
+		while gsafety < 500 and guard_scan.length() > 0
+			gsafety = gsafety + 1
+			integer gnl = guard_scan.indexOf("\n")
+			string gline = ""
+			if gnl == -1
+				gline = guard_scan
+				guard_scan = ""
+			else
+				gline = guard_scan.substring(0, gnl)
+				guard_scan = guard_scan.substring(gnl + 1, guard_scan.length())
+
+			string gtrimmed = gline.trim()
+			if gtrimmed == "guard:" or gtrimmed == "guard :"
+				// Collect the indented block that follows
+				integer guard_indent = 0
+				while guard_indent < gline.length() and gline.substring(guard_indent, guard_indent + 1) == "\t"
+					guard_indent = guard_indent + 1
+
+				string block_content = ""
+				string block_scan = guard_scan
+				integer bsafety = 0
+				while bsafety < 50 and block_scan.length() > 0
+					bsafety = bsafety + 1
+					integer bnl = block_scan.indexOf("\n")
+					string bline = ""
+					if bnl == -1
+						bline = block_scan
+						block_scan = ""
+					else
+						bline = block_scan.substring(0, bnl)
+						block_scan = block_scan.substring(bnl + 1, block_scan.length())
+					if bline.trim().length() == 0
+						block_content = block_content + "\n"
+					else
+						integer bindent = 0
+						while bindent < bline.length() and bline.substring(bindent, bindent + 1) == "\t"
+							bindent = bindent + 1
+						if bindent > guard_indent
+							block_content = block_content + bline + "\n"
+						else
+							block_scan = ""
+
+				boolean has_directive = false
+				if block_content.indexOf("role:") != -1
+					has_directive = true
+				if block_content.indexOf("permission:") != -1
+					has_directive = true
+				if block_content.indexOf("authenticated") != -1
+					has_directive = true
+				if block_content.indexOf("any") != -1
+					has_directive = true
+
+				if not has_directive
+					return "endpoints: guard: block must specify role:, permission:, or authenticated"
+
+		return ""

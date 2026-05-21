@@ -446,13 +446,28 @@ functions:
 // ============================================================================
 
 functions:
-	// Validate auth config
 	string validate_auth_config(string body)
-		// Check for JWT secret if JWT is enabled
 		if body.indexOf("jwt:") != -1
 			string jwt_block = extract_subblock(body, "jwt:")
 			if jwt_block.indexOf("enabled = false") == -1
 				if jwt_block.indexOf("secret") == -1
 					return "auth.jwt: secret is required when JWT is enabled"
+
+				// Item 2 — detect hardcoded JWT secret (must reference env var)
+				string raw_secret = get_config_value(jwt_block, "secret", "")
+				if raw_secret.length() > 0
+					boolean is_env_ref = raw_secret.startsWith("$")
+					boolean is_env_call = raw_secret.startsWith("env(")
+					if not is_env_ref and not is_env_call
+						return "auth.jwt: secret must reference an environment variable (use $JWT_SECRET or env(\"JWT_SECRET\")), not a hardcoded string"
+
+		// Item 14 — sameSite=None requires secure=true
+		if body.indexOf("session:") != -1
+			string session_block = extract_subblock(body, "session:")
+			string same_site_val = get_config_value(session_block, "sameSite", "")
+			if same_site_val == "None"
+				string secure_val = get_config_value(session_block, "secure", "")
+				if secure_val != "true"
+					return "auth.session: sameSite=\"None\" requires secure=true (required by browser spec)"
 
 		return ""

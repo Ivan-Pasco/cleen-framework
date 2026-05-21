@@ -65,7 +65,7 @@ functions:
 
 	string validate_block(string block_name, string attributes, string body)
 		if block_name.startsWith("canvasScene")
-			return validate_canvas_scene(attributes)
+			return validate_canvas_scene(attributes, body)
 		return ""
 
 	string get_keywords()
@@ -603,7 +603,229 @@ functions:
 	// VALIDATION
 	// =====================================================================
 
-	string validate_canvas_scene(string attrs)
+	string validate_canvas_scene(string attrs, string body)
+		// Item 4 — canvas.* calls in init: block forbidden (CVS-X001)
+		string init_body = extract_scene_subblock(body, "init")
+		if init_body.indexOf("canvas.") != -1
+			return "canvasScene: init: block must not contain canvas.* drawing calls (CVS-X001) — use onFrame for rendering"
+
+		// Item 5 — state mutation in draw: block forbidden (CVS-L002)
+		string draw_body = extract_scene_subblock(body, "draw")
+		integer draw_start = 0
+		boolean draw_keep_going = true
+		while draw_start < draw_body.length() and draw_keep_going
+			integer draw_nl = draw_body.indexOf("\n", draw_start)
+			string draw_line = ""
+			if draw_nl == -1
+				draw_line = draw_body.substring(draw_start, draw_body.length())
+				draw_keep_going = false
+			else
+				draw_line = draw_body.substring(draw_start, draw_nl)
+				draw_start = draw_nl + 1
+			string draw_trimmed = draw_line.trim()
+			if draw_trimmed.length() > 0
+				if draw_trimmed.indexOf(" = ") != -1
+					if not draw_trimmed.startsWith("canvas.") and not draw_trimmed.startsWith("audio.") and not draw_trimmed.startsWith("integer ") and not draw_trimmed.startsWith("number ") and not draw_trimmed.startsWith("string ") and not draw_trimmed.startsWith("boolean ") and not draw_trimmed.startsWith("//")
+						return "canvasScene: draw: block must not mutate state variables (CVS-L002) — move state changes to onFrame:"
+
+		// Item 15 — Canonical sub-block order (CVS-S010)
+		// Canonical order index list (lower index = must appear earlier)
+		integer pos_assets = body.indexOf("assets:")
+		integer pos_layers = body.indexOf("layers:")
+		integer pos_state = body.indexOf("state:")
+		integer pos_tween = body.indexOf("tween")
+		integer pos_timeline = body.indexOf("timeline")
+		integer pos_animState = body.indexOf("animState")
+		integer pos_animSprite = body.indexOf("animSprite")
+		integer pos_particles = body.indexOf("particles")
+		integer pos_path = body.indexOf("path")
+		integer pos_gradient = body.indexOf("gradient")
+		integer pos_customEase = body.indexOf("customEase")
+		integer pos_camera = body.indexOf("camera:")
+		integer pos_init = body.indexOf("init:")
+		integer pos_draw = body.indexOf("draw:")
+		integer pos_onFrame = body.indexOf("onFrame")
+		integer pos_onPointerDown = body.indexOf("onPointerDown")
+		integer pos_onPointerMove = body.indexOf("onPointerMove")
+		integer pos_onPointerUp = body.indexOf("onPointerUp")
+		integer pos_onKeyDown = body.indexOf("onKeyDown")
+		integer pos_onKeyUp = body.indexOf("onKeyUp")
+		integer pos_onExit = body.indexOf("onExit")
+		integer pos_onPause = body.indexOf("onPause")
+		integer pos_onResume = body.indexOf("onResume")
+
+		// Build ordered sequence of present sub-block positions
+		// Canonical order: assets(0) layers(1) state(2) tween(3) timeline(4) animState(5)
+		//   animSprite(6) particles(7) path(8) gradient(9) customEase(10) camera(11)
+		//   init(12) draw(13) onFrame(14) onPointerDown(15) onPointerMove(16)
+		//   onPointerUp(17) onKeyDown(18) onKeyUp(19) onExit(20) onPause(21) onResume(22)
+		integer prev_pos = -1
+		boolean order_ok = true
+
+		// assets must come before everything after it
+		if pos_assets != -1
+			if prev_pos != -1 and pos_assets < prev_pos
+				order_ok = false
+			if pos_assets > prev_pos
+				prev_pos = pos_assets
+
+		// layers
+		if pos_layers != -1
+			if pos_layers < prev_pos
+				order_ok = false
+			if pos_layers > prev_pos
+				prev_pos = pos_layers
+
+		// state
+		if pos_state != -1
+			if pos_state < prev_pos
+				order_ok = false
+			if pos_state > prev_pos
+				prev_pos = pos_state
+
+		// tween
+		if pos_tween != -1
+			if pos_tween < prev_pos
+				order_ok = false
+			if pos_tween > prev_pos
+				prev_pos = pos_tween
+
+		// timeline
+		if pos_timeline != -1
+			if pos_timeline < prev_pos
+				order_ok = false
+			if pos_timeline > prev_pos
+				prev_pos = pos_timeline
+
+		// animState
+		if pos_animState != -1
+			if pos_animState < prev_pos
+				order_ok = false
+			if pos_animState > prev_pos
+				prev_pos = pos_animState
+
+		// animSprite
+		if pos_animSprite != -1
+			if pos_animSprite < prev_pos
+				order_ok = false
+			if pos_animSprite > prev_pos
+				prev_pos = pos_animSprite
+
+		// particles
+		if pos_particles != -1
+			if pos_particles < prev_pos
+				order_ok = false
+			if pos_particles > prev_pos
+				prev_pos = pos_particles
+
+		// path
+		if pos_path != -1
+			if pos_path < prev_pos
+				order_ok = false
+			if pos_path > prev_pos
+				prev_pos = pos_path
+
+		// gradient
+		if pos_gradient != -1
+			if pos_gradient < prev_pos
+				order_ok = false
+			if pos_gradient > prev_pos
+				prev_pos = pos_gradient
+
+		// customEase
+		if pos_customEase != -1
+			if pos_customEase < prev_pos
+				order_ok = false
+			if pos_customEase > prev_pos
+				prev_pos = pos_customEase
+
+		// camera
+		if pos_camera != -1
+			if pos_camera < prev_pos
+				order_ok = false
+			if pos_camera > prev_pos
+				prev_pos = pos_camera
+
+		// init
+		if pos_init != -1
+			if pos_init < prev_pos
+				order_ok = false
+			if pos_init > prev_pos
+				prev_pos = pos_init
+
+		// draw
+		if pos_draw != -1
+			if pos_draw < prev_pos
+				order_ok = false
+			if pos_draw > prev_pos
+				prev_pos = pos_draw
+
+		// onFrame
+		if pos_onFrame != -1
+			if pos_onFrame < prev_pos
+				order_ok = false
+			if pos_onFrame > prev_pos
+				prev_pos = pos_onFrame
+
+		// onPointerDown
+		if pos_onPointerDown != -1
+			if pos_onPointerDown < prev_pos
+				order_ok = false
+			if pos_onPointerDown > prev_pos
+				prev_pos = pos_onPointerDown
+
+		// onPointerMove
+		if pos_onPointerMove != -1
+			if pos_onPointerMove < prev_pos
+				order_ok = false
+			if pos_onPointerMove > prev_pos
+				prev_pos = pos_onPointerMove
+
+		// onPointerUp
+		if pos_onPointerUp != -1
+			if pos_onPointerUp < prev_pos
+				order_ok = false
+			if pos_onPointerUp > prev_pos
+				prev_pos = pos_onPointerUp
+
+		// onKeyDown
+		if pos_onKeyDown != -1
+			if pos_onKeyDown < prev_pos
+				order_ok = false
+			if pos_onKeyDown > prev_pos
+				prev_pos = pos_onKeyDown
+
+		// onKeyUp
+		if pos_onKeyUp != -1
+			if pos_onKeyUp < prev_pos
+				order_ok = false
+			if pos_onKeyUp > prev_pos
+				prev_pos = pos_onKeyUp
+
+		// onExit
+		if pos_onExit != -1
+			if pos_onExit < prev_pos
+				order_ok = false
+			if pos_onExit > prev_pos
+				prev_pos = pos_onExit
+
+		// onPause
+		if pos_onPause != -1
+			if pos_onPause < prev_pos
+				order_ok = false
+			if pos_onPause > prev_pos
+				prev_pos = pos_onPause
+
+		// onResume
+		if pos_onResume != -1
+			if pos_onResume < prev_pos
+				order_ok = false
+			if pos_onResume > prev_pos
+				prev_pos = pos_onResume
+
+		if order_ok == false
+			return "canvasScene: sub-blocks are out of order (CVS-S010) — expected: assets, layers, state, tween, timeline, animState, particles, path, gradient, customEase, camera, init, draw, onFrame, event handlers"
+
 		return ""
 
 	// =====================================================================

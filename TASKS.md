@@ -503,4 +503,31 @@ The plugins provide the complete DSL layer. Next steps:
 
 ---
 
-**Last Updated**: 2026-03-22
+## Code Health
+
+### Plugin test files — syntax fixed, semantic compilation pending 🟡 MEDIUM-HIGH
+
+**Issue**: All 4 plugin test files (`plugins/*/tests/test_expand.cln`) used function declarations at
+the top level, which is invalid per `grammar.ebnf` (SYN001). Fixed 2026-05-20 by wrapping in
+`start:` + `functions:` blocks.
+
+**Remaining**: Tests call `expand_block()` and `validate_block()` which are plugin-internal functions
+defined in `src/main.cln`. Compiled standalone, these are undefined, producing semantic errors.
+The test runner (`scripts/test-plugins.sh`) must compile each test file together with its plugin's
+`src/main.cln`, or the compiler needs multi-file test support.
+
+**Files**: `plugins/frame.auth/tests/test_expand.cln`, `plugins/frame.data/tests/test_expand.cln`,
+`plugins/frame.server/tests/test_expand.cln`, `plugins/frame.ui/tests/test_expand.cln`
+
+### frame.auth password-reset pattern — email sending not implemented 🟢 LOW
+
+**Issue**: `plugins/frame.auth/patterns/password-reset.cln:89` — the reset token is generated but
+never emailed to the user. The `email.send()` call is commented out pending a bridge function for
+email delivery. The pattern is non-functional end-to-end without it.
+
+**Requires**: A `bridge:email` namespace in the host bridge (`_email_send(to, subject, body) -> bool`),
+declared in `frame.auth/plugin.toml` and implemented in `clean-server`.
+
+---
+
+**Last Updated**: 2026-05-20
