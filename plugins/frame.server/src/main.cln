@@ -61,10 +61,6 @@ functions:
 		result = result + "\t\treturn _http_respond(403, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"PERMISSION_DENIED\\\",\\\"message\\\":\\\"Access denied\\\"}}\")\n\n"
 		result = result + "\tstring httpHeader(string name, string value)\n"
 		result = result + "\t\treturn _http_set_header(name, value)\n\n"
-		result = result + "\tstring render(string template_name)\n"
-		result = result + "\t\treturn _http_respond(200, \"text/html\", _ui_render_page(template_name, \"{}\"))\n\n"
-		result = result + "\tstring renderWith(string template_name, string data_json)\n"
-		result = result + "\t\treturn _http_respond(200, \"text/html\", _ui_render_page(template_name, data_json))\n\n"
 
 		// Parse endpoints - find methods and paths
 		string remaining = body
@@ -212,10 +208,33 @@ functions:
 
 		string handler_code = after_handle.substring(0, end_pos)
 
-		// Process line by line — just add indentation, skip empty lines
+		// First pass: find minimum tab depth among non-empty lines (base indent to strip)
+		integer min_tabs = 99
+		string scan = handler_code
+		integer scan_safety = 0
+		while scan_safety < 200 and scan.length() > 0
+			scan_safety = scan_safety + 1
+			integer snl = scan.indexOf("\n")
+			string sline = ""
+			if snl == -1
+				sline = scan
+				scan = ""
+			else
+				sline = scan.substring(0, snl)
+				scan = scan.substring(snl + 1, scan.length())
+			if sline.trim().length() > 0
+				integer tabs = 0
+				while tabs < sline.length() and sline.substring(tabs, tabs + 1) == "\t"
+					tabs = tabs + 1
+				if tabs < min_tabs
+					min_tabs = tabs
+		if min_tabs == 99
+			min_tabs = 0
+
+		// Second pass: preserve relative indentation (base → \t\t, sub-levels add one tab each)
 		string remaining = handler_code
 		integer safety = 0
-		while safety < 50 and remaining.length() > 0
+		while safety < 200 and remaining.length() > 0
 			safety = safety + 1
 			integer nl = remaining.indexOf("\n")
 			string line = ""
@@ -227,7 +246,16 @@ functions:
 				remaining = remaining.substring(nl + 1, remaining.length())
 			string trimmed = line.trim()
 			if trimmed.length() > 0
-				result = result + "\t\t" + trimmed + "\n"
+				integer orig_tabs = 0
+				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
+					orig_tabs = orig_tabs + 1
+				integer rel_depth = orig_tabs - min_tabs
+				string indent = "\t\t"
+				integer d = 0
+				while d < rel_depth
+					indent = indent + "\t"
+					d = d + 1
+				result = result + indent + trimmed + "\n"
 
 		return result
 

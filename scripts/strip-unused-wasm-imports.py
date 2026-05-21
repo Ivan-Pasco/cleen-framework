@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""Strip unreachable imports and dead functions from a WASM text (WAT) file.
+"""Strip server-specific bridge imports from plugin WASM files.
 
-The Clean Language compiler emits imports for ALL known host functions
-unconditionally, even when the source code doesn't reference them. This causes
-plugin instantiation failures when the plugin loader doesn't provide stubs for
-every possible host function.
+The Clean Language compiler emits imports for server-only host functions
+unconditionally, even when building a plugin (not a server application).
+The plugin loader doesn't provide these functions, causing instantiation failures.
 
-This script performs dead-code elimination at the import level:
-1. Builds a call graph from the WAT
-2. Finds all functions reachable from exports
-3. Removes unreachable imports and their dead wrapper functions
-4. Renumbers all function references
+This script removes the named server-only imports and their direct wrapper
+functions from the WAT, then renumbers all function references.
 
 Usage:
     python3 strip-unused-wasm-imports.py input.wat output.wat
@@ -18,6 +14,33 @@ Usage:
 
 import re
 import sys
+
+
+# Server-specific runtime functions that the plugin loader never provides.
+# These must be stripped from plugin WASMs unconditionally.
+FORCE_STRIP_NAMES = {
+    '_server_sleep',
+    '_async_fire',
+    '_async_await',
+}
+
+
+def find_func_body_end(content, start):
+    """Return the index one past the closing ) of the func body starting at start."""
+    depth = 0
+    i = start
+    while i < len(content):
+        if content[i] == '(':
+            depth += 1
+        elif content[i] == ')':
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                if end < len(content) and content[end] == '\n':
+                    end += 1
+                return end
+        i += 1
+    return len(content)
 
 
 def main():
@@ -30,7 +53,7 @@ def main():
     with open(input_path, 'r') as f:
         content = f.read()
 
-    # Parse imports
+    # Parse all function imports
     imports = []
     for m in re.finditer(
         r'\(import "(\w+)" "([^"]+)" \(func \(;(\d+);\) \(type (\d+)\)\)\)',
@@ -44,110 +67,106 @@ def main():
             'full_match': m.group(0),
         })
 
-    num_imports = len(imports)
-    if num_imports == 0:
-        # Nothing to strip
+    if not imports:
         with open(output_path, 'w') as f:
             f.write(content)
         return
 
-    # Parse function bodies and build call graph
-    func_bodies = {}
-    for m in re.finditer(r'\(func \(;(\d+);\)[^\n]*\n(.*?)\n  \)', content, re.DOTALL):
-        func_bodies[int(m.group(1))] = m.group(2)
+    # Find the indices to force-strip
+    force_strip_indices = {
+        imp['idx'] for imp in imports if imp['name'] in FORCE_STRIP_NAMES
+    }
 
-    call_graph = {}
-    for idx, body in func_bodies.items():
-        call_graph[idx] = set(int(x) for x in re.findall(r'\bcall (\d+)\b', body))
-
-    # Find exports
-    exports = set()
-    for m in re.finditer(r'\(export "[^"]*" \(func (\d+)\)\)', content):
-        exports.add(int(m.group(1)))
-
-    # BFS reachability from exports
-    reachable = set()
-    queue = list(exports)
-    while queue:
-        f = queue.pop()
-        if f in reachable:
-            continue
-        reachable.add(f)
-        if f in call_graph:
-            for callee in call_graph[f]:
-                if callee not in reachable:
-                    queue.append(callee)
-
-    # Identify what to remove
-    all_func_indices = set(func_bodies.keys()) | set(range(num_imports))
-    unused_imports = {imp['idx'] for imp in imports if imp['idx'] not in reachable}
-    dead_funcs = {idx for idx in all_func_indices
-                  if idx not in reachable and idx >= num_imports}
-    to_remove = unused_imports | dead_funcs
-
-    if not to_remove:
+    if not force_strip_indices:
         with open(output_path, 'w') as f:
             f.write(content)
-        print("No unused imports found.", file=sys.stderr)
+        print("No server-specific imports found.", file=sys.stderr)
         return
 
-    # Build renumber map
-    remap = {}
-    new_idx = 0
-    for old_idx in range(max(all_func_indices) + 1):
-        if old_idx in to_remove:
-            continue
-        remap[old_idx] = new_idx
-        new_idx += 1
+    # Find wrapper functions: functions exported as the same name AND whose
+    # entire body is just a direct call to a force-stripped import.
+    # These become invalid after the import is removed, so they must go too.
+    wrapper_indices = set()
+    for idx in force_strip_indices:
+        # A wrapper function directly calls `call <idx>` and is re-exported
+        # Find functions that call this import
+        for m in re.finditer(
+            r'  \(func \(;(\d+);\)[^\n]*\n(.*?)\n  \)',
+            content, re.DOTALL
+        ):
+            func_idx = int(m.group(1))
+            body = m.group(2)
+            calls = re.findall(r'\bcall (\d+)\b', body)
+            # If this function ONLY calls the force-stripped import (and nothing else
+            # meaningful), it's a wrapper — mark it for removal.
+            if calls and all(int(c) == idx or int(c) in force_strip_indices
+                             for c in calls):
+                # Verify it's exported (wrappers are always exported)
+                if re.search(
+                    r'\(export "[^"]*" \(func ' + str(func_idx) + r'\)\)',
+                    content
+                ):
+                    wrapper_indices.add(func_idx)
 
-    # Remove unused import lines
+    to_remove = force_strip_indices | wrapper_indices
+    removed_sorted = sorted(to_remove)
+
+    def new_idx(n):
+        """Map old function index to new index after removals."""
+        if n in to_remove:
+            return None
+        return n - sum(1 for r in to_remove if r < n)
+
+    # Remove import lines and their re-export lines
     for imp in imports:
-        if imp['idx'] in unused_imports:
+        if imp['idx'] in force_strip_indices:
             content = content.replace('  ' + imp['full_match'] + '\n', '')
+            content = re.sub(
+                r'  \(export "[^"]*" \(func ' + str(imp['idx']) + r'\)\)\n',
+                '',
+                content
+            )
 
-    # Remove dead function definitions with proper parenthesis matching
-    func_spans = []
-    for m in re.finditer(r'  \(func \(;(\d+);\)', content):
-        func_idx = int(m.group(1))
-        if func_idx not in dead_funcs:
-            continue
-        start = m.start()
-        depth = 0
-        i = start
-        while i < len(content):
-            if content[i] == '(':
-                depth += 1
-            elif content[i] == ')':
-                depth -= 1
-                if depth == 0:
-                    end = i + 1
-                    if end < len(content) and content[end] == '\n':
-                        end += 1
-                    func_spans.append((start, end))
-                    break
-            i += 1
+    # Remove wrapper function bodies and their export lines
+    # Collect spans first, then remove in reverse order
+    wrapper_spans = []
+    for widx in wrapper_indices:
+        # Remove export for this wrapper
+        content = re.sub(
+            r'  \(export "[^"]*" \(func ' + str(widx) + r'\)\)\n',
+            '',
+            content
+        )
+        # Find and mark function body for removal
+        m = re.search(r'  \(func \(;' + str(widx) + r';\)', content)
+        if m:
+            end = find_func_body_end(content, m.start())
+            wrapper_spans.append((m.start(), end))
 
-    # Remove in reverse order to preserve offsets
-    for start, end in sorted(func_spans, reverse=True):
-        content = content[:start] + content[end:]
+    for start, end in sorted(wrapper_spans, reverse=True):
+        content = content[: start] + content[end:]
 
     # Renumber all function references
     def renumber_func_def(m):
         old = int(m.group(1))
-        return f'(func (;{remap[old]};)' if old in remap else m.group(0)
+        ni = new_idx(old)
+        return f'(func (;{ni};)' if ni is not None else m.group(0)
 
     def renumber_call(m):
         old = int(m.group(1))
-        return f'call {remap[old]}' if old in remap else m.group(0)
+        ni = new_idx(old)
+        return f'call {ni}' if ni is not None else m.group(0)
 
     def renumber_export(m):
-        old = int(m.group(2))
-        return (f'(export "{m.group(1)}" (func {remap[old]}))'
-                if old in remap else m.group(0))
+        name, old = m.group(1), int(m.group(2))
+        ni = new_idx(old)
+        return (f'(export "{name}" (func {ni}))' if ni is not None
+                else m.group(0))
 
     def renumber_elem_ref(m):
         old = int(m.group(1))
-        return f'ref.func {remap[old]}' if old in remap else m.group(0)
+        ni = new_idx(old)
+        return f'ref.func {ni}' if ni is not None else m.group(0)
 
     content = re.sub(r'\(func \(;(\d+);\)', renumber_func_def, content)
     content = re.sub(r'\bcall (\d+)\b', renumber_call, content)
@@ -157,9 +176,12 @@ def main():
     with open(output_path, 'w') as f:
         f.write(content)
 
-    print(f"Stripped {len(unused_imports)} unused imports + "
-          f"{len(dead_funcs)} dead functions "
-          f"({len(to_remove)} total removed)", file=sys.stderr)
+    print(
+        f"Stripped {len(force_strip_indices)} server-specific imports + "
+        f"{len(wrapper_indices)} wrapper functions "
+        f"({len(to_remove)} total removed)",
+        file=sys.stderr
+    )
 
 
 if __name__ == '__main__':
