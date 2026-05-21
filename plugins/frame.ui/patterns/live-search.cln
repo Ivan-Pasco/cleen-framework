@@ -70,16 +70,16 @@ component: tag="live-search"
 				oninput="onInput"
 			>
 
-			<div class="search-spinner" cl-show="{state.loading}">Searching...</div>
+			<div class="search-spinner" cl-show="state.loading">Searching...</div>
 
-			<ul class="search-results" cl-show="{state.results.length() > 0}">
-				<li cl-iterate="{state.results}">
+			<ul class="search-results" cl-show="state.results.length() > 0">
+				<li cl-iterate="state.results">
 					<a href="/users/{item.id}">{item.name}</a>
 					<span class="email">{item.email}</span>
 				</li>
 			</ul>
 
-			<p class="no-results" cl-show="{state.query.length() >= 2 and state.results.length() == 0 and state.loading == false}">
+			<p class="no-results" cl-show="state.query.length() >= 2 and state.results.length() == 0 and state.loading == false">
 				No results for "{state.query}"
 			</p>
 		</div>

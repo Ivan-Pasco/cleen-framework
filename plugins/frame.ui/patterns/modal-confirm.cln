@@ -42,11 +42,11 @@ component: tag="confirm-modal"
 			state.visible = false
 
 	html:
-		<div class="modal-overlay" cl-show="{state.visible}" onclick="cancel">
+		<div class="modal-overlay" cl-show="state.visible" onclick="cancel">
 			<div class="modal-dialog" onclick.stop="">
 				<h2>{props.title}</h2>
 				<p>{props.message}</p>
-				<p cl-show="{state.target_name.length() > 0}">
+				<p cl-show="state.target_name.length() > 0">
 					You are about to delete <strong>{state.target_name}</strong>.
 				</p>
 				<div class="modal-actions">
@@ -94,7 +94,7 @@ component: tag="users-page"
 
 	html:
 		<div>
-			<ul cl-iterate="{state.users}">
+			<ul cl-iterate="state.users">
 				<li>
 					{item.name}
 					<button

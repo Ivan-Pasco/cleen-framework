@@ -39,9 +39,9 @@ component: tag="validated-input"
 				name="{props.name}"
 				type="{props.type}"
 				onblur="onBlur"
-				cl-validate="{props.validation}"
+				cl-validate="props.validation"
 			>
-			<span class="error" cl-show="{state.error.length() > 0}">{state.error}</span>
+			<span class="error" cl-show="state.error.length() > 0">{state.error}</span>
 		</div>
 
 // Server endpoint

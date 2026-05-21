@@ -2,7 +2,7 @@
 // Use when: building any web page — this is the foundational page structure pattern
 // Anti-pattern: DON'T put logic or dynamic content in the HTML file itself.
 //   The HTML file is a static shell. All server-rendered data comes from the
-//   endpoint that renders the page. All interactivity lives in component: blocks.
+//   companion .cln file's load() function. All interactivity lives in component: blocks.
 //   DON'T add client="on" to everything — most content should stay server-rendered
 //   (client="off") and ship zero JS. Only islands that truly need interactivity
 //   should opt in to hydration.
@@ -12,13 +12,13 @@
 // A Frame page has three layers:
 //
 //   1. HTML file (app/pages/*.html)
-//      Plain HTML shell. Uses {{ variable }} for SSR interpolation and
+//      Plain HTML shell. Uses {variable} for SSR interpolation and
 //      cl-* attributes for server-side conditionals and iteration.
 //      Embeds component custom tags where interactivity is needed.
 //      No JavaScript. No logic.
 //
-//   2. Page endpoint (app/backend/pages/*.cln or inline in app.cln)
-//      Clean function that loads data and returns it to the template.
+//   2. Companion file (app/pages/*.cln — paired by filename with the .html file)
+//      Exports load() and optionally guard() to load data and gate access.
 //      Runs entirely on the server — never in the browser.
 //
 //   3. Component blocks (app/components/*.cln)
@@ -48,44 +48,50 @@ plugins:
 	frame.server
 	frame.data
 
-// ─── PAGE ENDPOINT ───────────────────────────────────────────────────────────
-// Loads all data the HTML template needs. Runs on the server.
+// ─── COMPANION FILE (app/pages/products/[category].cln) ──────────────────────
+// Loads data for the HTML template. Runs on the server before the page renders.
 
-endpoints:
-	GET "/products/:category":
-		let category = req.params.category
-		let lang = req.query.lang
-		if lang.length() == 0
+// app/pages/products/[category].cln
+functions:
+	any guard(Request request)
+		if not request.auth.loggedIn
+			return null
+		return null
+
+	any load(Request request)
+		string category = request.params.category
+		string lang = request.query.lang
+		if lang == ""
 			lang = "en"
 
-		// Load server-rendered data — available as {{ variable }} in the HTML
-		let products = Product.find:
+		// Load server-rendered data — available as {variable} in the HTML
+		list products = Product.find:
 			where:
 				category == category
 				is_active == true
 			order:
 				sort_order asc
 
-		let meta_title = category + " — My Store"
-		let product_count = products.length()
+		string meta_title = category + " — My Store"
+		integer product_count = products.length()
 
-		return render("products", {
-			"meta_title" to meta_title,
-			"category" to category,
-			"lang" to lang,
-			"products" to products,
-			"product_count" to product_count
-		})
+		return {
+			meta_title: meta_title,
+			category: category,
+			lang: lang,
+			products: products,
+			product_count: product_count
+		}
 
-// ─── HTML PAGE (app/pages/products.html) ─────────────────────────────────────
-// Plain HTML. {{ }} for SSR values. cl-* for server-side directives.
+// ─── HTML PAGE (app/pages/products/[category].html) ──────────────────────────
+// Plain HTML. { } for SSR values. cl-* for server-side directives.
 // Custom tags for components — client= controls whether they hydrate.
 //
 // <!DOCTYPE html>
-// <html lang="{{ lang }}">
+// <html lang="{lang}">
 // <head>
 //     <meta charset="UTF-8">
-//     <title>{{ meta_title }}</title>
+//     <title>{meta_title}</title>
 //     <link rel="stylesheet" href="/css/main.css">
 // </head>
 // <body>
@@ -98,7 +104,7 @@ endpoints:
 //
 //     <!-- STATIC — pure SSR, the product grid itself ships as HTML -->
 //     <main class="product-grid">
-//         <h1>{{ category }} <span class="count">({{ product_count }})</span></h1>
+//         <h1>{category} <span class="count">({product_count})</span></h1>
 //
 //         <!-- cl-if/cl-else are evaluated on the server — no JS needed -->
 //         <div cl-if="product_count == 0">
@@ -107,14 +113,14 @@ endpoints:
 //         <div cl-else>
 //             <!-- cl-iterate renders the list on the server as plain HTML -->
 //             <article cl-iterate="product in products" class="product-card">
-//                 <img src="{{ product.image_url }}" alt="{{ product.name }}">
-//                 <h2>{{ product.name }}</h2>
-//                 <p class="price">{{ product.price }}</p>
+//                 <img src="{product.image_url}" alt="{product.name}">
+//                 <h2>{product.name}</h2>
+//                 <p class="price">{product.price}</p>
 //
 //                 <!-- ISLAND: add-to-cart needs client state — hydrates at load -->
 //                 <add-to-cart
-//                     product-id="{{ product.id }}"
-//                     product-name="{{ product.name }}"
+//                     product-id="{product.id}"
+//                     product-name="{product.name}"
 //                     client="on">
 //                 </add-to-cart>
 //             </article>
@@ -174,7 +180,7 @@ component: tag="add-to-cart"
 				state.quantity = state.quantity - 1
 
 	html:
-		<div class="add-to-cart" cl-show="{state.added == false}">
+		<div class="add-to-cart" cl-show="state.added == false">
 			<div class="qty-control">
 				<button onclick="changeQty" data-dir="down">-</button>
 				<span>{state.quantity}</span>
@@ -182,7 +188,7 @@ component: tag="add-to-cart"
 			</div>
 			<button class="btn-primary" onclick="add">Add to Cart</button>
 		</div>
-		<div class="added-confirm" cl-show="{state.added}">
+		<div class="added-confirm" cl-show="state.added">
 			✓ Added — <a href="/cart">View Cart</a>
 		</div>
 
@@ -199,10 +205,10 @@ component: tag="recently-viewed"
 			state.items = result.items
 
 	html:
-		<section class="recently-viewed" cl-show="{state.items.length() > 0}">
+		<section class="recently-viewed" cl-show="state.items.length() > 0">
 			<h3>Recently Viewed</h3>
 			<ul>
-				<li cl-iterate="{state.items}">
+				<li cl-iterate="state.items">
 					<a href="/products/{item.slug}">{item.name}</a>
 				</li>
 			</ul>

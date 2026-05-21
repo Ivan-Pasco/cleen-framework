@@ -397,45 +397,45 @@ functions:
 		string remaining = text
 
 		while remaining.length() > 0
-			// Check for raw interpolation {{{...}}}
-			integer raw_start = remaining.indexOf("{{{")
-			// Check for escaped interpolation {{...}}
-			integer esc_start = remaining.indexOf("{{")
+			integer brace_start = remaining.indexOf("{")
 
-			if raw_start != -1 and (esc_start == -1 or raw_start <= esc_start)
-				// Raw interpolation first
-				if raw_start > 0
-					result = result + escape_string(remaining.substring(0, raw_start))
-				result = result + "\" + "
-
-				integer raw_end = remaining.indexOf("}}}", raw_start + 3)
-				if raw_end == -1
-					raw_end = remaining.length()
-				string expr = remaining.substring(raw_start + 3, raw_end).trim()
-				if has_data
-					result = result + "data." + expr + " + \""
-				else
-					result = result + expr + " + \""
-				remaining = remaining.substring(raw_end + 3, remaining.length())
-			else if esc_start != -1
-				// Escaped interpolation
-				if esc_start > 0
-					result = result + escape_string(remaining.substring(0, esc_start))
-				result = result + "\" + _html_escape("
-
-				integer esc_end = remaining.indexOf("}}", esc_start + 2)
-				if esc_end == -1
-					esc_end = remaining.length()
-				string expr = remaining.substring(esc_start + 2, esc_end).trim()
-				if has_data
-					result = result + "data." + expr + ") + \""
-				else
-					result = result + expr + ") + \""
-				remaining = remaining.substring(esc_end + 2, remaining.length())
-			else
-				// No more interpolations
+			if brace_start == -1
+				// No more interpolations - add remaining text
 				result = result + escape_string(remaining)
 				remaining = ""
+			else
+				integer brace_end = remaining.indexOf("}", brace_start + 1)
+
+				if brace_end == -1
+					// No closing brace - treat as literal text
+					result = result + escape_string(remaining)
+					remaining = ""
+				else
+					// Add text before the brace
+					if brace_start > 0
+						result = result + escape_string(remaining.substring(0, brace_start))
+
+					// Check if raw interpolation {!expr}
+					string after_brace = ""
+					if brace_start + 1 < remaining.length()
+						after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+
+					if after_brace == "!"
+						// Raw interpolation - no escaping
+						string expr = remaining.substring(brace_start + 2, brace_end)
+						if has_data
+							result = result + "\" + data." + strip_spaces(expr) + " + \""
+						else
+							result = result + "\" + " + strip_spaces(expr) + " + \""
+					else
+						// Escaped interpolation
+						string expr = remaining.substring(brace_start + 1, brace_end)
+						if has_data
+							result = result + "\" + _html_escape(data." + strip_spaces(expr) + ") + \""
+						else
+							result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+					remaining = remaining.substring(brace_end + 1, remaining.length())
 
 		result = result + "\"\n"
 		return result
@@ -866,7 +866,7 @@ functions:
 									result = result + " data-on-" + event_name + "-" + modifier + "='true'"
 							else
 								// Handle interpolations in attribute values
-								if attr_value.indexOf("{{") != -1
+								if attr_value.indexOf("{") != -1
 									result = result + raw_attr_name + "='\" + " + interpolate_attr(attr_value) + " + \"'"
 								else
 									result = result + raw_attr_name + "='" + attr_value + "'"
@@ -906,19 +906,29 @@ functions:
 		string remaining = value
 
 		while remaining.length() > 0
-			integer startIdx = remaining.indexOf("{{")
+			integer startIdx = remaining.indexOf("{")
 			if startIdx == -1
 				result = result + remaining + "\""
 				remaining = ""
 			else
 				if startIdx > 0
 					result = result + remaining.substring(0, startIdx)
-				result = result + "\" + html.escape("
-				integer end = remaining.indexOf("}}", startIdx + 2)
+
+				integer end = remaining.indexOf("}", startIdx + 1)
 				if end == -1
 					end = remaining.length()
-				result = result + remaining.substring(startIdx + 2, end).trim() + ") + \""
-				remaining = remaining.substring(end + 2, remaining.length())
+
+				string after_brace = remaining.substring(startIdx + 1, startIdx + 2)
+				if after_brace == "!"
+					// Raw interpolation in attribute
+					string expr = remaining.substring(startIdx + 2, end)
+					result = result + "\" + " + strip_spaces(expr) + " + \""
+				else
+					// Escaped interpolation in attribute
+					string expr = remaining.substring(startIdx + 1, end)
+					result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+				remaining = remaining.substring(end + 1, remaining.length())
 
 		return result
 
@@ -953,8 +963,8 @@ functions:
 						if directives.indexOf("," + attr_name + ",") == -1
 							string prop_name = kebab_to_camel(attr_name)
 							// Check if value is interpolation or literal
-							if attr_value.indexOf("{{") != -1
-								string expr = attr_value.substring(2, attr_value.length() - 2).trim()
+							if attr_value.startsWith("{") and attr_value.endsWith("}")
+								string expr = attr_value.substring(1, attr_value.length() - 1).trim()
 								result = result + "\t_comp." + prop_name + " = " + expr + "\n"
 							else
 								result = result + "\t_comp." + prop_name + " = \"" + attr_value + "\"\n"
