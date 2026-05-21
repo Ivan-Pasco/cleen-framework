@@ -28,12 +28,16 @@ endpoints:
 		let offset = (page - 1) * page_size
 
 		// Server does the filtering — never pull all rows to the client
-		let users = db.queryAs(User):
-			SELECT * FROM users
-			WHERE name ILIKE '%' || ? || '%'
-			ORDER BY name ASC
-			LIMIT ? OFFSET ?
-			[search, page_size, offset]
+		// ORM like operator maps to ILIKE on PostgreSQL (case-insensitive)
+		let users = User.find:
+			where:
+				name like search
+			order:
+				name asc
+			limit:
+				page_size
+			offset:
+				offset
 
 		let total = User.count:
 			where:

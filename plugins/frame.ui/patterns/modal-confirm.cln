@@ -56,56 +56,47 @@ component: tag="confirm-modal"
 			</div>
 		</div>
 
-// Example page using the confirm modal
-// In app/pages/users.html:
+// ─── PAGE LAYER ──────────────────────────────────────────────────────────────
+// Pages are HTML files + a companion .cln file. DO NOT wrap pages in component: blocks.
 //
-// <users-page>
-//   <data-table ... />
+// app/pages/users.cln — companion file: loads server data before render
+// functions:
+// 	any load(Request request)
+// 		list users = User.find:
+// 			order:
+// 				name asc
+// 		return {users: users}
+//
+// app/pages/users.html — the page shell; confirm-modal is an island
+//
+// <!DOCTYPE html>
+// <html>
+// <head><title>Users</title><link rel="stylesheet" href="/css/main.css"></head>
+// <body>
+//
+//   <ul>
+//     <li cl-iterate="users">
+//       {item.name}
+//       <!-- data-id and data-name are read by the component's onDeleteClick -->
+//       <button
+//         onclick="onDeleteClick"
+//         data-id="{item.id}"
+//         data-name="{item.name}"
+//       >Delete</button>
+//     </li>
+//   </ul>
+//
+//   <!-- confirm-modal is a client island — it manages its own open/confirm state -->
 //   <confirm-modal
 //     id="delete-modal"
 //     title="Delete user?"
 //     message="This will permanently remove the user and all their data."
 //     confirm_label="Yes, delete"
-//   />
-// </users-page>
-
-// Page component that wires the delete button to the modal
-component: tag="users-page"
-	state:
-		list users = []
-
-	handlers:
-		void onDeleteClick()
-			let id = ui.eventAttr("data-id")
-			let name = ui.eventAttr("data-name")
-			// Open the modal — do NOT delete yet
-			ui.onEvent("#delete-modal", "open", "openModal")
-
-		void openModal()
-			let id = ui.eventAttr("data-id")
-			let name = ui.eventAttr("data-name")
-			// This calls the modal's open() handler with the target data
-
-		void onConfirm()
-			let modal_id = ui.getState("delete-modal")
-			// Now safe to delete — user explicitly confirmed
-			let result = http.delete("/api/users/" + modal_id)
-			// Refresh the list
-
-	html:
-		<div>
-			<ul cl-iterate="state.users">
-				<li>
-					{item.name}
-					<button
-						onclick="onDeleteClick"
-						data-id="{item.id}"
-						data-name="{item.name}"
-					>Delete</button>
-				</li>
-			</ul>
-			<confirm-modal id="delete-modal" />
-		</div>
+//     client="on">
+//   </confirm-modal>
+//
+// </body>
+// </html>
 
 // Server endpoint
 endpoints:
