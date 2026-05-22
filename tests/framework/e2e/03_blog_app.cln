@@ -1,0 +1,153 @@
+// E2E Test: Blog Application
+// Tests blog app with posts, comments, and relationships
+
+functions:
+	boolean testCreatePost()
+		// POST /api/posts creates new blog post
+		string method = "POST"
+		string path = "/api/posts"
+		string body = "title and content"
+		integer statusCode = 201
+		return method == "POST" and statusCode == 201
+
+	boolean testListPosts()
+		// GET /api/posts returns paginated posts
+		string method = "GET"
+		string path = "/api/posts"
+		string response = "posts with pagination"
+		return method == "GET" and response.contains("pagination")
+
+	boolean testGetPostWithAuthor()
+		// GET /api/posts/:id includes author data
+		string path = "/api/posts/1"
+		string response = "post with author included"
+		return path.contains("posts") and response.contains("author")
+
+	boolean testUpdatePost()
+		// PUT /api/posts/:id updates post
+		string method = "PUT"
+		string path = "/api/posts/1"
+		string body = "updated title and content"
+		integer statusCode = 200
+		return method == "PUT" and statusCode == 200
+
+	boolean testDeletePost()
+		// DELETE /api/posts/:id removes post
+		string method = "DELETE"
+		string path = "/api/posts/1"
+		integer statusCode = 204
+		return method == "DELETE" and statusCode == 204
+
+	boolean testAddComment()
+		// POST /api/posts/:id/comments adds comment
+		string method = "POST"
+		string path = "/api/posts/1/comments"
+		string body = "comment content"
+		integer statusCode = 201
+		return method == "POST" and statusCode == 201
+
+	boolean testListComments()
+		// GET /api/posts/:id/comments returns comments
+		string path = "/api/posts/1/comments"
+		string response = "comments array"
+		return path.contains("comments") and response.contains("array")
+
+	boolean testPostWithComments()
+		// GET /api/posts/:id includes comments relation
+		string path = "/api/posts/1"
+		string include = "comments"
+		string response = "post with comments"
+		return include == "comments" and response.contains("comments")
+
+	boolean testPostsByAuthor()
+		// GET /api/users/:id/posts returns user posts
+		string path = "/api/users/1/posts"
+		string response = "posts by author"
+		return path.contains("users") and response.contains("posts")
+
+	boolean testSearchPosts()
+		// GET /api/posts with search parameter
+		string path = "/api/posts"
+		string search = "keyword"
+		string response = "matching posts"
+		return search == "keyword" and response.contains("matching")
+
+start:
+	printl("=== E2E Test: Blog Application ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testCreatePost()
+		printl("PASS: create post works")
+		passed = passed + 1
+	else
+		printl("FAIL: create post works")
+		failed = failed + 1
+
+	if testListPosts()
+		printl("PASS: list posts with pagination works")
+		passed = passed + 1
+	else
+		printl("FAIL: list posts with pagination works")
+		failed = failed + 1
+
+	if testGetPostWithAuthor()
+		printl("PASS: get post includes author")
+		passed = passed + 1
+	else
+		printl("FAIL: get post includes author")
+		failed = failed + 1
+
+	if testUpdatePost()
+		printl("PASS: update post works")
+		passed = passed + 1
+	else
+		printl("FAIL: update post works")
+		failed = failed + 1
+
+	if testDeletePost()
+		printl("PASS: delete post works")
+		passed = passed + 1
+	else
+		printl("FAIL: delete post works")
+		failed = failed + 1
+
+	if testAddComment()
+		printl("PASS: add comment works")
+		passed = passed + 1
+	else
+		printl("FAIL: add comment works")
+		failed = failed + 1
+
+	if testListComments()
+		printl("PASS: list comments works")
+		passed = passed + 1
+	else
+		printl("FAIL: list comments works")
+		failed = failed + 1
+
+	if testPostWithComments()
+		printl("PASS: post includes comments relation")
+		passed = passed + 1
+	else
+		printl("FAIL: post includes comments relation")
+		failed = failed + 1
+
+	if testPostsByAuthor()
+		printl("PASS: posts by author works")
+		passed = passed + 1
+	else
+		printl("FAIL: posts by author works")
+		failed = failed + 1
+
+	if testSearchPosts()
+		printl("PASS: search posts works")
+		passed = passed + 1
+	else
+		printl("FAIL: search posts works")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

@@ -1,0 +1,17 @@
+// Blog App Configuration
+
+config:
+	project:
+		name = "blog-app"
+		version = "1.0.0"
+		description = "Full-featured blog application"
+
+	build:
+		output = "dist"
+
+	server:
+		port = 3000
+
+	auth:
+		strategy = "jwt"
+		secret = env("BLOG_SECRET")

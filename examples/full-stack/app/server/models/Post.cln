@@ -1,0 +1,8 @@
+// Post model
+data Post
+	integer user_id
+	string title
+	string content
+	boolean published
+	string created_at
+	string updated_at

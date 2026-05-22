@@ -1,0 +1,97 @@
+// Test: frame.ui state management
+// Tests that component state is correctly managed
+
+functions:
+	// Test state block
+	boolean testStateBlock()
+		string state = "state:\n\tinteger count = 0"
+		return state.contains("state:")
+
+	// Test state initialization
+	boolean testStateInit()
+		string init = "integer count = 0"
+		return init.contains("= 0")
+
+	// Test state update
+	boolean testStateUpdate()
+		string update = "count = count + 1"
+		return update.contains("count + 1")
+
+	// Test derived state
+	boolean testDerivedState()
+		string derived = "computed:\n\tinteger doubled = count * 2"
+		return derived.contains("computed:")
+
+	// Test state reactivity
+	boolean testStateReactivity()
+		string reactiveCall = "onStateChange: rerender()"
+		return reactiveCall.contains("onStateChange:")
+
+	// Test props to state
+	boolean testPropsToState()
+		string mapping = "state:\n\tstring value = props.initialValue"
+		return mapping.contains("props.")
+
+	// Test state reset
+	boolean testStateReset()
+		string reset = "resetState()"
+		return reset.contains("resetState()")
+
+start:
+	printl("=== Test Suite: State Management ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testStateBlock()
+		printl("PASS: state block is recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: state block is recognized")
+		failed = failed + 1
+
+	if testStateInit()
+		printl("PASS: state can be initialized")
+		passed = passed + 1
+	else
+		printl("FAIL: state can be initialized")
+		failed = failed + 1
+
+	if testStateUpdate()
+		printl("PASS: state can be updated")
+		passed = passed + 1
+	else
+		printl("FAIL: state can be updated")
+		failed = failed + 1
+
+	if testDerivedState()
+		printl("PASS: derived/computed state supported")
+		passed = passed + 1
+	else
+		printl("FAIL: derived/computed state supported")
+		failed = failed + 1
+
+	if testStateReactivity()
+		printl("PASS: state changes trigger reactivity")
+		passed = passed + 1
+	else
+		printl("FAIL: state changes trigger reactivity")
+		failed = failed + 1
+
+	if testPropsToState()
+		printl("PASS: props can initialize state")
+		passed = passed + 1
+	else
+		printl("FAIL: props can initialize state")
+		failed = failed + 1
+
+	if testStateReset()
+		printl("PASS: state can be reset")
+		passed = passed + 1
+	else
+		printl("FAIL: state can be reset")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

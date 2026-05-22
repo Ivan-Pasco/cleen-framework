@@ -1,0 +1,141 @@
+// User API - Simple version with SSR HTML page
+// Serves both API endpoints and an HTML dashboard
+
+functions:
+	// GET / - Server-rendered HTML dashboard
+	string __route_handler_0()
+		string result = _db_query("SELECT id, email, username, created_at, is_active FROM users ORDER BY id DESC LIMIT 50", "[]")
+		any data = json.tryTextToData(result)
+
+		integer count = 0
+		if data != null
+			any dataObj = data.data
+			if dataObj != null
+				any rowCount = dataObj.count
+				count = rowCount.toInteger()
+
+		string html = "<!DOCTYPE html><html><head><meta charset=utf-8><title>Clean Framework Demo</title></head>"
+		html = html + "<body style='margin: 0; font-family: system-ui, sans-serif; background: #0a0e17; color: #e0e0e0'>"
+
+		html = html + "<div style='background: linear-gradient(135deg, #1a1f2e, #2d1b4e); padding: 2rem; text-align: center'>"
+		html = html + "<h1 style='color: #7c3aed; font-size: 2rem'>Clean Framework Demo</h1>"
+		html = html + "<p style='color: #888; margin-top: 0.5rem'>Full-stack application compiled to WebAssembly</p></div>"
+
+		html = html + "<div style='max-width: 900px; margin: 2rem auto; padding: 0 1rem'>"
+
+		html = html + "<div style='display: grid; grid-template-columns: repeat(3,1fr); gap: 1rem; margin-bottom: 2rem'>"
+		html = html + "<div style='background: #1a1f2e; border: 1px solid #2a2f3e; border-radius: 12px; padding: 1.5rem; text-align: center'>"
+		html = html + "<div style='font-size: 2rem; font-weight: 700; color: #7c3aed'>" + count.toString() + "</div><div style='color: #888'>Total Users</div></div>"
+		html = html + "<div style='background: #1a1f2e; border: 1px solid #2a2f3e; border-radius: 12px; padding: 1.5rem; text-align: center'>"
+		html = html + "<div style='font-size: 2rem; font-weight: 700; color: #7c3aed'>SQLite</div><div style='color: #888'>Database</div></div>"
+		html = html + "<div style='background: #1a1f2e; border: 1px solid #2a2f3e; border-radius: 12px; padding: 1.5rem; text-align: center'>"
+		html = html + "<div style='font-size: 2rem; font-weight: 700; color: #7c3aed'>WASM</div><div style='color: #888'>Runtime</div></div>"
+		html = html + "</div>"
+
+		html = html + "<div style='background: #1a1f2e; border: 1px solid #2a2f3e; border-radius: 12px; overflow: hidden; margin-bottom: 2rem'>"
+		html = html + "<h2 style='padding: 1rem 1.5rem; border-bottom: 1px solid #2a2f3e; font-size: 1.1rem'>Database Result</h2>"
+		html = html + "<pre style='padding: 1rem 1.5rem; overflow: auto; font-size: 0.8rem; color: #aaa; white-space: pre-wrap; word-break: break-all'>" + result + "</pre></div>"
+
+		html = html + "<div style='background: #1a1f2e; border: 1px solid #2a2f3e; border-radius: 12px; overflow: hidden; margin-bottom: 2rem'>"
+		html = html + "<h2 style='padding: 1rem 1.5rem; border-bottom: 1px solid #2a2f3e; font-size: 1.1rem'>API Endpoints</h2>"
+		html = html + "<div style='padding: 1.5rem'>"
+		html = html + "<a href=/api/users style='color: #3b82f6; margin-right: 1.5rem'>GET /api/users</a>"
+		html = html + "<a href=/api/users/1 style='color: #3b82f6; margin-right: 1.5rem'>GET /api/users/1</a>"
+		html = html + "<a href=/api/users/2 style='color: #3b82f6; margin-right: 1.5rem'>GET /api/users/2</a>"
+		html = html + "<a href=/api/users/3 style='color: #3b82f6; margin-right: 1.5rem'>GET /api/users/3</a>"
+		html = html + "</div></div>"
+
+		html = html + "</div>"
+		html = html + "<div style='text-align: center; padding: 2rem; color: #555; font-size: 0.8rem'>Clean Language + Frame Framework | WebAssembly Runtime | Clean Server v1.7.11</div>"
+		html = html + "</body></html>"
+
+		_http_set_header("Content-Type", "text/html")
+		return html
+
+	// GET /api/users - List all users (JSON)
+	string __route_handler_1()
+		string sql = "SELECT id, email, username, created_at FROM users ORDER BY id DESC LIMIT 50"
+		string result = _db_query(sql, "[]")
+		string resp = "{\"ok\":true,\"data\":" + result + "}"
+		return resp
+
+	// POST /api/users - Create new user
+	string __route_handler_2()
+		string body = _req_body()
+		printl("POST body: " + body)
+
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"Invalid JSON\"}"
+
+		any emailField = bodyData.email
+		any usernameField = bodyData.username
+		any passwordField = bodyData.password
+
+		if usernameField == null
+			return "{\"ok\":false,\"error\":\"Username required\"}"
+		if emailField == null
+			return "{\"ok\":false,\"error\":\"Email required\"}"
+		if passwordField == null
+			return "{\"ok\":false,\"error\":\"Password required\"}"
+
+		string email = emailField.toString()
+		string username = usernameField.toString()
+		string password = passwordField.toString()
+
+		string sql = "INSERT INTO users (email, username, password_hash, is_active) VALUES (?, ?, ?, 1)"
+		string params = "[\"" + email + "\",\"" + username + "\",\"" + password + "\"]"
+		integer insertId = _db_execute(sql, params)
+
+		if insertId < 1
+			return "{\"ok\":false,\"error\":\"Insert failed\"}"
+
+		string resp = "{\"ok\":true,\"id\":" + insertId.toString() + ",\"username\":\"" + username + "\",\"email\":\"" + email + "\"}"
+		return resp
+
+	// GET /api/users/:id - Get single user
+	string __route_handler_3()
+		string userId = _req_param("id")
+
+		if userId == ""
+			return "{\"ok\":false,\"error\":\"User ID required\"}"
+
+		string sql = "SELECT id, email, username, created_at FROM users WHERE id = ?"
+		string params = "[" + userId + "]"
+		string result = _db_query(sql, params)
+
+		string resp = "{\"ok\":true,\"user\":" + result + "}"
+		return resp
+
+	// DELETE /api/users/:id
+	string __route_handler_4()
+		string userId = _req_param("id")
+		string sql = "DELETE FROM users WHERE id = ?"
+		string params = "[" + userId + "]"
+		integer deleteResult = _db_execute(sql, params)
+		return "{\"ok\":true,\"deleted\":" + deleteResult.toString() + "}"
+
+start:
+	printl("================================")
+	printl("  User API - Simple Version")
+	printl("================================")
+
+	printl("Creating users table...")
+	string createSql = "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, username TEXT NOT NULL, password_hash TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, is_active INTEGER DEFAULT 1)"
+	integer createResult = _db_execute(createSql, "[]")
+	printl("Table result: " + createResult.toString())
+
+	printl("Registering routes...")
+	integer s = 0
+	s = _http_route("GET", "/", 0)
+	printl("  GET    /")
+	s = _http_route("GET", "/api/users", 1)
+	printl("  GET    /api/users")
+	s = _http_route("POST", "/api/users", 2)
+	printl("  POST   /api/users")
+	s = _http_route("GET", "/api/users/:id", 3)
+	printl("  GET    /api/users/:id")
+	s = _http_route("DELETE", "/api/users/:id", 4)
+	printl("  DELETE /api/users/:id")
+	printl("")
+	printl("Server ready at http://localhost:3002")

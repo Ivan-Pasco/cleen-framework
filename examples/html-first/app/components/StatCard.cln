@@ -1,0 +1,9 @@
+// StatCard Component
+// Displays a statistic placeholder
+
+component: tag="stat-card"
+	html:
+		<div class="stat-card">
+			<span class="stat-value">--</span>
+			<span class="stat-label">Stat</span>
+		</div>

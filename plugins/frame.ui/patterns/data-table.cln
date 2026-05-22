@@ -1,0 +1,115 @@
+// Pattern: data-table
+// Use when: displaying a sortable, filterable list of records
+// Anti-pattern: DON'T fetch all rows and filter client-side.
+//   For large datasets this transfers too much data and is slow.
+//   Paginate and sort server-side; pass page + sort + filter as query params.
+
+plugins:
+	frame.ui
+	frame.server
+	frame.data
+
+// Server: accepts page, sort, order, search as query params
+endpoints:
+	GET "/users":
+		let page = req.query.page.toInteger()
+		let sort = req.query.sort
+		let order = req.query.order
+		let search = req.query.search
+
+		if page <= 0
+			page = 1
+		if sort.length() == 0
+			sort = "name"
+		if order.length() == 0
+			order = "asc"
+
+		let page_size = 20
+		let offset = (page - 1) * page_size
+
+		// Server does the filtering — never pull all rows to the client
+		// ORM like operator maps to ILIKE on PostgreSQL (case-insensitive)
+		let users = User.find:
+			where:
+				name like search
+			order:
+				name asc
+			limit:
+				page_size
+			offset:
+				offset
+
+		let total = User.count:
+			where:
+				name like search
+
+		return json({
+			"users" to users,
+			"page" to page,
+			"total" to total,
+			"total_pages" to (total / page_size + 1)
+		})
+
+// UI component: data table with sort headers and pagination
+component: tag="data-table"
+	props:
+		string api_url = "/users"
+
+	state:
+		string sort = "name"
+		string order = "asc"
+		integer page = 1
+		list rows = []
+		integer total_pages = 1
+
+	handlers:
+		void load()
+			let url = props.api_url + "?page=" + state.page + "&sort=" + state.sort + "&order=" + state.order
+			let result = http.get(url)
+			state.rows = result.users
+			state.total_pages = result.total_pages
+
+		void sortBy(string col)
+			if state.sort == col
+				if state.order == "asc"
+					state.order = "desc"
+				else
+					state.order = "asc"
+			else
+				state.sort = col
+				state.order = "asc"
+			state.page = 1
+			load()
+
+		void nextPage()
+			if state.page < state.total_pages
+				state.page = state.page + 1
+				load()
+
+		void prevPage()
+			if state.page > 1
+				state.page = state.page - 1
+				load()
+
+	html:
+		<div class="data-table">
+			<table>
+				<thead>
+					<tr>
+						<th onclick="sortBy" data-col="name">Name</th>
+						<th onclick="sortBy" data-col="email">Email</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr cl-iterate="state.rows">
+						<td>{item.name}</td>
+						<td>{item.email}</td>
+					</tr>
+				</tbody>
+			</table>
+			<div class="pagination">
+				<button onclick="prevPage" cl-show="state.page > 1">Previous</button>
+				<span>Page {state.page} of {state.total_pages}</span>
+				<button onclick="nextPage" cl-show="state.page < state.total_pages">Next</button>
+			</div>
+		</div>

@@ -1,0 +1,15 @@
+// Simple test app to diagnose memory issues
+
+functions:
+	string __route_handler_0()
+		string html = "<!DOCTYPE html><html><head><title>Test</title></head><body>"
+		html = html + "<h1>Hello World</h1>"
+		html = html + "<p>Request successful!</p>"
+		html = html + "</body></html>"
+		return html
+
+start:
+	printl("Simple test app starting...")
+	integer status = 0
+	status = _http_route("GET", "/", 0)
+	printl("Server ready!")

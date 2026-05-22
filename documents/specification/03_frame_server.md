@@ -2,9 +2,11 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
 **Version:** 1.2 (adopts `endpoints:` for HTTP APIs)  
-**Location (repo):** `/docs/specification/03_frame_server.md`
+**Location (repo):** `/documents/specification/03_frame_server.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Purpose
 The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code to the Host via **Host Bridge**, and renders SSR HTML for Frame UI. This version standardizes API declaration using a single, declarative block: **`endpoints:`**.
@@ -27,13 +29,24 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 ---
 
 ## 3. File Layout
+
+> **Canonical reference:** [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) — complete folder reference.
+
 ```
-/app/api/*.cln           # API modules using `endpoints:`
-/app/pages/*.cln         # UI pages (SSR/CSR)
-/app/components/*.cln    # UI components
-/config/*.cln            # app, ui, data, auth
-/public/*                # static assets
+/app/server/             # Owned by frame.server plugin
+/app/server/api/*.cln    # API modules using `endpoints:`
+/app/server/services/    # Business logic services
+/app/server/middleware/  # Custom middleware
+/app/ui/pages/*.html     # SSR page templates (HTML)
+/app/ui/pages/*.cln      # Companion data loaders (paired by filename)
+/app/ui/components/*.cln # UI components
+/app/ui/layouts/*.html   # Page layout wrappers
+/app/data/*.cln          # Data models / ORM
+/app/auth/*.cln          # Auth configuration (frame.auth)
+/public/*                # Static assets
 ```
+
+**Plugin Folder Ownership:** Files placed in `app/server/`, `app/server/api/`, or `app/server/services/` are processed by the `frame.server` plugin. The plugin must be declared in `app.cln` via the `plugins:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
 
 ---
 
@@ -41,9 +54,9 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 Each API module exposes a single `endpoints:` block. Endpoints are declared by **METHOD + PATH** and the block body handles the request.
 
 ```clean
-# /app/api/users.cln
+// /app/server/api/users.cln
 endpoints:
-    GET /api/users:
+    GET "/api/users" :
         list<User> users = User.find:
             where:
                 active == true
@@ -52,7 +65,7 @@ endpoints:
             limit: 50
         return json(users)
 
-    POST /api/users:
+    POST "/api/users" :
         CreateUser body = req.json(CreateUser)
         User u = User.insert:
             name  = body.name
@@ -60,18 +73,18 @@ endpoints:
             active = true
         return json(u), status(201)
 
-    GET /api/users/:id:
+    GET "/api/users/:id" :
         integer id = req.params.id
         User? u = User.first:
             where:
                 id == id
-        if u == null:
+        if u == null
             return notFound()
         return json(u)
 ```
 
 **Notes**
-- The body of `METHOD /path:` is the handler. No extra `functions:` wrapper is required.
+- Paths are always quoted: `METHOD "/path" :` — this is the only accepted format.
 - The handler must `return` a Response (e.g., `json(...)`, `html(...)`, `redirect(...)`).
 
 ---
@@ -81,7 +94,7 @@ Sub‑blocks improve clarity and documentation. All are optional.
 
 ```clean
 endpoints:
-    GET /api/secure:
+    GET "/api/secure" :
         guard:
             role in ["admin", "editor"]
         returns:
@@ -141,11 +154,11 @@ Typical codes: `AUTH_ERROR`, `NOT_FOUND`, `VALIDATION_ERROR`, `NETWORK_FAIL`.
 ---
 
 ## 9. Auth Integration
-Auth lives in `/config/auth.cln` and exposes guards usable inside `guard:` blocks or imperative checks.
+Auth lives in `app/auth/auth.cln` and exposes guards usable inside `guard:` blocks or imperative checks.
 
 ```clean
 endpoints:
-    GET /api/admin:
+    GET "/api/admin" :
         guard:
             role in ["admin"]
         handle:
@@ -164,8 +177,8 @@ if not auth.can(user, "post.publish"):
 The server can emit OpenAPI 3.1 by inspecting `endpoints:` declarations, `returns:`, typed params, and DTOs.
 
 ```bash
-frame api:spec   # writes openapi.json
-frame api:sdk    # generates Clean/TS/Swift/Kotlin clients
+cleen api:spec   # writes openapi.json
+cleen api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ```
 
 **Conventions**
@@ -175,7 +188,7 @@ frame api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ---
 
 ## 11. SSR Pipeline (UI)
-- Server renders pages declared in `/app/pages/*.cln`.
+- Server renders pages from `/app/ui/pages/*.html`. Data is supplied by paired companion `.cln` files.
 - Output HTML is streamed or buffered (host adapter decides).
 - Hydration islands are scheduled according to `client="on|visible|idle|only"`.
 
@@ -207,22 +220,78 @@ The Clean code never calls host APIs directly—only via these bridges.
 
 ## 14. Testing
 - Unit: call handler blocks with mock `req`.
-- Integration: spin dev server (`frame serve`) and hit endpoints.
+- Integration: spin dev server (`cleen serve`) and hit endpoints.
 - E2E: verify SSR + hydration + API flows together.
 
 ---
 
 ## 15. CLI
 ```bash
-frame serve        # dev server with hot reload
-frame build        # produce optimized WASM + assets
-frame api:spec     # OpenAPI
-frame api:sdk      # Client SDKs
+cleen serve        # dev server with hot reload
+cln compile app.cln -o app.wasm --plugins    # produce WASM
+cleen api:spec     # OpenAPI
+cleen api:sdk      # Client SDKs
 ```
 
 ---
 
-## 16. Security
+## 16. Middleware
+
+Middleware files live in `app/server/middleware/`. They inspect or modify requests before the endpoint handler runs.
+
+```clean
+// app/server/middleware/RateLimit.cln
+middleware RateLimit
+    functions:
+        Request handle(Request req)
+            string key = "rate:" + req.ip
+            integer count = cache.get(key).toInteger()
+            if count > 100
+                return error(429, "Too many requests")
+            cache.set(key, (count + 1).toString(), ttl: 60)
+            return req
+```
+
+Register middleware in `app.cln` or per-endpoint:
+
+```clean
+endpoints:
+    GET "/api/data" :
+        middleware: [RateLimit, VerifyJWT]
+        handle:
+            return json({ ok: true })
+```
+
+---
+
+## 17. Server-Side HTTP Client
+
+The server can make outbound HTTP requests using the `http.*` bridge functions. This is separate from client-side communication (`frame.client`).
+
+```clean
+// app/server/api/proxy.cln
+endpoints:
+    GET "/api/weather" :
+        handle:
+            string city = req.query.city
+            string url = "https://weather.example.com/api?city=" + city
+            string response = http.get(url)
+            return json(response)
+
+    POST "/api/notify" :
+        handle:
+            string body = req.json(string)
+            string result = http.postJson("https://notify.example.com/send", body)
+            return json({ sent: true })
+```
+
+Available: `http.get(url)`, `http.postJson(url, body)`, `http.put(url, body)`, `http.delete(url)`.
+
+> **Note:** These functions are a clean API layer over the internal `host:http` bridge — they execute on the server and make outbound network calls from the server process. They are NOT the same as `frame.client` (which provides browser-side HTTP calls from client-side WASM). Use `http.*` for server-to-server communication; use `frame.client` for browser-to-server communication.
+
+---
+
+## 18. Security
 - Enforce HTTPS at host; set HSTS as appropriate.
 - Use `HttpOnly` + `SameSite` cookies for sessions.
 - Limit CORS; expose only required origins/headers.
@@ -230,20 +299,20 @@ frame api:sdk      # Client SDKs
 
 ---
 
-## 17. Examples
+## 19. Examples
 
-### 17.1 Simple CRUD
+### 19.1 Simple CRUD
 ```clean
-# /app/api/posts.cln
+// /app/server/api/posts.cln
 endpoints:
-    GET /api/posts:
+    GET "/api/posts" :
         list<Post> posts = Post.find:
             order:
                 createdAt desc
             limit: 20
         return json(posts)
 
-    POST /api/posts:
+    POST "/api/posts" :
         CreatePost body = req.json(CreatePost)
         Post p = Post.insert:
             title   = body.title
@@ -252,10 +321,10 @@ endpoints:
         return json(p), status(201)
 ```
 
-### 17.2 Guard + Returns + Cache
+### 19.2 Guard + Returns + Cache
 ```clean
 endpoints:
-    GET /api/reports/daily:
+    GET "/api/reports/daily" :
         guard:
             role in ["admin"]
         returns:

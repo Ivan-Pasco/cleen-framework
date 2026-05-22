@@ -1,0 +1,39 @@
+// Simple Canvas Demo - static scene
+plugins:
+	frame.canvas
+
+canvasScene: width=800 height=600 id="main"
+
+	draw:
+		canvas.clear color="#1a1a2e"
+		canvas.circle x=650 y=100 radius=50 color="#ffdd44"
+		canvas.line fromX=710 fromY=100 toX=740 toY=100 stroke=3 color="#ffdd44"
+		canvas.line fromX=590 fromY=100 toX=560 toY=100 stroke=3 color="#ffdd44"
+		canvas.line fromX=650 fromY=40 toX=650 toY=10 stroke=3 color="#ffdd44"
+		canvas.line fromX=650 fromY=160 toX=650 toY=190 stroke=3 color="#ffdd44"
+		canvas.line fromX=692 fromY=142 toX=714 toY=164 stroke=3 color="#ffdd44"
+		canvas.line fromX=608 fromY=142 toX=586 toY=164 stroke=3 color="#ffdd44"
+		canvas.line fromX=692 fromY=58 toX=714 toY=36 stroke=3 color="#ffdd44"
+		canvas.line fromX=608 fromY=58 toX=586 toY=36 stroke=3 color="#ffdd44"
+		canvas.circle x=200 y=80 radius=30 color="#ffffff"
+		canvas.circle x=235 y=80 radius=35 color="#ffffff"
+		canvas.circle x=270 y=80 radius=30 color="#ffffff"
+		canvas.circle x=235 y=60 radius=25 color="#ffffff"
+		canvas.circle x=450 y=120 radius=30 color="#ffffff"
+		canvas.circle x=485 y=120 radius=35 color="#ffffff"
+		canvas.circle x=520 y=120 radius=30 color="#ffffff"
+		canvas.circle x=485 y=100 radius=25 color="#ffffff"
+		canvas.rect x=0 y=450 width=800 height=150 color="#228b22"
+		canvas.rect x=150 y=350 width=150 height=100 color="#8b4513"
+		canvas.triangle x1=175 y1=350 x2=275 y2=350 x3=225 y3=250 color="#a52a2a"
+		canvas.rect x=205 y=390 width=40 height=60 color="#654321"
+		canvas.rect x=165 y=370 width=30 height=30 color="#87ceeb"
+		canvas.rect x=165 y=370 width=30 height=30 color="#333333" filled=false
+		canvas.rect x=255 y=370 width=30 height=30 color="#87ceeb"
+		canvas.rect x=255 y=370 width=30 height=30 color="#333333" filled=false
+		canvas.rect x=535 y=350 width=30 height=100 color="#8b4513"
+		canvas.circle x=550 y=320 radius=50 color="#228b22"
+		canvas.circle x=515 y=350 radius=40 color="#2e8b2e"
+		canvas.circle x=585 y=350 radius=40 color="#2e8b2e"
+		canvas.text value="Clean Language Canvas" x=280 y=540 size=24 color="#ffffff"
+		canvas.text value="100% compiled to WebAssembly" x=260 y=568 size=16 color="#cccccc"

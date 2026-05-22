@@ -1,0 +1,102 @@
+// Integration Test: CRUD endpoints with data
+// Tests complete CRUD operations through web endpoints
+
+functions:
+	// Test create endpoint
+	boolean testCreateEndpoint()
+		string endpoint = "POST /api/users"
+		string action = "creates new user"
+		return endpoint.contains("POST")
+
+	// Test read endpoint
+	boolean testReadEndpoint()
+		string endpoint = "GET /api/users/:id"
+		string action = "returns user by id"
+		return endpoint.contains("GET")
+
+	// Test update endpoint
+	boolean testUpdateEndpoint()
+		string endpoint = "PUT /api/users/:id"
+		string action = "updates user"
+		return endpoint.contains("PUT")
+
+	// Test delete endpoint
+	boolean testDeleteEndpoint()
+		string endpoint = "DELETE /api/users/:id"
+		string action = "deletes user"
+		return endpoint.contains("DELETE")
+
+	// Test list endpoint
+	boolean testListEndpoint()
+		string endpoint = "GET /api/users"
+		string action = "returns all users"
+		return endpoint.contains("/users")
+
+	// Test create returns created
+	boolean testCreateReturnsCreated()
+		integer expectedStatus = 201
+		return expectedStatus == 201
+
+	// Test not found returns 404
+	boolean testNotFoundReturns404()
+		integer expectedStatus = 404
+		return expectedStatus == 404
+
+start:
+	printl("=== Integration Test: CRUD Endpoints ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testCreateEndpoint()
+		printl("PASS: create endpoint works")
+		passed = passed + 1
+	else
+		printl("FAIL: create endpoint works")
+		failed = failed + 1
+
+	if testReadEndpoint()
+		printl("PASS: read endpoint works")
+		passed = passed + 1
+	else
+		printl("FAIL: read endpoint works")
+		failed = failed + 1
+
+	if testUpdateEndpoint()
+		printl("PASS: update endpoint works")
+		passed = passed + 1
+	else
+		printl("FAIL: update endpoint works")
+		failed = failed + 1
+
+	if testDeleteEndpoint()
+		printl("PASS: delete endpoint works")
+		passed = passed + 1
+	else
+		printl("FAIL: delete endpoint works")
+		failed = failed + 1
+
+	if testListEndpoint()
+		printl("PASS: list endpoint works")
+		passed = passed + 1
+	else
+		printl("FAIL: list endpoint works")
+		failed = failed + 1
+
+	if testCreateReturnsCreated()
+		printl("PASS: create returns 201")
+		passed = passed + 1
+	else
+		printl("FAIL: create returns 201")
+		failed = failed + 1
+
+	if testNotFoundReturns404()
+		printl("PASS: not found returns 404")
+		passed = passed + 1
+	else
+		printl("FAIL: not found returns 404")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

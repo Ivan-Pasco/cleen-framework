@@ -1,0 +1,14 @@
+// Header Component
+
+component: tag="site-header"
+	html:
+		<header class="site-header">
+			<nav class="container">
+				<a href="/" class="logo">Article Blog</a>
+				<div class="nav-links">
+					<a href="/">Home</a>
+					<a href="/articles">Articles</a>
+					<a href="/about">About</a>
+				</div>
+			</nav>
+		</header>

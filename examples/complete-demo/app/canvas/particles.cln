@@ -1,0 +1,41 @@
+// Particle animation - frame.canvas plugin
+// Location: app/canvas/ tells the compiler this is a canvas application
+
+state:
+	integer canvasId = 0
+	number mouseX = 400.0
+	number mouseY = 200.0
+	integer frameCount = 0
+
+functions:
+	void _frame_callback(integer cId)
+		// Clear with dark background
+		_canvas_clear_color(cId, "#0d1117")
+
+		// Simple particle effect - draw circles at semi-random positions
+		frameCount = frameCount + 1
+
+		// Draw multiple particles
+		integer i = 0
+		while i < 50
+			number angle = i.toNumber() * 0.12 + frameCount.toNumber() * 0.02
+			number radius = 100.0 + i.toNumber() * 2.0
+			number x = 400.0 + math.cos(angle) * radius
+			number y = 200.0 + math.sin(angle) * radius
+
+			// Particle with glow effect
+			number size = 3.0 + math.sin(angle * 2.0) * 2.0
+			_canvas_circle_filled(cId, x, y, size, "#4ecdc4")
+			_canvas_circle_filled(cId, x, y, size * 2.0, "#4ecdc450")
+
+			i = i + 1
+
+		// Draw center glow
+		_canvas_circle_filled(canvasId, 400.0, 200.0, 20.0, "#ffffff30")
+		_canvas_circle_filled(canvasId, 400.0, 200.0, 10.0, "#ffffff")
+
+start:
+	printl("Initializing particle canvas...")
+	canvasId = _canvas_init(800, 400)
+	_canvas_request_frame(canvasId)
+	printl("Particle animation started")

@@ -1,35 +1,36 @@
-Frame Developer Guidelines (09)
+# Frame Developer Guidelines (09)
 
-Project: Frame – Full-Stack Framework for Clean Language
-Version: 1.0
+**Project:** Frame – Full-Stack Framework for Clean Language
+**Version:** 1.0
+**Location:** `/documents/specification/09_frame_dev_guidelines.md`
 
-1) Goals
+---
 
-Consistency first: same naming, formatting, and file structure across all modules.
+## 1. Goals
 
-Clarity over cleverness: prefer readable code to smart one-liners.
+- **Consistency first:** Same naming, formatting, and file structure across all modules.
+- **Clarity over cleverness:** Prefer readable code to smart one-liners.
+- **Single mental model:** Clean syntax and types flow across UI, Server, and Data.
 
-Single mental model: Clean syntax and types flow across UI, Server, and Data.
+---
 
-2) Naming & Formatting
+## 2. Naming & Formatting
 
-Classes / Components: PascalCase (e.g., UserBadge, OrderService)
+| Item | Convention | Example |
+|------|-----------|---------|
+| Classes / Components | PascalCase | `UserBadge`, `OrderService` |
+| Variables / functions | camelCase | `userId`, `loadOrders()` |
+| Files (non-Clean) | kebab-case | `user-service.toml` |
+| Files (Clean components) | PascalCase.cln | `UserCard.cln` |
+| Tabs vs spaces | **Tabs only** | — |
+| Line length | Soft 100–120 chars | — |
+| Block style | Heads end with `:`, indent consistently | — |
+| Property access | No `self`/`this` — Clean is context-aware | — |
 
-Variables / functions: camelCase (e.g., userId, loadOrders())
+**Example (Clean Language):**
 
-Files: kebab-case for non-Clean files; PascalCase.cln for components.
-
-Tabs vs spaces: Tabs.
-
-Line length: soft 100–120 chars.
-
-Block style: heads end with : and indent blocks consistently.
-
-Property access: no self/this — rely on Clean’s context-awareness.
-
-Example (Clean)
-
-class User
+```clean
+data User
     integer id : pk, auto
     string email : unique
     boolean active = true
@@ -37,124 +38,124 @@ class User
 functions:
     boolean canPublish(User u)
         return u.role == "admin"
+```
 
-3) Project Structure
-app/
-  pages/          # route-aligned pages
-  components/     # reusable UI widgets
-  api/            # server endpoints
-config/
-  app.cln
-  ui.cln
-  data.cln
-  auth.cln
-db/
-  schema.cln
-  migrations/
-public/
-dist/
-docs/specification/
+---
 
-4) Clean Language Conventions
+## 3. Project Structure
 
-Prefer declarative blocks: where:, order:, limit: etc.
+For the canonical folder layout, see [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md).
 
-Avoid duplication: rely on type inference where obvious.
+**Quick reference — plugin folder ownership:**
 
-Keep host calls behind the Host Bridge; never embed raw host APIs.
+| Plugin | Owned paths |
+|--------|-------------|
+| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
+| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.auth` | `app/auth/` |
+| `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
+| `frame.client` | *(no owned folders — available everywhere once declared in `app.cln`)* |
 
-Use explicit returns and typed function signatures.
+---
 
-Escape HTML by default; only use rawHtml() for trusted content.
+## 4. Clean Language Conventions
 
-5) UI Guidelines
+- Prefer declarative blocks: `where:`, `order:`, `limit:`, `guard:`, etc.
+- Avoid duplication; rely on type inference where obvious.
+- Keep host calls behind the Host Bridge — never embed raw host APIs.
+- Use explicit returns and typed function signatures.
+- Escape HTML by default; only use `rawHtml()` for trusted content.
 
-Default to SSR, opt-in to client with client="on|visible|idle|only".
+---
 
-Keep components small, focused, and typed.
+## 5. UI Guidelines
 
-Accessibility: semantic tags, aria-*, focus order, keyboard support.
+- Default to SSR; opt-in to client hydration with `client="on|visible|idle|only"`.
+- Keep components small, focused, and typed.
+- Accessibility: semantic tags, `aria-*` attributes, focus order, keyboard support.
+- Theming: centralize colors and spacing in design-token blocks → CSS variables.
 
-Theming: centralize colors/spacing in /config/ui.cln → CSS variables.
+---
 
-6) Data (ORM) Guidelines
+## 6. Data (ORM) Guidelines
 
-One model per file; keep field rules (min, max, unique, default) by the field.
+- One model per file; place field constraints (`min`, `max`, `unique`, `default`) next to the field.
+- Use relation fields instead of manual foreign keys.
+- Wrap multi-step writes in `Data.tx:` blocks.
+- Keep migrations clean; review the diff before committing.
 
-Use relations (related) instead of manual FKs.
+---
 
-Wrap multi-step writes in Data.tx: blocks.
+## 7. Server Guidelines
 
-Keep migrations clean: run frame db:plan before committing.
+- Write pure functions where possible; avoid global mutable state.
+- Keep endpoints thin; move business rules into services.
+- Log structured objects via the host bridge log functions.
 
-7) Server Guidelines
+---
 
-Pure functions where possible; no global mutable state.
+## 8. Testing
 
-Keep endpoints thin; move business rules into services/modules.
+| Level | Scope | Location |
+|-------|-------|----------|
+| Unit | Components (SSR snapshot), services, policies | `/tests/unit/` |
+| Integration | API routes, DB transactions, auth flows | `/tests/integration/` |
+| E2E | Headless browser for hydration and user actions | `/tests/e2e/` |
 
-Log structured objects via host:log.
+---
 
-8) Testing
+## 9. Security
 
-Unit: components render (SSR snapshot), services, policies.
+- HTTPS everywhere; `SameSite` and `HttpOnly` cookies.
+- Short-lived JWTs with refresh; rotate secrets via environment variables.
+- Least-privilege Host Bridge allowlists (FS, HTTP, ENV).
+- Validate inputs at both compile-time (types) and runtime (model constraints).
 
-Integration: API routes, DB TX behavior, auth flows.
+---
 
-E2E: headless browser for hydration and actions.
+## 10. Performance
 
-Location: /tests/<area>/...
+- Prefer SSR for first paint; hydrate only interactive parts.
+- Use pagination and field projections in queries.
+- Cache static assets; use HTTP caching headers for GET routes.
+- Measure with timing bridge functions.
 
-Run (future): frame test.
+---
 
-9) Security
+## 11. Versioning & Releases
 
-HTTPS everywhere; SameSite & HttpOnly cookies.
+- Semver for packages and plugins.
+- Tag releases and record changes in `CHANGELOG.md`.
+- Lock compiler version via `.tool-versions` or `/.frame/pin`.
 
-Short-lived JWTs with refresh; rotate secrets.
+---
 
-Least-privilege Host Bridge allowlists (FS, HTTP, ENV).
+## 12. Git Workflow
 
-Validate inputs (compile-time + runtime).
+- Branches: `main` (stable), `develop` (integration), `feat/*`, `fix/*`.
+- Conventional commits: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `perf:`.
+- PR checklist: tests pass, docs updated, lint clean.
 
-10) Performance
+---
 
-Prefer SSR for first paint; hydrate only what’s interactive.
+## 13. CI/CD
 
-Use pagination and select projections.
+```bash
+cleen build --target=server    # + additional platform targets
+cleen test                      # lint + test suite
+```
 
-Cache static assets; consider HTTP caching for GET routes.
+- Cache `/dist` between runs.
+- Security job: dependency audit, secrets scan.
 
-Measure with timing logs (host:time.now).
+---
 
-11) Versioning & Releases
+## 14. Editor Configuration
 
-Semver for packages and plugins.
+`.editorconfig`:
 
-Tag releases and record changes in CHANGELOG.md.
-
-Lock compiler/CLI version via .tool-versions or /.frame/pin.
-
-12) Git Workflow
-
-main (stable), develop (integration), feat/*, fix/*.
-
-Conventional commits: feat:, fix:, docs:, chore:, refactor:, perf:.
-
-PR checklist: tests, docs, lint.
-
-13) CI/CD
-
-Build: frame build --target=server (+ platform targets).
-
-Lint & test; cache /dist.
-
-Security job: dependency audit, secrets scan.
-
-14) Editor & Tooling
-
-.editorconfig
-
+```ini
 root = true
 
 [*]
@@ -164,76 +165,17 @@ charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
+```
 
-15) AI Development Notes
+---
 
-Deterministic, typed code helps agents.
+## 15. AI Development Notes
 
-Prefer --json outputs & normalized contracts.
+- Deterministic, typed code helps AI agents reason about correctness.
+- Prefer `--json` outputs and normalized contracts for machine-readable results.
+- Bridge schemas are documented in `foundation/spec/plugins/plugin-contract.md` and `foundation/platform-architecture/HOST_BRIDGE.md`.
 
-Put bridge schemas in /docs/specification/ai_context/.
+---
 
-10_frame_future_evolution.md
-
-(Place at /docs/specification/10_frame_future_evolution.md)
-
-Frame Future Evolution (10)
-
-Project: Frame – Full-Stack Framework for Clean Language
-Version: 1.0
-
-1) Vision
-
-Portable, secure, elegant. All logic in Clean, running everywhere via WASM. The host only provides a small typed bridge.
-
-2) Roadmap (12–18 months)
-
-Pure WASI Runtime — Wasmtime/wasmCloud; wasi:http, timers, sockets.
-
-Distributed Runtime — multi-node jobs, scheduler, durable queue.
-
-Streaming & Incremental Rendering — chunked SSR/JSON streams.
-
-Graph Layer — auto GraphQL (or Clean graph) from ORM.
-
-Visual Builder — drag-and-drop over Clean; persists .cln.
-
-Plugin Marketplace — signed plugins, permission manifests, CI tests.
-
-Observability Pack — spans via host:log; OTLP export.
-
-Security Hardening — key rotation helpers, mTLS adapters, SRI.
-
-DX — frame test, frame deploy, incremental builds, hot-reload.
-
-3) Research
-
-Deterministic scheduling across hosts.
-
-Zero-copy host↔WASM data (shared memory proposals).
-
-IndexedDB/OPFS-backed SQLite parity across browsers.
-
-4) Compatibility
-
-Semver for compiler/CLI; deprecations one minor ahead.
-
-Bridges backward-compatible within a major.
-
-Migration helpers auto-upgrade manifests/configs.
-
-5) Success Metrics
-
-SSR TTFP ≤ 150ms (baseline hardware).
-
-Hydration < 20ms for simple islands.
-
-p95 CRUD latency < 100ms (local region).
-
-Compile times improve release-over-release.
-
-6) Contributing
-
-RFCs for proposals; small patches with tests.
-
-Private channel for security reports.
+> **See also:** [13_frame_future_evolution.md](13_frame_future_evolution.md) for roadmap and versioning policy.
+> **Architecture boundaries:** [ARCHITECTURE_BOUNDARIES.md](../../../../foundation/management/ARCHITECTURE_BOUNDARIES.md)

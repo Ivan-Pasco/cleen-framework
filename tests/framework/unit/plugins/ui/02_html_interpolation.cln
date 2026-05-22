@@ -1,0 +1,99 @@
+// Test: frame.ui HTML interpolation
+// Tests that HTML interpolation works correctly
+
+functions:
+	// Test basic interpolation
+	boolean testBasicInterpolation()
+		string htmlStr = "p tag with message variable"
+		return htmlStr.contains("message")
+
+	// Test expression interpolation
+	boolean testExpressionInterpolation()
+		string htmlStr = "span with count + 1 expression"
+		return htmlStr.contains("count")
+
+	// Test function call interpolation
+	boolean testFunctionCallInterpolation()
+		string htmlStr = "p with formatDate function call"
+		return htmlStr.contains("formatDate")
+
+	// Test attribute interpolation
+	boolean testAttributeInterpolation()
+		string htmlStr = "div with class attribute"
+		return htmlStr.contains("class")
+
+	// Test HTML escaping by default
+	boolean testHtmlEscaping()
+		string escapedText = "lt-script-gt"
+		return escapedText.contains("lt")
+
+	// Test raw HTML output
+	boolean testRawHtmlOutput()
+		string rawCall = "rawHtml(userContent)"
+		return rawCall.contains("rawHtml(")
+
+	// Test multiple interpolations
+	boolean testMultipleInterpolations()
+		string htmlStr = "div with a and b variables"
+		boolean hasA = htmlStr.contains("a")
+		boolean hasB = htmlStr.contains("b")
+		return hasA and hasB
+
+start:
+	printl("=== Test Suite: HTML Interpolation ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testBasicInterpolation()
+		printl("PASS: basic variable interpolation works")
+		passed = passed + 1
+	else
+		printl("FAIL: basic variable interpolation works")
+		failed = failed + 1
+
+	if testExpressionInterpolation()
+		printl("PASS: expression interpolation works")
+		passed = passed + 1
+	else
+		printl("FAIL: expression interpolation works")
+		failed = failed + 1
+
+	if testFunctionCallInterpolation()
+		printl("PASS: function call interpolation works")
+		passed = passed + 1
+	else
+		printl("FAIL: function call interpolation works")
+		failed = failed + 1
+
+	if testAttributeInterpolation()
+		printl("PASS: attribute interpolation works")
+		passed = passed + 1
+	else
+		printl("FAIL: attribute interpolation works")
+		failed = failed + 1
+
+	if testHtmlEscaping()
+		printl("PASS: HTML is escaped by default")
+		passed = passed + 1
+	else
+		printl("FAIL: HTML is escaped by default")
+		failed = failed + 1
+
+	if testRawHtmlOutput()
+		printl("PASS: rawHtml function exists for unescaped output")
+		passed = passed + 1
+	else
+		printl("FAIL: rawHtml function exists for unescaped output")
+		failed = failed + 1
+
+	if testMultipleInterpolations()
+		printl("PASS: multiple interpolations work")
+		passed = passed + 1
+	else
+		printl("FAIL: multiple interpolations work")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

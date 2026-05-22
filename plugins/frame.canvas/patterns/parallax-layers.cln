@@ -1,0 +1,74 @@
+// Pattern: parallax-layers
+// Use when: a scrolling background with visual depth (side-scrollers, space shooters)
+// Anti-pattern: DON'T scroll all background layers at the same speed.
+//   Objects far away appear to move slowly; objects close appear to move fast.
+//   Assign different scroll multipliers per layer (far=0.1, mid=0.3, near=0.6)
+//   and use the layers: block to ensure correct draw order (back to front).
+
+plugins:
+	frame.canvas
+
+canvasScene: width=800 height=500 fps=60
+
+	assets:
+		image "bg-stars"   src="bg/stars.png"     // far — slow
+		image "bg-clouds"  src="bg/clouds.png"     // mid — medium
+		image "bg-hills"   src="bg/hills.png"      // near — fast
+		image "bg-ground"  src="bg/ground.png"     // foreground — player speed
+		image "player"     src="sprites/player.png"
+
+	// Layer order: lower z = drawn first (behind)
+	layers:
+		layer "stars"   z=0
+		layer "clouds"  z=1
+		layer "hills"   z=2
+		layer "ground"  z=3
+		layer "player"  z=10
+		layer "hud"     z=100
+
+	state:
+		// World scroll position (how far the player has moved right)
+		number scrollX = 0.0
+		number playerX = 150.0
+		number playerSpeed = 200.0  // pixels/second
+
+		// Parallax multipliers — far layers move less than near layers
+		number stars_mult  = 0.05   // barely moves
+		number clouds_mult = 0.20   // slow drift
+		number hills_mult  = 0.50   // moderate
+		number ground_mult = 1.00   // moves at full player speed
+
+	onFrame: param="dt"
+		if input.keyDown("ArrowRight")
+			scrollX = scrollX + playerSpeed * dt
+
+		// Each layer scrolls at its own rate — use modulo to tile seamlessly
+		let stars_x  = -(scrollX * stars_mult)  % 800.0
+		let clouds_x = -(scrollX * clouds_mult) % 800.0
+		let hills_x  = -(scrollX * hills_mult)  % 800.0
+		let ground_x = -(scrollX * ground_mult) % 800.0
+
+		// Draw back to front using named layers
+		on layer "stars":
+			// Tile the image twice to cover the seam during scrolling
+			canvas.image src="bg-stars"  x=stars_x         y=0 width=800 height=500
+			canvas.image src="bg-stars"  x=stars_x + 800.0 y=0 width=800 height=500
+
+		on layer "clouds":
+			canvas.image src="bg-clouds"  x=clouds_x         y=50 width=800 height=300
+			canvas.image src="bg-clouds"  x=clouds_x + 800.0 y=50 width=800 height=300
+
+		on layer "hills":
+			canvas.image src="bg-hills"  x=hills_x         y=200 width=800 height=300
+			canvas.image src="bg-hills"  x=hills_x + 800.0 y=200 width=800 height=300
+
+		on layer "ground":
+			canvas.image src="bg-ground"  x=ground_x         y=380 width=800 height=120
+			canvas.image src="bg-ground"  x=ground_x + 800.0 y=380 width=800 height=120
+
+		on layer "player":
+			// Player stays fixed horizontally — world scrolls past them
+			canvas.image src="player" x=playerX y=330 width=48 height=64
+
+		on layer "hud":
+			canvas.text "Distance: {scrollX.toInteger()}m" x=10 y=20 size=14 color="white"

@@ -1,0 +1,61 @@
+// Pattern: multi-tenant
+// Use when: one database instance serves multiple isolated customer organisations
+// Anti-pattern: DON'T omit tenant scoping.
+//   Without a tenant_id on every model and every query, one tenant can read
+//   another tenant's data. Always add tenant_id as a FK field and always
+//   filter by it using tenant_getId() — which reads from the authenticated
+//   session, not from user-supplied input.
+
+plugins:
+	frame.data
+	frame.auth
+
+// Every tenant-scoped model carries tenant_id
+data Project:
+	id: integer pk auto
+	tenant_id: integer: tenant      // frame.data enforces this is always filtered
+	name: string
+	description: string nullable
+	created_at: datetime auto
+
+data ProjectMember:
+	id: integer pk auto
+	tenant_id: integer: tenant
+	project_id: integer             // FK to Project
+	user_id: integer
+	role: string                    // "owner", "editor", "viewer"
+	joined_at: datetime auto
+
+functions:
+	// Always read tenant_id from the session — never from user input
+	list<pairs> list_projects()
+		let tid = tenant_getId()
+		return Project.find:
+			where:
+				tenant_id == tid
+			order:
+				name asc
+
+	// Creating a record: inject tenant_id from session, not from caller
+	integer create_project(string name, string description)
+		let tid = tenant_getId()
+		let result = Project.insert:
+			tenant_id = tid
+			name = name
+			description = description
+		return result
+
+	// Fetching a single record: always verify tenant_id matches session
+	pairs get_project(integer project_id)
+		let tid = tenant_getId()
+		return Project.first:
+			where:
+				id == project_id
+				tenant_id == tid    // without this line, any tenant can read any project
+
+	// Cross-tenant admin queries (internal tooling only, never exposed to tenants)
+	list<pairs> admin_list_all_projects()
+		return Project.find:
+			order:
+				tenant_id asc
+				name asc

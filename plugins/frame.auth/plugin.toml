@@ -1,0 +1,199 @@
+[plugin]
+name = "frame.auth"
+version = "2.0.0"
+description = "Authentication and authorization plugin for Clean Language - provides sessions, JWT, roles/permissions, CSRF, and password hashing"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"
+get_keywords = "get_keywords"
+
+[handles]
+blocks = ["auth", "protected", "login", "roles"]
+
+# Bridge function declarations - auth-specific functions provided by the runtime
+[bridge]
+functions = [
+  # Environment - Secrets
+  { name = "_env_get", params = ["string"], returns = "string", description = "Get environment variable (for JWT_SECRET, etc.)", expand_strings = true },
+
+  # Time - Token expiry
+  { name = "_time_now", params = [], returns = "integer", description = "Get current Unix timestamp in seconds" },
+
+  # Crypto - Random
+  { name = "_crypto_random_hex", params = ["integer"], returns = "string", description = "Generate random hex string of specified byte length" },
+  { name = "_crypto_random_bytes", params = ["integer"], returns = "string", description = "Generate random bytes (base64 encoded)" },
+
+  # Crypto - Password Hashing (Argon2/bcrypt)
+  { name = "_crypto_hash_password", params = ["string"], returns = "string", description = "Hash password using Argon2id", expand_strings = true },
+  { name = "_crypto_verify_password", params = ["string", "string"], returns = "integer", description = "Verify password against hash (1=match, 0=no match)", expand_strings = true },
+
+  # Crypto - General Hashing
+  { name = "_crypto_hash_sha256", params = ["string"], returns = "string", description = "SHA-256 hash", expand_strings = true },
+  { name = "_crypto_hash_sha512", params = ["string"], returns = "string", description = "SHA-512 hash", expand_strings = true },
+  { name = "_crypto_hmac", params = ["string", "string", "string"], returns = "string", description = "HMAC: data, key, algorithm", expand_strings = true },
+
+  # JWT - Token operations
+  { name = "_jwt_sign", params = ["string", "string", "string"], returns = "string", description = "Sign JWT: payload, secret, algorithm", expand_strings = true },
+  { name = "_jwt_verify", params = ["string", "string", "string"], returns = "string", description = "Verify JWT: token, secret, algorithm - returns payload or empty", expand_strings = true },
+  { name = "_jwt_decode", params = ["string"], returns = "string", description = "Decode JWT without verification (for debugging)", expand_strings = true },
+
+  # Session - Storage
+  { name = "_session_store", params = ["string", "string"], returns = "integer", description = "Store session: sessionId, data - returns 1 on success", expand_strings = true },
+  { name = "_session_get", params = ["string"], returns = "string", description = "Get session data by ID", expand_strings = true },
+  { name = "_session_delete", params = ["string"], returns = "integer", description = "Delete session by ID - returns 1 on success", expand_strings = true },
+  { name = "_session_exists", params = ["string"], returns = "integer", description = "Check if session exists (1=yes, 0=no)", expand_strings = true },
+
+  # Session - CSRF
+  { name = "_session_set_csrf", params = ["string"], returns = "integer", description = "Store CSRF token in current session", expand_strings = true },
+  { name = "_session_get_csrf", params = [], returns = "string", description = "Get CSRF token from current session" },
+
+  # Cookies
+  { name = "_req_cookie", params = ["string"], returns = "string", description = "Get cookie value by name", expand_strings = true },
+  { name = "_http_set_cookie", params = ["string", "string", "string"], returns = "string", description = "Set cookie: name, value, options", expand_strings = true },
+
+  # Roles - Registration and checking
+  { name = "_roles_register", params = ["string"], returns = "integer", description = "Register roles configuration (JSON)", expand_strings = true },
+  { name = "_role_has_permission", params = ["string", "string"], returns = "integer", description = "Check if role has permission (1=yes, 0=no)", expand_strings = true },
+  { name = "_role_get_permissions", params = ["string"], returns = "string", description = "Get all permissions for role (JSON array)", expand_strings = true },
+
+  # Auth - Session Management
+  { name = "_auth_set_session", params = ["string"], returns = "integer", description = "Create session from JSON with user_id, role, claims; sets session cookie on response (1=success, 0=fail)", expand_strings = true },
+  { name = "_auth_clear_session", params = [], returns = "integer", description = "Destroy current user session and clear session cookie (1=success, 0=no session)" },
+  { name = "_auth_user_id", params = [], returns = "integer", description = "Get current authenticated user ID; returns 0 if not authenticated" },
+  { name = "_auth_user_role", params = [], returns = "string", description = "Get current authenticated user role; returns empty string if unauthenticated" },
+
+  # JSON helpers
+  { name = "_json_get", params = ["string", "string"], returns = "string", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true },
+]
+
+[language]
+# Block-level keywords that start a declaration
+blocks = ["auth", "protected", "login", "roles"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "session", description = "Session configuration block", context = "block" },
+  { name = "jwt", description = "JWT configuration block", context = "block" },
+  { name = "cookie", description = "Session cookie name", context = "config" },
+  { name = "sameSite", description = "Cookie SameSite attribute (Strict, Lax, None)", context = "config" },
+  { name = "secure", description = "Cookie Secure flag (HTTPS only)", context = "config" },
+  { name = "httpOnly", description = "Cookie HttpOnly flag (no JS access)", context = "config" },
+  { name = "timeoutMinutes", description = "Session timeout in minutes", context = "config" },
+  { name = "enabled", description = "Enable/disable feature", context = "config" },
+  { name = "secret", description = "JWT secret source (use $ENV_VAR)", context = "config" },
+  { name = "alg", description = "JWT signing algorithm (HS256, HS384, HS512)", context = "config" },
+  { name = "ttlMinutes", description = "JWT token TTL in minutes", context = "config" },
+  { name = "refreshTtlMinutes", description = "JWT refresh token TTL in minutes", context = "config" },
+  { name = "require", description = "Required role/permission for access", context = "block" },
+  { name = "roles", description = "Role definitions block", context = "block" },
+  { name = "permissions", description = "Permission definitions for a role", context = "block" },
+  { name = "csrf", description = "CSRF protection configuration", context = "config" },
+]
+
+# Custom types provided by the plugin
+types = [
+  { name = "Session", description = "User session object" },
+  { name = "User", description = "Authenticated user context" },
+  { name = "Role", description = "User role type" },
+  { name = "Permission", description = "Permission string type" },
+]
+
+# Built-in functions/expressions (generated by plugin expand)
+functions = [
+  { name = "auth.session.create", signature = "auth.session.create(userId, claims)", description = "Create a new session and return session ID" },
+  { name = "auth.session.setCookie", signature = "auth.session.setCookie(sessionId)", description = "Set session cookie on response" },
+  { name = "auth.session.get", signature = "auth.session.get()", description = "Get current session data (checks expiry)" },
+  { name = "auth.session.destroy", signature = "auth.session.destroy()", description = "End session and clear cookie" },
+  { name = "auth.jwt.sign", signature = "auth.jwt.sign(claims)", description = "Sign JWT with configured secret and algorithm" },
+  { name = "auth.jwt.verify", signature = "auth.jwt.verify(token)", description = "Verify JWT and return payload or empty string" },
+  { name = "auth.jwt.refresh", signature = "auth.jwt.refresh(refreshToken)", description = "Refresh a JWT token" },
+  { name = "auth.hashPassword", signature = "auth.hashPassword(password)", description = "Hash password with Argon2id" },
+  { name = "auth.verifyPassword", signature = "auth.verifyPassword(password, hash)", description = "Verify password against Argon2id hash" },
+  { name = "auth.can", signature = "auth.can(permission)", description = "Check if current user has permission" },
+  { name = "auth.hasRole", signature = "auth.hasRole(role)", description = "Check if current user has specific role" },
+  { name = "auth.getCurrentUser", signature = "auth.getCurrentUser()", description = "Get current authenticated user session data" },
+  { name = "auth.isAuthenticated", signature = "auth.isAuthenticated()", description = "Check if request is authenticated" },
+  { name = "auth.csrf.generate", signature = "auth.csrf.generate()", description = "Generate CSRF token for current session" },
+  { name = "auth.csrf.validate", signature = "auth.csrf.validate(token)", description = "Validate CSRF token against session" },
+  { name = "auth.tenant.getId", signature = "auth.tenant.getId()", description = "Get current tenant ID from session claims" },
+  { name = "auth.tenant.require", signature = "auth.tenant.require()", description = "Require a valid tenant context, returns tenant ID or empty string" },
+  { name = "auth.tenant.matches", signature = "auth.tenant.matches(tenantId)", description = "Check if current user belongs to the given tenant" },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "auth:", insert = "auth:\n\tsession:\n\t\tcookie = \"${1:app.sid}\"\n\t\ttimeoutMinutes = ${2:60}" },
+  { trigger = "roles:", insert = "roles:\n\tadmin: [\"*\"]\n\tuser: [${1:}]\n\tguest: []" },
+  { trigger = "protected ", insert = "endpoints:\n\tGET \"${1:/path}\" :\n\t\tguard:\n\t\t\trole in [\"${2:admin}\"]" },
+]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["app/auth"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
+
+[templates]
+# Starter files created when plugin is added to a project
+files = [
+  { path = "app/auth/auth.cln", template = "auth.cln" },
+  { path = "app/auth/project.cln", template = "project.cln" },
+]
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = [
+  { name = "_jwt_sign", use_instead = "auth: jwt: config", message = "Use auth: block JWT configuration instead of raw _jwt_sign()" },
+  { name = "_session_store", use_instead = "auth: session: config", message = "Use auth: block session configuration instead of raw session functions" },
+]
+
+block_folder_rules = [
+  { block = "auth", allowed_in = ["app/auth/", "app/backend/", "app/server/"], message = "auth: config should be in app/auth/" },
+]
+
+[ai]
+description = "Authentication and authorization plugin. Use the auth: block for configuration, guard: for route protection, and auth.* functions for session/JWT/role checks. Never implement your own password hashing or token signing."
+constraints = [
+  "Always use auth.hashPassword / auth.verifyPassword — never implement your own hashing",
+  "Never sign JWTs manually — use auth.jwt.sign with the secret from $ENV",
+  "Role checks belong in guard: sub-blocks, not inline if statements in handlers",
+  "Read tenant_id from auth.tenant.getId() — never from user-supplied body or query params",
+]
+
+[[ai.patterns]]
+name = "role-based-access"
+use_when = "different user types (admin, editor, viewer) have different permissions to routes or features"
+anti_pattern = "checking user.role == 'admin' inline inside handler logic — declare roles in the auth: roles: block and use guard: sub-blocks so the check is enforced before the handler runs"
+example = "patterns/role-based-access.cln"
+
+[[ai.patterns]]
+name = "password-reset"
+use_when = "users need a way to recover access when they forget their password"
+anti_pattern = "emailing a plain temporary password or a short numeric code — generate a signed, single-use token with a short TTL (15 min), store its hash, and invalidate on use"
+example = "patterns/password-reset.cln"
+
+[[ai.patterns]]
+name = "session-scoped-tenant"
+use_when = "a multi-tenant app where each session belongs to exactly one tenant"
+anti_pattern = "accepting tenant_id from the request body or query string — an attacker can forge it; always read it from the authenticated session via auth.tenant.getId()"
+example = "patterns/session-scoped-tenant.cln"
+
+[[ai.patterns]]
+name = "csrf-protection"
+use_when = "any server-rendered form that mutates state (login, settings, payments)"
+anti_pattern = "no CSRF protection on POST endpoints — a third-party site can submit a form as the logged-in user; generate a token with auth.csrf.generate(), embed it in the form, and validate with auth.csrf.validate() on every mutation"
+example = "patterns/csrf-protection.cln"

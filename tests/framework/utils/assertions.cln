@@ -1,0 +1,144 @@
+// Test Assertion Helpers for Clean Framework
+// Provides assertion functions for testing
+
+functions:
+	// Assert that two values are equal
+	boolean assertEqual(string actual, string expected, string message)
+		if actual != expected
+			printl("FAIL: " + message)
+			printl("  Expected: " + expected)
+			printl("  Actual:   " + actual)
+			return false
+		return true
+
+	// Assert that two integers are equal
+	boolean assertEqualInt(integer actual, integer expected, string message)
+		if actual != expected
+			printl("FAIL: " + message)
+			printl("  Expected: " + expected.toString())
+			printl("  Actual:   " + actual.toString())
+			return false
+		return true
+
+	// Assert that a condition is true
+	boolean assertTrue(boolean condition, string message)
+		if condition == false
+			printl("FAIL: " + message)
+			printl("  Expected: true")
+			printl("  Actual:   false")
+			return false
+		return true
+
+	// Assert that a condition is false
+	boolean assertFalse(boolean condition, string message)
+		if condition == true
+			printl("FAIL: " + message)
+			printl("  Expected: false")
+			printl("  Actual:   true")
+			return false
+		return true
+
+	// Assert that a string contains a substring
+	boolean assertContains(string haystack, string needle, string message)
+		if haystack.indexOf(needle) == -1
+			printl("FAIL: " + message)
+			printl("  String does not contain: " + needle)
+			return false
+		return true
+
+	// Assert that a string does NOT contain a substring
+	boolean assertNotContains(string haystack, string needle, string message)
+		if haystack.indexOf(needle) != -1
+			printl("FAIL: " + message)
+			printl("  String should not contain: " + needle)
+			return false
+		return true
+
+	// Assert that a string starts with a prefix
+	boolean assertStartsWith(string text, string prefix, string message)
+		if text.startsWith(prefix) == false
+			printl("FAIL: " + message)
+			printl("  String does not start with: " + prefix)
+			return false
+		return true
+
+	// Assert that a string ends with a suffix
+	boolean assertEndsWith(string text, string suffix, string message)
+		if text.endsWith(suffix) == false
+			printl("FAIL: " + message)
+			printl("  String does not end with: " + suffix)
+			return false
+		return true
+
+	// Assert that a string is empty
+	boolean assertEmpty(string text, string message)
+		if text.length() != 0
+			printl("FAIL: " + message)
+			printl("  Expected empty string, got: " + text)
+			return false
+		return true
+
+	// Assert that a string is not empty
+	boolean assertNotEmpty(string text, string message)
+		if text.length() == 0
+			printl("FAIL: " + message)
+			printl("  Expected non-empty string")
+			return false
+		return true
+
+	// Assert integer is greater than
+	boolean assertGreaterThan(integer actual, integer expected, string message)
+		if actual <= expected
+			printl("FAIL: " + message)
+			printl("  Expected: > " + expected.toString())
+			printl("  Actual:   " + actual.toString())
+			return false
+		return true
+
+	// Assert integer is less than
+	boolean assertLessThan(integer actual, integer expected, string message)
+		if actual >= expected
+			printl("FAIL: " + message)
+			printl("  Expected: < " + expected.toString())
+			printl("  Actual:   " + actual.toString())
+			return false
+		return true
+
+	// Count occurrences of a substring
+	integer countOccurrences(string text, string pattern)
+		integer count = 0
+		integer pos = 0
+		integer found = text.indexOf(pattern)
+		while found != -1
+			count = count + 1
+			pos = found + 1
+			if pos >= text.length()
+				found = -1
+			else
+				found = text.indexOf(pattern, pos)
+		return count
+
+	// Assert that a pattern occurs exactly N times
+	boolean assertOccurrences(string text, string pattern, integer expected, string message)
+		integer actual = countOccurrences(text, pattern)
+		if actual != expected
+			printl("FAIL: " + message)
+			printl("  Expected " + expected.toString() + " occurrences of: " + pattern)
+			printl("  Found: " + actual.toString())
+			return false
+		return true
+
+	// Log a test pass
+	void logPass(string testName)
+		printl("PASS: " + testName)
+
+	// Log a test fail
+	void logFail(string testName, string reason)
+		printl("FAIL: " + testName)
+		printl("  Reason: " + reason)
+
+	// Log test section header
+	void logSection(string sectionName)
+		printl("")
+		printl("=== " + sectionName + " ===")
+		printl("")

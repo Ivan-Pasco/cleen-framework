@@ -5,8 +5,11 @@
 
 # Build artifacts
 /build/
-/dist/
+dist/
+**/dist/
 *.wasm
+# But include compiled plugin WASMs (needed for releases)
+!plugins/*/plugin.wasm
 *.tar.gz
 *.zip
 *.sha256

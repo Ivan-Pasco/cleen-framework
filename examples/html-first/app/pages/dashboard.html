@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Dashboard | HTML First Demo</title>
+	<link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+	<app-header></app-header>
+
+	<div class="dashboard">
+		<header class="dashboard-header">
+			<h1>Welcome back!</h1>
+			<a href="/posts/new" class="btn btn-primary">New Post</a>
+		</header>
+
+		<section class="stats-grid">
+			<stat-card></stat-card>
+			<stat-card></stat-card>
+			<stat-card></stat-card>
+		</section>
+
+		<section class="quick-actions">
+			<h2>Quick Actions</h2>
+			<div class="action-cards">
+				<a href="/posts/new" class="action-card">
+					<span class="icon">+</span>
+					<span>New Post</span>
+				</a>
+				<a href="/settings" class="action-card">
+					<span class="icon">*</span>
+					<span>Settings</span>
+				</a>
+			</div>
+		</section>
+	</div>
+
+	<app-footer></app-footer>
+</body>
+</html>

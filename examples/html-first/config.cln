@@ -1,0 +1,13 @@
+// HTML-First Configuration
+
+config:
+	project:
+		name = "html-first"
+		version = "1.0.0"
+		description = "HTML-first approach with components"
+
+	build:
+		output = "dist"
+
+	server:
+		port = 3000

@@ -1,0 +1,110 @@
+// Pattern: modal-confirm
+// Use when: destructive actions (delete, deactivate, cancel subscription)
+// Anti-pattern: DON'T trigger destructive actions immediately on click.
+//   Users misclick. Destructive actions must always require explicit confirmation
+//   in a modal dialog that describes what will be destroyed and requires
+//   an affirmative button press — not just closing the modal.
+
+plugins:
+	frame.ui
+	frame.server
+	frame.data
+
+// Reusable confirm modal component
+component: tag="confirm-modal"
+	props:
+		string title = "Are you sure?"
+		string message = "This action cannot be undone."
+		string confirm_label = "Delete"
+		string cancel_label = "Cancel"
+		string confirm_class = "btn-danger"
+
+	state:
+		boolean visible = false
+		string target_id = ""
+		string target_name = ""
+
+	handlers:
+		// Call this from the page to open the modal
+		void open(string id, string name)
+			state.target_id = id
+			state.target_name = name
+			state.visible = true
+
+		void cancel()
+			state.visible = false
+			state.target_id = ""
+
+		void confirm()
+			// Dispatch a custom event the parent page handles
+			// Page's onConfirm handler does the actual deletion
+			ui.onEvent(".confirm-modal", "confirm", "onConfirm")
+			state.visible = false
+
+	html:
+		<div class="modal-overlay" cl-show="state.visible" onclick="cancel">
+			<div class="modal-dialog" onclick.stop="">
+				<h2>{props.title}</h2>
+				<p>{props.message}</p>
+				<p cl-show="state.target_name.length() > 0">
+					You are about to delete <strong>{state.target_name}</strong>.
+				</p>
+				<div class="modal-actions">
+					<button class="btn-secondary" onclick="cancel">{props.cancel_label}</button>
+					<button class="{props.confirm_class}" onclick="confirm">{props.confirm_label}</button>
+				</div>
+			</div>
+		</div>
+
+// ─── PAGE LAYER ──────────────────────────────────────────────────────────────
+// Pages are HTML files + a companion .cln file. DO NOT wrap pages in component: blocks.
+//
+// app/pages/users.cln — companion file: loads server data before render
+// functions:
+// 	any load(Request request)
+// 		list users = User.find:
+// 			order:
+// 				name asc
+// 		return {users: users}
+//
+// app/pages/users.html — the page shell; confirm-modal is an island
+//
+// <!DOCTYPE html>
+// <html>
+// <head><title>Users</title><link rel="stylesheet" href="/css/main.css"></head>
+// <body>
+//
+//   <ul>
+//     <li cl-iterate="users">
+//       {item.name}
+//       <!-- data-id and data-name are read by the component's onDeleteClick -->
+//       <button
+//         onclick="onDeleteClick"
+//         data-id="{item.id}"
+//         data-name="{item.name}"
+//       >Delete</button>
+//     </li>
+//   </ul>
+//
+//   <!-- confirm-modal is a client island — it manages its own open/confirm state -->
+//   <confirm-modal
+//     id="delete-modal"
+//     title="Delete user?"
+//     message="This will permanently remove the user and all their data."
+//     confirm_label="Yes, delete"
+//     client="on">
+//   </confirm-modal>
+//
+// </body>
+// </html>
+
+// Server endpoint
+endpoints:
+	DELETE "/api/users/:id":
+		guard:
+			require auth
+		let id = req.params.id.toInteger()
+		User.delete:
+			where:
+				id == id
+		return json({"deleted" to id})

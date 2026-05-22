@@ -1,0 +1,7 @@
+// Post model
+data Post
+	integer id
+	string title
+	integer author_id
+	string author
+	string date

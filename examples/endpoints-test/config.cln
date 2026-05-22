@@ -1,0 +1,13 @@
+// Endpoints Test Configuration
+
+config:
+	project:
+		name = "endpoints-test"
+		version = "1.0.0"
+		description = "API endpoints testing"
+
+	build:
+		output = "dist"
+
+	server:
+		port = 3000

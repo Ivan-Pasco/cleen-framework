@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>HTML First Demo</title>
+	<link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+	<app-header></app-header>
+
+	<section class="hero">
+		<h1>Welcome to Frame</h1>
+		<p>Build modern web apps with HTML.</p>
+		<a href="/docs" class="btn btn-primary">Get Started</a>
+	</section>
+
+	<section class="featured-posts">
+		<h2>Featured Posts</h2>
+
+		<div class="post-grid">
+			<article class="post-card">
+				<h3><a href="/blog/getting-started">Getting Started</a></h3>
+				<p>Learn the basics of building with Frame.</p>
+			</article>
+
+			<article class="post-card">
+				<h3><a href="/blog/components">Using Components</a></h3>
+				<p>Create reusable UI components.</p>
+			</article>
+
+			<article class="post-card">
+				<h3><a href="/blog/routing">File-based Routing</a></h3>
+				<p>How routing works in Frame.</p>
+			</article>
+		</div>
+
+		<a href="/blog" class="btn">View All Posts</a>
+	</section>
+
+	<section class="newsletter">
+		<h2>Stay Updated</h2>
+		<newsletter-form></newsletter-form>
+	</section>
+
+	<app-footer></app-footer>
+</body>
+</html>

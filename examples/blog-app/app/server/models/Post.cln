@@ -1,0 +1,10 @@
+// Post model
+data Post
+	integer author_id
+	string title
+	string content
+	string slug
+	boolean published
+	integer views
+	string created_at
+	string updated_at

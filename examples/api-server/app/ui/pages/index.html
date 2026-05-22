@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>API Server</title>
+	<style>
+		body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+		h1 { color: #333; }
+		h2 { color: #555; margin-top: 2rem; }
+		.endpoint { background: #f5f5f5; padding: 0.5rem 1rem; margin: 0.5rem 0; border-radius: 4px; font-family: monospace; }
+		.get { border-left: 4px solid #4CAF50; }
+		.post { border-left: 4px solid #2196F3; }
+		.put { border-left: 4px solid #FF9800; }
+		.delete { border-left: 4px solid #f44336; }
+	</style>
+</head>
+<body>
+	<h1>API Server</h1>
+	<p>REST API with authentication</p>
+
+	<h2>Public Endpoints</h2>
+	<div class="endpoint get">GET /api/health - Health check</div>
+	<div class="endpoint post">POST /api/login - User login</div>
+	<div class="endpoint post">POST /api/register - User registration</div>
+	<div class="endpoint get">GET /api/posts - List all posts</div>
+	<div class="endpoint get">GET /api/posts/:id - Get single post</div>
+
+	<h2>Protected Endpoints</h2>
+	<div class="endpoint get">GET /api/profile - Get user profile</div>
+	<div class="endpoint put">PUT /api/profile - Update profile</div>
+	<div class="endpoint post">POST /api/posts - Create post</div>
+	<div class="endpoint put">PUT /api/posts/:id - Update post</div>
+	<div class="endpoint delete">DELETE /api/posts/:id - Delete post</div>
+	<div class="endpoint post">POST /api/comments - Create comment</div>
+
+	<h2>Admin Endpoints</h2>
+	<div class="endpoint get">GET /api/admin/users - List all users</div>
+	<div class="endpoint delete">DELETE /api/admin/users/:id - Delete user</div>
+	<div class="endpoint get">GET /api/admin/posts - List all posts (admin)</div>
+</body>
+</html>

@@ -1,0 +1,13 @@
+// HTML Simple Configuration
+
+config:
+	project:
+		name = "html-simple"
+		version = "1.0.0"
+		description = "Simple HTML pages demo"
+
+	build:
+		output = "dist"
+
+	server:
+		port = 3000

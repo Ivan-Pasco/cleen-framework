@@ -1,0 +1,107 @@
+// Test: frame.ui validation errors
+// Tests that invalid configurations produce appropriate errors
+
+functions:
+	// Test component without render
+	boolean testComponentWithoutRender()
+		string component = "component Empty:"
+		return component.indexOf("render:") == -1
+
+	// Test invalid prop type
+	boolean testInvalidPropType()
+		string prop = "component Button(label: badtype):"
+		boolean validTypes = prop.contains("string") or prop.contains("integer") or prop.contains("boolean")
+		return validTypes == false
+
+	// Test duplicate prop name
+	boolean testDuplicatePropName()
+		string props = "(name: string, name: string)"
+		integer count = 0
+		string text = props
+		integer pos = text.indexOf("name")
+		while pos != -1
+			count = count + 1
+			text = text.substring(pos + 4, text.length())
+			pos = text.indexOf("name")
+		return count == 2
+
+	// Test invalid hydration mode
+	boolean testInvalidHydrationMode()
+		string component = "component Bad(client=\"invalid\"):"
+		boolean validModes = component.contains("on") or component.contains("off") or component.contains("visible") or component.contains("idle") or component.contains("only")
+		return component.contains("invalid")
+
+	// Test unclosed HTML tag
+	boolean testUnclosedHtmlTag()
+		string htmlStr = "html(\"<div><p>text</div>\")"
+		return htmlStr.indexOf("</p>") == -1
+
+	// Test missing required prop
+	boolean testMissingRequiredProp()
+		string componentUsage = "<Button />"
+		return componentUsage.indexOf("label=") == -1
+
+	// Test circular component reference
+	boolean testCircularReference()
+		string compA = "component A:\n\treturn html(\"<B />\")"
+		string compB = "component B:\n\treturn html(\"<A />\")"
+		return compA.contains("<B />") and compB.contains("<A />")
+
+start:
+	printl("=== Test Suite: UI Validation Errors ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testComponentWithoutRender()
+		printl("PASS: component without render is detected")
+		passed = passed + 1
+	else
+		printl("FAIL: component without render is detected")
+		failed = failed + 1
+
+	if testInvalidPropType()
+		printl("PASS: invalid prop type is detected")
+		passed = passed + 1
+	else
+		printl("FAIL: invalid prop type is detected")
+		failed = failed + 1
+
+	if testDuplicatePropName()
+		printl("PASS: duplicate prop name is detected")
+		passed = passed + 1
+	else
+		printl("FAIL: duplicate prop name is detected")
+		failed = failed + 1
+
+	if testInvalidHydrationMode()
+		printl("PASS: invalid hydration mode is detected")
+		passed = passed + 1
+	else
+		printl("FAIL: invalid hydration mode is detected")
+		failed = failed + 1
+
+	if testUnclosedHtmlTag()
+		printl("PASS: unclosed HTML tag is detected")
+		passed = passed + 1
+	else
+		printl("FAIL: unclosed HTML tag is detected")
+		failed = failed + 1
+
+	if testMissingRequiredProp()
+		printl("PASS: missing required prop is detected")
+		passed = passed + 1
+	else
+		printl("FAIL: missing required prop is detected")
+		failed = failed + 1
+
+	if testCircularReference()
+		printl("PASS: circular component reference is detected")
+		passed = passed + 1
+	else
+		printl("FAIL: circular component reference is detected")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

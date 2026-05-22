@@ -1,0 +1,473 @@
+// frame.auth plugin - Authentication and Authorization DSL
+// Provides: auth config, session handling, JWT, roles/permissions, CSRF
+// Version: 2.0.0
+// Implements: Frame Auth Specification v1.0
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
+
+functions:
+	// Main entry point - called by compiler for each framework block
+	string expand_block(string block_name, string attributes, string body)
+		if block_name == "auth"
+			return expand_auth_config(body)
+		if block_name == "protected"
+			return expand_protected(attributes, body)
+		if block_name == "login"
+			return expand_login(attributes, body)
+		if block_name == "roles"
+			return expand_roles(body)
+		return body
+
+	// Validation entry point
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "auth"
+			return validate_auth_config(body)
+		return ""
+
+	// Keywords for IDE
+	string get_keywords()
+		return "[\"auth\", \"protected\", \"login\", \"roles\", \"jwt\", \"session\", \"cookie\", \"sameSite\", \"secure\", \"httpOnly\", \"timeoutMinutes\", \"secret\", \"alg\", \"ttlMinutes\", \"refreshTtlMinutes\", \"csrf\", \"tenant\", \"tenantId\"]"
+
+// ============================================================================
+// AUTH CONFIG EXPANSION
+// ============================================================================
+
+functions:
+	// Expand auth: config block
+	string expand_auth_config(string body)
+		string result = ""
+
+		// Parse session config
+		string session_config = extract_subblock(body, "session:")
+		if session_config.length() > 0
+			result = result + expand_session_config(session_config)
+
+		// Parse JWT config
+		string jwt_config = extract_subblock(body, "jwt:")
+		if jwt_config.length() > 0
+			result = result + expand_jwt_config(jwt_config)
+
+		// Parse roles config
+		string roles_config = extract_subblock(body, "roles:")
+		if roles_config.length() > 0
+			result = result + expand_roles(roles_config)
+
+		// Parse tenant config
+		string tenant_config = extract_subblock(body, "tenant:")
+		if tenant_config.length() > 0
+			result = result + expand_tenant_config(tenant_config)
+
+		// Generate auth helper object
+		result = result + generate_auth_helpers()
+
+		return result
+
+	// Expand session configuration
+	string expand_session_config(string config)
+		string cookie_name = get_config_value(config, "cookie", "frame.sid")
+		string same_site = get_config_value(config, "sameSite", "Lax")
+		string secure = get_config_value(config, "secure", "true")
+		string http_only = get_config_value(config, "httpOnly", "true")
+		string path = get_config_value(config, "path", "/")
+		string timeout = get_config_value(config, "timeoutMinutes", "60")
+
+		string result = "// Session configuration\n"
+		result = result + "string __session_cookie = \"" + cookie_name + "\"\n"
+		result = result + "string __session_same_site = \"" + same_site + "\"\n"
+		result = result + "boolean __session_secure = " + secure + "\n"
+		result = result + "boolean __session_http_only = " + http_only + "\n"
+		result = result + "string __session_path = \"" + path + "\"\n"
+		result = result + "integer __session_timeout = " + timeout + "\n\n"
+
+		return result
+
+	// Expand JWT configuration
+	string expand_jwt_config(string config)
+		string enabled = get_config_value(config, "enabled", "true")
+		string secret_env = get_config_value(config, "secret", "JWT_SECRET")
+		string alg = get_config_value(config, "alg", "HS256")
+		string ttl = get_config_value(config, "ttlMinutes", "60")
+		string refresh_ttl = get_config_value(config, "refreshTtlMinutes", "43200")
+
+		string result = "// JWT configuration\n"
+		result = result + "boolean __jwt_enabled = " + enabled + "\n"
+		result = result + "string __jwt_secret = _env_get(\"" + secret_env + "\")\n"
+		result = result + "string __jwt_alg = \"" + alg + "\"\n"
+		result = result + "integer __jwt_ttl = " + ttl + "\n"
+		result = result + "integer __jwt_refresh_ttl = " + refresh_ttl + "\n\n"
+
+		return result
+
+	// Expand tenant configuration
+	string expand_tenant_config(string config)
+		string field = get_config_value(config, "field", "tenantId")
+		string header = get_config_value(config, "header", "")
+
+		string result = "// Tenant configuration\n"
+		result = result + "string __tenant_field = \"" + field + "\"\n"
+		if header.length() > 0
+			result = result + "string __tenant_header = \"" + header + "\"\n"
+		result = result + "\n"
+		return result
+
+// ============================================================================
+// AUTH HELPER GENERATION
+// ============================================================================
+
+functions:
+	// Generate auth.* helper object
+	string generate_auth_helpers()
+		string result = "// Auth helper functions\n"
+		result = result + "functions:\n"
+
+		// auth.session.create(userId, claims)
+		result = result + "\tstring session_create(integer userId, string claims)\n"
+		result = result + "\t\tstring sessionId = _crypto_random_hex(32)\n"
+		result = result + "\t\tinteger expiry = _time_now() + (__session_timeout * 60)\n"
+		result = result + "\t\tstring sessionData = \"{\\\"userId\\\":\" + userId.toString() + \",\\\"claims\\\":\" + claims + \",\\\"expiry\\\":\" + expiry.toString() + \"}\"\n"
+		result = result + "\t\t_session_store(sessionId, sessionData)\n"
+		result = result + "\t\treturn sessionId\n\n"
+
+		// auth.session.setCookie(sessionId)
+		result = result + "\tstring session_setCookie(string sessionId)\n"
+		result = result + "\t\tstring cookie = __session_cookie + \"=\" + sessionId + \"; Path=\" + __session_path + \"; SameSite=\" + __session_same_site\n"
+		result = result + "\t\tif __session_secure\n"
+		result = result + "\t\t\tcookie = cookie + \"; Secure\"\n"
+		result = result + "\t\tif __session_http_only\n"
+		result = result + "\t\t\tcookie = cookie + \"; HttpOnly\"\n"
+		result = result + "\t\tcookie = cookie + \"; Max-Age=\" + (__session_timeout * 60).toString()\n"
+		result = result + "\t\treturn _http_set_header(\"Set-Cookie\", cookie)\n\n"
+
+		// auth.session.get() - retrieves and validates session, checking expiry
+		result = result + "\tstring session_get()\n"
+		result = result + "\t\tstring sessionId = _req_cookie(__session_cookie)\n"
+		result = result + "\t\tif sessionId == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\tstring data = _session_get(sessionId)\n"
+		result = result + "\t\tif data == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\tstring expiry_str = _json_get(data, \"expiry\")\n"
+		result = result + "\t\tif expiry_str != \"\"\n"
+		result = result + "\t\t\tinteger expiry = parseInt(expiry_str)\n"
+		result = result + "\t\t\tif _time_now() > expiry\n"
+		result = result + "\t\t\t\t_session_delete(sessionId)\n"
+		result = result + "\t\t\t\treturn \"\"\n"
+		result = result + "\t\treturn data\n\n"
+
+		// auth.session.destroy() - clears server session and expires client cookie
+		result = result + "\tboolean session_destroy()\n"
+		result = result + "\t\tstring sessionId = _req_cookie(__session_cookie)\n"
+		result = result + "\t\tif sessionId != \"\"\n"
+		result = result + "\t\t\t_session_delete(sessionId)\n"
+		result = result + "\t\tstring expireCookie = __session_cookie + \"=; Path=\" + __session_path + \"; SameSite=\" + __session_same_site + \"; Max-Age=0\"\n"
+		result = result + "\t\tif __session_secure\n"
+		result = result + "\t\t\texpireCookie = expireCookie + \"; Secure\"\n"
+		result = result + "\t\tif __session_http_only\n"
+		result = result + "\t\t\texpireCookie = expireCookie + \"; HttpOnly\"\n"
+		result = result + "\t\t_http_set_header(\"Set-Cookie\", expireCookie)\n"
+		result = result + "\t\treturn true\n\n"
+
+		// auth.jwt.sign(claims)
+		result = result + "\tstring jwt_sign(string claims)\n"
+		result = result + "\t\tinteger iat = _time_now()\n"
+		result = result + "\t\tinteger exp = iat + (__jwt_ttl * 60)\n"
+		result = result + "\t\tstring payload = \"{\\\"iat\\\":\" + iat.toString() + \",\\\"exp\\\":\" + exp.toString()\n"
+		result = result + "\t\tif claims.length() > 2\n"
+		result = result + "\t\t\tinteger brace_pos = claims.indexOf(\"{\")\n"
+		result = result + "\t\t\tif brace_pos != -1\n"
+		result = result + "\t\t\t\tstring inner = claims.substring(brace_pos + 1, claims.length())\n"
+		result = result + "\t\t\t\tpayload = payload + \",\" + inner\n"
+		result = result + "\t\t\telse\n"
+		result = result + "\t\t\t\tpayload = payload + \"}\"\n"
+		result = result + "\t\telse\n"
+		result = result + "\t\t\tpayload = payload + \"}\"\n"
+		result = result + "\t\treturn _jwt_sign(payload, __jwt_secret, __jwt_alg)\n\n"
+
+		// auth.jwt.verify(token)
+		result = result + "\tstring jwt_verify(string token)\n"
+		result = result + "\t\treturn _jwt_verify(token, __jwt_secret, __jwt_alg)\n\n"
+
+		// auth.jwt.refresh(refreshToken)
+		result = result + "\tstring jwt_refresh(string refreshToken)\n"
+		result = result + "\t\tstring claims = _jwt_verify(refreshToken, __jwt_secret, __jwt_alg)\n"
+		result = result + "\t\tif claims == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\treturn jwt_sign(claims)\n\n"
+
+		// auth.hashPassword(password)
+		result = result + "\tstring hashPassword(string password)\n"
+		result = result + "\t\treturn _crypto_hash_password(password)\n\n"
+
+		// auth.verifyPassword(password, hash)
+		result = result + "\tboolean verifyPassword(string password, string hash)\n"
+		result = result + "\t\treturn _crypto_verify_password(password, hash)\n\n"
+
+		// auth.can(permission)
+		result = result + "\tboolean can(string permission)\n"
+		result = result + "\t\tstring session = session_get()\n"
+		result = result + "\t\tif session == \"\"\n"
+		result = result + "\t\t\treturn false\n"
+		result = result + "\t\tstring role = _json_get(session, \"claims.role\")\n"
+		result = result + "\t\treturn _role_has_permission(role, permission)\n\n"
+
+		// auth.hasRole(role)
+		result = result + "\tboolean hasRole(string requiredRole)\n"
+		result = result + "\t\tstring session = session_get()\n"
+		result = result + "\t\tif session == \"\"\n"
+		result = result + "\t\t\treturn false\n"
+		result = result + "\t\tstring role = _json_get(session, \"claims.role\")\n"
+		result = result + "\t\treturn role == requiredRole\n\n"
+
+		// auth.getCurrentUser()
+		result = result + "\tstring getCurrentUser()\n"
+		result = result + "\t\tstring session = session_get()\n"
+		result = result + "\t\tif session == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\treturn session\n\n"
+
+		// auth.isAuthenticated()
+		result = result + "\tboolean isAuthenticated()\n"
+		result = result + "\t\treturn session_get() != \"\"\n\n"
+
+		// CSRF token generation
+		result = result + "\tstring csrf_generate()\n"
+		result = result + "\t\tstring token = _crypto_random_hex(32)\n"
+		result = result + "\t\tstring session = session_get()\n"
+		result = result + "\t\tif session != \"\"\n"
+		result = result + "\t\t\t_session_set_csrf(token)\n"
+		result = result + "\t\treturn token\n\n"
+
+		// CSRF token validation
+		result = result + "\tboolean csrf_validate(string token)\n"
+		result = result + "\t\tstring expected = _session_get_csrf()\n"
+		result = result + "\t\treturn expected != \"\" and expected == token\n\n"
+
+		// auth.tenant.getId() - get tenant ID from current session claims
+		result = result + "\tstring tenant_getId()\n"
+		result = result + "\t\tstring session = session_get()\n"
+		result = result + "\t\tif session == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\treturn _json_get(session, \"claims.tenantId\")\n\n"
+
+		// auth.tenant.require() - require a valid tenant context; returns tenantId or empty string on failure
+		result = result + "\tstring tenant_require()\n"
+		result = result + "\t\tstring tenantId = tenant_getId()\n"
+		result = result + "\t\tif tenantId == \"\"\n"
+		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\treturn tenantId\n\n"
+
+		// auth.tenant.matches(checkTenantId) - check if current user belongs to given tenant
+		result = result + "\tboolean tenant_matches(string checkTenantId)\n"
+		result = result + "\t\tstring myTenantId = tenant_getId()\n"
+		result = result + "\t\tif myTenantId == \"\"\n"
+		result = result + "\t\t\treturn false\n"
+		result = result + "\t\treturn myTenantId == checkTenantId\n\n"
+
+		return result
+
+// ============================================================================
+// ROLES EXPANSION
+// ============================================================================
+
+functions:
+	// Expand roles: config block
+	string expand_roles(string body)
+		string result = "// Roles configuration\n"
+		result = result + "string __roles_config = \"{\"\n"
+
+		// Parse each role line
+		string lines = body
+		integer line_start = 0
+		boolean first = true
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0 and line.indexOf(":") != -1
+				integer colon_pos = line.indexOf(":")
+				string role_name = line.substring(0, colon_pos).trim()
+				string permissions = line.substring(colon_pos + 1, line.length()).trim()
+
+				if not first
+					result = result + " + \",\"\n"
+				first = false
+
+				result = result + "__roles_config = __roles_config + \"\\\"" + role_name + "\\\":\" + \"" + permissions + "\"\n"
+
+			line_start = line_end + 1
+
+		result = result + "__roles_config = __roles_config + \"}\"\n"
+		result = result + "_roles_register(__roles_config)\n\n"
+
+		return result
+
+// ============================================================================
+// PROTECTED BLOCK EXPANSION
+// ============================================================================
+
+functions:
+	// Expand protected block for route guards
+	string expand_protected(string attrs, string body)
+		string role = get_attr(attrs, "role", "")
+		string permission = get_attr(attrs, "permission", "")
+
+		string result = ""
+
+		// Generate guard check
+		if role != ""
+			result = result + "if not hasRole(\"" + role + "\")\n"
+			result = result + "\treturn forbidden()\n"
+		else if permission != ""
+			result = result + "if not can(\"" + permission + "\")\n"
+			result = result + "\treturn forbidden()\n"
+		else
+			result = result + "if not isAuthenticated()\n"
+			result = result + "\treturn unauthorized()\n"
+
+		result = result + body
+		return result
+
+// ============================================================================
+// LOGIN BLOCK EXPANSION
+// ============================================================================
+
+functions:
+	// Expand login handler block
+	string expand_login(string attrs, string body)
+		string model = get_attr(attrs, "model", "User")
+		string email_field = get_attr(attrs, "emailField", "email")
+		string password_field = get_attr(attrs, "passwordField", "password_hash")
+		string redirect_to = get_attr(attrs, "redirectTo", "/dashboard")
+
+		string result = "functions:\n"
+		result = result + "\tstring handleLogin(string email, string password)\n"
+		result = result + "\t\t" + model + "? user = " + model + ".first:\n"
+		result = result + "\t\t\twhere:\n"
+		result = result + "\t\t\t\t" + email_field + " == email\n"
+		result = result + "\t\t\n"
+		result = result + "\t\tif user == null\n"
+		result = result + "\t\t\treturn badRequest(\"Invalid credentials\")\n"
+		result = result + "\t\t\n"
+		result = result + "\t\tif not verifyPassword(password, user." + password_field + ")\n"
+		result = result + "\t\t\treturn badRequest(\"Invalid credentials\")\n"
+		result = result + "\t\t\n"
+		result = result + "\t\tstring safe_email = user." + email_field + ".replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")\n"
+		result = result + "\t\tstring safe_role = user.role.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")\n"
+		result = result + "\t\tstring claims = \"{\\\"email\\\":\\\"\" + safe_email + \"\\\",\\\"role\\\":\\\"\" + safe_role + \"\\\"}\"\n"
+		result = result + "\t\tstring sessionId = session_create(user.id, claims)\n"
+		result = result + "\t\tsession_setCookie(sessionId)\n"
+		result = result + "\t\treturn redirect(\"" + redirect_to + "\")\n\n"
+
+		result = result + body
+		return result
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+functions:
+	// Extract a sub-block from body
+	string extract_subblock(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + block_name.length()
+
+		// Find the end of this sub-block
+		integer end_pos = body.length()
+		integer search_pos = content_start
+
+		while search_pos < body.length()
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				string after_newline = body.substring(search_pos + 1, body.length()).trim()
+				if after_newline.startsWith("session:") or after_newline.startsWith("jwt:") or after_newline.startsWith("roles:") or after_newline.startsWith("tenant:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return body.substring(content_start, end_pos).trim()
+
+	// Get config value from block
+	string get_config_value(string config, string key, string default_val)
+		// Look for "key = value" pattern
+		string pattern = key + " = "
+		integer pos = config.indexOf(pattern)
+		if pos == -1
+			return default_val
+
+		integer value_start = pos + pattern.length()
+		integer value_end = config.indexOf("\n", value_start)
+		if value_end == -1
+			value_end = config.length()
+
+		string value = config.substring(value_start, value_end).trim()
+
+		// Remove quotes if present
+		if value.startsWith("\"") and value.endsWith("\"")
+			value = value.substring(1, value.length() - 1)
+
+		// Handle env() function
+		if value.startsWith("env(\"")
+			integer env_start = 5
+			integer env_end = value.indexOf("\")")
+			return value.substring(env_start, env_end)
+
+		return value
+
+	// Get attribute from attrs string
+	string get_attr(string attrs, string key, string default_val)
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_val
+		return extract_value(attrs, pos)
+
+	// Extract value after key position
+	string extract_value(string json, integer key_pos)
+		integer colon_pos = json.indexOf(":", key_pos)
+		if colon_pos == -1
+			return ""
+		integer quote_start = json.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			return ""
+		integer quote_end = json.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return ""
+		return json.substring(quote_start + 1, quote_end)
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+functions:
+	string validate_auth_config(string body)
+		if body.indexOf("jwt:") != -1
+			string jwt_block = extract_subblock(body, "jwt:")
+			if jwt_block.indexOf("enabled = false") == -1
+				if jwt_block.indexOf("secret") == -1
+					return "auth.jwt: secret is required when JWT is enabled"
+
+				// Item 2 — detect hardcoded JWT secret (must reference env var)
+				string raw_secret = get_config_value(jwt_block, "secret", "")
+				if raw_secret.length() > 0
+					boolean is_env_ref = raw_secret.startsWith("$")
+					boolean is_env_call = raw_secret.startsWith("env(")
+					if not is_env_ref and not is_env_call
+						return "auth.jwt: secret must reference an environment variable (use $JWT_SECRET or env(\"JWT_SECRET\")), not a hardcoded string"
+
+		// Item 14 — sameSite=None requires secure=true
+		if body.indexOf("session:") != -1
+			string session_block = extract_subblock(body, "session:")
+			string same_site_val = get_config_value(session_block, "sameSite", "")
+			if same_site_val == "None"
+				string secure_val = get_config_value(session_block, "secure", "")
+				if secure_val != "true"
+					return "auth.session: sameSite=\"None\" requires secure=true (required by browser spec)"
+
+		return ""

@@ -1,0 +1,10 @@
+// Login endpoint
+// Route: POST /api/login
+
+functions:
+	string __route_handler_0()
+		return "{\"message\": \"login endpoint\"}"
+
+start:
+	integer s = 0
+	s = _http_route("POST", "/api/login", 0)

@@ -1,0 +1,56 @@
+// Pattern: request-validation
+// Use when: any endpoint that accepts user-supplied input
+// Anti-pattern: DON'T pass raw input directly to service or data layer.
+//   Without boundary validation, invalid data reaches business logic and
+//   causes confusing internal errors. Validate at the endpoint, return 400
+//   immediately with a field-level error so the client can correct the input.
+
+plugins:
+	frame.server
+
+endpoints:
+	POST "/users":
+		let name = req.body_field("name")
+		let email = req.body_field("email")
+		let age = req.body_field("age")
+
+		// Validate required fields at the boundary — fail fast with 400
+		if name.length() == 0
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "name is required"}))
+
+		if email.length() == 0
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "email", "message" to "email is required"}))
+
+		// Email format check
+		if email.indexOf("@") == -1
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "email", "message" to "email must contain @"}))
+
+		// Type coercion check — age must be a positive integer
+		let age_int = age.toInteger()
+		if age_int <= 0
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "age", "message" to "age must be a positive integer"}))
+
+		if age_int > 150
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "age", "message" to "age must be 150 or less"}))
+
+		// Only reach service logic once all inputs are validated
+		return json({
+			"id" to "new-user-id",
+			"name" to name,
+			"email" to email,
+			"age" to age_int
+		})
+
+	PUT "/users/:id":
+		let id = req.params.id
+
+		// Path param must be a positive integer
+		let id_int = id.toInteger()
+		if id_int <= 0
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "id", "message" to "id must be a positive integer"}))
+
+		let name = req.body_field("name")
+		if name.length() == 0
+			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "name is required"}))
+
+		return json({"id" to id_int, "name" to name, "updated" to true})

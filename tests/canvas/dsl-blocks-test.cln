@@ -1,0 +1,106 @@
+// Test: canvas/dsl-blocks
+// Verifies that all major canvas DSL blocks expand correctly via the plugin.
+// Expected: compiles to WASM without errors.
+
+plugins:
+	frame.canvas
+
+canvasScene: width=800 height=600 fps=60
+
+	assets:
+		image "bg" src="images/background.png"
+		sound "jump" src="sounds/jump.wav"
+
+	layers:
+		layer "background" z=0
+		layer "world" z=10
+		layer "hud" z=100
+
+	state:
+		number ballX = 400.0
+		number ballY = 300.0
+		number velX = 3.0
+		number velY = 2.0
+		number score = 0.0
+
+	gradient "skyGrad" linear x1=0 y1=0 x2=0 y2=600:
+		stop 0.0 "#1a1a2e"
+		stop 1.0 "#16213e"
+
+	path "arrow":
+		moveTo x=0 y=0
+		lineTo x=40 y=0
+		curveTo x=60 y=0 cx=50 cy=-10
+		closePath
+
+	tween "ballIntro":
+		ballX from=0 to=400
+		duration = 1.0
+		ease = "easeOutElastic"
+		yoyo = false
+
+	customEase "snap" x1=0.68 y1=-0.55 x2=0.265 y2=1.55
+
+	camera:
+		followX = ballX
+		followY = ballY
+		smoothing = 0.08
+
+	init:
+		score = 0.0
+
+	draw:
+		canvas.clear color="#1a1a2e"
+		canvas.rect x=0 y=0 width=800 height=600 color="#16213e"
+		canvas.circle x=ballX y=ballY radius=30 color="#ff6b6b"
+		canvas.rect x=10 y=10 width=200 height=40 color="#0f3460" cornerRadius=8
+		canvas.text "Score: " x=20 y=22 size=18 color="#e94560"
+		canvas.line fromX=0 fromY=598 toX=800 toY=598 stroke=2 color="#e94560"
+		canvas.triangle x1=100 y1=100 x2=120 y2=140 x3=140 y3=100 color="#ffd700"
+		canvas.ellipse x=600 y=150 radiusX=60 radiusY=30 color="#4ecdc4"
+		canvas.alpha value=0.6:
+			canvas.rect x=300 y=250 width=200 height=100 color="#ffffff"
+		canvas.shadow blur=15 offsetX=0 offsetY=0 color="#ff6b6b":
+			canvas.circle x=ballX y=ballY radius=32 color="#ff6b6b"
+
+	onFrame: param="dt"
+		ballX = ballX + velX
+		ballY = ballY + velY
+		if ballX > 770.0
+			velX = velX * -1.0
+		if ballX < 30.0
+			velX = velX * -1.0
+		if ballY > 570.0
+			velY = velY * -1.0
+		if ballY < 30.0
+			velY = velY * -1.0
+		score = score + dt
+
+	onPointerDown: param="mx,my"
+		ballX = mx
+		ballY = my
+
+	onPointerMove: param="px,py"
+		velX = (px - ballX) * 0.05
+
+	onPointerUp: param="rx,ry"
+		velX = velX * 1.1
+
+	onKeyDown: param="key"
+		if key == "ArrowLeft"
+			velX = velX - 1.0
+		if key == "ArrowRight"
+			velX = velX + 1.0
+		if key == "Space"
+			velY = velY * -1.0
+
+	onKeyUp: param="key"
+		velY = velY * 0.9
+
+	onPause:
+		velX = 0.0
+		velY = 0.0
+
+	onResume:
+		velX = 3.0
+		velY = 2.0

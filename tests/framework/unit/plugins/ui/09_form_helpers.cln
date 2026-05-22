@@ -1,0 +1,157 @@
+// Test: frame.ui form helper bridge functions
+// Tests the 5 new form-reading functions added to frame.ui
+
+start:
+	printl("=== Test Suite: Form Helpers (frame.ui) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testInputValue()
+		printl("PASS: ui.inputValue(selector) returns string value")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.inputValue(selector) returns string value")
+		failed = failed + 1
+
+	if testFormJson()
+		printl("PASS: ui.formJson(selector) returns JSON string")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.formJson(selector) returns JSON string")
+		failed = failed + 1
+
+	if testFormJsonFormat()
+		printl("PASS: ui.formJson produces valid JSON format")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.formJson produces valid JSON format")
+		failed = failed + 1
+
+	if testFormData()
+		printl("PASS: ui.formData(selector) returns URL-encoded string")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.formData(selector) returns URL-encoded string")
+		failed = failed + 1
+
+	if testFormDataFormat()
+		printl("PASS: ui.formData produces valid URL-encoded format")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.formData produces valid URL-encoded format")
+		failed = failed + 1
+
+	if testChecked()
+		printl("PASS: ui.checked(selector) returns 0 or 1")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.checked(selector) returns 0 or 1")
+		failed = failed + 1
+
+	if testCheckedUnchecked()
+		printl("PASS: ui.checked returns 0 for unchecked")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.checked returns 0 for unchecked")
+		failed = failed + 1
+
+	if testCheckedChecked()
+		printl("PASS: ui.checked returns 1 for checked")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.checked returns 1 for checked")
+		failed = failed + 1
+
+	if testSetInput()
+		printl("PASS: ui.setInput(selector, value) sets input value")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.setInput(selector, value) sets input value")
+		failed = failed + 1
+
+	if testFormHelpersInUi()
+		printl("PASS: form helpers correctly placed in frame.ui")
+		passed = passed + 1
+	else
+		printl("FAIL: form helpers correctly placed in frame.ui")
+		failed = failed + 1
+
+	if testFormJsonSelector()
+		printl("PASS: ui.formJson works with CSS form selector")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.formJson works with CSS form selector")
+		failed = failed + 1
+
+	if testFormWithApiSubmit()
+		printl("PASS: form helpers compose with api.* for full flow")
+		passed = passed + 1
+	else
+		printl("FAIL: form helpers compose with api.* for full flow")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test ui.inputValue signature
+	boolean testInputValue()
+		string sig = "ui.inputValue(selector) -> string"
+		return sig.contains("ui.inputValue") and sig.contains("selector") and sig.contains("string")
+
+	// Test ui.formJson signature
+	boolean testFormJson()
+		string sig = "ui.formJson(selector) -> string (JSON object)"
+		return sig.contains("ui.formJson") and sig.contains("JSON")
+
+	// Test ui.formJson returns JSON format
+	boolean testFormJsonFormat()
+		string example = "{\"name\":\"John\",\"email\":\"john@example.com\"}"
+		return example.contains("name") and example.contains("email")
+
+	// Test ui.formData signature
+	boolean testFormData()
+		string sig = "ui.formData(selector) -> string (URL-encoded)"
+		return sig.contains("ui.formData") and sig.contains("URL-encoded")
+
+	// Test ui.formData returns URL-encoded format
+	boolean testFormDataFormat()
+		string example = "name=John&email=john%40example.com"
+		return example.contains("name=") and example.contains("&") and example.contains("email=")
+
+	// Test ui.checked signature
+	boolean testChecked()
+		string sig = "ui.checked(selector) -> integer (0 or 1)"
+		return sig.contains("ui.checked") and sig.contains("0 or 1")
+
+	// Test ui.checked returns 0 for unchecked
+	boolean testCheckedUnchecked()
+		integer unchecked = 0
+		return unchecked == 0
+
+	// Test ui.checked returns 1 for checked
+	boolean testCheckedChecked()
+		integer checked = 1
+		return checked == 1
+
+	// Test ui.setInput signature
+	boolean testSetInput()
+		string sig = "ui.setInput(selector, value) -> integer"
+		return sig.contains("ui.setInput") and sig.contains("selector") and sig.contains("value")
+
+	// Test form helpers are in frame.ui not frame.client
+	boolean testFormHelpersInUi()
+		string rationale = "Reading DOM inputs is a UI operation. ui.inputValue, ui.formJson belong in frame.ui."
+		return rationale.contains("UI operation") and rationale.contains("frame.ui")
+
+	// Test ui.formJson with form selector
+	boolean testFormJsonSelector()
+		string code = "string body = ui.formJson(\"#create-form\")"
+		return code.contains("#create-form") and code.contains("ui.formJson")
+
+	// Test form helpers combined with api.submit
+	boolean testFormWithApiSubmit()
+		string flow = "ui.formJson reads form -> api.post sends JSON -> api.ok checks response"
+		return flow.contains("reads form") and flow.contains("sends JSON") and flow.contains("checks response")

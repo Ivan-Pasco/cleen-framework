@@ -1,0 +1,70 @@
+// Test Application: Todo API
+// A complete todo CRUD application for integration testing
+
+functions:
+	// Handler 0: Home page
+	string __route_handler_0()
+		return "Welcome to Todo App"
+
+	// Handler 1: List all todos (GET /api/todos)
+	string __route_handler_1()
+		return "[]"
+
+	// Handler 2: Create todo (POST /api/todos)
+	string __route_handler_2()
+		string body = _req_body()
+		return "id:1,title:New Todo,completed:false"
+
+	// Handler 3: Get todo by ID (GET /api/todos/:id)
+	string __route_handler_3()
+		string id = _req_param("id")
+		return "id:" + id + ",title:Todo Item,completed:false"
+
+	// Handler 4: Update todo (PUT /api/todos/:id)
+	string __route_handler_4()
+		string id = _req_param("id")
+		string body = _req_body()
+		return "id:" + id + ",title:Updated Todo,completed:true"
+
+	// Handler 5: Delete todo (DELETE /api/todos/:id)
+	string __route_handler_5()
+		string id = _req_param("id")
+		return "deleted:true,id:" + id
+
+	// Handler 6: Toggle todo completion (PATCH /api/todos/:id/toggle)
+	string __route_handler_6()
+		string id = _req_param("id")
+		return "id:" + id + ",completed:true"
+
+	// Handler 7: Filter todos by status (GET /api/todos/filter)
+	string __route_handler_7()
+		string filterStatus = _req_query("status")
+		return "[]"
+
+	// Handler 8: Health check (GET /health)
+	string __route_handler_8()
+		return "status:healthy"
+
+	// Handler 9: Not found handler
+	string __route_handler_9()
+		return "error:Not Found,code:404"
+
+start:
+	printl("Starting Todo App...")
+	integer status = 0
+
+	// Register routes
+	status = _http_route("GET", "/", 0)
+	status = _http_route("GET", "/api/todos", 1)
+	status = _http_route("POST", "/api/todos", 2)
+	status = _http_route("GET", "/api/todos/:id", 3)
+	status = _http_route("PUT", "/api/todos/:id", 4)
+	status = _http_route("DELETE", "/api/todos/:id", 5)
+	status = _http_route("PATCH", "/api/todos/:id/toggle", 6)
+	status = _http_route("GET", "/api/todos/filter", 7)
+	status = _http_route("GET", "/health", 8)
+
+	printl("Todo App routes registered")
+
+	// Start listening
+	integer listenStatus = _http_listen(3000)

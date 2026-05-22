@@ -1,0 +1,10 @@
+// Hello API endpoint
+// Route: GET /api/hello
+
+functions:
+	string __route_handler_0()
+		return "{\"message\": \"Hello from Clean Framework!\"}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/hello", 0)

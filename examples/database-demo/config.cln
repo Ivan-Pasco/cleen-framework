@@ -1,0 +1,13 @@
+// Database Demo Configuration
+
+config:
+	project:
+		name = "database-demo"
+		version = "1.0.0"
+		description = "Database operations demo"
+
+	build:
+		output = "dist"
+
+	server:
+		port = 3000

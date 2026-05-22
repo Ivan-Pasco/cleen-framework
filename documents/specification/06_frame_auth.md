@@ -2,9 +2,11 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
 **Version:** 1.0  
-**Location:** `/docs/specification/06_frame_auth.md`
+**Location:** `/documents/specification/06_frame_auth.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Introduction
 
@@ -38,14 +40,14 @@ Auth is designed to be **simple by default** (cookies + sessions) and **extensib
 
 ## 4. Configuration
 
-**File:** `/config/auth.cln`
+**File:** `/app/auth/auth.cln`
 ```clean
 auth:
     session:
         cookie = "frame.sid"
-        sameSite = "Lax"         # Lax | Strict | None
-        secure = true            # use HTTPS-only cookies
-        httpOnly = true          # inaccessible to JS
+        sameSite = "Lax"         // Lax | Strict | None
+        secure = true            // use HTTPS-only cookies
+        httpOnly = true          // inaccessible to JS
         domain? = null
         path = "/"
         timeoutMinutes = 60
@@ -55,7 +57,7 @@ auth:
         secret = env("JWT_SECRET")
         alg = "HS256"
         ttlMinutes = 60
-        refreshTtlMinutes = 43200   # 30 days
+        refreshTtlMinutes = 43200   // 30 days
 
     roles:
         admin: ["*"]
@@ -63,13 +65,21 @@ auth:
         viewer: ["post.read"]
 ```
 
-**File:** `/config/roles.cln` (optional override)
+**File:** `/app/auth/roles.cln` (optional override)
 ```clean
 roles:
     admin: ["*"]
     editor: ["post.create", "post.edit", "post.read"]
     viewer: ["post.read"]
 ```
+
+### Session Store
+
+The default session store is **in-memory**, suitable for single-instance deployments (development, single-server production). For production multi-instance deployments (load-balanced or horizontally-scaled), a persistent session store must be configured via the session store adapter interface to ensure sessions are shared across all instances. Redis and database-backed session stores are the recommended production adapters; the configuration key for the adapter is `session.store` (not shown in the basic config above — omitting it selects the in-memory default).
+
+### Password Hashing
+
+Password hashing and verification use `host:crypto` functions (`hash` and `verify`). The implementation uses platform-native cryptography; the specific library is host-adapter dependent (commonly argon2 or bcrypt). Custom algorithms must not be used — see AUTH-C007.
 
 ---
 
@@ -83,22 +93,36 @@ roles:
 
 ### Example: Login handler (Clean)
 ```clean
-functions:
-    Response postLogin(LoginForm form)
-        User? u = User.where(email == form.email).first()
-        if u == null or not checkPassword(form.password, u.hash)
-            return error(401, "Invalid credentials")
+// app/server/api/auth.cln
+endpoints:
+    POST "/auth/login" :
+        LoginForm form = req.json(LoginForm)
+        User? u = User.first:
+            where:
+                email == form.email
+        if u == null or not verifyPassword(form.password, u.hash)
+            return badRequest("Invalid credentials")
 
         Session s = auth.session.create(u.id, claims: { email: u.email, role: u.role })
         return auth.session.setCookie(s, redirect("/dashboard"))
-```
 
-### Logout
-```clean
-functions:
-    Response postLogout()
+    POST "/auth/logout" :
         auth.session.destroyCurrent()
         return redirect("/login")
+```
+
+### Refresh Token Endpoint
+
+```clean
+endpoints:
+    POST "/auth/refresh" :
+        string? refreshToken = req.cookie("frame.refresh")
+        if refreshToken == null
+            return unauthorized()
+        string newToken = auth.jwt.refresh(refreshToken)
+        if newToken == ""
+            return unauthorized()
+        return json({ token: newToken })
 ```
 
 ### CSRF
@@ -144,6 +168,8 @@ middleware VerifyJWT
 - Short-lived access tokens; long-lived refresh tokens (HTTP-only cookie or secure storage).  
 - Endpoint `/auth/refresh` issues a new access token if the refresh token is valid.
 
+**Refresh token policy — single use:** Refresh tokens are single-use. After a refresh token is used to obtain a new access token, it is immediately invalidated and a new refresh token is issued alongside the new access token. A second attempt to use the same refresh token returns an empty string (failure). This ensures that token theft is detectable: if an attacker reuses a refresh token that the legitimate client has already consumed, the server can detect the replay and revoke the session.
+
 ---
 
 ## 7. Roles & Permissions
@@ -154,10 +180,15 @@ if not auth.can(user, "post.publish")
     return error(403, "Forbidden")
 ```
 
-### Guard Decorators (Simple)
+### Guard in Endpoints
 ```clean
-route /admin/publish
-    guard: role("editor", "admin")
+endpoints:
+    POST "/admin/publish" :
+        guard:
+            role in ["editor", "admin"]
+        handle:
+            // handler logic
+            return json({ ok: true })
 ```
 
 ### Policy Functions (Pro)
@@ -182,7 +213,9 @@ Session s = auth.session.create(u.id, claims: { tenantId: u.tenantId, role: u.ro
 ```
 Applied to queries:
 ```clean
-User.where(tenantId == ctx.claims.tenantId)
+list<User> tenantUsers = User.find:
+    where:
+        tenantId == ctx.claims.tenantId
 ```
 Database schemas or row‑level security can be used depending on scale.
 
@@ -262,15 +295,15 @@ This file provides deterministic structures for AI agents:
 
 When prompting an AI agent:
 - Include this file + `03_frame_server.md` for route handling.
-- Provide `/config/auth.cln` and `/config/roles.cln` snippets if relevant.
+- Provide `/app/auth/auth.cln` and `/app/auth/roles.cln` snippets if relevant.
 
 ---
 
 ## 15. File Locations
 
-- Config: `/config/auth.cln`, `/config/roles.cln`
-- Server handlers: `/app/api/auth/*.cln`
-- UI: gated components under `/app/components/` and pages in `/app/pages/`
+- Config: `/app/auth/auth.cln`, `/app/auth/roles.cln`
+- Server handlers: `/app/server/api/auth/*.cln`
+- UI: gated components under `/app/ui/components/` and pages in `/app/ui/pages/`
 - Tests: `/tests/auth/`
 
 ---

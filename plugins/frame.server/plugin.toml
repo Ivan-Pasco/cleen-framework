@@ -1,0 +1,278 @@
+[plugin]
+name = "frame.server"
+version = "2.2.3"
+description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+requires = "clean-server"
+
+[handles]
+blocks = ["endpoints", "middleware"]
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"
+get_keywords = "get_keywords"
+
+# Bridge function declarations - server-specific functions provided by clean-server
+[bridge]
+functions = [
+  # HTTP Server - Lifecycle
+  { name = "_http_listen", params = ["integer"], returns = "integer", description = "Start HTTP server on specified port" },
+
+  # HTTP Server - Route Registration
+  { name = "_http_route", params = ["string", "string", "string"], returns = "integer", description = "Register route: method, path, handler function name", expand_strings = true },
+  { name = "_http_route_protected", params = ["string", "string", "string", "string"], returns = "integer", description = "Register protected route: method, path, handler name, required role", expand_strings = true },
+
+  # Request Context - Path Parameters
+  { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name (e.g., :id)", expand_strings = true },
+  { name = "_req_param_int", params = ["string"], returns = "integer", description = "Get path parameter as integer by name", expand_strings = true },
+
+  # Request Context - Query Parameters
+  { name = "_req_query", params = ["string"], returns = "string", description = "Get query parameter by name", expand_strings = true },
+
+  # Request Context - Headers
+  { name = "_req_header", params = ["string"], returns = "string", description = "Get request header by name", expand_strings = true },
+  { name = "_req_headers", params = [], returns = "string", description = "Get all request headers as JSON object" },
+
+  # Request Context - Body
+  { name = "_req_body", params = [], returns = "string", description = "Get request body as string" },
+  { name = "_req_body_field", params = ["string"], returns = "string", description = "Get form field by name from request body", expand_strings = true },
+  { name = "_req_form", params = [], returns = "string", description = "Get form data as JSON object" },
+
+  # Request Context - Metadata
+  { name = "_req_method", params = [], returns = "string", description = "Get HTTP method (GET, POST, etc.)" },
+  { name = "_req_path", params = [], returns = "string", description = "Get request path" },
+  { name = "_req_ip", params = [], returns = "string", description = "Get client IP address" },
+
+  # Request Context - Cookies
+  { name = "_req_cookie", params = ["string"], returns = "string", description = "Get cookie value by name", expand_strings = true },
+
+  # Response - Core
+  { name = "_http_respond", params = ["integer", "string", "string"], returns = "string", description = "Send response: status, content-type, body", expand_strings = true },
+  { name = "_http_redirect", params = ["integer", "string"], returns = "string", description = "Send redirect: status, url", expand_strings = true },
+  { name = "_http_set_header", params = ["string", "string"], returns = "string", description = "Set response header: name, value", expand_strings = true },
+
+  # Response - Extended
+  { name = "_res_set_header", params = ["string", "string"], returns = "integer", description = "Set a custom response header", expand_strings = true },
+  { name = "_res_redirect", params = ["string", "integer"], returns = "integer", description = "Set redirect to URL with status code (301/302/303/307/308)", expand_strings = true },
+  { name = "_res_status", params = ["integer"], returns = "integer", description = "Set HTTP response status code" },
+  { name = "_res_body", params = ["string"], returns = "integer", description = "Set raw response body string", expand_strings = true },
+  { name = "_res_json", params = ["string"], returns = "integer", description = "Set JSON response body with Content-Type: application/json", expand_strings = true },
+
+  # Authentication - Session
+  { name = "_auth_get_session", params = [], returns = "string", description = "Get current session as JSON" },
+  { name = "_auth_require_auth", params = [], returns = "integer", description = "Check if authenticated (1=yes, 0=no)" },
+
+  # Authentication - Roles
+  { name = "_auth_require_role", params = ["string"], returns = "integer", description = "Check if user has role (1=yes, 0=no)", expand_strings = true },
+  { name = "_auth_can", params = ["string"], returns = "integer", description = "Check if user has permission (1=yes, 0=no)", expand_strings = true },
+  { name = "_auth_has_any_role", params = ["string"], returns = "integer", description = "Check if user has any of the roles (JSON array) (1=yes, 0=no)", expand_strings = true },
+
+  # Cache Headers
+  { name = "_http_set_cache", params = ["integer"], returns = "integer", description = "Set Cache-Control max-age header" },
+  { name = "_http_no_cache", params = [], returns = "integer", description = "Set no-cache headers" },
+
+  # HTML Page Rendering (SSR)
+  # Renders app/ui/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
+  # Implemented by clean-server: resolves the page template, substitutes interpolations, returns HTML.
+  { name = "_ui_render_page", params = ["string", "string"], returns = "string", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/ui/pages/<name>.html", expand_strings = true },
+
+  # JSON Encoding/Decoding
+  { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true },
+  { name = "_json_decode", params = ["string"], returns = "string", description = "Decode JSON string to value", expand_strings = true },
+  { name = "_json_get", params = ["string", "string"], returns = "string", description = "Extract value from JSON using dot-separated path (e.g., 'user.name')", expand_strings = true },
+
+  # HTTP Client - Basic Methods
+  # Convention: bridge names use http_client_ prefix to distinguish from server-side _http_* functions
+  { name = "http_get", params = ["string"], returns = "string", description = "Execute HTTP GET request to URL; returns response body", expand_strings = true },
+  { name = "http_post", params = ["string", "string"], returns = "string", description = "Execute HTTP POST request with raw body; returns response body", expand_strings = true },
+  { name = "http_put", params = ["string", "string"], returns = "string", description = "Execute HTTP PUT request with raw body; returns response body", expand_strings = true },
+  { name = "http_patch", params = ["string", "string"], returns = "string", description = "Execute HTTP PATCH request with raw body; returns response body", expand_strings = true },
+  { name = "http_delete", params = ["string"], returns = "string", description = "Execute HTTP DELETE request; returns response body", expand_strings = true },
+  { name = "http_head", params = ["string"], returns = "string", description = "Execute HTTP HEAD request; returns response headers as JSON", expand_strings = true },
+  { name = "http_options", params = ["string"], returns = "string", description = "Execute HTTP OPTIONS request; returns response body", expand_strings = true },
+
+  # HTTP Client - JSON Convenience
+  { name = "http_post_json", params = ["string", "string"], returns = "string", description = "POST with Content-Type: application/json; returns response body", expand_strings = true },
+  { name = "http_put_json", params = ["string", "string"], returns = "string", description = "PUT with Content-Type: application/json; returns response body", expand_strings = true },
+  { name = "http_patch_json", params = ["string", "string"], returns = "string", description = "PATCH with Content-Type: application/json; returns response body", expand_strings = true },
+
+  # HTTP Client - Form & Headers
+  { name = "http_post_form", params = ["string", "string"], returns = "string", description = "POST form-urlencoded body; returns response body", expand_strings = true },
+  { name = "http_get_with_headers", params = ["string", "string"], returns = "string", description = "GET with custom headers (JSON object); returns response body", expand_strings = true },
+  { name = "http_post_with_headers", params = ["string", "string", "string"], returns = "string", description = "POST with body and custom headers (JSON object); returns response body", expand_strings = true },
+
+  # HTTP Client - Configuration
+  { name = "http_set_user_agent", params = ["string"], returns = "integer", description = "Set User-Agent header for subsequent requests", expand_strings = true },
+  { name = "http_set_timeout", params = ["integer"], returns = "integer", description = "Set request timeout in milliseconds" },
+  { name = "http_set_max_redirects", params = ["integer"], returns = "integer", description = "Set maximum number of redirects to follow" },
+  { name = "http_enable_cookies", params = ["integer"], returns = "integer", description = "Enable or disable cookie jar for subsequent requests (1=enable, 0=disable)" },
+
+  # HTTP Client - Response Inspection
+  { name = "http_get_response_code", params = [], returns = "integer", description = "Get the HTTP status code of the last response" },
+  { name = "http_get_response_headers", params = [], returns = "string", description = "Get all headers from the last response as JSON" },
+
+  # HTTP Client - URL Utilities
+  { name = "http_encode_url", params = ["string"], returns = "string", description = "Percent-encode a string for safe use in a URL", expand_strings = true },
+  { name = "http_decode_url", params = ["string"], returns = "string", description = "Decode a percent-encoded URL string", expand_strings = true },
+  { name = "http_build_query", params = ["string"], returns = "string", description = "Build a URL query string from a JSON object of key-value pairs", expand_strings = true },
+]
+
+[language]
+# Block-level keywords that start a declaration
+blocks = ["endpoints", "middleware"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "GET", description = "HTTP GET endpoint", context = "block" },
+  { name = "POST", description = "HTTP POST endpoint", context = "block" },
+  { name = "PUT", description = "HTTP PUT endpoint", context = "block" },
+  { name = "PATCH", description = "HTTP PATCH endpoint", context = "block" },
+  { name = "DELETE", description = "HTTP DELETE endpoint", context = "block" },
+  { name = "guard", description = "Authentication/authorization guard", context = "block" },
+  { name = "returns", description = "Response type declaration", context = "block" },
+  { name = "cache", description = "Response caching configuration", context = "block" },
+  { name = "handle", description = "Request handler block", context = "block" },
+  { name = "middleware", description = "Middleware definition block", context = "block" },
+  { name = "body", description = "Request body parameter declaration", context = "block" },
+  { name = "params", description = "Route parameter declaration", context = "block" },
+  { name = "port", description = "Server port configuration", context = "config" },
+  { name = "host", description = "Server host configuration", context = "config" },
+  { name = "cors", description = "CORS configuration", context = "config" },
+  { name = "rateLimit", description = "Rate limiting configuration", context = "config" },
+]
+
+# Custom types provided by the plugin
+types = [
+  { name = "Request", description = "HTTP request context" },
+  { name = "Response", description = "HTTP response object" },
+]
+
+# Built-in functions/expressions
+functions = [
+  # Response helpers
+  { name = "render", signature = "render(name)", description = "Render HTML page from app/ui/pages/<name>.html and return as 200 text/html response" },
+  { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page with JSON data string for {{ key }} template substitution" },
+  { name = "json", signature = "json(data)", description = "Return JSON response with Content-Type: application/json" },
+  { name = "html", signature = "html(content)", description = "Return HTML response" },
+  { name = "redirect", signature = "redirect(url, status?)", description = "Redirect to URL (default 302)" },
+  { name = "notFound", signature = "notFound(message?)", description = "Return 404 Not Found response" },
+  { name = "badRequest", signature = "badRequest(message?)", description = "Return 400 Bad Request response" },
+  { name = "unauthorized", signature = "unauthorized(message?)", description = "Return 401 Unauthorized response" },
+  { name = "error", signature = "error(status, message)", description = "Return error response with given HTTP status" },
+  { name = "status", signature = "status(code, body)", description = "Return response with specific HTTP status code" },
+  # Request accessors
+  { name = "req.param", signature = "req.param(name)", description = "Get path parameter by name", maps_to = "_req_param" },
+  { name = "req.params", signature = "req.params.fieldName", description = "Access path parameters as object fields" },
+  { name = "req.query", signature = "req.query.fieldName", description = "Access query parameters as object fields" },
+  { name = "req.header", signature = "req.header(name)", description = "Get request header by name", maps_to = "_req_header" },
+  { name = "req.headers", signature = "req.headers", description = "Get all request headers as JSON", maps_to = "_req_headers" },
+  { name = "req.body", signature = "req.body()", description = "Get request body as string", maps_to = "_req_body" },
+  { name = "req.form", signature = "req.form()", description = "Get form data as JSON", maps_to = "_req_form" },
+  { name = "req.json", signature = "req.json(Type)", description = "Deserialize request body as typed struct" },
+  { name = "req.method", signature = "req.method()", description = "Get HTTP method (GET, POST, etc.)", maps_to = "_req_method" },
+  { name = "req.path", signature = "req.path()", description = "Get request URL path", maps_to = "_req_path" },
+  { name = "req.ip", signature = "req.ip", description = "Get client IP address", maps_to = "_req_ip" },
+  { name = "req.cookie", signature = "req.cookie(name)", description = "Get cookie value by name", maps_to = "_req_cookie" },
+  # Server-side HTTP client
+  { name = "http.get", signature = "http.get(url)", description = "Execute outbound HTTP GET request; returns response body", maps_to = "http_get" },
+  { name = "http.post", signature = "http.post(url, body)", description = "Execute outbound HTTP POST request; returns response body", maps_to = "http_post" },
+  { name = "http.put", signature = "http.put(url, body)", description = "Execute outbound HTTP PUT request; returns response body", maps_to = "http_put" },
+  { name = "http.patch", signature = "http.patch(url, body)", description = "Execute outbound HTTP PATCH request; returns response body", maps_to = "http_patch" },
+  { name = "http.delete", signature = "http.delete(url)", description = "Execute outbound HTTP DELETE request; returns response body", maps_to = "http_delete" },
+  { name = "http.postJson", signature = "http.postJson(url, body)", description = "POST with Content-Type: application/json; returns response body", maps_to = "http_post_json" },
+  { name = "http.putJson", signature = "http.putJson(url, body)", description = "PUT with Content-Type: application/json; returns response body", maps_to = "http_put_json" },
+  { name = "http.postForm", signature = "http.postForm(url, formData)", description = "POST form-urlencoded body; returns response body", maps_to = "http_post_form" },
+  { name = "http.responseCode", signature = "http.responseCode()", description = "Get HTTP status code of the last outbound response", maps_to = "http_get_response_code" },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "endpoints:", insert = "endpoints:\n\t${1:GET} \"${2:/path}\" :\n\t\treturn json({ ${3:data} })" },
+  { trigger = "GET ", insert = "GET \"${1:/path}\" :\n\treturn json({ ${2:data} })" },
+  { trigger = "POST ", insert = "POST \"${1:/path}\" :\n\t${2:Type} body = req.json(${2:Type})\n\treturn json({ ${3:data} })" },
+  { trigger = "guard:", insert = "guard:\n\trole in [\"${1:admin}\"]" },
+  { trigger = "middleware ", insert = "middleware ${1:Name}\n\tfunctions:\n\t\tRequest handle(Request req)\n\t\t\t${2:// inspect or modify request}\n\t\t\treturn req" },
+]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["app/server", "app/server/api", "app/server/services", "app/server/middleware"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
+
+[templates]
+# Starter files created when plugin is added to a project
+files = [
+  { path = "app/server/api/health.cln", template = "health.cln" },
+]
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = [
+  { name = "_http_route", use_instead = "endpoints:", message = "Use 'endpoints:' block to define routes instead of calling _http_route() directly" },
+  { name = "_http_route_protected", use_instead = "endpoints: with guard:", message = "Use 'endpoints:' block with guard: sub-block for protected routes" },
+  { name = "_http_listen", use_instead = "server:", message = "Use 'server:' block to configure and start the HTTP server" },
+  { name = "_http_respond", use_instead = "return json()/html()/redirect()", message = "Use response helpers inside endpoints: handlers" },
+]
+
+required_blocks = [
+  { folder = "app/server/api/", block = "endpoints", message = "API endpoint files should use 'endpoints:' block" },
+]
+
+block_folder_rules = [
+  { block = "endpoints", allowed_in = ["app/server/"], message = "endpoints: block should be in app/server/" },
+  { block = "middleware", allowed_in = ["app/server/middleware/", "app/server/"], message = "middleware: block should be in app/server/middleware/" },
+  { block = "server", allowed_in = ["app/server/", "app/"], message = "server: block should be in app/server/ or app root" },
+]
+
+[ai]
+description = "HTTP server plugin. Define all routes inside endpoints: blocks. Use guard: for auth checks. Use response helpers (json, html, redirect) — never call _http_respond or _http_route directly."
+constraints = [
+  "All routes must be declared inside endpoints: blocks — never call _http_route() directly",
+  "Protected routes must use guard: sub-block, not inline role checks",
+  "Always return a response helper (json, html, redirect, notFound) — never leave a handler without a return",
+  "Validate request body at the endpoint boundary before passing to service functions",
+]
+
+[[ai.patterns]]
+name = "versioned-api"
+use_when = "building a public or partner-facing API that must remain stable as the app evolves"
+anti_pattern = "no versioning prefix — a breaking change in your route or response shape breaks all clients with no migration path; prefix all public routes with /v1/ from day one"
+example = "patterns/versioned-api.cln"
+
+[[ai.patterns]]
+name = "request-validation"
+use_when = "any endpoint that accepts user-supplied input (body, query params, path params)"
+anti_pattern = "validating only in the model or service layer — invalid input reaches business logic, causing confusing errors; validate at the endpoint boundary and return 400 immediately"
+example = "patterns/request-validation.cln"
+
+[[ai.patterns]]
+name = "error-envelope"
+use_when = "any API that must be consumed by clients (web, mobile, third-party)"
+anti_pattern = "ad-hoc error strings with inconsistent shapes — clients can't reliably handle errors; use a consistent {code, message, field?} envelope across all endpoints"
+example = "patterns/error-envelope.cln"
+
+[[ai.patterns]]
+name = "health-check"
+use_when = "any deployed service behind a load balancer, orchestrator, or uptime monitor"
+anti_pattern = "no health endpoint — the orchestrator has no way to know if the service is ready and will send traffic to broken instances; always expose GET /health"
+example = "patterns/health-check.cln"
+
+[[ai.patterns]]
+name = "outbound-webhook"
+use_when = "your service needs to notify external systems when events occur (payment completed, order shipped, user created)"
+anti_pattern = "calling http.post inline in the handler — if the call fails the request fails; send webhook calls from a background job with retry, and always sign the payload with HMAC"
+example = "patterns/outbound-webhook.cln"

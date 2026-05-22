@@ -1,0 +1,10 @@
+// Admin dashboard - requires admin role
+// Route: GET /api/admin/dashboard
+
+functions:
+	string __route_handler_0()
+		return "{\"message\": \"Admin dashboard\"}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/admin/dashboard", 0)

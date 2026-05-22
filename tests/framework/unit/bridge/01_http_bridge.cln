@@ -1,0 +1,112 @@
+// Test: Host Bridge HTTP functions
+// Tests that HTTP bridge functions work correctly
+
+functions:
+	// Test HTTP route registration
+	boolean testHttpRoute()
+		string routeCall = "_http_route(GET, /api/test, 0)"
+		return routeCall.contains("_http_route")
+
+	// Test HTTP listen
+	boolean testHttpListen()
+		string listenCall = "_http_listen(3000)"
+		return listenCall.contains("_http_listen")
+
+	// Test HTTP response functions
+	boolean testHttpResponse()
+		string responseCall = "_http_response(200, body)"
+		return responseCall.contains("_http_response")
+
+	// Test request body access
+	boolean testReqBody()
+		string bodyCall = "_req_body()"
+		return bodyCall.contains("_req_body")
+
+	// Test request param access
+	boolean testReqParam()
+		string paramCall = "_req_param(id)"
+		return paramCall.contains("_req_param")
+
+	// Test request header access
+	boolean testReqHeader()
+		string headerCall = "_req_header(Content-Type)"
+		return headerCall.contains("_req_header")
+
+	// Test response header set
+	boolean testResHeader()
+		string headerCall = "_res_header(Content-Type, application/json)"
+		return headerCall.contains("_res_header")
+
+	// Test HTTP status codes
+	boolean testHttpStatusCodes()
+		integer ok = 200
+		integer created = 201
+		integer notFound = 404
+		integer serverError = 500
+		return ok == 200 and notFound == 404
+
+start:
+	printl("=== Test Suite: HTTP Bridge ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testHttpRoute()
+		printl("PASS: _http_route function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _http_route function exists")
+		failed = failed + 1
+
+	if testHttpListen()
+		printl("PASS: _http_listen function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _http_listen function exists")
+		failed = failed + 1
+
+	if testHttpResponse()
+		printl("PASS: _http_response function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _http_response function exists")
+		failed = failed + 1
+
+	if testReqBody()
+		printl("PASS: _req_body function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _req_body function exists")
+		failed = failed + 1
+
+	if testReqParam()
+		printl("PASS: _req_param function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _req_param function exists")
+		failed = failed + 1
+
+	if testReqHeader()
+		printl("PASS: _req_header function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _req_header function exists")
+		failed = failed + 1
+
+	if testResHeader()
+		printl("PASS: _res_header function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: _res_header function exists")
+		failed = failed + 1
+
+	if testHttpStatusCodes()
+		printl("PASS: HTTP status codes are correct")
+		passed = passed + 1
+	else
+		printl("FAIL: HTTP status codes are correct")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

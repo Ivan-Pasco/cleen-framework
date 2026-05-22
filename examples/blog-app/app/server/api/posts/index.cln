@@ -1,0 +1,19 @@
+// Posts API
+// Route: GET, POST /api/posts
+
+functions:
+	string __route_handler_0()
+		string method = _req_method()
+
+		if method == "GET"
+			return "{\"posts\": []}"
+
+		if method == "POST"
+			return "{\"message\": \"post created\"}"
+
+		return "{\"error\": \"method not allowed\"}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/posts", 0)
+	s = _http_route("POST", "/api/posts", 0)

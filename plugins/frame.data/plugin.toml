@@ -1,0 +1,219 @@
+[plugin]
+name = "frame.data"
+version = "2.0.0"
+description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"
+get_keywords = "get_keywords"
+
+[handles]
+# Model definitions and migration definitions
+blocks = ["data", "migrate"]
+
+# CRUD operations (these are expression-level, handled by compiler calling expand functions)
+expressions = [
+  "*.find:",
+  "*.first:",
+  "*.count:",
+  "*.insert:",
+  "*.update:",
+  "*.delete:",
+  "*.migrate",
+  "Data.tx:",
+  "db.query:",
+  "db.queryAs"
+]
+
+# Bridge function declarations - these are provided by the runtime (clean-server)
+# The compiler reads these to generate correct WASM imports
+[bridge]
+# Database functions provided by clean-server host bridge
+functions = [
+  # Query and Execute - strings passed as (ptr, len) pairs at WASM level
+  { name = "_db_query", params = ["string", "string"], returns = "string", description = "Execute SELECT query, returns JSON result with rows", expand_strings = true },
+  { name = "_db_execute", params = ["string", "string"], returns = "integer", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
+
+  # Transactions
+  { name = "_db_begin", params = [], returns = "string", description = "Begin a database transaction; returns transaction ID string" },
+  { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
+  { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Configuration - called once at startup from a data: config block
+  # Parameter: JSON object with keys: engine, host, port, database, user, password, pool_max, pool_idle_timeout_ms
+  { name = "_db_configure", params = ["string"], returns = "integer", description = "Configure the database connection pool from JSON config object; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Migration System
+  # Register a named migration for version tracking; the runtime records it in the
+  # schema_migrations table with a pending status until it is applied.
+  { name = "_db_register_migration", params = ["string"], returns = "integer", description = "Register a migration by name for version tracking; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Compare the declared field definitions for a table against the live database
+  # schema and return the ALTER TABLE SQL needed to reconcile the difference.
+  # Returns an empty string when the schema already matches the declaration.
+  { name = "_db_migration_diff", params = ["string", "string"], returns = "string", description = "Compare declared model fields against the live database table schema; returns ALTER TABLE SQL or empty string when in sync", expand_strings = true },
+
+  # Execute all pending registered migrations in version order.
+  { name = "_db_run_migrations", params = [], returns = "integer", description = "Run all pending registered migrations in version order; returns count of migrations applied" },
+
+  # Roll back a specific named migration by executing its down function.
+  { name = "_db_rollback_migration", params = ["string"], returns = "integer", description = "Rollback a specific migration by name; returns 0 on success, -1 on error", expand_strings = true },
+
+  # Return a JSON array describing every known migration and its current status.
+  # Each element has the shape: {"name":"...","applied_at":"..."|null}.
+  { name = "_db_migration_status", params = [], returns = "string", description = "Get JSON array of migration status records (name, applied_at); applied_at is null for pending migrations" },
+]
+
+[language]
+# Block-level keywords that start a declaration
+blocks = ["data", "migrate"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "find", description = "Query records from a model", context = "expression" },
+  { name = "first", description = "Get first matching record", context = "expression" },
+  { name = "exists", description = "Check if any records match the condition (returns 1/0)", context = "expression" },
+  { name = "findOrFail", description = "Find first matching record or raise NOT_FOUND error", context = "expression" },
+  { name = "count", description = "Count matching records", context = "expression" },
+  { name = "insert", description = "Insert new record(s)", context = "expression" },
+  { name = "update", description = "Update existing record(s)", context = "expression" },
+  { name = "delete", description = "Delete record(s)", context = "expression" },
+  { name = "migrate", description = "Run model schema migration (expression) or define a versioned migration file (block)", context = "both" },
+  { name = "where", description = "Filter query conditions", context = "block" },
+  { name = "order", description = "Sort query results", context = "block" },
+  { name = "limit", description = "Limit number of results", context = "block" },
+  { name = "offset", description = "Skip number of results", context = "block" },
+  { name = "include", description = "Include related models (eager loading)", context = "block" },
+  { name = "join", description = "Join related tables", context = "block" },
+  { name = "group", description = "Group results by field", context = "block" },
+  { name = "having", description = "Filter grouped results", context = "block" },
+  { name = "select", description = "Select specific fields", context = "block" },
+  { name = "up", description = "SQL to apply when running the migration forward", context = "block" },
+  { name = "down", description = "SQL to apply when rolling back the migration", context = "block" },
+]
+
+# Custom types provided by the plugin
+types = [
+  { name = "Model", description = "Base type for data models" },
+  { name = "Query", description = "Database query builder" },
+  { name = "Transaction", description = "Database transaction context" },
+]
+
+# Built-in functions/expressions
+functions = [
+  { name = "Data.tx", signature = "Data.tx: block", description = "Execute block in transaction" },
+  { name = "db.query", signature = "db.query: sql, params", description = "Execute raw SQL query" },
+  { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model" },
+  { name = "Model.exists", signature = "Model.exists:\n\twhere:\n\t\tcondition", description = "Check if record exists matching conditions (returns 1/0)" },
+  { name = "Model.findOrFail", signature = "Model.findOrFail:\n\twhere:\n\t\tcondition", description = "Find first matching record or raise a NOT_FOUND error" },
+  { name = "migrate", signature = "migrate \"name\":\n\tup:\n\t\tSQL\n\tdown:\n\t\tSQL", description = "Define a versioned schema migration" },
+  { name = "Model.validate", signature = "Model.validate(fieldName, value)", description = "Validate a field value against model constraints (min, max, email, range). Returns empty string if valid, error message if invalid." },
+  { name = "Model.save", signature = "Model.save()", description = "Insert or update the model instance" },
+  { name = "Model.delete", signature = "Model.delete()", description = "Delete the model instance by ID" },
+  { name = "Model.find", signature = "Model.find:\n\twhere:\n\t\tcondition", description = "Query records with optional where, order, limit, offset, link clauses" },
+  { name = "Model.first", signature = "Model.first:\n\twhere:\n\t\tcondition", description = "Get first matching record (adds LIMIT 1)" },
+  { name = "Model.count", signature = "Model.count:\n\twhere:\n\t\tcondition", description = "Count matching records" },
+  { name = "Model.insert", signature = "Model.insert:\n\tfield = value", description = "Insert a new record with field assignments" },
+  { name = "Model.update", signature = "Model.update:\n\tset:\n\t\tfield = value\n\twhere:\n\t\tcondition", description = "Update records matching the where clause" },
+  { name = "Model.migrate", signature = "Model.migrate()", description = "Create table if not exists based on model definition" },
+  { name = "tenant_getId", signature = "tenant_getId()", description = "Get current tenant ID from session claims (requires frame.auth)" },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "data ", insert = "data ${1:ModelName}:\n\t${2:field}: ${3:type}" },
+  { trigger = ".find:", insert = "find:\n\twhere:\n\t\t${1:condition}" },
+  { trigger = ".exists:", insert = "exists:\n\twhere:\n\t\t${1:condition}" },
+  { trigger = ".findOrFail:", insert = "findOrFail:\n\twhere:\n\t\t${1:condition}" },
+  { trigger = ".insert:", insert = "insert:\n\t${1:field} = ${2:value}" },
+  { trigger = "Data.tx:", insert = "Data.tx:\n\t${1:// transaction code}" },
+  { trigger = "migrate ", insert = "migrate \"${1:001_migration_name}\":\n\tup:\n\t\t${2:CREATE TABLE ...}\n\tdown:\n\t\t${3:DROP TABLE ...}" },
+]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["app/data", "app/data/models", "app/data/queries", "app/data/migrations", "app/data/repositories"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln", "*.sql"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = [
+  { name = "_db_query", use_instead = "Model.find: or db.query:", message = "Use ORM query blocks instead of raw _db_query()" },
+  { name = "_db_execute", use_instead = "Model.insert:/update:/delete:", message = "Use ORM mutation blocks instead of raw _db_execute()" },
+]
+
+required_blocks = [
+  { folder = "app/data/models/", block = "data", message = "Model files should contain 'data ModelName' definitions" },
+  { folder = "app/data/migrations/", block = "migrate", message = "Migration files should contain 'migrate \"name\":' definitions" },
+]
+
+block_folder_rules = [
+  { block = "data", allowed_in = ["app/data/", "app/backend/", "app/server/"], message = "data models should be in app/data/ or app/backend/" },
+  { block = "migrate", allowed_in = ["app/data/migrations/"], message = "migrate blocks must be in app/data/migrations/" },
+]
+
+[ai]
+description = "ORM and database plugin. Use ORM blocks (Model.find, Model.insert, etc.) for all CRUD. Reserve db.query/db.queryAs for complex aggregations that ORM cannot express. Never call _db_query or _db_execute directly."
+constraints = [
+  "Always use ORM blocks for CRUD — never call _db_query or _db_execute directly",
+  "data model files belong in app/data/models/, migrations in app/data/migrations/",
+  "Every multi-step mutation must be wrapped in Data.tx: to ensure atomicity",
+  "Always include tenant_id in every model and every query when building a multi-tenant app",
+]
+
+[[ai.patterns]]
+name = "multilingual-site"
+use_when = "app serves content in more than one language"
+anti_pattern = "storing translations as a JSON column on the content row — prevents SQL-level filtering by locale, cannot be indexed, breaks FK integrity, and forces app-side deserialization on every read"
+example = "patterns/multilingual-site.cln"
+
+[[ai.patterns]]
+name = "cms-page-content"
+use_when = "a website serves the same pages in multiple languages and content is managed as a flat key-value table (Page × Language × field_key)"
+anti_pattern = "storing all page content in a JSON blob per language — cannot be queried field-by-field, has no FK integrity, makes translation completeness checks impossible without parsing every row. Also: never use dot notation in field keys, never hardcode user-visible strings in Clean code"
+example = "patterns/cms-page-content.cln"
+
+[[ai.patterns]]
+name = "soft-delete"
+use_when = "records must be deactivatable without permanent removal (compliance, undo, audit trails)"
+anti_pattern = "boolean is_deleted column — loses the deletion timestamp; use deleted_at: datetime nullable instead so you always know WHEN it was deleted"
+example = "patterns/soft-delete.cln"
+
+[[ai.patterns]]
+name = "audit-log"
+use_when = "every state change on a record must be traceable for compliance, debugging, or undo"
+anti_pattern = "overwriting rows in place — history is lost; use an append-only *_events or *_log table where you only INSERT, never UPDATE or DELETE"
+example = "patterns/audit-log.cln"
+
+[[ai.patterns]]
+name = "multi-tenant"
+use_when = "one database instance serves multiple isolated customer organisations"
+anti_pattern = "no tenant scoping — one tenant can read another's data; every model needs a tenant_id FK and every query must filter by it using tenant_getId()"
+example = "patterns/multi-tenant.cln"
+
+[[ai.patterns]]
+name = "pagination"
+use_when = "endpoints that return lists of records that can grow large"
+anti_pattern = "deep OFFSET pagination — past page ~10 it table-scans from row 0 on every request; use cursor pagination (last seen id) instead"
+example = "patterns/pagination.cln"
+
+[[ai.patterns]]
+name = "tree-structure"
+use_when = "data has a parent-child hierarchy: categories, menus, org charts, comment threads"
+anti_pattern = "recursive self-joins at query time for deep trees — use parent_id for shallow trees (≤3 levels); for deep trees use a closure table (separate ancestor/descendant pairs table)"
+example = "patterns/tree-structure.cln"

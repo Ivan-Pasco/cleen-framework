@@ -1,0 +1,95 @@
+// Pattern: sprite-animation
+// Use when: a character or object with multiple animation states
+// Anti-pattern: DON'T manually track frame index and frame timer in state:.
+//   Manually incrementing frameIndex += 1 every N frames is fragile and
+//   frame-rate dependent. Use animSprite: clips for frame sequences and
+//   animState: FSM for state transitions — the engine handles all timing.
+
+plugins:
+	frame.canvas
+
+canvasScene: width=800 height=400 fps=60
+
+	assets:
+		// Spritesheet: 8 columns, 4 rows of 48x64 frames
+		// Row 0: idle (4 frames), Row 1: walk (8 frames), Row 2: run (8 frames), Row 3: jump (4 frames)
+		spritesheet "hero" src="sprites/hero.png" frameWidth=48 frameHeight=64 cols=8 rows=4
+
+	state:
+		number heroX = 100.0
+		number heroY = 300.0
+		number velX = 0.0
+		number speed = 180.0
+		boolean on_ground = true
+		boolean facing_right = true
+
+	// Define named animation clips from the spritesheet
+	animSprite "hero-idle":
+		sheet = "hero"
+		frames = 0..3       // first 4 frames of row 0
+		fps = 8
+		loop = true
+
+	animSprite "hero-walk":
+		sheet = "hero"
+		frames = 8..15      // all 8 frames of row 1
+		fps = 12
+		loop = true
+
+	animSprite "hero-run":
+		sheet = "hero"
+		frames = 16..23     // all 8 frames of row 2
+		fps = 16
+		loop = true
+
+	animSprite "hero-jump":
+		sheet = "hero"
+		frames = 24..27     // 4 frames of row 3
+		fps = 10
+		loop = false         // play once, hold last frame
+
+	// FSM: transitions between clips based on game state
+	animState "heroFSM":
+		state "idle":
+			canvas.sprite "hero" x=heroX y=heroY state="hero-idle"
+		state "walk":
+			canvas.sprite "hero" x=heroX y=heroY state="hero-walk"
+		state "run":
+			canvas.sprite "hero" x=heroX y=heroY state="hero-run"
+		state "jump":
+			canvas.sprite "hero" x=heroX y=heroY state="hero-jump"
+		transitions:
+			"idle" -> "walk" when velX != 0.0 and on_ground
+			"walk" -> "run" when Math.abs(velX) > 150.0
+			"walk" -> "idle" when velX == 0.0
+			"run" -> "walk" when Math.abs(velX) <= 150.0
+			"run" -> "idle" when velX == 0.0
+			"idle" -> "jump" when on_ground == false
+			"walk" -> "jump" when on_ground == false
+			"run" -> "jump" when on_ground == false
+			"jump" -> "idle" when on_ground
+		initial = "idle"
+
+	init:
+		start animState "heroFSM"
+
+	onFrame: param="dt"
+		velX = 0.0
+		if input.keyDown("ArrowLeft")
+			velX = -speed
+			facing_right = false
+		if input.keyDown("ArrowRight")
+			velX = speed
+			facing_right = true
+		if input.keyDown("ShiftLeft")
+			if velX != 0.0
+				velX = velX * 1.6  // run
+
+		heroX = heroX + velX * dt
+
+		canvas.clear color="#87CEEB"
+		canvas.rect x=0 y=340 width=800 height=60 color="#2d5a27"
+
+		// animState draws the correct clip automatically
+		// flipX mirrors the sprite when moving left
+		canvas.sprite "hero" x=heroX y=heroY flipX={facing_right == false} state="heroFSM"

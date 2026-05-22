@@ -1,0 +1,43 @@
+// Register endpoint
+// Route: POST /api/register
+
+functions:
+	// POST /api/register - User registration
+	string __route_handler_0()
+		string body = _req_body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"Invalid JSON\"}"
+
+		any nameField = bodyData.name
+		any emailField = bodyData.email
+		any passwordField = bodyData.password
+
+		if nameField == null
+			return "{\"ok\":false,\"error\":\"Name required\"}"
+		if emailField == null
+			return "{\"ok\":false,\"error\":\"Email required\"}"
+		if passwordField == null
+			return "{\"ok\":false,\"error\":\"Password required\"}"
+
+		string name = nameField.toString()
+		string email = emailField.toString()
+		string password = passwordField.toString()
+
+		// Validate inputs
+		if name.length() < 2
+			return "{\"ok\":false,\"error\":\"Name must be at least 2 characters\"}"
+
+		if email.indexOf("@") < 0
+			return "{\"ok\":false,\"error\":\"Invalid email address\"}"
+
+		if password.length() < 8
+			return "{\"ok\":false,\"error\":\"Password must be at least 8 characters\"}"
+
+		// In production, hash password and save to database
+		// For demo, just return success
+		return "{\"ok\":true,\"user\":{\"name\":\"" + name + "\",\"email\":\"" + email + "\"}}"
+
+start:
+	integer s = _http_route("POST", "/api/register", 0)
+	printl("Register endpoint registered")

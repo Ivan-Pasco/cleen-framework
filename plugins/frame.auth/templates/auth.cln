@@ -1,0 +1,22 @@
+// Authentication Configuration
+// Configure session, JWT, and role-based access control
+
+plugins:
+	frame.auth
+
+auth:
+	session:
+		cookie = "app.sid"
+		sameSite = "Lax"
+		secure = true
+		httpOnly = true
+		path = "/"
+		timeoutMinutes = 60
+
+	jwt:
+		enabled = false
+
+	roles:
+		admin: ["*"]
+		user: []
+		guest: []

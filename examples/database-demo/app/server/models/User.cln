@@ -1,0 +1,7 @@
+// User model
+data User
+	integer id
+	string name
+	string email
+	string role
+	boolean active

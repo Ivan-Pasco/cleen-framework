@@ -1,0 +1,17 @@
+// Full-Stack App Configuration
+
+config:
+	project:
+		name = "full-stack"
+		version = "1.0.0"
+		description = "Full-stack app with all Frame features"
+
+	build:
+		output = "dist"
+
+	server:
+		port = 3000
+
+	auth:
+		strategy = "session"
+		secret = env("APP_SECRET")

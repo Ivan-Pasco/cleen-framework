@@ -2,9 +2,11 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
 **Version:** 1.2 (Unified Query Syntax + Many-to-Many)  
-**Location:** `/docs/specification/04_frame_data.md`
+**Location:** `/documents/specification/04_frame_data.md`
 
 ---
+
+> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
 
 ## 1. Purpose
 
@@ -110,6 +112,73 @@ integer total = User.count:
         active == true
 ```
 
+### 3.6 Find or Fail
+
+Throws `NOT_FOUND` if no record matches. Use when existence is required.
+
+```clean
+User u = User.findOrFail:
+    where:
+        id == userId
+```
+
+### 3.7 Exists
+
+Returns `true` if at least one matching record exists.
+
+```clean
+boolean taken = User.exists:
+    where:
+        email == newEmail
+```
+
+### 3.8 Select (Partial Fields)
+
+Retrieve only specific fields using the `select:` sub-block.
+
+```clean
+list<User> users = User.find:
+    select:
+        id
+        name
+        email
+    where:
+        active == true
+```
+
+### 3.9 Offset and Pagination
+
+Use `offset:` with `limit:` for page-based pagination.
+
+```clean
+integer page = 3
+integer pageSize = 20
+
+list<User> users = User.find:
+    where:
+        active == true
+    order:
+        createdAt desc
+    limit: pageSize
+    offset: (page - 1) * pageSize
+```
+
+### 3.10 Include (Eager Loading)
+
+Load related records in a single query using the `include:` sub-block.
+
+```clean
+list<Post> posts = Post.find:
+    include:
+        author
+        tags
+    where:
+        published == true
+    order:
+        createdAt desc
+    limit: 10
+```
+
 ---
 
 ## 4. Transactions
@@ -156,8 +225,8 @@ Frame generates migrations automatically based on model diffs.
 
 ### CLI
 ```bash
-frame db:plan
-frame db:migrate
+cleen db:plan
+cleen db:migrate
 ```
 
 ### Per-model
@@ -166,9 +235,9 @@ User.migrate()
 Post.migrate()
 ```
 
-**Migration files** live under `/db/migrations/`:
+**Migration files** live under `app/data/migrations/`:
 ```
-/db/migrations/
+app/data/migrations/
   001_init.sql
   002_add_posts.sql
 ```
@@ -179,19 +248,18 @@ Each migration includes `up` and `down` SQL for rollback.
 
 ## 7. Configuration
 
-`/config/data.cln`
+`app/data/config.cln`
 ```clean
 data:
-    default:
-        engine = "postgres"
-        host = "localhost"
-        port = 5432
-        database = "frame_app"
-        user = "admin"
-        password = env("DB_PASSWORD")
-        pool:
-            max = 10
-            idleTimeout = 30000
+    engine = "postgres"
+    host = "localhost"
+    port = 5432
+    database = "frame_app"
+    user = "admin"
+    password = env("DB_PASSWORD")
+    pool:
+        max = 10
+        idleTimeout = 30000
 ```
 
 Default engine: `sqlite` (local development).  
@@ -309,7 +377,7 @@ list<User> users = User.find:
         UserRole.role != null
 ```
 
-### 9.4 Counting or Aggregating
+### 9.5 Counting or Aggregating
 
 ```clean
 list<map<string, any>> counts = db.query:
@@ -359,7 +427,7 @@ Data.tx:
 
 ## 10. Seeds
 
-`/db/seed.cln`
+`app/data/seed.cln`
 ```clean
 functions:
     seed()
@@ -370,7 +438,7 @@ functions:
 
 Run with:
 ```bash
-frame db:seed
+cleen db:seed
 ```
 
 ---
@@ -379,11 +447,11 @@ frame db:seed
 
 | Command | Description |
 |----------|-------------|
-| `frame db:plan` | Show migration SQL diff |
-| `frame db:migrate` | Apply migrations |
-| `frame db:seed` | Run database seeding |
-| `frame db:reset` | Drop and recreate schema |
-| `frame db:info` | Show connection metadata |
+| `cleen db:plan` | Show migration SQL diff |
+| `cleen db:migrate` | Apply migrations |
+| `cleen db:seed` | Run database seeding |
+| `cleen db:reset` | Drop and recreate schema |
+| `cleen db:info` | Show connection metadata |
 
 ---
 
@@ -443,6 +511,33 @@ Data.tx:
 
 Frame Data uses **only block-based ORM syntax** to ensure consistency, clarity, and minimal mental load.  
 It turns database interaction into clean, declarative statements — readable for humans, predictable for compilers, and intuitive for AI tools.
+
+---
+
+## 16. Edge Cases & Important Notes
+
+### 16.1 Migration Behavior
+
+- `Model.migrate()` uses `CREATE TABLE IF NOT EXISTS` — it will NOT alter an existing table
+- For schema changes on existing tables, use the `migrate` block with explicit `up:` and `down:` SQL
+- Auto-migration diff (`_db_migration_diff`) compares declared fields against the live database schema
+- Migrations are applied in alphabetical/numerical order by name
+
+### 16.2 Transaction Limits
+
+- Nested `Data.tx:` blocks are NOT supported — transactions are flat
+- If a transaction block throws, the entire transaction is rolled back automatically
+- Long-running transactions may time out depending on the database driver configuration
+
+> **Constraint — no nested transactions:** A `Data.tx:` block cannot be started inside another `Data.tx:` block. Attempting to nest transactions is a compile-time error. The outer transaction must complete (commit or roll back) before a new one can be started. Service functions that each use `Data.tx:` internally must not be composed inside a single outer `Data.tx:` — extract the composed logic into a single flat transaction block.
+
+### 16.3 Tenant Isolation
+
+- Models with a `tenantId` field or `: tenant` constraint are automatically tenant-scoped
+- All `find`, `first`, `count`, `update`, and `delete` queries include `WHERE tenant_id = <current_tenant>`
+- `insert` operations auto-inject the current tenant ID
+- Tenant ID is read from the session via `tenant_getId()` (requires frame.auth)
+- If no session exists (unauthenticated request), tenant-scoped queries will use an empty tenant ID
 
 ---
 

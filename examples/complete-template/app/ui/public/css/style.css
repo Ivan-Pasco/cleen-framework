@@ -1,0 +1,6 @@
+/* Starter styles */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; line-height: 1.6; padding: 2rem; }
+header { margin-bottom: 2rem; }
+nav a { font-size: 1.5rem; font-weight: bold; text-decoration: none; color: #333; }
+h1 { margin-bottom: 1rem; }

@@ -1,0 +1,21 @@
+// Main Canvas Scene
+// Game loop with init, update, and render phases
+
+plugins:
+	frame.canvas
+
+canvasScene Main:
+	width: 800
+	height: 600
+	background: "#1a1a2e"
+
+	init:
+		// Initialize game state here
+
+	update:
+		// Update game logic here
+		// deltaTime() gives time since last frame
+
+	render:
+		canvas.clear()
+		canvas.text("Hello Canvas!", 400, 300, 32, "#ffffff")

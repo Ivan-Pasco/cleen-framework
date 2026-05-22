@@ -1,0 +1,4027 @@
+// frame.ui plugin - HTML-First UI Framework
+// Provides: HTML page processing, component definitions, SSR rendering
+// Version: 2.6.9
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
+
+functions:
+	// Process HTML page content - main entry point for HTML-first pages
+	// Returns Clean code that renders the page
+	// companion_json: "" for no companion, or JSON with has_guard, has_load, module_name
+	string process_html(string html, string path, string registry_json, string companion_json)
+		// Extract page metadata
+		string layout = extract_page_attr(html, "layout")
+		string auth = extract_page_attr(html, "auth")
+		string roles = extract_page_attr(html, "roles")
+
+		// Parse HTML body (remove head, extract body content)
+		string body_html = extract_body(html)
+
+		// Determine if companion has load() — affects variable scoping
+		boolean has_data = false
+		if companion_json != ""
+			if companion_json.indexOf("\"has_load\":true") != -1
+				has_data = true
+
+		// Transform HTML to render function
+		string render_code = html_to_render(body_html, registry_json, has_data)
+
+		// Check if page needs client runtime for interactive screens
+		if needs_client_runtime(html)
+			// Inject runtime script at end of render code
+			render_code = render_code + generate_runtime_injection()
+
+		// Generate page class with companion file support
+		string page_name = path_to_class_name(path)
+		string result = generate_page_class(page_name, path, layout, auth, roles, render_code, companion_json)
+
+		return result
+
+	// Process component definition blocks (Clean syntax)
+	string expand_block(string block_name, string attributes, string body)
+
+		if block_name == "component"
+			// Idempotency guard: expansion marker present means this block was already expanded
+			if body.indexOf("// __frame_ui_expanded__") != -1
+				return body
+			return expand_component(attributes, body)
+
+		if block_name == "html"
+			return expand_html_block(attributes, body)
+
+		if block_name == "ui"
+			return expand_ui_config(attributes, body)
+
+		// Check if this is a screen block (block_name is "screen ScreenName")
+		if block_name.startsWith("screen ")
+			// Split the operations to debug corruption issue
+			integer name_start = 7
+			integer name_end = block_name.length()
+			string temp_name = block_name.substring(name_start, name_end)
+			// Skip trim for now - it may be causing issues
+			string screen_name = temp_name
+			return expand_screen(screen_name, body)
+
+		return body
+
+	// Validate HTML page against component registry
+	string validate_html(string html, string registry_json)
+		string errors = ""
+
+		// Find all custom tags (contain hyphen)
+		string remaining = html
+		while remaining.indexOf("<") != -1
+			integer tag_start = remaining.indexOf("<")
+			integer tag_end = remaining.indexOf(">", tag_start)
+			if tag_end == -1
+				remaining = ""
+			else
+				string tag_content = remaining.substring(tag_start + 1, tag_end)
+				string tag_name = extract_tag_name(tag_content)
+
+				// Check if custom tag (contains hyphen)
+				if tag_name.indexOf("-") != -1
+					if registry_json.indexOf("\"" + tag_name + "\"") == -1
+						errors = errors + "Unknown component: <" + tag_name + ">\n"
+
+				remaining = remaining.substring(tag_end + 1, remaining.length())
+
+		return errors
+
+	// Extract page metadata as JSON
+	string get_page_meta(string html)
+		string layout = extract_page_attr(html, "layout")
+		string auth = extract_page_attr(html, "auth")
+		string roles = extract_page_attr(html, "roles")
+		string cache = extract_page_attr(html, "cache")
+
+		string json = "{"
+		json = json + "\"layout\":\"" + layout + "\","
+		json = json + "\"auth\":\"" + auth + "\","
+		json = json + "\"roles\":\"" + roles + "\","
+		json = json + "\"cache\":\"" + cache + "\""
+		json = json + "}"
+
+		return json
+
+	// Get keywords for IDE support
+	string get_keywords()
+		return "[\"component\", \"props\", \"state\", \"render\", \"tag\", \"client\", \"if\", \"else\", \"each\", \"bind\", \"slot\", \"html\", \"ui\", \"theme\", \"colors\", \"spacing\"]"
+
+// ============================================================================
+// STRING HELPER FUNCTIONS (workaround for buggy trim())
+// ============================================================================
+
+functions:
+	// Strip leading and trailing spaces without using broken trim()
+	string strip_spaces(string s)
+		// Strip leading spaces
+		integer lead_count = 0
+		while s.length() > 0 and s.substring(0, 1) == " "
+			s = s.substring(1, s.length())
+			lead_count = lead_count + 1
+			if lead_count > 100
+				break
+		// Strip trailing spaces
+		integer trail_count = 0
+		while s.length() > 0 and s.substring(s.length() - 1, s.length()) == " "
+			s = s.substring(0, s.length() - 1)
+			trail_count = trail_count + 1
+			if trail_count > 100
+				break
+		return s
+
+// ============================================================================
+// HTML PARSING FUNCTIONS
+// ============================================================================
+
+functions:
+	// Extract attribute value from <page> tag
+	string extract_page_attr(string html, string attr_name)
+		integer page_start = html.indexOf("<page")
+		if page_start == -1
+			return ""
+
+		integer page_end = html.indexOf(">", page_start)
+		if page_end == -1
+			return ""
+
+		string page_tag = html.substring(page_start, page_end + 1)
+		return extract_attr_value(page_tag, attr_name)
+
+	// Extract body content from HTML
+	string extract_body(string html)
+		// Try to find <body> tag
+		integer body_start = html.indexOf("<body")
+		if body_start != -1
+			integer body_open_end = html.indexOf(">", body_start)
+			integer body_end = html.indexOf("</body>")
+			if body_open_end != -1 and body_end != -1
+				return html.substring(body_open_end + 1, body_end)
+
+		// No body tag - remove head and page tags, use rest
+		string result = html
+
+		// Remove DOCTYPE
+		integer doctype_end = result.indexOf(">")
+		if result.indexOf("<!DOCTYPE") == 0 and doctype_end != -1
+			result = result.substring(doctype_end + 1, result.length())
+
+		// Remove <html> tags
+		result = remove_tag(result, "html")
+
+		// Remove <head>...</head>
+		result = remove_tag_with_content(result, "head")
+
+		// Remove <page ...> tag
+		result = remove_tag(result, "page")
+
+		return result.trim()
+
+	// Remove a tag (opening and closing) but keep content
+	string remove_tag(string html, string tag_name)
+		string result = html
+
+		// Remove opening tag
+		string open_start = "<" + tag_name
+		integer open_pos = result.indexOf(open_start)
+		if open_pos != -1
+			integer open_end = result.indexOf(">", open_pos)
+			if open_end != -1
+				string before = result.substring(0, open_pos)
+				string after = result.substring(open_end + 1, result.length())
+				result = before + after
+
+		// Remove closing tag
+		string close_tag = "</" + tag_name + ">"
+		integer close_pos = result.indexOf(close_tag)
+		if close_pos != -1
+			string before = result.substring(0, close_pos)
+			string after = result.substring(close_pos + close_tag.length(), result.length())
+			result = before + after
+
+		return result
+
+	// Remove a tag and all its content
+	string remove_tag_with_content(string html, string tag_name)
+		string open_start = "<" + tag_name
+		integer startIdx = html.indexOf(open_start)
+		if startIdx == -1
+			return html
+
+		string close_tag = "</" + tag_name + ">"
+		integer end = html.indexOf(close_tag)
+		if end == -1
+			return html
+
+		string before = html.substring(0, startIdx)
+		string after = html.substring(end + close_tag.length(), html.length())
+		return before + after
+
+	// Extract tag name from tag content (e.g., "div class='foo'" -> "div")
+	string extract_tag_name(string tag_content)
+		string trimmed = tag_content.trim()
+
+		// Handle closing tags
+		if trimmed.startsWith("/")
+			trimmed = trimmed.substring(1, trimmed.length())
+
+		// Handle self-closing
+		if trimmed.endsWith("/")
+			trimmed = trimmed.substring(0, trimmed.length() - 1)
+
+		// Find end of tag name (space or end)
+		integer space_pos = trimmed.indexOf(" ")
+		if space_pos == -1
+			return trimmed.trim()
+
+		return trimmed.substring(0, space_pos)
+
+	// Extract attribute value from tag string
+	string extract_attr_value(string tag, string attr_name)
+		// Try attr="value"
+		string pattern1 = attr_name + "=\""
+		integer pos1 = tag.indexOf(pattern1)
+		if pos1 != -1
+			integer value_start = pos1 + pattern1.length()
+			integer value_end = tag.indexOf("\"", value_start)
+			if value_end != -1
+				return tag.substring(value_start, value_end)
+
+		// Try attr='value'
+		string pattern2 = attr_name + "='"
+		integer pos2 = tag.indexOf(pattern2)
+		if pos2 != -1
+			integer value_start = pos2 + pattern2.length()
+			integer value_end = tag.indexOf("'", value_start)
+			if value_end != -1
+				return tag.substring(value_start, value_end)
+
+		// Try attr=value (no quotes)
+		string pattern3 = attr_name + "="
+		integer pos3 = tag.indexOf(pattern3)
+		if pos3 != -1
+			integer value_start = pos3 + pattern3.length()
+			integer value_end = tag.indexOf(" ", value_start)
+			if value_end == -1
+				value_end = tag.indexOf(">", value_start)
+			if value_end == -1
+				value_end = tag.length()
+			return tag.substring(value_start, value_end)
+
+		return ""
+
+// ============================================================================
+// HTML TO CLEAN CODE TRANSFORMATION
+// ============================================================================
+
+functions:
+	// Convert HTML body to render function code
+	// has_data: true when companion has load(), causing {{expr}} to reference data.expr
+	string html_to_render(string html, string registry_json, boolean has_data)
+		string result = ""
+		string remaining = html
+
+		while remaining.length() > 0
+			integer tag_start = remaining.indexOf("<")
+
+			if tag_start == -1
+				// No more tags - add remaining text
+				string text = remaining.trim()
+				if text.length() > 0
+					result = result + process_text_node(text, has_data)
+				remaining = ""
+			else if tag_start > 0
+				// Text before tag
+				string text = remaining.substring(0, tag_start)
+				if text.trim().length() > 0
+					result = result + process_text_node(text, has_data)
+				remaining = remaining.substring(tag_start, remaining.length())
+			else
+				// At a tag
+				integer tag_end = find_tag_end(remaining)
+				if tag_end == -1
+					remaining = ""
+				else
+					string tag_content = remaining.substring(1, tag_end)
+					string tag_name = extract_tag_name(tag_content)
+
+					// Check if self-closing
+					boolean self_closing = tag_content.endsWith("/") or is_void_element(tag_name)
+
+					// Check if closing tag
+					if tag_content.startsWith("/")
+						// Closing tag - skip it (handled by opening tag)
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if self_closing
+						// Self-closing tag
+						result = result + process_element(tag_content, "", registry_json, has_data)
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else
+						// Opening tag - find matching close
+						string close_tag = "</" + tag_name + ">"
+						integer close_pos = find_matching_close(remaining, tag_name)
+						if close_pos == -1
+							// No close tag - treat as self-closing
+							result = result + process_element(tag_content, "", registry_json, has_data)
+							remaining = remaining.substring(tag_end + 1, remaining.length())
+						else
+							// Extract inner content
+							string inner = remaining.substring(tag_end + 1, close_pos)
+							result = result + process_element(tag_content, inner, registry_json, has_data)
+							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+
+		return result
+
+	// Find the end of a tag (the closing >)
+	integer find_tag_end(string html)
+		integer pos = 1
+		boolean in_string = false
+		string quote_char = ""
+
+		while pos < html.length()
+			string ch = html.substring(pos, pos + 1)
+
+			if in_string
+				if ch == quote_char
+					in_string = false
+			else
+				if ch == "\"" or ch == "'"
+					in_string = true
+					quote_char = ch
+				else if ch == ">"
+					return pos
+
+			pos = pos + 1
+
+		return -1
+
+	// Find matching closing tag, accounting for nested same-name tags
+	integer find_matching_close(string html, string tag_name)
+		string open_tag = "<" + tag_name
+		string close_tag = "</" + tag_name + ">"
+
+		integer depth = 1
+		integer pos = html.indexOf(">") + 1
+
+		while pos < html.length() and depth > 0
+			integer next_open = html.indexOf(open_tag, pos)
+			integer next_close = html.indexOf(close_tag, pos)
+
+			if next_close == -1
+				return -1
+
+			if next_open != -1 and next_open < next_close
+				// Check if it's actually an opening tag (not <tagname2)
+				string char_after = html.substring(next_open + open_tag.length(), next_open + open_tag.length() + 1)
+				if char_after == " " or char_after == ">" or char_after == "/"
+					depth = depth + 1
+				pos = next_open + 1
+			else
+				depth = depth - 1
+				if depth == 0
+					return next_close
+				pos = next_close + 1
+
+		return -1
+
+	// Check if element is a void (self-closing) HTML element
+	boolean is_void_element(string tag_name)
+		string void_elements = ",area,base,br,col,embed,hr,img,input,link,meta,source,track,wbr,"
+		return void_elements.indexOf("," + tag_name + ",") != -1
+
+	// Process a text node, handling interpolations
+	// Process text node with interpolation
+	// has_data: when true, {{expr}} references data.expr (companion load() return value)
+	string process_text_node(string text, boolean has_data)
+		string result = "html = html + \""
+		string remaining = text
+
+		while remaining.length() > 0
+			integer brace_start = remaining.indexOf("{")
+
+			if brace_start == -1
+				// No more interpolations - add remaining text
+				result = result + escape_string(remaining)
+				remaining = ""
+			else
+				integer brace_end = remaining.indexOf("}", brace_start + 1)
+
+				if brace_end == -1
+					// No closing brace - treat as literal text
+					result = result + escape_string(remaining)
+					remaining = ""
+				else
+					// Add text before the brace
+					if brace_start > 0
+						result = result + escape_string(remaining.substring(0, brace_start))
+
+					// Check if raw interpolation {!expr}
+					string after_brace = ""
+					if brace_start + 1 < remaining.length()
+						after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+
+					if after_brace == "!"
+						// Raw interpolation - no escaping
+						string expr = remaining.substring(brace_start + 2, brace_end)
+						if has_data
+							result = result + "\" + data." + strip_spaces(expr) + " + \""
+						else
+							result = result + "\" + " + strip_spaces(expr) + " + \""
+					else
+						// Escaped interpolation
+						string expr = remaining.substring(brace_start + 1, brace_end)
+						if has_data
+							result = result + "\" + _html_escape(data." + strip_spaces(expr) + ") + \""
+						else
+							result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+					remaining = remaining.substring(brace_end + 1, remaining.length())
+
+		result = result + "\"\n"
+		return result
+
+	// Process an HTML element
+	string process_element(string tag_content, string inner_html, string registry_json, boolean has_data)
+		string tag_name = extract_tag_name(tag_content)
+
+		// Check for cl- directives
+		string if_attr = extract_attr_value("<" + tag_content + ">", "cl-if")
+		string else_attr = extract_attr_value("<" + tag_content + ">", "cl-else")
+		string iterate_attr = extract_attr_value("<" + tag_content + ">", "cl-iterate")
+		string bind_attr = extract_attr_value("<" + tag_content + ">", "cl-bind")
+		string show_attr = extract_attr_value("<" + tag_content + ">", "cl-show")
+		string validate_attr = extract_attr_value("<" + tag_content + ">", "cl-validate")
+		string slot_attr = extract_attr_value("<" + tag_content + ">", "cl-slot")
+
+		string result = ""
+
+		// Handle cl-if directive — prefix condition with data. when has_data
+		if if_attr != ""
+			if has_data
+				result = result + "if data." + if_attr + "\n"
+			else
+				result = result + "if " + if_attr + "\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			return result
+
+		// Handle cl-else directive (must follow cl-if)
+		if else_attr != "" or tag_content.indexOf(" cl-else") != -1
+			result = result + "else\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			return result
+
+		// Handle cl-iterate directive — prefix collection with data. when has_data
+		if iterate_attr != ""
+			// Parse "item in items" or "item, index in items"
+			integer in_pos = iterate_attr.indexOf(" in ")
+			if in_pos != -1
+				string vars = iterate_attr.substring(0, in_pos).trim()
+				string collection = iterate_attr.substring(in_pos + 4, iterate_attr.length()).trim()
+				if has_data
+					result = result + "iterate " + vars + " in data." + collection + "\n"
+				else
+					result = result + "iterate " + vars + " in " + collection + "\n"
+				result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+				return result
+
+		// Handle cl-show directive — always renders element but controls CSS display
+		// When expr is truthy: render normally; when falsy: render with style="display:none"
+		if show_attr != ""
+			string show_expr = show_attr
+			if has_data
+				show_expr = "data." + show_attr
+			result = result + "if " + show_expr + "\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			result = result + "else\n"
+			result = result + "\t" + render_element_hidden(tag_name, tag_content, inner_html, registry_json, has_data)
+			return result
+
+		// Handle cl-slot directive — content projection with named slot
+		// Renders a slot marker wrapping the default content
+		if slot_attr != ""
+			result = result + "html = html + \"<div data-slot='" + slot_attr + "'>\"\n"
+			if inner_html.trim().length() > 0
+				result = result + html_to_render(inner_html, registry_json, has_data)
+			result = result + "html = html + \"</div>\"\n"
+			return result
+
+		// Handle cl-validate directive — renders input then appends validation error span
+		// The input itself is rendered normally; we append an error display span after it
+		if validate_attr != ""
+			string error_msg_attr = extract_attr_value("<" + tag_content + ">", "error-message")
+			if error_msg_attr == ""
+				error_msg_attr = "Invalid value"
+			result = result + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			result = result + render_validation_error_span(bind_attr, validate_attr, error_msg_attr, has_data)
+			return result
+
+		// Regular element
+		return render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+
+	// Render a single element to Clean code
+	string render_element(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		// Check if this is a <screen> tag for islands
+		if tag_name == "screen"
+			return render_screen_island(tag_content, inner_html, registry_json)
+
+		// Check if custom component (contains hyphen)
+		if tag_name.indexOf("-") != -1
+			return render_component(tag_name, tag_content, inner_html, registry_json, has_data)
+
+		// Standard HTML element
+		string result = "html = html + \"<" + tag_name
+
+		// Add attributes (excluding directives)
+		string attrs = extract_attributes(tag_content)
+		if attrs != ""
+			result = result + " " + attrs
+
+		result = result + ">\"\n"
+
+		// Process inner content
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+
+		// Auto-inject CSRF hidden field for state-mutating forms (POST/PUT/PATCH/DELETE)
+		// Per spec 06_frame_auth.md: CSRF protection is automatic for forms that modify state.
+		// Forms with no method attribute default to POST behaviour and also receive the token.
+		if tag_name == "form"
+			string form_method = extract_attr_value("<" + tag_content + ">", "method")
+			string method_upper = form_method.toUpperCase()
+			boolean needs_csrf = method_upper == "POST" or method_upper == "PUT" or method_upper == "PATCH" or method_upper == "DELETE" or form_method == ""
+			if needs_csrf
+				result = result + "html = html + \"<input type='hidden' name='_csrf' value='\" + csrf_generate() + \"'>\"\n"
+
+		// Close tag (unless void element)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+
+		return result
+
+	// Render an element with display:none injected (for cl-show false branch)
+	string render_element_hidden(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		// Check if custom component (contains hyphen) — components do not support cl-show hidden mode directly
+		if tag_name.indexOf("-") != -1
+			return render_component(tag_name, tag_content, inner_html, registry_json, has_data)
+
+		string result = "html = html + \"<" + tag_name
+
+		// Add attributes (excluding directives), then inject display:none
+		string attrs = extract_attributes(tag_content)
+		if attrs != ""
+			// Check if there is already a style attribute — if so, prepend display:none to it
+			string style_check = " style="
+			if attrs.indexOf(style_check) != -1
+				// Inject display:none; into existing style value
+				integer style_pos = attrs.indexOf(style_check)
+				integer style_val_start = style_pos + style_check.length() + 3
+				string before_style = attrs.substring(0, style_val_start)
+				string after_style = attrs.substring(style_val_start, attrs.length())
+				attrs = before_style + "display:none;" + after_style
+			else
+				// No existing style attribute — append style="display:none"
+				attrs = attrs + " style='display:none'"
+			result = result + " " + attrs
+		else
+			result = result + " style='display:none'"
+
+		result = result + ">\"\n"
+
+		// Process inner content
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+
+		// Close tag (unless void element)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+
+		return result
+
+	// Render a validation error span for cl-validate
+	// Generates a conditionally-visible <span> that shows when validation fails
+	string render_validation_error_span(string field_name, string validate_type, string error_msg, boolean has_data)
+		string result = ""
+		string field_ref = field_name
+		if field_ref == ""
+			// No bind target — use a placeholder condition that never fails
+			return ""
+
+		if has_data
+			field_ref = "data." + field_name
+
+		// Build the condition expression based on validation type
+		string condition = ""
+		if validate_type == "email"
+			// Email: must contain "@" and "."
+			condition = field_ref + ".indexOf(\"@\") == -1 or " + field_ref + ".indexOf(\".\") == -1"
+		else if validate_type == "required"
+			// Required: must not be empty
+			condition = field_ref + ".length() == 0"
+		else if validate_type == "min"
+			// Min length — requires accompanying min attribute; use length > 0 check as fallback
+			condition = field_ref + ".length() == 0"
+		else if validate_type == "max"
+			// Max length — requires accompanying max attribute; use basic non-empty check
+			condition = field_ref + ".length() == 0"
+		else
+			// Unknown validation type — use required semantics as safe default
+			condition = field_ref + ".length() == 0"
+
+		result = result + "if " + condition + "\n"
+		result = result + "\thtml = html + \"<span class='cl-validation-error'>" + escape_string(error_msg) + "</span>\"\n"
+		return result
+
+	// Render a <screen> tag as an island
+	// <screen name="Counter" client="on" count="5">
+	string render_screen_island(string tag_content, string inner_html, string registry_json)
+		// Extract screen name (required)
+		string screen_name = extract_attr_value("<" + tag_content + ">", "name")
+		if screen_name == ""
+			// Fallback: try getting it as the first attribute value
+			screen_name = "Unknown"
+
+		// Extract hydration mode
+		string client = extract_attr_value("<" + tag_content + ">", "client")
+		if client == ""
+			client = "off"
+
+		// Generate the screen class name
+		string class_name = "__Screen_" + screen_name
+
+		string result = ""
+
+		// Create a block for the screen instance
+		result = result + "{\n"
+		result = result + "\t" + class_name + " _screen = " + class_name + "()\n"
+
+		// Extract and apply any prop overrides from attributes
+		string props_code = extract_screen_props(tag_content, screen_name)
+		if props_code != ""
+			result = result + props_code
+
+		// Generate island wrapper
+		result = result + "\thtml = html + \"<div id='screen-" + screen_name + "'>\"\n"
+
+		// Call screen render
+		result = result + "\thtml = html + _screen.render()\n"
+
+		// Close wrapper
+		result = result + "\thtml = html + \"</div>\"\n"
+
+		result = result + "}\n"
+
+		return result
+
+	// Extract props from screen tag and generate setter code
+	string extract_screen_props(string tag_content, string screen_name)
+		string result = ""
+		string excluded = ",name,client,props,"
+
+		// Find attributes in tag_content
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos == -1
+			return ""
+		remaining = remaining.substring(space_pos + 1, remaining.length())
+
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+		remaining = remaining.trim()
+
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				remaining = ""
+			else
+				string attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+
+						// Only process non-excluded attributes
+						if excluded.indexOf("," + attr_name + ",") == -1
+							// Check if value looks like a number
+							if is_numeric(attr_value)
+								result = result + "\t_screen." + attr_name + " = " + attr_value + "\n"
+							else if attr_value == "true" or attr_value == "false"
+								result = result + "\t_screen." + attr_name + " = " + attr_value + "\n"
+							else
+								result = result + "\t_screen." + attr_name + " = \"" + attr_value + "\"\n"
+
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					remaining = ""
+
+		return result
+
+	// Check if a string is numeric
+	boolean is_numeric(string s)
+		if s.length() == 0
+			return false
+		integer i = 0
+		// Allow leading minus
+		if s.substring(0, 1) == "-"
+			i = 1
+		boolean has_dot = false
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch >= "0" and ch <= "9"
+				i = i + 1
+			else if ch == "." and has_dot == false
+				has_dot = true
+				i = i + 1
+			else
+				return false
+		return true
+
+	// Render a custom component
+	string render_component(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		// Look up component class name
+		string class_name = lookup_component(tag_name, registry_json)
+		if class_name == ""
+			class_name = tag_to_class_name(tag_name)
+
+		// Extract props
+		string props = extract_component_props(tag_content)
+
+		// Check hydration mode
+		string client = extract_attr_value("<" + tag_content + ">", "client")
+		if client == ""
+			client = "off"
+
+		string result = ""
+
+		// Create component instance
+		result = result + "{\n"
+		result = result + "\t" + class_name + " _comp = " + class_name + "()\n"
+
+		// Set props
+		if props != ""
+			result = result + props
+
+		// Set slot content if any
+		if inner_html.trim().length() > 0
+			result = result + "\tstring _slot = \"\"\n"
+			// Render inner HTML then rewrite variable assignments line by line
+			string slot_code = html_to_render(inner_html, registry_json, has_data)
+			string slot_remaining = slot_code
+			while slot_remaining.length() > 0
+				integer snl = slot_remaining.indexOf("\n")
+				string sline = ""
+				if snl == -1
+					sline = slot_remaining
+					slot_remaining = ""
+				else
+					sline = slot_remaining.substring(0, snl)
+					slot_remaining = slot_remaining.substring(snl + 1, slot_remaining.length())
+				// Only replace at line start (not inside string literals)
+				if sline.startsWith("html = html +")
+					result = result + "\t_slot = _slot +" + sline.substring(13, sline.length()) + "\n"
+				else if sline.trim().length() > 0
+					result = result + "\t" + sline + "\n"
+			result = result + "\t_comp.setSlot(_slot)\n"
+
+		// Render component directly
+		result = result + "\thtml = html + _comp.render()\n"
+
+		result = result + "}\n"
+
+		return result
+
+	// Extract attributes from tag, excluding directives
+	// Event attributes (onclick, onsubmit, etc.) are transformed to data-on-* for SSR hydration
+	string extract_attributes(string tag_content)
+		// Directive attributes consumed by the compiler — not output to HTML
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,error-message,"
+		// Known HTML event attribute prefixes (all start with "on")
+		string events = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onmouseenter,onmouseleave,"
+		string result = ""
+
+		// Simple attribute extraction - find key="value" or key='value' pairs
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos != -1
+			remaining = remaining.substring(space_pos + 1, remaining.length())
+		else
+			return ""
+
+		// Remove trailing / or >
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+
+		remaining = remaining.trim()
+
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				// Boolean attribute or end
+				integer next_space = remaining.indexOf(" ")
+				if next_space == -1
+					string attr_name = remaining.trim()
+					if attr_name.length() > 0 and directives.indexOf("," + attr_name + ",") == -1
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = ""
+				else
+					string attr_name = remaining.substring(0, next_space).trim()
+					if attr_name.length() > 0 and directives.indexOf("," + attr_name + ",") == -1
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = remaining.substring(next_space + 1, remaining.length()).trim()
+			else
+				// attr_name may contain dot-modifier: onsubmit.prevent
+				string raw_attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if directives.indexOf("," + raw_attr_name + ",") == -1
+							if result != ""
+								result = result + " "
+							// Check if this is an event attribute (raw name before modifier)
+							string base_event = raw_attr_name
+							string modifier = ""
+							integer dot_pos = raw_attr_name.indexOf(".")
+							if dot_pos != -1
+								base_event = raw_attr_name.substring(0, dot_pos)
+								modifier = raw_attr_name.substring(dot_pos + 1, raw_attr_name.length())
+							if events.indexOf("," + base_event + ",") != -1
+								// Transform event to data-on-* attribute for SSR hydration
+								// onclick -> data-on-click, onsubmit -> data-on-submit, etc.
+								string event_name = base_event.substring(2, base_event.length())
+								result = result + "data-on-" + event_name + "='" + attr_value + "'"
+								// Append modifier attribute if present
+								if modifier != ""
+									result = result + " data-on-" + event_name + "-" + modifier + "='true'"
+							else
+								// Handle interpolations in attribute values
+								if attr_value.indexOf("{") != -1
+									result = result + raw_attr_name + "='\" + " + interpolate_attr(attr_value) + " + \"'"
+								else
+									result = result + raw_attr_name + "='" + attr_value + "'"
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					// Unquoted value
+					integer next_space = after_eq.indexOf(" ")
+					if next_space == -1
+						next_space = after_eq.length()
+					string attr_value = after_eq.substring(0, next_space)
+					if directives.indexOf("," + raw_attr_name + ",") == -1
+						if result != ""
+							result = result + " "
+						// Check if this is an event attribute
+						string base_event = raw_attr_name
+						string modifier = ""
+						integer dot_pos = raw_attr_name.indexOf(".")
+						if dot_pos != -1
+							base_event = raw_attr_name.substring(0, dot_pos)
+							modifier = raw_attr_name.substring(dot_pos + 1, raw_attr_name.length())
+						if events.indexOf("," + base_event + ",") != -1
+							string event_name = base_event.substring(2, base_event.length())
+							result = result + "data-on-" + event_name + "='" + attr_value + "'"
+							if modifier != ""
+								result = result + " data-on-" + event_name + "-" + modifier + "='true'"
+						else
+							result = result + raw_attr_name + "='" + attr_value + "'"
+					remaining = after_eq.substring(next_space, after_eq.length()).trim()
+
+		return result
+
+	// Convert attribute value with interpolations to expression
+	string interpolate_attr(string value)
+		string result = "\""
+		string remaining = value
+
+		while remaining.length() > 0
+			integer startIdx = remaining.indexOf("{")
+			if startIdx == -1
+				result = result + remaining + "\""
+				remaining = ""
+			else
+				if startIdx > 0
+					result = result + remaining.substring(0, startIdx)
+
+				integer end = remaining.indexOf("}", startIdx + 1)
+				if end == -1
+					end = remaining.length()
+
+				string after_brace = remaining.substring(startIdx + 1, startIdx + 2)
+				if after_brace == "!"
+					// Raw interpolation in attribute
+					string expr = remaining.substring(startIdx + 2, end)
+					result = result + "\" + " + strip_spaces(expr) + " + \""
+				else
+					// Escaped interpolation in attribute
+					string expr = remaining.substring(startIdx + 1, end)
+					result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+				remaining = remaining.substring(end + 1, remaining.length())
+
+		return result
+
+	// Extract component props as setter code
+	string extract_component_props(string tag_content)
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-slot,cl-show,cl-validate,"
+		string result = ""
+
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos == -1
+			return ""
+		remaining = remaining.substring(space_pos + 1, remaining.length())
+
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+		remaining = remaining.trim()
+
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				remaining = ""
+			else
+				string attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if directives.indexOf("," + attr_name + ",") == -1
+							string prop_name = kebab_to_camel(attr_name)
+							// Check if value is interpolation or literal
+							if attr_value.startsWith("{") and attr_value.endsWith("}")
+								string expr = attr_value.substring(1, attr_value.length() - 1).trim()
+								result = result + "\t_comp." + prop_name + " = " + expr + "\n"
+							else
+								result = result + "\t_comp." + prop_name + " = \"" + attr_value + "\"\n"
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					remaining = ""
+
+		return result
+
+	// Look up component class name from registry
+	string lookup_component(string tag_name, string registry_json)
+		string pattern = "\"" + tag_name + "\":\""
+		integer pos = registry_json.indexOf(pattern)
+		if pos == -1
+			return ""
+
+		integer value_start = pos + pattern.length()
+		integer value_end = registry_json.indexOf("\"", value_start)
+		if value_end == -1
+			return ""
+
+		return registry_json.substring(value_start, value_end)
+
+	// Convert kebab-case to camelCase
+	string kebab_to_camel(string input)
+		string result = ""
+		boolean capitalize_next = false
+
+		integer i = 0
+		while i < input.length()
+			string ch = input.substring(i, i + 1)
+			if ch == "-"
+				capitalize_next = true
+			else
+				if capitalize_next
+					result = result + ch.toUpperCase()
+					capitalize_next = false
+				else
+					result = result + ch
+			i = i + 1
+
+		return result
+
+	// Convert tag-name to ClassName
+	string tag_to_class_name(string tag_name)
+		string result = ""
+		boolean capitalize_next = true
+
+		integer i = 0
+		while i < tag_name.length()
+			string ch = tag_name.substring(i, i + 1)
+			if ch == "-"
+				capitalize_next = true
+			else
+				if capitalize_next
+					result = result + ch.toUpperCase()
+					capitalize_next = false
+				else
+					result = result + ch
+			i = i + 1
+
+		return result
+
+	// Escape string for HTML text content embedding
+	string escape_string(string input)
+		string result = input
+		result = result.replace("\"", "&quot;")
+		result = result.replace("\n", " ")
+		result = result.replace("\t", " ")
+		return result
+
+// ============================================================================
+// HTML: BLOCK TEMPLATE TRANSFORMATION
+// ============================================================================
+// Transforms html: template blocks into Clean string concatenation code.
+// Uses {expr} for escaped interpolation and {!expr} for raw interpolation.
+// Output variable is __html, escape function is _html_escape().
+
+functions:
+	// Entry point for standalone html: blocks (inside functions)
+	// Default mode: generates string __html = "" + building code + return __html
+	// Named var mode (var="name"): generates string name = "" + building code (no return)
+	string expand_html_block(string attributes, string body)
+		string cleaned = strip_block_indent(body)
+		string code = html_block_to_code(cleaned)
+		string var_name = get_attr(attributes, "var", "")
+
+		if var_name == ""
+			// Default mode: build __html and return it
+			string result = "string __html = \"\"\n"
+			result = result + code
+			result = result + "return __html\n"
+			return result
+		else
+			// Named variable mode: build into named var, no return
+			string result = "string " + var_name + " = \"\"\n"
+			result = result + code.replace("__html", var_name)
+			return result
+
+	// Core transformer: walks HTML and delegates to text/element processors
+	// Parallel to html_to_render but uses {expr} syntax and __html variable
+	string html_block_to_code(string html)
+		string result = ""
+		string remaining = html
+
+		while remaining.length() > 0
+			integer tag_start = remaining.indexOf("<")
+
+			if tag_start == -1
+				// No more tags - process remaining text
+				string text = remaining.trim()
+				if text.length() > 0
+					result = result + process_block_text_node(text)
+				remaining = ""
+			else if tag_start > 0
+				// Text before tag
+				string text = remaining.substring(0, tag_start)
+				if text.trim().length() > 0
+					result = result + process_block_text_node(text)
+				remaining = remaining.substring(tag_start, remaining.length())
+			else
+				// At a tag
+				integer tag_end = find_tag_end(remaining)
+				if tag_end == -1
+					remaining = ""
+				else
+					string tag_content = remaining.substring(1, tag_end)
+					string tag_name = extract_tag_name(tag_content)
+
+					boolean self_closing = tag_content.endsWith("/") or is_void_element(tag_name)
+
+					if tag_content.startsWith("/")
+						// Closing tag - skip (handled by opening tag)
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if tag_name.startsWith("!")
+						// Declarations like <!DOCTYPE html> — emit as raw literal, no closing tag
+						result = result + "__html = __html + \"<" + tag_content + ">\"\n"
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if self_closing
+						result = result + process_block_element(tag_content, "")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else
+						string close_tag = "</" + tag_name + ">"
+						integer close_pos = find_matching_close(remaining, tag_name)
+						if close_pos == -1
+							result = result + process_block_element(tag_content, "")
+							remaining = remaining.substring(tag_end + 1, remaining.length())
+						else
+							string inner = remaining.substring(tag_end + 1, close_pos)
+							result = result + process_block_element(tag_content, inner)
+							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+
+		return result
+
+	// Process text node for html: blocks
+	// Handles {expr} (escaped via _html_escape) and {!expr} (raw)
+	string process_block_text_node(string text)
+		string result = "__html = __html + \""
+		string remaining = text
+
+		while remaining.length() > 0
+			integer brace_start = remaining.indexOf("{")
+
+			if brace_start == -1
+				// No more interpolations - add remaining text
+				result = result + escape_string(remaining)
+				remaining = ""
+			else
+				integer brace_end = remaining.indexOf("}", brace_start + 1)
+
+				if brace_end == -1
+					// No closing brace - treat as literal text
+					result = result + escape_string(remaining)
+					remaining = ""
+				else
+					// Add text before the brace
+					if brace_start > 0
+						result = result + escape_string(remaining.substring(0, brace_start))
+
+					// Check if raw interpolation {!expr}
+					string after_brace = ""
+					if brace_start + 1 < remaining.length()
+						after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+
+					if after_brace == "!"
+						// Raw interpolation - no escaping
+						string expr = remaining.substring(brace_start + 2, brace_end)
+						result = result + "\" + " + strip_spaces(expr) + " + \""
+					else
+						// Escaped interpolation
+						string expr = remaining.substring(brace_start + 1, brace_end)
+						result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+					remaining = remaining.substring(brace_end + 1, remaining.length())
+
+		result = result + "\"\n"
+		return result
+
+	// Process an HTML element for html: blocks
+	string process_block_element(string tag_content, string inner_html)
+		string tag_name = extract_tag_name(tag_content)
+
+		string result = "__html = __html + \"<" + tag_name
+
+		// Add attributes
+		string attrs = extract_block_attributes(tag_content)
+		if attrs != ""
+			result = result + " " + attrs
+
+		result = result + ">\"\n"
+
+		// Process inner content recursively
+		if inner_html.trim().length() > 0
+			result = result + html_block_to_code(inner_html)
+
+		// Close tag (unless void element)
+		if is_void_element(tag_name) == false
+			result = result + "__html = __html + \"</" + tag_name + ">\"\n"
+
+		return result
+
+	// Extract attributes from tag for html: blocks
+	// Handles {expr} interpolation in attribute values
+	string extract_block_attributes(string tag_content)
+		string result = ""
+
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos != -1
+			remaining = remaining.substring(space_pos + 1, remaining.length())
+		else
+			return ""
+
+		// Remove trailing /
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+
+		remaining = remaining.trim()
+
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				// Boolean attribute or end
+				integer next_space = remaining.indexOf(" ")
+				if next_space == -1
+					string attr_name = remaining.trim()
+					if attr_name.length() > 0
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = ""
+				else
+					string attr_name = remaining.substring(0, next_space).trim()
+					if attr_name.length() > 0
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = remaining.substring(next_space + 1, remaining.length()).trim()
+			else
+				string attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if result != ""
+							result = result + " "
+						// Handle interpolations in attribute values
+						if attr_value.indexOf("{") != -1
+							result = result + attr_name + "='\" + " + interpolate_block_attr(attr_value) + " + \"'"
+						else
+							result = result + attr_name + "='" + attr_value + "'"
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					// Unquoted value
+					integer next_space = after_eq.indexOf(" ")
+					if next_space == -1
+						next_space = after_eq.length()
+					string attr_value = after_eq.substring(0, next_space)
+					if result != ""
+						result = result + " "
+					result = result + attr_name + "='" + attr_value + "'"
+					remaining = after_eq.substring(next_space, after_eq.length()).trim()
+
+		return result
+
+	// Convert attribute value with {expr} interpolations to expression
+	// Used for: class="badge-{this.difficulty}" -> "badge-" + _html_escape(this.difficulty)
+	string interpolate_block_attr(string value)
+		string result = "\""
+		string remaining = value
+
+		while remaining.length() > 0
+			integer startIdx = remaining.indexOf("{")
+			if startIdx == -1
+				result = result + remaining
+				remaining = ""
+			else
+				if startIdx > 0
+					result = result + remaining.substring(0, startIdx)
+
+				integer end = remaining.indexOf("}", startIdx + 1)
+				if end == -1
+					end = remaining.length()
+
+				string after_brace = remaining.substring(startIdx + 1, startIdx + 2)
+				if after_brace == "!"
+					// Raw interpolation in attribute
+					string expr = remaining.substring(startIdx + 2, end)
+					result = result + "\" + " + strip_spaces(expr) + " + \""
+				else
+					// Escaped interpolation in attribute
+					string expr = remaining.substring(startIdx + 1, end)
+					result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+				remaining = remaining.substring(end + 1, remaining.length())
+
+		result = result + "\""
+		return result
+
+	// Parse component body to extract html: block and other sections
+	// Returns JSON: {"before": "...", "html": "...", "after": "..."}
+	string parse_component_body(string body)
+		string before = ""
+		string html_content = ""
+		string after = ""
+
+		// Search for html: as a section header
+		integer html_pos = -1
+		integer search_pos = 0
+
+		while search_pos < body.length()
+			integer pos = body.indexOf("html:", search_pos)
+			if pos == -1
+				search_pos = body.length()
+			else
+				// Verify it's at the start of a line (after newline/tab or at start)
+				boolean valid = false
+				if pos == 0
+					valid = true
+				else
+					string char_before = body.substring(pos - 1, pos)
+					if char_before == "\n" or char_before == "\t"
+						valid = true
+
+				if valid
+					html_pos = pos
+					search_pos = body.length()
+				else
+					search_pos = pos + 5
+
+		if html_pos == -1
+			// No html: block found
+			return "{\"before\":\"" + escape_json_string(body) + "\",\"html\":\"\",\"after\":\"\"}"
+
+		// Extract content before html:
+		if html_pos > 0
+			before = body.substring(0, html_pos)
+
+		// Find content start (after "html:\n")
+		integer content_start = body.indexOf("\n", html_pos)
+		if content_start == -1
+			return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"\",\"after\":\"\"}"
+		content_start = content_start + 1
+
+		// Determine the indentation level of the html: line
+		integer html_line_indent = 0
+		integer scan = html_pos - 1
+		while scan >= 0 and body.substring(scan, scan + 1) == "\t"
+			html_line_indent = html_line_indent + 1
+			scan = scan - 1
+
+		// Find end of html: block by scanning for next section header at same or lower indent
+		integer html_end = body.length()
+		string sections = ",props:,state:,functions:,computed:,handlers:,"
+		string search_remaining = body.substring(content_start, body.length())
+		integer line_start = 0
+
+		while line_start < search_remaining.length()
+			integer nl = search_remaining.indexOf("\n", line_start)
+			if nl == -1
+				nl = search_remaining.length()
+			string line = search_remaining.substring(line_start, nl)
+
+			// Count indent level
+			integer indent = 0
+			while indent < line.length() and line.substring(indent, indent + 1) == "\t"
+				indent = indent + 1
+
+			// Check if this is a section header at same or lower indent
+			if indent <= html_line_indent and line.trim().length() > 0
+				string trimmed = line.trim()
+				if trimmed.endsWith(":")
+					// Check it's a known section
+					string section_name = trimmed.substring(0, trimmed.length() - 1)
+					if sections.indexOf("," + section_name + ",") != -1
+						html_end = content_start + line_start
+						after = body.substring(html_end, body.length())
+						line_start = search_remaining.length()
+					else
+						line_start = nl + 1
+				else
+					line_start = nl + 1
+			else
+				line_start = nl + 1
+
+		html_content = body.substring(content_start, html_end)
+
+		return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"" + escape_json_string(html_content) + "\",\"after\":\"" + escape_json_string(after) + "\"}"
+
+	// Strip common indentation from html: block content and collapse whitespace
+	string strip_block_indent(string content)
+		// Find minimum indent level across non-empty lines
+		integer min_indent = 999
+		string remaining = content
+
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			if line.trim().length() > 0
+				integer indent = 0
+				while indent < line.length() and line.substring(indent, indent + 1) == "\t"
+					indent = indent + 1
+				if indent < min_indent
+					min_indent = indent
+
+		if min_indent == 999
+			min_indent = 0
+
+		// Rebuild content with common indent stripped
+		string result = ""
+		remaining = content
+		boolean first = true
+
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			if line.trim().length() > 0
+				if first == false
+					result = result + " "
+				first = false
+				if line.length() > min_indent
+					result = result + line.substring(min_indent, line.length()).trim()
+				else
+					result = result + line.trim()
+
+		return result
+
+// ============================================================================
+// CODE GENERATION
+// ============================================================================
+
+functions:
+	// Convert file path to class name
+	string path_to_class_name(string path)
+		// /app/pages/blog/[slug].html -> BlogSlugPage
+		string result = ""
+		boolean capitalize_next = true
+
+		// Remove leading path and extension
+		integer last_slash = path.lastIndexOf("/")
+		string filename = path
+		if last_slash != -1
+			filename = path.substring(last_slash + 1, path.length())
+
+		integer dot_pos = filename.lastIndexOf(".")
+		if dot_pos != -1
+			filename = filename.substring(0, dot_pos)
+
+		// Handle index -> use parent folder name
+		if filename == "index"
+			integer second_last_slash = path.lastIndexOf("/", last_slash - 1)
+			if second_last_slash != -1
+				filename = path.substring(second_last_slash + 1, last_slash)
+			else
+				filename = "Home"
+
+		// Convert to PascalCase
+		integer i = 0
+		while i < filename.length()
+			string ch = filename.substring(i, i + 1)
+			if ch == "-" or ch == "_" or ch == "[" or ch == "]"
+				capitalize_next = true
+			else
+				if capitalize_next
+					result = result + ch.toUpperCase()
+					capitalize_next = false
+				else
+					result = result + ch
+			i = i + 1
+
+		return result + "Page"
+
+	// Generate page class from parsed HTML
+	string generate_page_class(string name, string path, string layout, string auth, string roles, string render_code, string companion_json)
+		string result = "class " + name + "\n"
+
+		// Page metadata fields
+		result = result + "\tstring _path = \"" + path + "\"\n"
+		if layout != ""
+			result = result + "\tstring _layout = \"" + layout + "\"\n"
+		if auth != ""
+			result = result + "\tstring _auth = \"" + auth + "\"\n"
+		if roles != ""
+			result = result + "\tstring _roles = \"" + roles + "\"\n"
+
+		result = result + "\n\tfunctions:\n"
+
+		// Render function
+		result = result + "\t\tstring render()\n"
+
+		// If companion has guard(), call it first
+		if companion_json != ""
+			string module_name = extract_json_field(companion_json, "module_name")
+
+			if companion_json.indexOf("\"has_guard\":true") != -1
+				result = result + "\t\t\tany guard_result = " + module_name + "_guard()\n"
+				result = result + "\t\t\tif guard_result != null\n"
+				result = result + "\t\t\t\treturn \"\"\n"
+
+			if companion_json.indexOf("\"has_load\":true") != -1
+				result = result + "\t\t\tany data = " + module_name + "_load()\n"
+
+		result = result + "\t\t\tstring html = \"\"\n"
+		result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+
+		// When a layout is specified, wrap the rendered page content in the layout template.
+		// Named slots (<slot name="X">...</slot>) are extracted from the page content first
+		// and injected into their matching placeholders in the layout, then the remaining
+		// content replaces the default <slot></slot>.
+		if layout != ""
+			result = result + "\t\t\tstring __page_content = html\n"
+			result = result + "\t\t\tstring __layout_html = _ui_loadLayout(\"" + layout + "\")\n"
+			result = result + "\t\t\tif __layout_html != \"\"\n"
+			// Named slot extraction loop — runs up to 10 named slots
+			result = result + "\t\t\t\tinteger __slot_i = 0\n"
+			result = result + "\t\t\t\twhile __slot_i < 10\n"
+			result = result + "\t\t\t\t\tinteger __ns_start = __page_content.indexOf(\"<slot name='\")\n"
+			result = result + "\t\t\t\t\tif __ns_start == -1\n"
+			result = result + "\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\tinteger __name_start = __ns_start + 12\n"
+			result = result + "\t\t\t\t\t\tinteger __name_end = __page_content.indexOf(\"'\", __name_start)\n"
+			result = result + "\t\t\t\t\t\tif __name_end == -1\n"
+			result = result + "\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\tstring __slot_name = __page_content.substring(__name_start, __name_end)\n"
+			result = result + "\t\t\t\t\t\t\tinteger __open_end = __page_content.indexOf(\">\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\tinteger __close_start = __page_content.indexOf(\"</slot>\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\tif __open_end == -1 or __close_start == -1\n"
+			result = result + "\t\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __layout_placeholder = \"<slot name='\" + __slot_name + \"'></slot>\"\n"
+			result = result + "\t\t\t\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
+			result = result + "\t\t\t\t\t\t\t\t__page_content = __before + __after\n"
+			result = result + "\t\t\t\t\t\t\t\t__slot_i = __slot_i + 1\n"
+			// Replace default slot with remaining content after named slots are extracted
+			result = result + "\t\t\t\t__layout_html = __layout_html.replace(\"<slot></slot>\", __page_content)\n"
+			result = result + "\t\t\t\thtml = __layout_html\n"
+
+		result = result + "\t\t\treturn html\n"
+
+		return result
+
+	// Check if HTML contains interactive screen tags that need client runtime
+	boolean needs_client_runtime(string html)
+		// Look for <screen ... client="on|visible|idle" patterns
+		string remaining = html
+		while remaining.indexOf("<screen") != -1
+			integer screen_start = remaining.indexOf("<screen")
+			integer screen_end = remaining.indexOf(">", screen_start)
+			if screen_end == -1
+				return false
+
+			string screen_tag = remaining.substring(screen_start, screen_end + 1)
+
+			// Check client attribute
+			string client = extract_attr_value(screen_tag, "client")
+			if client == "on" or client == "visible" or client == "idle"
+				return true
+
+			remaining = remaining.substring(screen_end + 1, remaining.length())
+
+		return false
+
+	// Generate runtime injection code
+	string generate_runtime_injection()
+		string result = ""
+		result = result + "html = html + \"<script src='/loader.js' data-wasm='/frontend.wasm'></script>\"\n"
+		return result
+
+	// Expand component block (Clean syntax for component definitions)
+	string expand_component(string attrs, string body)
+		string tag = get_attr(attrs, "tag", "")
+		string name = get_attr(attrs, "name", "")
+		string client = get_attr(attrs, "client", "off")
+
+		// Use tag to derive name if not provided
+		if name == "" and tag != ""
+			name = tag_to_class_name(tag)
+
+		if name == ""
+			name = "Component"
+
+		string result = "// __frame_ui_expanded__\n"
+		result = result + "class " + name + "\n"
+
+		// Add tag and hydration metadata
+		if tag != ""
+			result = result + "\tstring _tag = \"" + tag + "\"\n"
+		result = result + "\tstring _hydration_mode = \"" + client + "\"\n"
+		result = result + "\tstring _slot_content = \"\"\n"
+
+		// Parse body to find html: block and other sections
+		string parsed = parse_component_body(body)
+		string before_html = extract_json_field(parsed, "before")
+		string html_content = extract_json_field(parsed, "html")
+		string after_html = extract_json_field(parsed, "after")
+
+		if html_content != ""
+			// html: block found - generate render() from it
+
+			// Add sections before html: (typically props:, state:)
+			if before_html.trim().length() > 0
+				result = result + "\t" + before_html + "\n"
+
+			// Generate render() function from html: block content
+			string cleaned_html = strip_block_indent(html_content)
+			string render_code = html_block_to_code(cleaned_html)
+
+			// Check if after_html contains a functions: section
+			if after_html.trim().length() > 0 and after_html.trim().startsWith("functions:")
+				// Merge render() into the existing functions: block
+				result = result + "\n\t" + after_html.trim().substring(0, 10) + "\n"
+				result = result + "\t\tstring render()\n"
+				result = result + "\t\t\tstring __html = \"\"\n"
+				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+				result = result + "\t\t\treturn __html\n\n"
+				// Add remaining functions after "functions:" header
+				string remaining_funcs = after_html.trim().substring(10, after_html.trim().length())
+				if remaining_funcs.trim().length() > 0
+					result = result + "\t\t" + remaining_funcs.trim() + "\n"
+			else
+				// No functions: section after html - create one with render()
+				result = result + "\n\tfunctions:\n"
+				result = result + "\t\tstring render()\n"
+				result = result + "\t\t\tstring __html = \"\"\n"
+				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+				result = result + "\t\t\treturn __html\n"
+				// Add any remaining content after html:
+				if after_html.trim().length() > 0
+					result = result + "\n\t" + after_html + "\n"
+		else
+			// No html: block - pass body through as before (backward compatible)
+			result = result + "\t" + body + "\n"
+
+		// Add slot setter and SSR wrapper
+		if html_content != "" and after_html.trim().startsWith("functions:")
+			// Functions block already exists, just append
+			result = result + "\n\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t_slot_content = content\n"
+			result = result + "\n\t\tstring renderSSR()\n"
+			result = result + "\t\t\treturn this.render()\n"
+		else
+			result = result + "\n\tfunctions:\n"
+			result = result + "\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t_slot_content = content\n"
+			result = result + "\n\t\tstring renderSSR()\n"
+			result = result + "\t\t\treturn this.render()\n"
+
+		return result
+
+	// Get attribute from JSON-like attrs string
+	string get_attr(string attrs, string key, string default_val)
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_val
+
+		integer colon_pos = attrs.indexOf(":", pos)
+		if colon_pos == -1
+			return default_val
+
+		integer quote_start = attrs.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			return default_val
+
+		integer quote_end = attrs.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return default_val
+
+		return attrs.substring(quote_start + 1, quote_end)
+
+// ============================================================================
+// LINE-BASED PARSING UTILITIES
+// ============================================================================
+// These utilities are used for parsing indentation-based content like screen
+// blocks, state definitions, and UI widget trees.
+
+functions:
+	// Split a string into lines by newline characters
+	// Returns a list of strings, one per line
+	list<string> split_lines(string content)
+		integer first_newline = content.indexOf("\n")
+		if content.length() > 0
+			string first_char = content.substring(0, 1)
+
+		list<string> result = []
+		string remaining = content
+
+		while remaining.length() > 0
+			integer newline = remaining.indexOf("\n")
+			if newline == -1
+				// No more newlines - add remaining content as last line
+				result.push(remaining)
+				remaining = ""
+			else
+				// Add line before newline and continue
+				string line = remaining.substring(0, newline)
+				result.push(line)
+				remaining = remaining.substring(newline + 1, remaining.length())
+
+		return result
+
+	// Count the number of leading tab characters in a line
+	// Returns the indentation level (number of tabs)
+	integer get_indent_level(string line)
+		integer count = 0
+		while count < line.length()
+			string ch = line.substring(count, count + 1)
+			if ch == "\t"
+				count = count + 1
+			else
+				return count
+		return count
+
+	// Remove a specific number of leading tabs from a line
+	// Returns the line with indent prefix removed
+	string trim_indent(string line, integer level)
+		integer current_indent = get_indent_level(line)
+		if current_indent >= level
+			return line.substring(level, line.length())
+		return line
+
+	// Extract a block of lines at or above a given indent level
+	// Returns JSON: {"lines": [...], "end_index": n}
+	// lines: array of lines in the block
+	// end_index: index after the last line of the block
+	string parse_block(list<string> lines, integer start_index, integer base_indent)
+		list<string> block_lines = []
+		integer index = start_index
+		boolean done = false
+
+		while index < lines.length() and done == false
+			string line = lines[index]
+
+			// Skip empty lines within block
+			if line.trim().length() == 0
+				block_lines.push(line)
+				index = index + 1
+			else
+				integer indent = get_indent_level(line)
+				// Check if still in block (indent > base_indent)
+				if indent > base_indent
+					block_lines.push(line)
+					index = index + 1
+				else
+					done = true
+
+		string result = "{\"lines\":["
+		integer i = 0
+		while i < block_lines.length()
+			if i > 0
+				result = result + ","
+			result = result + "\"" + escape_json_string(block_lines[i]) + "\""
+			i = i + 1
+		result = result + "],\"end_index\":" + index.toString() + "}"
+
+		return result
+
+	// Parse a key-value pair from a line
+	// Supports "key: value" and "key = value" formats
+	// Returns JSON: {"key": "...", "value": "...", "found": true/false}
+	string parse_key_value(string line)
+		string trimmed = line.trim()
+
+		// Try "key: value" format
+		integer colon_pos = trimmed.indexOf(":")
+		if colon_pos != -1
+			string key = trimmed.substring(0, colon_pos).trim()
+			string value = ""
+			if colon_pos + 1 < trimmed.length()
+				value = trimmed.substring(colon_pos + 1, trimmed.length()).trim()
+			return "{\"key\":\"" + escape_json_string(key) + "\",\"value\":\"" + escape_json_string(value) + "\",\"found\":true}"
+
+		// Try "key = value" format
+		integer eq_pos = trimmed.indexOf("=")
+		if eq_pos != -1
+			string key = trimmed.substring(0, eq_pos).trim()
+			string value = trimmed.substring(eq_pos + 1, trimmed.length()).trim()
+			return "{\"key\":\"" + escape_json_string(key) + "\",\"value\":\"" + escape_json_string(value) + "\",\"found\":true}"
+
+		// No key-value pair found
+		return "{\"key\":\"\",\"value\":\"\",\"found\":false}"
+
+	// Parse a typed variable declaration with optional default value
+	// Format: "name: type" or "name: type = default"
+	// Returns JSON: {"name": "...", "type": "...", "default": "...", "found": true/false}
+	string parse_typed_var(string line)
+		string trimmed = line.trim()
+
+		// Find the colon separating name from type
+		integer colon_pos = trimmed.indexOf(":")
+		if colon_pos == -1
+			return "{\"name\":\"\",\"type\":\"\",\"default\":\"\",\"found\":false}"
+
+		string name = trimmed.substring(0, colon_pos).trim()
+		string rest = trimmed.substring(colon_pos + 1, trimmed.length()).trim()
+
+		// Check for default value
+		integer eq_pos = rest.indexOf("=")
+		if eq_pos != -1
+			string type_str = rest.substring(0, eq_pos).trim()
+			string default_val = rest.substring(eq_pos + 1, rest.length()).trim()
+			return "{\"name\":\"" + escape_json_string(name) + "\",\"type\":\"" + escape_json_string(type_str) + "\",\"default\":\"" + escape_json_string(default_val) + "\",\"found\":true}"
+
+		// No default value
+		return "{\"name\":\"" + escape_json_string(name) + "\",\"type\":\"" + escape_json_string(rest) + "\",\"default\":\"\",\"found\":true}"
+
+	// Check if a line starts a named block (e.g., "state:", "render:", "onClick:")
+	// Returns the block name without colon, or empty string if not a block start
+	string get_block_name(string line)
+		string trimmed = line.trim()
+
+		// Must end with colon and have no other content after it
+		if trimmed.endsWith(":")
+			// Check there's no "=" before the colon (not a key=value:)
+			integer eq_pos = trimmed.indexOf("=")
+			if eq_pos == -1
+				// Remove the trailing colon and trim any spaces before it
+				string name = trimmed.substring(0, trimmed.length() - 1)
+				return name.trim()
+
+		return ""
+
+	// Check if a line is a widget line (starts with "ui." after trimming)
+	// Returns true if line starts with "ui."
+	boolean is_widget_line(string line)
+		string trimmed = line.trim()
+		return trimmed.startsWith("ui.")
+
+	// Extract widget name from a widget line
+	// Input: "ui.column gap 12:" -> "column"
+	// Input: "ui.text \"Hello\"" -> "text"
+	string get_widget_name(string line)
+		string trimmed = line.trim()
+
+		if trimmed.startsWith("ui.") == false
+			return ""
+
+		// Remove "ui." prefix
+		string after_prefix = trimmed.substring(3, trimmed.length())
+
+		// Find end of widget name (space, colon, or end of line)
+		integer space_pos = after_prefix.indexOf(" ")
+		integer colon_pos = after_prefix.indexOf(":")
+
+		integer end_pos = after_prefix.length()
+		if space_pos != -1 and space_pos < end_pos
+			end_pos = space_pos
+		if colon_pos != -1 and colon_pos < end_pos
+			end_pos = colon_pos
+
+		return after_prefix.substring(0, end_pos)
+
+	// Extract widget properties from a widget line
+	// Input: "ui.column gap 12 padding 20:" -> "gap 12 padding 20"
+	// Returns the properties string between widget name and colon/end
+	string get_widget_props(string line)
+		string trimmed = line.trim()
+
+		if trimmed.startsWith("ui.") == false
+			return ""
+
+		// Remove "ui." prefix
+		string after_prefix = trimmed.substring(3, trimmed.length())
+
+		// Find widget name end
+		string widget_name = get_widget_name(line)
+		string after_name = after_prefix.substring(widget_name.length(), after_prefix.length()).trim()
+
+		// Remove trailing colon if present
+		if after_name.endsWith(":")
+			after_name = after_name.substring(0, after_name.length() - 1).trim()
+
+		return after_name
+
+	// Check if a widget line has children (ends with colon)
+	boolean widget_has_children(string line)
+		string trimmed = line.trim()
+		return trimmed.endsWith(":")
+
+	// Escape a string for JSON output
+	string escape_json_string(string txt)
+		string result = txt
+		result = result.replace("\\", "\\\\")
+		result = result.replace("\"", "\\\"")
+		result = result.replace("\n", "\\n")
+		result = result.replace("\t", "\\t")
+		result = result.replace("\r", "\\r")
+		return result
+
+	// Format a single prop as JSON
+	string format_prop_json(string name, string value, boolean is_first)
+		string prefix = ""
+		if is_first == false
+			prefix = ","
+		return prefix + "{\"name\":\"" + escape_json_string(name) + "\",\"value\":\"" + escape_json_string(value) + "\"}"
+
+	// Parse a single property from remaining string
+	// Returns JSON: {"name":"...", "value":"...", "remaining":"...", "first":true/false}
+	string parse_single_prop(string remaining, boolean first)
+		string trimmed = remaining.trim()
+
+		if trimmed.length() == 0
+			return "{\"prop\":\"\",\"remaining\":\"\",\"first\":" + first.toString() + "}"
+
+		integer space_pos = trimmed.indexOf(" ")
+
+		// Boolean prop (no value)
+		if space_pos == -1
+			string prop = format_prop_json(trimmed, "true", first)
+			return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"\",\"first\":false}"
+
+		string prop_name = trimmed.substring(0, space_pos)
+		string after_name = trimmed.substring(space_pos + 1, trimmed.length()).trim()
+
+		// Quoted value
+		if after_name.length() > 0 and after_name.substring(0, 1) == "\""
+			integer end_quote = after_name.indexOf("\"", 1)
+			if end_quote == -1
+				return "{\"prop\":\"\",\"remaining\":\"\",\"first\":" + first.toString() + "}"
+			string prop_value = after_name.substring(1, end_quote)
+			string prop = format_prop_json(prop_name, prop_value, first)
+			string rest = after_name.substring(end_quote + 1, after_name.length()).trim()
+			return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"" + escape_json_string(rest) + "\",\"first\":false}"
+
+		// Unquoted value
+		integer next_space = after_name.indexOf(" ")
+		if next_space == -1
+			string prop = format_prop_json(prop_name, after_name, first)
+			return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"\",\"first\":false}"
+
+		string prop_value = after_name.substring(0, next_space)
+		string prop = format_prop_json(prop_name, prop_value, first)
+		string rest = after_name.substring(next_space + 1, after_name.length()).trim()
+		return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"" + escape_json_string(rest) + "\",\"first\":false}"
+
+	// Parse widget property pairs from a props string
+	// Input: "gap 12 padding 20" -> [{"name":"gap","value":"12"},{"name":"padding","value":"20"}]
+	// Returns JSON array of property objects
+	string parse_widget_props(string props_string)
+		if props_string.trim().length() == 0
+			return "[]"
+
+		string result = "["
+		string remaining = props_string.trim()
+		boolean first = true
+
+		while remaining.length() > 0
+			string parsed = parse_single_prop(remaining, first)
+			string prop = extract_json_field(parsed, "prop")
+			remaining = extract_json_field(parsed, "remaining")
+			string first_str = extract_json_field(parsed, "first")
+			first = first_str == "true"
+			result = result + prop
+
+		result = result + "]"
+		return result
+
+// ============================================================================
+// SCREEN BLOCK PARSING
+// ============================================================================
+// Parses "screen Name:" framework blocks into structured data and generates
+// Clean code for SSR rendering and client hydration.
+
+functions:
+	// Main entry point for screen expansion
+	// Parses screen body and generates Clean code
+	string expand_screen(string name, string body)
+
+		// Parse the screen body into state, render, and lifecycle sections
+		string parsed = parse_screen_body(body)
+
+		// Extract state variables
+		string state_json = extract_json_field(parsed, "state")
+
+		// Extract render block content
+		string render_content = extract_json_field(parsed, "render")
+
+		// Extract lifecycle hooks
+		string on_mount = extract_json_field(parsed, "onMount")
+		string on_unmount = extract_json_field(parsed, "onUnmount")
+		string on_update = extract_json_field(parsed, "onUpdate")
+
+		// Generate the screen class
+		string result = generate_screen_class_full(name, state_json, render_content, on_mount, on_unmount, on_update)
+
+		// Generate module-level render function that exports the screen's render
+		result = result + "\n"
+		result = result + "__Screen_" + name + " __screen_instance\n\n"
+		result = result + "functions:\n"
+		result = result + "\tstring render()\n"
+		result = result + "\t\treturn __screen_instance.render()\n\n"
+
+		// Generate start() and handle_event_N() for client-side
+		string client_code = generate_client_handlers(name, state_json, render_content)
+		result = result + client_code
+
+		return result
+
+	// Generate Clean class code for a screen with lifecycle hooks
+	string generate_screen_class_full(string name, string state_json, string render_content, string on_mount, string on_unmount, string on_update)
+		// Clean Language requires classes to be inside a classes: block
+		string result = "classes:\n"
+		result = result + "\tclass __Screen_" + name + "\n"
+
+		// Parse state variables from JSON
+		list<string> state_vars = json_to_object_list(state_json)
+
+		// Add state fields
+		integer i = 0
+		while i < state_vars.length()
+			string var_json = state_vars[i]
+			string var_name = extract_json_field(var_json, "name")
+			string var_type = extract_json_field(var_json, "type")
+			string var_default = extract_json_field(var_json, "default")
+
+			// Map Clean UI types to Clean types
+			string clean_type = map_ui_type(var_type)
+
+			result = result + "\t\t" + clean_type + " " + var_name
+			if var_default != ""
+				result = result + " = " + var_default
+			result = result + "\n"
+
+			i = i + 1
+
+		result = result + "\n"
+
+		// Add functions block
+		result = result + "\t\tfunctions:\n"
+
+		// Generate SSR render function
+		result = result + generate_ssr_render(name, state_json, render_content)
+
+		// Generate hydration function with lifecycle hooks
+		result = result + generate_hydration_function_full(name, state_json, render_content, on_mount, on_unmount, on_update)
+
+		// Generate state getter for serialization
+		result = result + generate_state_getter(name, state_json)
+
+		return result
+
+	// Parse screen body into structured data (no list<string> to avoid memory corruption)
+	// Returns JSON: {"state": [...], "render": "...", "onMount": "...", "onUnmount": "...", "onUpdate": "..."}
+	string parse_screen_body(string body)
+
+		string state_json = "[]"
+		string render_content = ""
+		string on_mount_content = ""
+		string on_unmount_content = ""
+		string on_update_content = ""
+
+		// Find state: block
+		integer state_pos = body.indexOf("state")
+		if state_pos != -1
+			// Find the next line after state:
+			integer nl_after_state = body.indexOf("\n", state_pos)
+			if nl_after_state != -1
+				// Find end of state block - could be functions:, render:, or end
+				integer func_pos = body.indexOf("functions")
+				integer render_pos = body.indexOf("render")
+				integer state_end = body.length()
+				// Use whichever comes first (and is valid)
+				if func_pos != -1 and func_pos > state_pos
+					state_end = func_pos
+				if render_pos != -1 and render_pos > state_pos and render_pos < state_end
+					state_end = render_pos
+				// Extract state content
+				string state_content = body.substring(nl_after_state + 1, state_end)
+				// Parse the state variable declarations
+				state_json = parse_state_from_string(state_content)
+
+		// Find render: block
+		integer render_pos = body.indexOf("render")
+		if render_pos != -1
+			integer nl_after_render = body.indexOf("\n", render_pos)
+			if nl_after_render != -1
+				// Find end of render block
+				integer onmount_pos = body.indexOf("onMount")
+				integer render_end = onmount_pos
+				if render_end == -1
+					render_end = body.length()
+				render_content = body.substring(nl_after_render + 1, render_end)
+
+		string result = "{\"state\":" + state_json + ",\"render\":" + "\"" + escape_json_string(render_content) + "\""
+		result = result + ",\"onMount\":\"" + escape_json_string(on_mount_content) + "\""
+		result = result + ",\"onUnmount\":\"" + escape_json_string(on_unmount_content) + "\""
+		result = result + ",\"onUpdate\":\"" + escape_json_string(on_update_content) + "\"}"
+		return result
+
+	// Helper function to parse state from string content
+	string parse_state_from_string(string content)
+		string result = "["
+		boolean first = true
+
+		// Simple line-by-line parsing using indexOf for newlines
+		string remaining = content
+		while remaining.length() > 0
+			integer nl_pos = remaining.indexOf("\n")
+			string line = ""
+			if nl_pos == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl_pos)
+				remaining = remaining.substring(nl_pos + 1, remaining.length())
+
+			// Tokenizer already removes indentation, so use line directly
+			string trimmed = line
+
+			// Skip empty lines
+			if trimmed.length() > 0
+				// Parse as a typed variable
+				integer colon_pos = trimmed.indexOf(":")
+				if colon_pos > 0
+					string var_name = strip_spaces(trimmed.substring(0, colon_pos))
+					string var_rest = strip_spaces(trimmed.substring(colon_pos + 1, trimmed.length()))
+					integer var_rest_len = var_rest.length()
+					// Find type and optional default value
+					integer eq_pos = var_rest.indexOf("=")
+					string var_type = ""
+					string var_default = ""
+					if eq_pos != -1
+						// Use stored length for substring
+						var_type = strip_spaces(var_rest.substring(0, eq_pos))
+						if eq_pos + 1 < var_rest_len
+							var_default = strip_spaces(var_rest.substring(eq_pos + 1, var_rest_len))
+					else
+						var_type = var_rest
+
+					// Add to result
+					if first == false
+						result = result + ","
+					first = false
+					result = result + "{\"name\":\"" + escape_json_string(var_name) + "\""
+					result = result + ",\"type\":\"" + escape_json_string(var_type) + "\""
+					result = result + ",\"default\":\"" + escape_json_string(var_default) + "\"}"
+
+		result = result + "]"
+		return result
+
+	// Extract lifecycle action code from lines
+	string extract_lifecycle_action(string lines_json)
+		list<string> lines = json_to_string_list(lines_json)
+		string action = ""
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				if action != ""
+					action = action + "; "
+				action = action + trimmed
+			i = i + 1
+
+		return action
+
+	// Parse state block lines into variable definitions
+	// Input: JSON array of lines
+	// Returns: JSON array of {name, type, default}
+	string parse_state_block(string lines_json)
+		string result = "["
+		boolean first = true
+
+		// Parse the JSON array of lines
+		list<string> lines = json_to_string_list(lines_json)
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			if trimmed.length() > 0
+				// Parse typed variable declaration
+				string var_json = parse_typed_var(trimmed)
+				string found = extract_json_field(var_json, "found")
+
+				if found == "true"
+					if first == false
+						result = result + ","
+					first = false
+
+					string var_name = extract_json_field(var_json, "name")
+					string var_type = extract_json_field(var_json, "type")
+					string var_default = extract_json_field(var_json, "default")
+
+					result = result + "{\"name\":\"" + escape_json_string(var_name) + "\""
+					result = result + ",\"type\":\"" + escape_json_string(var_type) + "\""
+					result = result + ",\"default\":\"" + escape_json_string(var_default) + "\"}"
+
+			i = i + 1
+
+		result = result + "]"
+		return result
+
+	// Map UI type names to Clean type names
+	string map_ui_type(string ui_type)
+		if ui_type == "integer" or ui_type == "int"
+			return "integer"
+		if ui_type == "number" or ui_type == "float" or ui_type == "decimal"
+			return "number"
+		if ui_type == "text" or ui_type == "string"
+			return "string"
+		if ui_type == "boolean" or ui_type == "bool"
+			return "boolean"
+		// Default to string for unknown types
+		return "string"
+
+	// Parse an integer from a string
+	integer parse_integer(string s)
+		// Simple integer parsing
+		integer result = 0
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch >= "0" and ch <= "9"
+				result = result * 10 + (ch.charCodeAt(0) - 48)
+			i = i + 1
+		return result
+
+	// Find the position of the first unescaped quote in a string starting from start_pos
+	// Returns -1 if no unescaped quote is found
+	integer find_unescaped_quote(string text, integer start_pos)
+		integer current_pos = start_pos
+		integer text_len = text.length()
+		while current_pos < text_len
+			integer quote_pos = text.indexOf("\"", current_pos)
+			if quote_pos == -1
+				return -1
+			// Check if this quote is escaped by counting preceding backslashes
+			integer backslash_count = 0
+			integer check_pos = quote_pos - 1
+			while check_pos >= start_pos
+				string ch = text.substring(check_pos, check_pos + 1)
+				if ch == "\\"
+					backslash_count = backslash_count + 1
+					check_pos = check_pos - 1
+				else
+					break
+			// If even number of backslashes, the quote is not escaped
+			if backslash_count % 2 == 0
+				return quote_pos
+			// Quote is escaped, continue searching after it
+			current_pos = quote_pos + 1
+		return -1
+
+	// Extract a field value from JSON string
+	// Simple JSON field extraction (not a full parser)
+	string extract_json_field(string json, string field)
+		string pattern = "\"" + field + "\":"
+		integer pos = json.indexOf(pattern)
+		if pos == -1
+			return ""
+
+		integer value_start = pos + pattern.length()
+
+		// Skip whitespace
+		while value_start < json.length() and json.substring(value_start, value_start + 1) == " "
+			value_start = value_start + 1
+
+		if value_start >= json.length()
+			return ""
+
+		string first_char = json.substring(value_start, value_start + 1)
+
+		// Handle different value types
+		integer first_code = first_char.charCodeAt(0)
+
+		// Check for string (quote = 34)
+		if first_code == 34
+			// Use indexOf to find quotes, then check if escaped
+			integer end_pos = find_unescaped_quote(json, value_start + 1)
+			if end_pos == -1
+				return ""
+			// Extract the string content and unescape it
+			string raw_value = json.substring(value_start + 1, end_pos)
+			// Unescape JSON escape sequences - order matters!
+			string result = raw_value.replace("\\\\", "\x01")
+			result = result.replace("\\\"", "\"")
+			result = result.replace("\x01", "\\")
+			result = result.replace("\\n", "\n")
+			result = result.replace("\\t", "\t")
+			result = result.replace("\\r", "\r")
+			return result
+
+		// Check for array ([ = 91)
+		if first_code == 91
+			// Simple array extraction - find matching ]
+			// Find the closing bracket by scanning for ]
+			integer close_pos = json.indexOf("]", value_start)
+			if close_pos == -1
+				return "[]"
+			return json.substring(value_start, close_pos + 1)
+
+		// Check for object ({ = 123)
+		if first_code == 123
+			// Object value - find matching brace
+			integer depth = 1
+			integer end_pos = value_start + 1
+			while end_pos < json.length() and depth > 0
+				string ch = json.substring(end_pos, end_pos + 1)
+				integer ch_code = ch.charCodeAt(0)
+				if ch_code == 123
+					depth = depth + 1
+				else if ch_code == 125
+					depth = depth - 1
+				end_pos = end_pos + 1
+			return json.substring(value_start, end_pos)
+
+		// Find end of value - store start position separately to avoid aliasing
+		integer saved_start = value_start + 0
+		integer end_pos = value_start + 0
+		integer json_len = json.length()
+
+		// Scan for delimiter (comma, }, ])
+		if end_pos < json_len
+			integer code0 = json.charCodeAt(end_pos)
+			if code0 != 44 and code0 != 125 and code0 != 93
+				end_pos = end_pos + 1
+				if end_pos < json_len
+					integer code1 = json.charCodeAt(end_pos)
+					if code1 != 44 and code1 != 125 and code1 != 93
+						end_pos = end_pos + 1
+						if end_pos < json_len
+							integer code2 = json.charCodeAt(end_pos)
+							if code2 != 44 and code2 != 125 and code2 != 93
+								end_pos = end_pos + 1
+								if end_pos < json_len
+									integer code3 = json.charCodeAt(end_pos)
+									if code3 != 44 and code3 != 125 and code3 != 93
+										end_pos = end_pos + 1
+										if end_pos < json_len
+											integer code4 = json.charCodeAt(end_pos)
+											if code4 != 44 and code4 != 125 and code4 != 93
+												end_pos = end_pos + 1
+
+		string result = json.substring(saved_start, end_pos)
+		return result.trim()
+
+	// Convert JSON array string to list<string>
+	list<string> json_to_string_list(string json_array)
+		list<string> result = []
+
+		if json_array.length() < 2
+			return result
+
+		// Remove brackets
+		string content = json_array.substring(1, json_array.length() - 1)
+
+		if content.trim().length() == 0
+			return result
+
+		// Parse comma-separated quoted strings
+		string remaining = content
+		while remaining.length() > 0
+			// Skip whitespace
+			while remaining.length() > 0 and remaining.substring(0, 1) == " "
+				remaining = remaining.substring(1, remaining.length())
+
+			if remaining.length() == 0
+				break
+
+			if remaining.substring(0, 1) == "\""
+				// Find end of string (accounting for escapes)
+				integer end_quote = 1
+				while end_quote < remaining.length()
+					string ch = remaining.substring(end_quote, end_quote + 1)
+					if ch == "\\" and end_quote + 1 < remaining.length()
+						end_quote = end_quote + 2
+					else if ch == "\""
+						break
+					else
+						end_quote = end_quote + 1
+
+				string value = remaining.substring(1, end_quote)
+				// Unescape the value
+				value = value.replace("\\n", "\n")
+				value = value.replace("\\t", "\t")
+				value = value.replace("\\\"", "\"")
+				value = value.replace("\\\\", "\\")
+				result.push(value)
+
+				remaining = remaining.substring(end_quote + 1, remaining.length())
+
+				// Skip comma
+				integer comma_pos = remaining.indexOf(",")
+				if comma_pos != -1
+					remaining = remaining.substring(comma_pos + 1, remaining.length())
+				else
+					remaining = ""
+			else
+				// Skip non-string value
+				integer comma_pos = remaining.indexOf(",")
+				if comma_pos != -1
+					remaining = remaining.substring(comma_pos + 1, remaining.length())
+				else
+					remaining = ""
+
+		return result
+
+	// Convert JSON array of objects to list<string> (each string is JSON object)
+	list<string> json_to_object_list(string json_array)
+		list<string> result = []
+
+		if json_array.length() < 2
+			return result
+
+		// Remove outer brackets (don't use broken .trim())
+		string content = strip_spaces(json_array.substring(1, json_array.length() - 1))
+
+		if content.length() == 0
+			return result
+
+		// Find objects
+		integer pos = 0
+		integer content_len = content.length()
+		while pos < content_len
+			// Skip whitespace and commas
+			while pos < content_len
+				string ch = content.substring(pos, pos + 1)
+				if ch != " " and ch != ","
+					break
+				pos = pos + 1
+
+			if pos >= content_len
+				break
+
+			integer char_code = content.charCodeAt(pos)
+			// Check if this is an opening brace (ASCII 123)
+			boolean is_brace = char_code == 123
+			if is_brace
+				// Find matching closing brace
+				integer depth = 1
+				integer end_pos = pos + 1
+				integer loop_count = 0
+				// Avoid compound condition in while - use break instead
+				while end_pos < content_len
+					if depth == 0
+						break
+					integer ch_code = content.charCodeAt(end_pos)
+					if ch_code == 123
+						depth = depth + 1
+					else if ch_code == 125
+						depth = depth - 1
+					end_pos = end_pos + 1
+					loop_count = loop_count + 1
+					if loop_count > 1000
+						break
+				string obj = content.substring(pos, end_pos)
+				result.push(obj)
+				pos = end_pos
+			else
+				pos = pos + 1
+
+		return result
+
+	// Generate SSR render function for a screen
+	// This will be fully implemented in UI-05
+	string generate_ssr_render(string name, string state_json, string render_content)
+		string result = "\t\t\tstring render()\n"
+		result = result + "\t\t\t\tstring html = \"\"\n"
+
+		// Parse and render UI widgets from render_content
+		// Handle both JSON array format and plain string (single line)
+		list<string> lines = []
+		if render_content.startsWith("[")
+			lines = json_to_string_list(render_content)
+		else
+			// Split by newlines using custom function
+			lines = split_lines(render_content)
+
+		result = result + render_ui_tree(lines, 0, 0)
+
+		result = result + "\t\t\t\treturn html\n\n"
+		return result
+
+	// Generate hydration function for a screen (full version with lifecycle hooks)
+	string generate_hydration_function_full(string name, string state_json, string render_content, string on_mount, string on_unmount, string on_update)
+		string result = "\t\tstring getHydrationData()\n"
+		result = result + "\t\t\tstring json = \"{\"\n"
+		result = result + "\t\t\tstring __q = string.fromCharCode(34)\n"
+
+		// Serialize state
+		result = result + "\t\t\tjson = json + __q + \"state\" + __q + \":{\"\n"
+		result = result + generate_hydration_state_fields(state_json)
+		result = result + "\t\t\tjson = json + \"}\"\n"
+
+		// Generate events array from render content
+		list<string> lines = json_to_string_list(render_content)
+		string events_json = extract_events_from_render(lines)
+		result = result + "\t\t\tstring __events = \"" + events_json + "\"\n"
+		result = result + "\t\t\t__events = __events.replace(\"~\", __q)\n"
+		result = result + "\t\t\tjson = json + \",\" + __q + \"events\" + __q + \":\" + __events\n"
+
+		// Add lifecycle hooks
+		result = result + "\t\t\tjson = json + \",\" + __q + \"lifecycle\" + __q + \":{\"\n"
+		result = result + "\t\t\tjson = json + __q + \"onMount\" + __q + \":\" + __q + \"" + escape_json_string(on_mount) + "\" + __q\n"
+		result = result + "\t\t\tjson = json + \",\" + __q + \"onUnmount\" + __q + \":\" + __q + \"" + escape_json_string(on_unmount) + "\" + __q\n"
+		result = result + "\t\t\tjson = json + \",\" + __q + \"onUpdate\" + __q + \":\" + __q + \"" + escape_json_string(on_update) + "\" + __q\n"
+		result = result + "\t\t\tjson = json + \"}\"\n"
+
+		result = result + "\t\t\tjson = json + \"}\"\n"
+		result = result + "\t\t\treturn json\n\n"
+
+		return result
+
+	// Helper: generate serialization code for a single state field
+	string generate_hydration_state_field(string var_json, boolean add_comma)
+		string var_name = extract_json_field(var_json, "name")
+		string var_type = extract_json_field(var_json, "type")
+		string separator = ""
+		if add_comma
+			separator = ","
+		string clean_type = map_ui_type(var_type)
+		if clean_type == "string"
+			return "\t\t\tjson = json + \"" + separator + "\" + __q + \"" + var_name + "\" + __q + \":\" + __q + " + var_name + " + __q\n"
+		return "\t\t\tjson = json + \"" + separator + "\" + __q + \"" + var_name + "\" + __q + \":\" + " + var_name + ".toString()\n"
+
+	// Helper: generate state field serialization code
+	string generate_hydration_state_fields(string state_json)
+		string result = ""
+		list<string> state_vars = json_to_object_list(state_json)
+		integer i = 0
+		while i < state_vars.length()
+			boolean needs_comma = i > 0
+			result = result + generate_hydration_state_field(state_vars[i], needs_comma)
+			i = i + 1
+		return result
+
+	// Generate hydration function for a screen (delegates to full version with empty hooks)
+	string generate_hydration_function(string name, string state_json, string render_content)
+		return generate_hydration_function_full(name, state_json, render_content, "", "", "")
+
+	// Generate client-side handler functions (start() and handle_event_N())
+	string generate_client_handlers(string name, string state_json, string render_content)
+		// Parse render content lines
+		list<string> lines = []
+		if render_content.startsWith("[")
+			lines = json_to_string_list(render_content)
+		else
+			lines = split_lines(render_content)
+
+		// Scan for events and collect them
+		list<string> event_data = collect_event_data(lines)
+
+		// Generate start() function with event registrations
+		string start_code = generate_start_function(event_data)
+
+		// Generate handle_event_N() functions
+		string handler_code = generate_event_handlers(name, event_data)
+
+		return start_code + handler_code
+
+	// Collect event data from render lines
+	list<string> collect_event_data(list<string> lines)
+		list<string> events = []
+		integer event_counter = 0
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+
+			if is_widget_line(line)
+				string widget_name = get_widget_name(line)
+				boolean has_children = widget_has_children(line)
+
+				if has_children
+					// Look for event handlers in the next lines
+					integer child_indent = get_indent_level(line)
+					integer j = i + 1
+					while j < lines.length()
+						string child_line = lines[j]
+						if child_line.trim().length() == 0
+							j = j + 1
+						else
+							integer child_level = get_indent_level(child_line)
+							if child_level > child_indent
+								// Check for event handler
+								string event_type = detect_event_handler(child_line)
+								if event_type != ""
+									// Found an event handler - extract the action
+									string action = extract_event_action(lines, j + 1, child_level)
+
+									// Create event data entry: "evt-N|event_type|action"
+									string event_entry = "evt-" + event_counter.toString() + "|" + event_type + "|" + action
+									events = events.add(event_entry)
+
+								j = j + 1
+							else
+								break
+
+				event_counter = event_counter + 1
+
+			i = i + 1
+
+		return events
+
+	// Generate start() function that registers all events
+	string generate_start_function(list<string> events)
+		string result = "\tstart()\n"
+
+		integer i = 0
+		while i < events.length()
+			string event_entry = events[i]
+
+			// Parse event entry: "evt-N|event_type|action"
+			integer pipe1 = event_entry.indexOf("|")
+			if pipe1 > 0
+				string selector = "." + event_entry.substring(0, pipe1)
+				integer pipe2 = event_entry.indexOf("|", pipe1 + 1)
+				if pipe2 > pipe1
+					string event_type = event_entry.substring(pipe1 + 1, pipe2)
+					result = result + "\t\tinteger s = _ui_onEvent(\"" + selector + "\", \"" + event_type + "\", \"handle_event_" + i.toString() + "\")\n"
+
+			i = i + 1
+
+		return result + "\n"
+
+	// Generate handle_event_N() functions
+	string generate_event_handlers(string name, list<string> events)
+		string result = ""
+
+		integer i = 0
+		while i < events.length()
+			string event_entry = events[i]
+
+			// Parse event entry: "evt-N|event_type|action"
+			integer pipe1 = event_entry.indexOf("|")
+			if pipe1 > 0
+				integer pipe2 = event_entry.indexOf("|", pipe1 + 1)
+				if pipe2 > pipe1
+					string action = event_entry.substring(pipe2 + 1)
+
+					result = result + "\thandle_event_" + i.toString() + "()\n"
+					result = result + "\t\t\n"
+					result = result + "\t\t__screen_instance." + action + "\n"
+					result = result + "\t\tinteger s = _ui_updateElement(\"#screen-" + name + "\", __screen_instance.render())\n\n"
+
+			i = i + 1
+
+		return result
+
+	// Extract events from render block lines
+	// Scans for widgets with event handlers and returns JSON array
+	string extract_events_from_render(list<string> lines)
+		string result = "["
+		integer event_counter = 0
+		boolean first = true
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			// Check if this is a widget line
+			if is_widget_line(line)
+				string widget_name = get_widget_name(line)
+				boolean has_children = widget_has_children(line)
+
+				if has_children
+					// Look for event handlers in the next lines
+					integer child_indent = get_indent_level(line)
+					integer j = i + 1
+					while j < lines.length()
+						string child_line = lines[j]
+						if child_line.trim().length() == 0
+							j = j + 1
+						else
+							integer child_level = get_indent_level(child_line)
+							if child_level > child_indent
+								// Check for event handler
+								string event_type = detect_event_handler(child_line)
+								if event_type != ""
+									// Found an event handler - extract the action
+									string action = extract_event_action(lines, j + 1, child_level)
+
+									if first == false
+										result = result + ","
+									first = false
+
+									string event_id = "evt-" + event_counter.toString()
+									string safe_action = action.replace("~", "")
+									result = result + "{~id~:~" + event_id + "~"
+									result = result + ",~type~:~" + event_type + "~"
+									result = result + ",~action~:~" + safe_action + "~}"
+								j = j + 1
+							else
+								break
+
+				event_counter = event_counter + 1
+
+			i = i + 1
+
+		result = result + "]"
+		return result
+
+	// Detect if a line is an event handler declaration
+	// Returns the event type (onClick, onChange, etc.) or empty string
+	string detect_event_handler(string line)
+		string trimmed = line.trim()
+
+		// Check for common event patterns
+		if trimmed == "onClick:" or trimmed.startsWith("onClick ")
+			return "click"
+		if trimmed == "onDoubleClick:" or trimmed.startsWith("onDoubleClick ")
+			return "dblclick"
+		if trimmed == "onChange:" or trimmed.startsWith("onChange ")
+			return "change"
+		if trimmed == "onInput:" or trimmed.startsWith("onInput ")
+			return "input"
+		if trimmed == "onFocus:" or trimmed.startsWith("onFocus ")
+			return "focus"
+		if trimmed == "onBlur:" or trimmed.startsWith("onBlur ")
+			return "blur"
+		if trimmed == "onKeyDown:" or trimmed.startsWith("onKeyDown ")
+			return "keydown"
+		if trimmed == "onKeyUp:" or trimmed.startsWith("onKeyUp ")
+			return "keyup"
+		if trimmed == "onKeyPress:" or trimmed.startsWith("onKeyPress ")
+			return "keypress"
+		if trimmed == "onMouseEnter:" or trimmed.startsWith("onMouseEnter ")
+			return "mouseenter"
+		if trimmed == "onMouseLeave:" or trimmed.startsWith("onMouseLeave ")
+			return "mouseleave"
+		if trimmed == "onMouseDown:" or trimmed.startsWith("onMouseDown ")
+			return "mousedown"
+		if trimmed == "onMouseUp:" or trimmed.startsWith("onMouseUp ")
+			return "mouseup"
+		if trimmed == "onMouseMove:" or trimmed.startsWith("onMouseMove ")
+			return "mousemove"
+		if trimmed == "onSubmit:" or trimmed.startsWith("onSubmit ")
+			return "submit"
+
+		return ""
+
+	// Extract the action code from an event handler block
+	string extract_event_action(list<string> lines, integer start_index, integer base_indent)
+		string action = ""
+
+		integer i = start_index
+		while i < lines.length()
+			string line = lines[i]
+			if line.trim().length() == 0
+				i = i + 1
+			else
+				integer line_indent = get_indent_level(line)
+				if line_indent > base_indent
+					// This is part of the action
+					string action_line = line.trim()
+					if action != ""
+						action = action + "; "
+					action = action + action_line
+					i = i + 1
+				else
+					break
+
+		return action
+
+	// Extract draw block from canvas scene children
+	string extract_canvas_draw_block(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			if trimmed == "draw:" or trimmed.startsWith("draw ")
+				// Found draw block - extract content
+				integer base_indent = get_indent_level(line)
+				string content = ""
+				integer j = i + 1
+
+				while j < lines.length()
+					string draw_line = lines[j]
+					if draw_line.trim().length() == 0
+						j = j + 1
+					else
+						integer draw_indent = get_indent_level(draw_line)
+						if draw_indent > base_indent
+							if content != ""
+								content = content + "\\n"
+							content = content + draw_line.trim()
+							j = j + 1
+						else
+							break
+
+				return content
+			i = i + 1
+
+		return ""
+
+	// Extract update block from canvas scene children (for animation)
+	string extract_canvas_update_block(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			if trimmed == "update:" or trimmed.startsWith("update ")
+				// Found update block - extract content
+				integer base_indent = get_indent_level(line)
+				string content = ""
+				integer j = i + 1
+
+				while j < lines.length()
+					string update_line = lines[j]
+					if update_line.trim().length() == 0
+						j = j + 1
+					else
+						integer update_indent = get_indent_level(update_line)
+						if update_indent > base_indent
+							if content != ""
+								content = content + "\\n"
+							content = content + update_line.trim()
+							j = j + 1
+						else
+							break
+
+				return content
+			i = i + 1
+
+		return ""
+
+	// Extract canvas event handlers
+	string extract_canvas_events(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+		string result = ""
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			// Check for canvas-specific event handlers
+			string event_type = ""
+			if trimmed == "onCanvasClick:" or trimmed.startsWith("onCanvasClick ")
+				event_type = "click"
+			else if trimmed == "onCanvasMouseMove:" or trimmed.startsWith("onCanvasMouseMove ")
+				event_type = "mousemove"
+			else if trimmed == "onCanvasMouseDown:" or trimmed.startsWith("onCanvasMouseDown ")
+				event_type = "mousedown"
+			else if trimmed == "onCanvasMouseUp:" or trimmed.startsWith("onCanvasMouseUp ")
+				event_type = "mouseup"
+			else if trimmed == "onCanvasTouchStart:" or trimmed.startsWith("onCanvasTouchStart ")
+				event_type = "touchstart"
+			else if trimmed == "onCanvasTouchMove:" or trimmed.startsWith("onCanvasTouchMove ")
+				event_type = "touchmove"
+			else if trimmed == "onCanvasTouchEnd:" or trimmed.startsWith("onCanvasTouchEnd ")
+				event_type = "touchend"
+
+			if event_type != ""
+				// Extract the action
+				integer base_indent = get_indent_level(line)
+				string action = ""
+				integer j = i + 1
+
+				while j < lines.length()
+					string action_line = lines[j]
+					if action_line.trim().length() == 0
+						j = j + 1
+					else
+						integer action_indent = get_indent_level(action_line)
+						if action_indent > base_indent
+							if action != ""
+								action = action + "; "
+							action = action + action_line.trim()
+							j = j + 1
+						else
+							break
+
+				if result != ""
+					result = result + ","
+				result = result + event_type + ":" + action
+
+			i = i + 1
+
+		return result
+
+	// Convert list to JSON array string
+	string list_to_json_array(list<string> items)
+		string result = "["
+		integer i = 0
+		while i < items.length()
+			if i > 0
+				result = result + ","
+			result = result + "\"" + escape_json_string(items[i]) + "\""
+			i = i + 1
+		result = result + "]"
+		return result
+
+	// Escape string for use in HTML attribute
+	string escape_html_attr(string input)
+		string result = ""
+		integer i = 0
+		while i < input.length()
+			string c = input.charAt(i)
+			if c == "\""
+				result = result + "&quot;"
+			else if c == "'"
+				result = result + "&#39;"
+			else if c == "<"
+				result = result + "&lt;"
+			else if c == ">"
+				result = result + "&gt;"
+			else if c == "&"
+				result = result + "&amp;"
+			else
+				result = result + c
+			i = i + 1
+		return result
+
+// ============================================================================
+// FORM VALIDATION (UI-41)
+// ============================================================================
+// Parses validate blocks and generates validation logic.
+
+functions:
+	// Extract validation rules from widget children
+	string extract_validation_rules(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+		string rules = ""
+
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			if trimmed == "validate:" or trimmed.startsWith("validate ")
+				// Found validate block - extract rules
+				integer base_indent = get_indent_level(line)
+				integer j = i + 1
+
+				while j < lines.length()
+					string rule_line = lines[j]
+					if rule_line.trim().length() == 0
+						j = j + 1
+					else
+						integer rule_indent = get_indent_level(rule_line)
+						if rule_indent > base_indent
+							string rule = rule_line.trim()
+							if rules != ""
+								rules = rules + ","
+							rules = rules + parse_validation_rule(rule)
+							j = j + 1
+						else
+							break
+
+				return rules
+			i = i + 1
+
+		return rules
+
+	// Parse a single validation rule
+	string parse_validation_rule(string rule)
+		// Format: required "Error message"
+		// Format: minLength 8 "Must be at least 8 chars"
+		// Format: email "Invalid email"
+		// Format: pattern "^[a-z]+$" "Only lowercase letters"
+
+		string rule_type = ""
+		string rule_value = ""
+		string rule_message = ""
+
+		// Extract rule type (first word)
+		integer space_pos = rule.indexOf(" ")
+		if space_pos > 0
+			rule_type = rule.substring(0, space_pos)
+			string rest = rule.substring(space_pos + 1).trim()
+
+			// Check if next part is a value or message
+			if rest.startsWith("\"")
+				// It's a message
+				rule_message = extract_quoted_string(rest)
+			else
+				// It's a value followed by message
+				integer msg_start = rest.indexOf("\"")
+				if msg_start > 0
+					rule_value = rest.substring(0, msg_start).trim()
+					rule_message = extract_quoted_string(rest.substring(msg_start))
+				else
+					rule_value = rest
+		else
+			rule_type = rule
+
+		string result = "{\"type\":\"" + rule_type + "\""
+		if rule_value != ""
+			result = result + ",\"value\":\"" + escape_json_string(rule_value) + "\""
+		if rule_message != ""
+			result = result + ",\"message\":\"" + escape_json_string(rule_message) + "\""
+		result = result + "}"
+
+		return result
+
+	// Extract quoted string from input
+	string extract_quoted_string(string input)
+		if input.startsWith("\"")
+			integer end_quote = input.indexOf("\"", 1)
+			if end_quote > 1
+				return input.substring(1, end_quote)
+		return ""
+
+// ============================================================================
+// ACCESSIBILITY (UI-42)
+// ============================================================================
+// Generates ARIA attributes and accessibility enhancements.
+
+functions:
+	// Get ARIA role for a widget
+	string get_widget_aria_role(string widget_name)
+		if widget_name == "button"
+			return "button"
+		if widget_name == "textField"
+			return "textbox"
+		if widget_name == "checkbox"
+			return "checkbox"
+		if widget_name == "radio"
+			return "radio"
+		if widget_name == "select"
+			return "listbox"
+		if widget_name == "slider"
+			return "slider"
+		if widget_name == "link"
+			return "link"
+		if widget_name == "heading"
+			return "heading"
+		if widget_name == "paragraph"
+			return ""
+		if widget_name == "image"
+			return "img"
+		if widget_name == "column" or widget_name == "row"
+			return "group"
+		if widget_name == "card"
+			return "region"
+		if widget_name == "scroll"
+			return "scrollbar"
+		return ""
+
+	// Generate ARIA attributes for a widget
+	string generate_aria_attrs(string widget_name, list<string> props)
+		string attrs = ""
+
+		// Add role if applicable
+		string role = get_widget_aria_role(widget_name)
+		if role != ""
+			attrs = attrs + " role='" + role + "'"
+
+		// Add aria-label from label prop
+		string label = get_prop_value(props, "label")
+		if label != ""
+			attrs = attrs + " aria-label='" + label + "'"
+
+		// Add aria-describedby if there's a hint
+		string hint = get_prop_value(props, "hint")
+		if hint != ""
+			attrs = attrs + " aria-describedby='hint'"
+
+		// Add disabled state
+		string disabled = get_prop_value(props, "disabled")
+		if disabled == "true"
+			attrs = attrs + " aria-disabled='true'"
+
+		// Add required state for form fields
+		string required = get_prop_value(props, "required")
+		if required == "true"
+			attrs = attrs + " aria-required='true'"
+
+		return attrs
+
+	// Generate state getter function
+	string generate_state_getter(string name, string state_json)
+		string result = "\t\tstring getState()\n"
+		result = result + "\t\t\treturn this.getHydrationData()\n\n"
+		return result
+
+// ============================================================================
+// UI WIDGET PARSING AND RENDERING
+// ============================================================================
+// Parses ui.* widgets and generates HTML rendering code.
+
+functions:
+	// Render a UI widget tree to Clean code that generates HTML
+	// lines: list of lines from render block
+	// start_index: where to start in lines
+	// base_indent: indentation level to expect
+	// Returns Clean code that builds html variable
+	string render_ui_tree(list<string> lines, integer start_index, integer base_indent)
+		string result = ""
+		integer event_counter = 0
+
+		integer i = start_index
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			// Skip empty lines
+			if trimmed.length() == 0
+				i = i + 1
+			else
+				integer line_indent = get_indent_level(line)
+
+				// Check if we've exited the current indent level
+				if line_indent <= base_indent and i > start_index
+					break
+
+				// Check if this is a widget line
+				if is_widget_line(line)
+					string widget_name = get_widget_name(line)
+					string widget_props = get_widget_props(line)
+					boolean has_children = widget_has_children(line)
+
+					// Find children if widget has them
+					list<string> child_lines = []
+					if has_children
+						// Collect child lines at deeper indent
+						integer child_start = i + 1
+						integer child_base = line_indent
+						while child_start < lines.length()
+							string child_line = lines[child_start]
+							if child_line.trim().length() == 0
+								child_lines.push(child_line)
+								child_start = child_start + 1
+							else
+								integer child_indent = get_indent_level(child_line)
+								if child_indent > child_base
+									child_lines.push(child_line)
+									child_start = child_start + 1
+								else
+									break
+
+					// Generate code for this widget
+					string widget_result = render_ui_widget(widget_name, widget_props, child_lines, event_counter)
+					result = result + extract_json_field(widget_result, "code")
+
+					// Update event counter
+					string new_counter = extract_json_field(widget_result, "event_counter")
+					event_counter = parse_integer(new_counter)
+
+					// Skip past children
+					if has_children
+						i = i + 1 + child_lines.length()
+					else
+						i = i + 1
+				else
+					// Non-widget line - might be an event handler or expression
+					i = i + 1
+
+		return result
+
+	// Render a single UI widget to Clean code
+	// Returns JSON: {"code": "...", "event_counter": n}
+	string render_ui_widget(string widget_name, string props_string, list<string> child_lines, integer event_counter)
+		string code = ""
+		string props_json = parse_widget_props(props_string)
+
+		// Get widget HTML tag and styles
+		string html_tag = get_widget_html_tag(widget_name)
+		string html_class = "ui-" + widget_name
+		string html_style = get_widget_base_style(widget_name)
+
+		// Add prop-based styles
+		list<string> props = json_to_object_list(props_json)
+		integer i = 0
+		while i < props.length()
+			string prop_json = props[i]
+			string prop_name = extract_json_field(prop_json, "name")
+			string prop_value = extract_json_field(prop_json, "value")
+			string style = prop_to_style(prop_name, prop_value)
+			if style != ""
+				html_style = html_style + style
+			i = i + 1
+
+		// Generate opening tag
+		if widget_name == "text"
+			// Text widget - extract the text expression
+			string text_expr = props_string.trim()
+			if text_expr.startsWith("\"")
+				// Literal string
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "'>\"\n"
+				code = code + "\t\t\thtml = html + " + text_expr + "\n"
+				code = code + "\t\t\thtml = html + \"</span>\"\n"
+			else
+				// Expression - escape it
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "'>\"\n"
+				code = code + "\t\t\thtml = html + html.escape(" + text_expr + ".toString())\n"
+				code = code + "\t\t\thtml = html + \"</span>\"\n"
+		else if widget_name == "button"
+			// Button widget - may have onClick
+			code = code + "\t\t\thtml = html + \"<button class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			// Button text from first string prop or child
+			string button_text = extract_button_text(props_string)
+			if button_text != ""
+				code = code + "\t\t\thtml = html + " + button_text + "\n"
+
+			code = code + "\t\t\thtml = html + \"</button>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "textField"
+			// Text input field
+			code = code + "\t\t\thtml = html + \"<input type='text' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+
+			// Check for bind prop
+			string bind_var = get_prop_value(props, "bind")
+			if bind_var != ""
+				code = code + "\t\t\thtml = html + \" value='\" + html.escape(" + bind_var + ") + \"'\"\n"
+
+			// Check for placeholder
+			string placeholder = get_prop_value(props, "placeholder")
+			if placeholder != ""
+				code = code + "\t\t\thtml = html + \" placeholder='" + placeholder + "'\"\n"
+
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "checkbox"
+			// Checkbox input
+			code = code + "\t\t\thtml = html + \"<label class='" + html_class + "-wrapper'>\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='checkbox' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+
+			// Check for bind prop
+			string bind_var = get_prop_value(props, "bind")
+			if bind_var != ""
+				code = code + "\t\t\tif " + bind_var + "\n"
+				code = code + "\t\t\t\thtml = html + \" checked\"\n"
+
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+
+			// Label text
+			string label_text = get_prop_value(props, "label")
+			if label_text != ""
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "-label'>\" + \"" + label_text + "\" + \"</span>\"\n"
+
+			code = code + "\t\t\thtml = html + \"</label>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "radio"
+			// Radio input (should be inside radioGroup)
+			string radio_value = get_prop_value(props, "value")
+			string label_text = get_prop_value(props, "label")
+			string name_attr = get_prop_value(props, "name")
+
+			code = code + "\t\t\thtml = html + \"<label class='" + html_class + "-wrapper'>\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='radio' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+
+			if name_attr != ""
+				code = code + "\t\t\thtml = html + \" name='" + name_attr + "'\"\n"
+			if radio_value != ""
+				code = code + "\t\t\thtml = html + \" value='" + radio_value + "'\"\n"
+
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+
+			if label_text != ""
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "-label'>\" + \"" + label_text + "\" + \"</span>\"\n"
+
+			code = code + "\t\t\thtml = html + \"</label>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "select"
+			// Select dropdown
+			code = code + "\t\t\thtml = html + \"<select class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			// Render option children
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+
+			code = code + "\t\t\thtml = html + \"</select>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "option"
+			// Option for select
+			string option_value = get_prop_value(props, "value")
+			string label_text = get_prop_value(props, "label")
+
+			code = code + "\t\t\thtml = html + \"<option\"\n"
+			if option_value != ""
+				code = code + "\t\t\thtml = html + \" value='" + option_value + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			if label_text != ""
+				code = code + "\t\t\thtml = html + \"" + label_text + "\"\n"
+
+			code = code + "\t\t\thtml = html + \"</option>\"\n"
+		else if widget_name == "slider"
+			// Range slider input
+			code = code + "\t\t\thtml = html + \"<input type='range' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+
+			// Min/max/step props
+			string min_val = get_prop_value(props, "min")
+			string max_val = get_prop_value(props, "max")
+			string step_val = get_prop_value(props, "step")
+
+			if min_val != ""
+				code = code + "\t\t\thtml = html + \" min='" + min_val + "'\"\n"
+			if max_val != ""
+				code = code + "\t\t\thtml = html + \" max='" + max_val + "'\"\n"
+			if step_val != ""
+				code = code + "\t\t\thtml = html + \" step='" + step_val + "'\"\n"
+
+			// Check for bind prop
+			string bind_var = get_prop_value(props, "bind")
+			if bind_var != ""
+				code = code + "\t\t\thtml = html + \" value='\" + " + bind_var + ".toString() + \"'\"\n"
+
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "image"
+			// Image element
+			string src = get_prop_value(props, "src")
+			string alt = get_prop_value(props, "alt")
+			string width = get_prop_value(props, "width")
+			string height = get_prop_value(props, "height")
+
+			code = code + "\t\t\thtml = html + \"<img class='" + html_class + "'\"\n"
+			if src != ""
+				code = code + "\t\t\thtml = html + \" src='" + src + "'\"\n"
+			if alt != ""
+				code = code + "\t\t\thtml = html + \" alt='" + alt + "'\"\n"
+			if width != ""
+				code = code + "\t\t\thtml = html + \" width='" + width + "'\"\n"
+			if height != ""
+				code = code + "\t\t\thtml = html + \" height='" + height + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+		else if widget_name == "link"
+			// Anchor link
+			string href = get_prop_value(props, "href")
+			string link_text = get_prop_value(props, "text")
+			string external = get_prop_value(props, "external")
+
+			code = code + "\t\t\thtml = html + \"<a class='" + html_class + "'\"\n"
+			if href != ""
+				code = code + "\t\t\thtml = html + \" href='" + href + "'\"\n"
+			if external == "true"
+				code = code + "\t\t\thtml = html + \" target='_blank' rel='noopener noreferrer'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			if link_text != ""
+				code = code + "\t\t\thtml = html + \"" + link_text + "\"\n"
+			else if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+
+			code = code + "\t\t\thtml = html + \"</a>\"\n"
+		else if widget_name == "divider"
+			// Horizontal rule
+			string thickness = get_prop_value(props, "thickness")
+			string color = get_prop_value(props, "color")
+
+			code = code + "\t\t\thtml = html + \"<hr class='" + html_class + "'\"\n"
+			string divider_style = ""
+			if thickness != ""
+				divider_style = divider_style + "border-width:" + thickness + "px;"
+			if color != ""
+				divider_style = divider_style + "border-color:" + color + ";"
+			if divider_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + divider_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+		else if widget_name == "spacer"
+			// Flexible or fixed spacer
+			string width = get_prop_value(props, "width")
+			string height = get_prop_value(props, "height")
+
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='\"\n"
+			if width != "" or height != ""
+				if width != ""
+					code = code + "\t\t\thtml = html + \"width:" + width + "px;\"\n"
+				if height != ""
+					code = code + "\t\t\thtml = html + \"height:" + height + "px;\"\n"
+			else
+				code = code + "\t\t\thtml = html + \"flex:1;\"\n"
+			code = code + "\t\t\thtml = html + \"'></div>\"\n"
+		else if widget_name == "scroll"
+			// Scroll container
+			string scroll_height = get_prop_value(props, "height")
+			string scroll_width = get_prop_value(props, "width")
+
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='overflow:auto;\"\n"
+			if scroll_height != ""
+				code = code + "\t\t\thtml = html + \"max-height:" + scroll_height + "px;\"\n"
+			if scroll_width != ""
+				code = code + "\t\t\thtml = html + \"max-width:" + scroll_width + "px;\"\n"
+			code = code + "\t\t\thtml = html + \"'>\"\n"
+
+			// Render children
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+
+			code = code + "\t\t\thtml = html + \"</div>\"\n"
+		else if widget_name == "card"
+			// Card with optional shadow
+			string shadow = get_prop_value(props, "shadow")
+
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \"" + html_style + "\"\n"
+			if shadow == "true"
+				code = code + "\t\t\thtml = html + \"box-shadow:0 2px 8px rgba(0,0,0,0.15);\"\n"
+			code = code + "\t\t\thtml = html + \"border-radius:8px;background:#fff;\"\n"
+			code = code + "\t\t\thtml = html + \"'>\"\n"
+
+			// Render children
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+
+			code = code + "\t\t\thtml = html + \"</div>\"\n"
+		else if widget_name == "heading"
+			// Heading h1-h6
+			string level = get_prop_value(props, "level")
+			string heading_text = get_prop_value(props, "text")
+			if level == ""
+				level = "1"
+
+			code = code + "\t\t\thtml = html + \"<h" + level + " class='" + html_class + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			if heading_text != ""
+				code = code + "\t\t\thtml = html + \"" + heading_text + "\"\n"
+
+			code = code + "\t\t\thtml = html + \"</h" + level + ">\"\n"
+		else if widget_name == "paragraph"
+			// Paragraph
+			code = code + "\t\t\thtml = html + \"<p class='" + html_class + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			// Render children or text content
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+
+			code = code + "\t\t\thtml = html + \"</p>\"\n"
+		else if widget_name == "code"
+			// Code block
+			string language = get_prop_value(props, "language")
+
+			code = code + "\t\t\thtml = html + \"<pre class='" + html_class + "'><code\"\n"
+			if language != ""
+				code = code + "\t\t\thtml = html + \" class='language-" + language + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			// Render children as code content
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+
+			code = code + "\t\t\thtml = html + \"</code></pre>\"\n"
+		else if widget_name == "bold"
+			// Bold text
+			code = code + "\t\t\thtml = html + \"<strong>\"\n"
+			string bold_text = props_string.trim()
+			if bold_text.startsWith("\"")
+				code = code + "\t\t\thtml = html + " + bold_text + "\n"
+			code = code + "\t\t\thtml = html + \"</strong>\"\n"
+		else if widget_name == "italic"
+			// Italic text
+			code = code + "\t\t\thtml = html + \"<em>\"\n"
+			string italic_text = props_string.trim()
+			if italic_text.startsWith("\"")
+				code = code + "\t\t\thtml = html + " + italic_text + "\n"
+			code = code + "\t\t\thtml = html + \"</em>\"\n"
+		else if widget_name == "icon"
+			// Icon element using CSS class
+			string icon_name = get_prop_value(props, "name")
+			string icon_size = get_prop_value(props, "size")
+
+			code = code + "\t\t\thtml = html + \"<span class='" + html_class + " icon-" + icon_name + "'\"\n"
+			if icon_size != ""
+				code = code + "\t\t\thtml = html + \" style='font-size:" + icon_size + "px;'\"\n"
+			code = code + "\t\t\thtml = html + \"></span>\"\n"
+		else if widget_name == "canvasScene"
+			// Canvas scene for 2D graphics
+			string canvas_id = "canvas-" + event_counter.toString()
+			string canvas_width = get_prop_value(props, "width")
+			string canvas_height = get_prop_value(props, "height")
+			string animate = get_prop_value(props, "animate")
+
+			if canvas_width == ""
+				canvas_width = "400"
+			if canvas_height == ""
+				canvas_height = "300"
+
+			code = code + "\t\t\thtml = html + \"<canvas id='" + canvas_id + "' class='" + html_class + "'\"\n"
+			code = code + "\t\t\thtml = html + \" width='" + canvas_width + "' height='" + canvas_height + "'\"\n"
+			code = code + "\t\t\thtml = html + \" data-canvas-id='" + canvas_id + "'\"\n"
+			if animate == "true"
+				code = code + "\t\t\thtml = html + \" data-animate='true'\"\n"
+
+			// Serialize child_lines to JSON for extraction
+			string child_lines_json = list_to_json_array(child_lines)
+
+			// Extract draw block from children
+			string draw_code = extract_canvas_draw_block(child_lines_json)
+			if draw_code != ""
+				code = code + "\t\t\thtml = html + \" data-draw='\" + escape_html_attr(draw_code) + \"'\"\n"
+
+			// Extract update block from children (for animation)
+			string update_code = extract_canvas_update_block(child_lines_json)
+			if update_code != ""
+				code = code + "\t\t\thtml = html + \" data-update='\" + escape_html_attr(update_code) + \"'\"\n"
+
+			// Extract canvas event handlers
+			string canvas_events = extract_canvas_events(child_lines_json)
+			if canvas_events != ""
+				code = code + "\t\t\thtml = html + \" data-canvas-events='\" + escape_html_attr(canvas_events) + \"'\"\n"
+
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \"></canvas>\"\n"
+			event_counter = event_counter + 1
+		else
+			// Container widget (column, row, stack, etc.)
+			code = code + "\t\t\thtml = html + \"<" + html_tag + " class='" + html_class + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+
+			// Render children
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+
+			code = code + "\t\t\thtml = html + \"</" + html_tag + ">\"\n"
+
+		return "{\"code\":\"" + escape_json_string(code) + "\",\"event_counter\":" + event_counter.toString() + "}"
+
+	// Get HTML tag for a widget
+	string get_widget_html_tag(string widget_name)
+		if widget_name == "column" or widget_name == "row" or widget_name == "stack"
+			return "div"
+		if widget_name == "text"
+			return "span"
+		if widget_name == "button"
+			return "button"
+		if widget_name == "textField" or widget_name == "checkbox" or widget_name == "radio" or widget_name == "slider"
+			return "input"
+		if widget_name == "select"
+			return "select"
+		if widget_name == "option"
+			return "option"
+		if widget_name == "image"
+			return "img"
+		if widget_name == "link"
+			return "a"
+		if widget_name == "divider"
+			return "hr"
+		if widget_name == "spacer" or widget_name == "scroll" or widget_name == "card"
+			return "div"
+		if widget_name == "heading"
+			return "h1"
+		if widget_name == "paragraph"
+			return "p"
+		if widget_name == "code"
+			return "pre"
+		if widget_name == "bold"
+			return "strong"
+		if widget_name == "canvasScene"
+			return "canvas"
+		if widget_name == "italic"
+			return "em"
+		if widget_name == "icon"
+			return "span"
+		// Default to div
+		return "div"
+
+	// Get base CSS style for a widget
+	string get_widget_base_style(string widget_name)
+		if widget_name == "column"
+			return "display:flex;flex-direction:column;"
+		if widget_name == "row"
+			return "display:flex;flex-direction:row;"
+		if widget_name == "stack"
+			return "position:relative;"
+		return ""
+
+	// Convert a prop to CSS style
+	string prop_to_style(string prop_name, string prop_value)
+		if prop_name == "gap"
+			return "gap:" + prop_value + "px;"
+		if prop_name == "padding"
+			return "padding:" + prop_value + "px;"
+		if prop_name == "margin"
+			return "margin:" + prop_value + "px;"
+		if prop_name == "width"
+			return "width:" + prop_value + "px;"
+		if prop_name == "height"
+			return "height:" + prop_value + "px;"
+		if prop_name == "backgroundColor" or prop_name == "bg"
+			return "background-color:" + prop_value + ";"
+		if prop_name == "color"
+			return "color:" + prop_value + ";"
+		if prop_name == "fontSize"
+			return "font-size:" + prop_value + "px;"
+		if prop_name == "fontWeight"
+			return "font-weight:" + prop_value + ";"
+		if prop_name == "borderRadius"
+			return "border-radius:" + prop_value + "px;"
+		if prop_name == "align"
+			return "align-items:" + prop_value + ";"
+		if prop_name == "justify"
+			return "justify-content:" + prop_value + ";"
+		return ""
+
+	// Extract button text from props string
+	string extract_button_text(string props_string)
+		string trimmed = props_string.trim()
+
+		// Look for quoted string
+		if trimmed.indexOf("\"") != -1
+			integer startIdx = trimmed.indexOf("\"")
+			integer end = trimmed.indexOf("\"", startIdx + 1)
+			if end != -1
+				return trimmed.substring(startIdx, end + 1)
+
+		return "\"\""
+
+	// Get a specific prop value from props list
+	string get_prop_value(list<string> props, string prop_name)
+		integer i = 0
+		while i < props.length()
+			string prop_json = props[i]
+			string name = extract_json_field(prop_json, "name")
+			if name == prop_name
+				return extract_json_field(prop_json, "value")
+			i = i + 1
+		return ""
+
+// ============================================================================
+// STATIC HTML RENDERING (Compile-Time)
+// ============================================================================
+// These functions render screens directly to HTML files at compile time,
+// instead of generating code that produces HTML at runtime.
+
+functions:
+	// Main entry point: Render a screen definition to a complete HTML document
+	// Input: screen body content (the indented block after "screen Name:")
+	// Output: Complete HTML document string
+	string render_screen_to_html(string name, string body)
+		// Parse the screen body
+		string parsed = parse_screen_body(body)
+		string state_json = extract_json_field(parsed, "state")
+		string render_content = extract_json_field(parsed, "render")
+
+		// Render the UI tree directly to HTML
+		list<string> render_lines = json_to_string_list(render_content)
+		string body_html = render_ui_tree_direct(render_lines, 0, 0)
+
+		// Generate the complete HTML document
+		string html = generate_html_document(name, body_html)
+
+		return html
+
+	// Render UI tree directly to HTML string (not to code)
+	string render_ui_tree_direct(list<string> lines, integer start_index, integer base_indent)
+		string result = ""
+
+		integer i = start_index
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+
+			if trimmed.length() == 0
+				i = i + 1
+			else
+				integer line_indent = get_indent_level(line)
+
+				if line_indent <= base_indent and i > start_index
+					break
+
+				if is_widget_line(line)
+					string widget_name = get_widget_name(line)
+					string widget_props = get_widget_props(line)
+					boolean has_children = widget_has_children(line)
+
+					list<string> child_lines = []
+					if has_children
+						integer child_start = i + 1
+						integer child_base = line_indent
+						while child_start < lines.length()
+							string child_line = lines[child_start]
+							if child_line.trim().length() == 0
+								child_lines.push(child_line)
+								child_start = child_start + 1
+							else
+								integer child_indent = get_indent_level(child_line)
+								if child_indent > child_base
+									child_lines.push(child_line)
+									child_start = child_start + 1
+								else
+									break
+
+					result = result + render_widget_direct(widget_name, widget_props, child_lines)
+
+					if has_children
+						i = i + 1 + child_lines.length()
+					else
+						i = i + 1
+				else
+					i = i + 1
+
+		return result
+
+	// Render a single widget directly to HTML
+	string render_widget_direct(string widget_name, string props_string, list<string> child_lines)
+		string html = ""
+		string props_json = parse_widget_props(props_string)
+		list<string> props = json_to_object_list(props_json)
+
+		string html_tag = get_widget_html_tag(widget_name)
+		string html_class = "ui-" + widget_name
+		string html_style = get_widget_base_style(widget_name)
+
+		// Add custom class if specified
+		string custom_class = get_prop_value(props, "class")
+		if custom_class != ""
+			html_class = html_class + " " + custom_class
+
+		// Add prop-based styles
+		integer i = 0
+		while i < props.length()
+			string prop_json = props[i]
+			string prop_name = extract_json_field(prop_json, "name")
+			string prop_value = extract_json_field(prop_json, "value")
+			string style = prop_to_style(prop_name, prop_value)
+			if style != ""
+				html_style = html_style + style
+			i = i + 1
+
+		// Render based on widget type
+		if widget_name == "text"
+			string text_content = extract_text_content(props_string)
+			html = html + "<span class=\"" + html_class + "\""
+			if html_style != ""
+				html = html + " style=\"" + html_style + "\""
+			html = html + ">" + escape_html(text_content) + "</span>"
+
+		else if widget_name == "button"
+			string btn_text = extract_button_text(props_string)
+			string btn_class = get_prop_value(props, "class")
+			if btn_class != ""
+				html_class = html_class + " " + btn_class
+
+			html = html + "<button class=\"" + html_class + "\""
+			if html_style != ""
+				html = html + " style=\"" + html_style + "\""
+			html = html + ">"
+
+			if child_lines.length() > 0
+				html = html + render_ui_tree_direct(child_lines, 0, -1)
+			else
+				html = html + strip_quotes(btn_text)
+
+			html = html + "</button>"
+
+		else if widget_name == "textField"
+			string placeholder = get_prop_value(props, "placeholder")
+			string bind_var = get_prop_value(props, "bind")
+
+			html = html + "<input type=\"text\" class=\"" + html_class + "\""
+			if placeholder != ""
+				html = html + " placeholder=\"" + strip_quotes(placeholder) + "\""
+			if html_style != ""
+				html = html + " style=\"" + html_style + "\""
+			html = html + ">"
+
+		else if widget_name == "passwordField"
+			string placeholder = get_prop_value(props, "placeholder")
+
+			html = html + "<input type=\"password\" class=\"" + html_class + "\""
+			if placeholder != ""
+				html = html + " placeholder=\"" + strip_quotes(placeholder) + "\""
+			if html_style != ""
+				html = html + " style=\"" + html_style + "\""
+			html = html + ">"
+
+		else if widget_name == "box"
+			html = html + "<div class=\"" + html_class + "\""
+			if html_style != ""
+				html = html + " style=\"" + html_style + "\""
+			html = html + ">"
+			if child_lines.length() > 0
+				html = html + render_ui_tree_direct(child_lines, 0, -1)
+			html = html + "</div>"
+
+		else
+			// Container widgets (column, row, stack, etc.)
+			html = html + "<" + html_tag + " class=\"" + html_class + "\""
+			if html_style != ""
+				html = html + " style=\"" + html_style + "\""
+			html = html + ">"
+
+			if child_lines.length() > 0
+				html = html + render_ui_tree_direct(child_lines, 0, -1)
+
+			html = html + "</" + html_tag + ">"
+
+		return html
+
+	// Generate complete HTML document
+	string generate_html_document(string screen_name, string body_html)
+		string html = "<!DOCTYPE html>\n"
+		html = html + "<html lang=\"en\">\n"
+		html = html + "<head>\n"
+		html = html + "\t<meta charset=\"UTF-8\">\n"
+		html = html + "\t<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+		html = html + "\t<title>" + screen_name + "</title>\n"
+		html = html + "\t<style>\n"
+		html = html + generate_default_styles()
+		html = html + "\t</style>\n"
+		html = html + "</head>\n"
+		html = html + "<body>\n"
+		html = html + "\t<div id=\"app\">\n"
+		html = html + body_html
+		html = html + "\t</div>\n"
+		html = html + "\t<script src=\"loader.js\" data-wasm=\"frontend.wasm\"></script>\n"
+		html = html + "</body>\n"
+		html = html + "</html>"
+		return html
+
+	// Generate default CSS styles for UI components
+	string generate_default_styles()
+		string css = ""
+		string ob = "{"
+		string cb = "}"
+		string nl = "\n"
+		css = css + ":root " + ob + nl
+		css = css + "\t--color-bg: #0a0a0f;" + nl
+		css = css + "\t--color-surface: #12121a;" + nl
+		css = css + "\t--color-accent: #c9a962;" + nl
+		css = css + "\t--color-accent-light: #e8d5a3;" + nl
+		css = css + "\t--color-text: #f5f5f7;" + nl
+		css = css + "\t--color-text-muted: #8a8a9a;" + nl
+		css = css + "\t--color-border: #2a2a3a;" + nl
+		css = css + "\t--font-display: 'Playfair Display', Georgia, serif;" + nl
+		css = css + "\t--font-body: 'DM Sans', -apple-system, sans-serif;" + nl
+		css = css + cb + nl
+		css = css + "* " + ob + " margin: 0; padding: 0; box-sizing: border-box; " + cb + nl
+		css = css + "body " + ob + " font-family: var(--font-body); background: var(--color-bg); color: var(--color-text); min-height: 100vh; " + cb + nl
+		css = css + ".ui-column " + ob + " display: flex; flex-direction: column; " + cb + nl
+		css = css + ".ui-row " + ob + " display: flex; flex-direction: row; " + cb + nl
+		css = css + ".ui-text " + ob + " display: inline; " + cb + nl
+		css = css + ".ui-button " + ob + " padding: 12px 24px; background: var(--color-accent); color: var(--color-bg); border: none; cursor: pointer; font-family: var(--font-body); " + cb + nl
+		css = css + ".ui-button:hover " + ob + " background: var(--color-accent-light); " + cb + nl
+		css = css + ".ui-textField, .ui-passwordField " + ob + " padding: 12px; background: transparent; border: none; border-bottom: 1px solid var(--color-border); color: var(--color-text); font-family: var(--font-body); font-size: 16px; outline: none; " + cb + nl
+		css = css + ".ui-textField:focus, .ui-passwordField:focus " + ob + " border-color: var(--color-accent); " + cb + nl
+		css = css + ".ui-box " + ob + " display: block; " + cb + nl
+		return css
+
+	// Extract text content from props string
+	string extract_text_content(string props_string)
+		string trimmed = props_string.trim()
+		if trimmed.startsWith("\"")
+			integer end = trimmed.indexOf("\"", 1)
+			if end != -1
+				return trimmed.substring(1, end)
+		return trimmed
+
+	// Strip surrounding quotes from string
+	string strip_quotes(string s)
+		if s.length() < 2
+			return s
+		if s.startsWith("\"") and s.endsWith("\"")
+			return s.substring(1, s.length() - 1)
+		return s
+
+	// Escape HTML special characters
+	string escape_html(string s)
+		string result = s
+		result = result.replace("&", "&amp;")
+		result = result.replace("<", "&lt;")
+		result = result.replace(">", "&gt;")
+		result = result.replace("\"", "&quot;")
+		return result
+
+// ============================================================================
+// THEMING SYSTEM (ui: block with theme: sub-block)
+// Spec: 05_frame_ui.md section 10.3
+// Generates CSS custom properties injected into the page <head>
+// ============================================================================
+
+functions:
+	// Entry point for ui: block expansion.
+	// Extracts the theme: sub-block (if present) and generates the injection code.
+	string expand_ui_config(string attrs, string body)
+		string theme_block = extract_theme_block(body, "theme:")
+		if theme_block.length() == 0
+			// No theme: block — nothing to emit
+			return ""
+		return expand_theme(theme_block)
+
+	// Extract a named sub-block from a ui: body.
+	// Stops at the next peer block keyword or end of body.
+	// Peer blocks inside a ui: body are: theme:, fonts:, breakpoints:
+	string extract_theme_block(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + block_name.length()
+		integer end_pos = body.length()
+		integer search_pos = content_start
+
+		// Advance line by line; stop when we reach a peer block at the same indent level
+		while search_pos < body.length()
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				// Peek at the trimmed content of the next line
+				integer next_line_start = search_pos + 1
+				string after_newline = body.substring(next_line_start, body.length()).trim()
+				if after_newline.startsWith("theme:") or after_newline.startsWith("fonts:") or after_newline.startsWith("breakpoints:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return body.substring(content_start, end_pos).trim()
+
+	// Parse the theme block body and generate Clean code that:
+	//   1. Builds a :root { ... } CSS string from colors: and spacing: entries
+	//   2. Calls _ui_injectHeadCss() to insert the stylesheet into the page head
+	string expand_theme(string theme_block)
+		// Extract colors: and spacing: sub-sections
+		string colors_section = extract_theme_section(theme_block, "colors:")
+		string spacing_section = extract_theme_section(theme_block, "spacing:")
+
+		// Guard: nothing meaningful to emit if both sections are empty
+		if colors_section.length() == 0 and spacing_section.length() == 0
+			return ""
+
+		// Build the generated Clean code
+		string code = "string __theme_css = \":root { \"\n"
+
+		// Emit color variables
+		if colors_section.length() > 0
+			code = code + parse_theme_section(colors_section, "color")
+
+		// Emit spacing variables
+		if spacing_section.length() > 0
+			code = code + parse_theme_section(spacing_section, "spacing")
+
+		code = code + "__theme_css = __theme_css + \"}\"\n"
+		code = code + "_ui_injectHeadCss(__theme_css)\n"
+
+		return code
+
+	// Extract a named section (e.g. "colors:" or "spacing:") from the theme body.
+	// Stops at the next peer section keyword or end of theme body.
+	string extract_theme_section(string theme_body, string section_name)
+		integer start_pos = theme_body.indexOf(section_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + section_name.length()
+		integer end_pos = theme_body.length()
+		integer search_pos = content_start
+
+		while search_pos < theme_body.length()
+			if theme_body.substring(search_pos, search_pos + 1) == "\n"
+				integer next_start = search_pos + 1
+				string after_newline = theme_body.substring(next_start, theme_body.length()).trim()
+				if after_newline.startsWith("colors:") or after_newline.startsWith("spacing:") or after_newline.startsWith("typography:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return theme_body.substring(content_start, end_pos).trim()
+
+	// Parse a theme section (e.g. the body under colors: or spacing:) line by line.
+	// Each line is expected to match the pattern:  name: "value"
+	// Generates one __theme_css concatenation statement per variable.
+	// prefix: "color" or "spacing" — used to form the CSS variable name.
+	string parse_theme_section(string section_content, string prefix)
+		string result = ""
+		string remaining = section_content
+
+		while remaining.length() > 0
+			// Find the next newline or end of string
+			integer nl_pos = remaining.indexOf("\n")
+			string line = ""
+			if nl_pos == -1
+				line = remaining.trim()
+				remaining = ""
+			else
+				line = remaining.substring(0, nl_pos).trim()
+				remaining = remaining.substring(nl_pos + 1, remaining.length())
+
+			// Skip blank lines — only process non-empty lines
+			if line.length() != 0
+				// Parse "name: \"value\"" — locate the colon separator
+				integer colon_pos = line.indexOf(":")
+				if colon_pos != -1
+					string var_name = line.substring(0, colon_pos).trim()
+					string raw_value = line.substring(colon_pos + 1, line.length()).trim()
+
+					// Strip surrounding quotes from the value if present
+					if raw_value.startsWith("\"") and raw_value.endsWith("\"")
+						raw_value = raw_value.substring(1, raw_value.length() - 1)
+
+					// Only emit if both name and value are non-empty
+					if var_name.length() > 0 and raw_value.length() > 0
+						result = result + "__theme_css = __theme_css + \"--" + prefix + "-" + var_name + ": " + raw_value + "; \"\n"
+
+		return result

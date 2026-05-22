@@ -1,0 +1,27 @@
+// Medium complexity test
+
+functions:
+	string __route_handler_0()
+		string html = "<!DOCTYPE html><html><head>"
+		html = html + "<meta charset=\"UTF-8\">"
+		html = html + "<title>Test</title>"
+		html = html + "<style>"
+		html = html + getCSS()
+		html = html + "</style></head><body>"
+		html = html + "<h1>Hello World</h1>"
+		html = html + "<p>Request successful!</p>"
+		html = html + "</body></html>"
+		return html
+
+	string getCSS()
+		string s = "*\{margin:0;padding:0\}"
+		s = s + "body\{font-family:sans-serif;background:#faf8f5\}"
+		s = s + "h1\{font-size:2rem;margin:2rem\}"
+		s = s + "p\{margin:1rem 2rem\}"
+		return s
+
+start:
+	printl("Medium test app starting...")
+	integer status = 0
+	status = _http_route("GET", "/", 0)
+	printl("Server ready!")

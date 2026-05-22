@@ -1,0 +1,11 @@
+// NewsletterForm Component
+// Simple newsletter form (static SSR)
+
+component: tag="newsletter-form"
+	html:
+		<form class="newsletter-form" action="/api/subscribe" method="POST">
+			<div class="form-row">
+				<input type="email" name="email" placeholder="Enter your email" required>
+				<button type="submit">Subscribe</button>
+			</div>
+		</form>

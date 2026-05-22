@@ -1,0 +1,32 @@
+// Simple API demo - demonstrates basic HTTP endpoints
+
+endpoints Simple:
+	// Health check endpoint
+	GET "/api/health" :
+		returns: json
+
+		handle:
+			return json:
+				status: "ok"
+
+	// Static greeting endpoint
+	GET "/api/hello" :
+		returns: json
+
+		handle:
+			return json:
+				message: "Hello, World!"
+
+	// HTML response endpoint
+	GET "/api/page" :
+		returns: html
+
+		handle:
+			return html("<h1>Welcome to Clean Framework</h1>")
+
+	// Error example
+	GET "/api/error" :
+		returns: json
+
+		handle:
+			return badRequest("Example error message")

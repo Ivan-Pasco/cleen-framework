@@ -1,0 +1,16 @@
+// PostCard component
+component: name="PostCard", client="off"
+
+props:
+	string title
+	string excerpt
+	string author
+	string date
+
+article: class="post-card"
+	h2:
+		{title}
+	p:
+		{excerpt}
+	span:
+		"By {author} on {date}"

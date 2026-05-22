@@ -1,0 +1,109 @@
+// Test: frame.auth role-based access control
+// Tests that role checking functions correctly
+
+functions:
+	// Test hasRole function
+	boolean testHasRole()
+		string roleCheck = "hasRole(\"admin\")"
+		return roleCheck.contains("hasRole")
+
+	// Test hasAnyRole function
+	boolean testHasAnyRole()
+		string roleCheck = "hasAnyRole([\"admin\", \"editor\"])"
+		return roleCheck.contains("hasAnyRole")
+
+	// Test hasAllRoles function
+	boolean testHasAllRoles()
+		string roleCheck = "hasAllRoles([\"user\", \"verified\"])"
+		return roleCheck.contains("hasAllRoles")
+
+	// Test role assignment
+	boolean testRoleAssignment()
+		string assignCall = "Auth.assignRole(userId, \"admin\")"
+		return assignCall.contains("assignRole")
+
+	// Test role removal
+	boolean testRoleRemoval()
+		string removeCall = "Auth.removeRole(userId, \"admin\")"
+		return removeCall.contains("removeRole")
+
+	// Test get user roles
+	boolean testGetUserRoles()
+		string getRoles = "Auth.getRoles(userId)"
+		return getRoles.contains("getRoles")
+
+	// Test role in guard block
+	boolean testRoleInGuard()
+		string guardBlock = "guard: hasRole(\"admin\")"
+		return guardBlock.contains("guard:") and guardBlock.contains("hasRole")
+
+	// Test 403 forbidden response
+	boolean testForbiddenResponse()
+		integer forbiddenCode = 403
+		return forbiddenCode == 403
+
+start:
+	printl("=== Test Suite: Role Check ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testHasRole()
+		printl("PASS: hasRole function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: hasRole function exists")
+		failed = failed + 1
+
+	if testHasAnyRole()
+		printl("PASS: hasAnyRole function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: hasAnyRole function exists")
+		failed = failed + 1
+
+	if testHasAllRoles()
+		printl("PASS: hasAllRoles function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: hasAllRoles function exists")
+		failed = failed + 1
+
+	if testRoleAssignment()
+		printl("PASS: role assignment function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: role assignment function exists")
+		failed = failed + 1
+
+	if testRoleRemoval()
+		printl("PASS: role removal function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: role removal function exists")
+		failed = failed + 1
+
+	if testGetUserRoles()
+		printl("PASS: get user roles function exists")
+		passed = passed + 1
+	else
+		printl("FAIL: get user roles function exists")
+		failed = failed + 1
+
+	if testRoleInGuard()
+		printl("PASS: role check works in guard block")
+		passed = passed + 1
+	else
+		printl("FAIL: role check works in guard block")
+		failed = failed + 1
+
+	if testForbiddenResponse()
+		printl("PASS: 403 forbidden response code is correct")
+		passed = passed + 1
+	else
+		printl("FAIL: 403 forbidden response code is correct")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

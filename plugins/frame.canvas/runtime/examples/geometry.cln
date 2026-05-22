@@ -1,0 +1,155 @@
+// Celestial Geometry - Clean Language Canvas Demo
+// All animation compiled from Clean Language to WebAssembly.
+// Rotating rings of geometric shapes with mouse influence.
+
+plugins:
+	frame.canvas
+
+functions:
+	void start()
+		integer canvas = _canvas_init(800, 600, "main")
+		integer s1 = _canvas_var_set("time", 0.0)
+		integer s2 = _canvas_var_set("mx", 400.0)
+		integer s3 = _canvas_var_set("my", 300.0)
+		integer fr = _canvas_request_frame(canvas)
+
+	void _frame_callback(integer canvas)
+		number dt = _canvas_get_delta_time()
+		number t = _canvas_var_get("time", 0.0) + dt
+		integer sv = _canvas_var_set("time", t)
+		number mx = _canvas_var_get("mx", 400.0)
+		number my = _canvas_var_get("my", 300.0)
+		number cx = 400.0
+		number cy = 300.0
+
+		// Background
+		integer cl = _canvas_clear_color(canvas, "#000011")
+
+		// Radial glow behind everything
+		integer g1 = _canvas_circle_filled(canvas, cx, cy, 330.0, "#1100ff18")
+		integer g2 = _canvas_circle_filled(canvas, cx, cy, 250.0, "#0044ff22")
+		integer g3 = _canvas_circle_filled(canvas, cx, cy, 180.0, "#2200ff28")
+		integer g4 = _canvas_circle_filled(canvas, cx, cy, 120.0, "#4400ff30")
+		integer g5 = _canvas_circle_filled(canvas, cx, cy, 70.0, "#6600ff38")
+
+		// Mouse influence factor
+		number mdx = (mx - 400.0) / 400.0
+		number mdy = (my - 300.0) / 300.0
+		number infl = math.sqrt(mdx * mdx + mdy * mdy)
+		number inflClamped = clampInfluence(infl)
+
+		// Orbit outlines (faint)
+		integer o1 = _canvas_circle_outline(canvas, cx, cy, 70.0, "#ffffff22")
+		integer o2 = _canvas_circle_outline(canvas, cx, cy, 120.0, "#00ffff22")
+		integer o3 = _canvas_circle_outline(canvas, cx, cy, 180.0, "#aa00ff22")
+		integer o4 = _canvas_circle_outline(canvas, cx, cy, 250.0, "#ffaa0022")
+		integer o5 = _canvas_circle_outline(canvas, cx, cy, 330.0, "#ffffff18")
+
+		// Ring 1: 6 white circles at radius 70, fast clockwise
+		number spd1 = 1.5 + inflClamped * 2.0
+		integer r1 = drawWhiteRing(canvas, cx, cy, 70.0, t * spd1, 6, 0)
+
+		// Ring 2: 8 cyan circles at radius 120, counterclockwise
+		number spd2 = 0.8 + inflClamped * 1.5
+		integer r2 = drawCyanRing(canvas, cx, cy, 120.0, t * spd2 * -1.0, 8, 0)
+
+		// Ring 3: 12 purple circles at radius 180, slow clockwise
+		integer r3 = drawPurpleRing(canvas, cx, cy, 180.0, t * 0.4, 12, 0)
+
+		// Ring 4: 10 gold triangles at radius 250, slow counterclockwise
+		integer r4 = drawGoldTriangleRing(canvas, cx, cy, 250.0, t * 0.25 * -1.0, 10, 0)
+
+		// Ring 5: 20 tiny white dots at radius 330, very slow clockwise
+		integer r5 = drawDotRing(canvas, cx, cy, 330.0, t * 0.1, 20, 0)
+
+		// Central pulsing orb
+		number pulse = 8.0 + 6.0 * math.sin(t * 3.0)
+		number outerGlow = pulse + 20.0
+		number midGlow = pulse + 10.0
+		integer cg1 = _canvas_circle_filled(canvas, cx, cy, outerGlow, "#ffdd6633")
+		integer cg2 = _canvas_circle_filled(canvas, cx, cy, midGlow, "#ffee8866")
+		integer cg3 = _canvas_circle_filled(canvas, cx, cy, pulse, "#ffffaaff")
+		integer cg4 = _canvas_circle_filled(canvas, cx, cy, pulse * 0.4, "#ffffffff")
+
+	// Clamp influence to 0..1
+	number clampInfluence(number v)
+		if v > 1.0
+			return 1.0
+		return v
+
+	// Ring drawing helpers — all use recursion, decrement count to 0
+
+	integer drawWhiteRing(integer canvas, number cx, number cy, number r, number baseAngle, integer count, integer done)
+		if count <= 0
+			return done
+		number stepAngle = 6.2831853 / 6.0
+		number idx = 6.0 - count
+		number a = baseAngle + idx * stepAngle
+		number px = cx + math.cos(a) * r
+		number py = cy + math.sin(a) * r
+		integer d = _canvas_circle_filled(canvas, px, py, 5.0, "#ffffffcc")
+		return drawWhiteRing(canvas, cx, cy, r, baseAngle, count - 1, d)
+
+	integer drawCyanRing(integer canvas, number cx, number cy, number r, number baseAngle, integer count, integer done)
+		if count <= 0
+			return done
+		number stepAngle = 6.2831853 / 8.0
+		number idx = 8.0 - count
+		number a = baseAngle + idx * stepAngle
+		number px = cx + math.cos(a) * r
+		number py = cy + math.sin(a) * r
+		integer d = _canvas_circle_filled(canvas, px, py, 5.5, "#00eeeebb")
+		return drawCyanRing(canvas, cx, cy, r, baseAngle, count - 1, d)
+
+	integer drawPurpleRing(integer canvas, number cx, number cy, number r, number baseAngle, integer count, integer done)
+		if count <= 0
+			return done
+		number stepAngle = 6.2831853 / 12.0
+		number idx = 12.0 - count
+		number a = baseAngle + idx * stepAngle
+		number px = cx + math.cos(a) * r
+		number py = cy + math.sin(a) * r
+		integer d = _canvas_circle_filled(canvas, px, py, 4.0, "#cc44ffcc")
+		return drawPurpleRing(canvas, cx, cy, r, baseAngle, count - 1, d)
+
+	integer drawGoldTriangleRing(integer canvas, number cx, number cy, number r, number baseAngle, integer count, integer done)
+		if count <= 0
+			return done
+		number stepAngle = 6.2831853 / 10.0
+		number idx = 10.0 - count
+		number a = baseAngle + idx * stepAngle
+		integer d = drawOutwardTriangle(canvas, cx, cy, r, a, 10.0, "#ffaa00ee")
+		return drawGoldTriangleRing(canvas, cx, cy, r, baseAngle, count - 1, d)
+
+	integer drawDotRing(integer canvas, number cx, number cy, number r, number baseAngle, integer count, integer done)
+		if count <= 0
+			return done
+		number stepAngle = 6.2831853 / 20.0
+		number idx = 20.0 - count
+		number a = baseAngle + idx * stepAngle
+		number px = cx + math.cos(a) * r
+		number py = cy + math.sin(a) * r
+		integer d = _canvas_circle_filled(canvas, px, py, 2.5, "#ffffffaa")
+		return drawDotRing(canvas, cx, cy, r, baseAngle, count - 1, d)
+
+	// Draw a triangle at orbit position pointing outward
+	integer drawOutwardTriangle(integer canvas, number cx, number cy, number r, number a, number size, string color)
+		number px = cx + math.cos(a) * r
+		number py = cy + math.sin(a) * r
+		number x1 = px + math.cos(a) * size
+		number y1 = py + math.sin(a) * size
+		number x2 = px + math.cos(a + 2.094) * size * 0.7
+		number y2 = py + math.sin(a + 2.094) * size * 0.7
+		number x3 = px + math.cos(a - 2.094) * size * 0.7
+		number y3 = py + math.sin(a - 2.094) * size * 0.7
+		integer d = _canvas_triangle_filled(canvas, x1, y1, x2, y2, x3, y3, color)
+		return d
+
+	void _on_pointer_move(integer canvas, number mx, number my)
+		integer a = _canvas_var_set("mx", mx)
+		integer b = _canvas_var_set("my", my)
+
+	void _on_pointer_down(integer canvas, number mx, number my)
+		number t = _canvas_var_get("time", 0.0)
+		number newT = t + 3.14159
+		integer sv = _canvas_var_set("time", newT)

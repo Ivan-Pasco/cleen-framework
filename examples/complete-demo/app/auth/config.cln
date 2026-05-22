@@ -1,0 +1,14 @@
+// Authentication configuration - frame.auth plugin
+// Location: app/auth/ tells the compiler this is auth configuration
+
+functions:
+	string getAuthConfig()
+		string config = "{"
+		config = config + "\"session\":{\"secret\":\"dev-secret-change-in-production\",\"cookie_name\":\"session_id\",\"expires\":\"24h\",\"http_only\":true,\"same_site\":\"lax\"},"
+		config = config + "\"password\":{\"algorithm\":\"bcrypt\",\"rounds\":12},"
+		config = config + "\"csrf\":{\"enabled\":true,\"token_name\":\"_csrf\",\"header_name\":\"X-CSRF-Token\"}"
+		config = config + "}"
+		return config
+
+start:
+	printl("Auth configuration loaded")

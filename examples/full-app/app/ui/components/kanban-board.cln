@@ -1,0 +1,18 @@
+// Kanban Board Component
+
+component: tag="kanban-board"
+	html:
+		<div class="kanban-board">
+			<div class="kanban-column">
+				<h3>To Do</h3>
+				<div class="task-list"><task-card></task-card></div>
+			</div>
+			<div class="kanban-column">
+				<h3>In Progress</h3>
+				<div class="task-list"><task-card></task-card></div>
+			</div>
+			<div class="kanban-column">
+				<h3>Done</h3>
+				<div class="task-list"><task-card></task-card></div>
+			</div>
+		</div>

@@ -1,0 +1,8 @@
+// User model
+data User
+	string email
+	string password_hash
+	string name
+	string role
+	boolean active
+	string created_at

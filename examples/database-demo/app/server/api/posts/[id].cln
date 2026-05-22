@@ -1,0 +1,11 @@
+// Single post API
+// Route: GET /api/posts/:id
+
+functions:
+	string __route_handler_0()
+		string odI = _req_param("id")
+		return "{\"id\": " + odI + ", \"title\": \"Getting Started with Frame\", \"authorId\": 1, \"author\": \"Alice Johnson\", \"date\": \"2025-12-15\"}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/posts/:id", 0)

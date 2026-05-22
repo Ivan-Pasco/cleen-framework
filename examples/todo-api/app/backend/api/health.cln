@@ -1,0 +1,10 @@
+// Health Check Endpoint
+// Public endpoint for service health monitoring
+
+functions:
+	string __route_handler_0()
+		return "{\"status\":\"ok\",\"service\":\"todo-api\"}"
+
+start:
+	integer s = _http_route("GET", "/health", 0)
+	printl("Health endpoint registered")

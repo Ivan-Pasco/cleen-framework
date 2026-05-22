@@ -1,0 +1,16 @@
+// ShareButton Component
+// Social media share buttons
+
+component: tag="share-button"
+	html:
+		<div class="share-buttons">
+			<a href="#" class="share-btn share-btn-twitter" aria-label="Share on Twitter">
+				<span>Twitter</span>
+			</a>
+			<a href="#" class="share-btn share-btn-linkedin" aria-label="Share on LinkedIn">
+				<span>LinkedIn</span>
+			</a>
+			<a href="#" class="share-btn share-btn-facebook" aria-label="Share on Facebook">
+				<span>Facebook</span>
+			</a>
+		</div>

@@ -1,0 +1,101 @@
+// Todo Endpoints
+// CRUD operations for todo items
+
+functions:
+	// GET /todos - List todos (requires auth)
+	string __route_handler_0()
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return "{\"ok\":false,\"error\":\"Authentication required\"}"
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string odI = userIdField.toString()
+		string sql = "SELECT id, title, description, completed, priority, created_at FROM todos WHERE owner_id = ? ORDER BY created_at DESC"
+		string params = "[" + odI + "]"
+		string result = _db_query(sql, params)
+		return "{\"ok\":true,\"data\":" + result + "}"
+
+	// GET /todos/:id - Get single todo (requires auth)
+	string __route_handler_1()
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return "{\"ok\":false,\"error\":\"Authentication required\"}"
+		string todoId = _req_param("id")
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string odI = userIdField.toString()
+		string sql = "SELECT id, title, description, completed, priority, created_at FROM todos WHERE id = ? AND owner_id = ?"
+		string params = "[" + todoId + "," + odI + "]"
+		string result = _db_query(sql, params)
+		return "{\"ok\":true,\"data\":" + result + "}"
+
+	// POST /todos - Create todo (requires auth)
+	string __route_handler_2()
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return "{\"ok\":false,\"error\":\"Authentication required\"}"
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string odI = userIdField.toString()
+		string body = _req_body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return "{\"ok\":false,\"error\":\"Invalid JSON\"}"
+		any titleField = bodyData.title
+		if titleField == null
+			return "{\"ok\":false,\"error\":\"Title is required\"}"
+		string title = titleField.toString()
+		string desc = ""
+		integer priority = 0
+		any descField = bodyData.description
+		if descField != null
+			desc = descField.toString()
+		any prioField = bodyData.priority
+		if prioField != null
+			priority = prioField.toInteger()
+		string sql = "INSERT INTO todos (title, description, priority, owner_id) VALUES (?, ?, ?, ?)"
+		string params = "[\"" + title + "\",\"" + desc + "\"," + priority.toString() + "," + odI + "]"
+		integer insertResult = _db_execute(sql, params)
+		return "{\"ok\":true,\"id\":" + insertResult.toString() + "}"
+
+	// DELETE /todos/:id - Delete todo (requires auth)
+	string __route_handler_3()
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return "{\"ok\":false,\"error\":\"Authentication required\"}"
+		string todoId = _req_param("id")
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string odI = userIdField.toString()
+		string sql = "DELETE FROM todos WHERE id = ? AND owner_id = ?"
+		string params = "[" + todoId + "," + odI + "]"
+		integer deleteResult = _db_execute(sql, params)
+		return "{\"ok\":true,\"deleted\":" + deleteResult.toString() + "}"
+
+	// PATCH /todos/:id/toggle - Toggle completion (requires auth)
+	string __route_handler_4()
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return "{\"ok\":false,\"error\":\"Authentication required\"}"
+		string todoId = _req_param("id")
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string odI = userIdField.toString()
+		string sql = "UPDATE todos SET completed = NOT completed WHERE id = ? AND owner_id = ?"
+		string params = "[" + todoId + "," + odI + "]"
+		integer updateResult = _db_execute(sql, params)
+		return "{\"ok\":true,\"updated\":" + updateResult.toString() + "}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/todos", 0)
+	s = _http_route("GET", "/todos/:id", 1)
+	s = _http_route("POST", "/todos", 2)
+	s = _http_route("DELETE", "/todos/:id", 3)
+	s = _http_route("PATCH", "/todos/:id/toggle", 4)
+	printl("Todo endpoints registered")

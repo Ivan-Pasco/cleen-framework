@@ -1,0 +1,295 @@
+[plugin]
+name = "frame.ui"
+version = "2.6.10"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+# SSR HTML rendering can exhaust the 32 MB standard tier on large pages.
+# Honored by compiler >= 0.30.57; older compilers silently use target defaults.
+# See foundation/platform-architecture/MEMORY_POLICY.md §2.2 and §3 (heavy tier: 64 initial / 1024 max pages).
+[memory]
+tier = "heavy"
+
+[exports]
+# HTML page processing (main entry point for pages)
+process_html = "process_html"
+
+# Component block expansion (for .cln component definitions)
+expand = "expand_block"
+
+# HTML validation against component registry
+validate_html = "validate_html"
+
+# Page metadata extraction
+get_page_meta = "get_page_meta"
+
+# IDE keyword support
+get_keywords = "get_keywords"
+
+[handles]
+blocks = ["component", "screen", "page", "html", "styles", "ui"]
+
+[html]
+# File extensions processed as HTML pages
+extensions = [".html"]
+
+# Directives recognized in HTML
+directives = ["cl-if", "cl-else", "cl-iterate", "cl-bind", "cl-client", "cl-slot", "cl-show", "cl-validate"]
+
+# Event attributes recognized (with modifiers like .prevent, .stop)
+events = ["onclick", "oninput", "onchange", "onsubmit", "onfocus", "onblur", "onkeydown", "onkeyup", "onmouseenter", "onmouseleave"]
+
+# Event modifiers
+event_modifiers = ["prevent", "stop", "once", "enter", "escape", "space"]
+
+# Interpolation syntax
+interpolation_escaped = "{}"
+interpolation_raw = "{!}"
+
+# Hydration modes
+hydration_modes = ["off", "on", "visible", "idle", "only"]
+
+# Bridge function declarations - UI runtime functions
+# Convention: bridge names use snake_case with _namespace_ prefix
+# e.g. ui.toggleClass → _ui_toggle_class
+[bridge]
+functions = [
+  # HTML Rendering
+  { name = "_html_escape", params = ["string"], returns = "string", description = "Escape HTML entities in string", expand_strings = true },
+  { name = "_html_raw", params = ["string"], returns = "string", description = "Return raw HTML without escaping", expand_strings = true },
+
+  # Component Registry
+  { name = "_ui_register_component", params = ["string", "string"], returns = "integer", description = "Register component: tag name, class name", expand_strings = true },
+  { name = "_ui_get_component", params = ["string"], returns = "string", description = "Get component class by tag name", expand_strings = true },
+
+  # Layout Loading
+  { name = "_ui_load_layout", params = ["string"], returns = "string", description = "Load layout HTML template by name from app/ui/layouts/", expand_strings = true },
+
+  # Slot Management
+  { name = "_ui_set_slot", params = ["string", "string"], returns = "integer", description = "Set slot content: slot name, content", expand_strings = true },
+  { name = "_ui_get_slot", params = ["string"], returns = "string", description = "Get slot content by name", expand_strings = true },
+
+  # Event Handler Registration (for client-side hydration)
+  { name = "_ui_on_event", params = ["string", "string", "string"], returns = "integer", description = "Register event handler: selector, event type, exported handler function name", expand_strings = true },
+
+  # State Management (for hydration)
+  { name = "_ui_set_state", params = ["string", "string"], returns = "integer", description = "Set component state: component id, state JSON", expand_strings = true },
+  { name = "_ui_get_state", params = ["string"], returns = "string", description = "Get component state by ID", expand_strings = true },
+
+  # DOM Manipulation (for client-side updates)
+  { name = "_ui_update_element", params = ["string", "string"], returns = "integer", description = "Update element content: selector, new content", expand_strings = true },
+  { name = "_ui_update_attr", params = ["string", "string", "string"], returns = "integer", description = "Update element attribute: selector, attr name, value", expand_strings = true },
+
+  # Form Binding
+  { name = "_ui_bind_input", params = ["string", "string"], returns = "integer", description = "Bind input to state: selector, state path", expand_strings = true },
+
+  # Validation
+  { name = "_ui_validate", params = ["string", "string"], returns = "string", description = "Validate value against rule: value, rule type - returns error or empty", expand_strings = true },
+
+  # Event Handler Context (available during event callbacks)
+  { name = "_ui_event_attr", params = ["string"], returns = "string", description = "Get attribute value from current event target element", expand_strings = true },
+  { name = "_ui_event_value", params = [], returns = "string", description = "Get value/textContent of current event target element" },
+  { name = "_ui_event_closest_attr", params = ["string", "string"], returns = "string", description = "Find closest ancestor matching selector, return its attribute value", expand_strings = true },
+  { name = "_ui_event_type", params = [], returns = "string", description = "Get the type of the current event (click, input, etc.)" },
+
+  # Clipboard
+  { name = "_ui_clipboard_write", params = ["string"], returns = "integer", description = "Write text to clipboard (navigator.clipboard.writeText)", expand_strings = true },
+
+  # URL / Location
+  { name = "_ui_location_href", params = ["string"], returns = "integer", description = "Navigate to URL (window.location.href)", expand_strings = true },
+  { name = "_ui_location_query", params = ["string"], returns = "string", description = "Get URL query parameter value", expand_strings = true },
+  { name = "_ui_location_path", params = [], returns = "string", description = "Get current URL pathname" },
+
+  # DOM Query (single element)
+  { name = "_ui_get_text", params = ["string"], returns = "string", description = "Get textContent of first element matching selector", expand_strings = true },
+  { name = "_ui_get_attr", params = ["string", "string"], returns = "string", description = "Get attribute of first element matching selector", expand_strings = true },
+  { name = "_ui_toggle_class", params = ["string", "string"], returns = "integer", description = "Toggle CSS class on first element matching selector", expand_strings = true },
+  { name = "_ui_add_class", params = ["string", "string"], returns = "integer", description = "Add CSS class to first element matching selector", expand_strings = true },
+  { name = "_ui_remove_class", params = ["string", "string"], returns = "integer", description = "Remove CSS class from first element matching selector", expand_strings = true },
+  { name = "_ui_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set inline style property on first element: selector, property, value", expand_strings = true },
+  { name = "_ui_update_element_self", params = ["string"], returns = "integer", description = "Update textContent of the current event target element", expand_strings = true },
+
+  # DOM Batch (querySelectorAll)
+  { name = "_ui_query_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set style property on ALL elements matching selector", expand_strings = true },
+  { name = "_ui_query_set_attr", params = ["string", "string", "string"], returns = "integer", description = "Set attribute on ALL elements matching selector", expand_strings = true },
+  { name = "_ui_query_add_class", params = ["string", "string"], returns = "integer", description = "Add class to ALL elements matching selector", expand_strings = true },
+  { name = "_ui_query_remove_class", params = ["string", "string"], returns = "integer", description = "Remove class from ALL elements matching selector", expand_strings = true },
+  { name = "_ui_filter_by_attr", params = ["string", "string", "string"], returns = "integer", description = "Show elements where attr matches value, hide others (* for all)", expand_strings = true },
+  { name = "_ui_filter_by_text", params = ["string", "string", "string", "string"], returns = "integer", description = "Filter elements by text search across name and description attributes", expand_strings = true },
+
+  # IntersectionObserver
+  { name = "_ui_observe_visible", params = ["string", "string"], returns = "integer", description = "Add class to elements when they become visible (one-shot)", expand_strings = true },
+
+  # Timers
+  { name = "_ui_set_timeout", params = ["string", "integer"], returns = "integer", description = "Call exported handler function by name after delay ms: handler name, delay_ms", expand_strings = true },
+
+  # Theming
+  { name = "_ui_inject_head_css", params = ["string"], returns = "integer", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true },
+
+  # Form Helpers
+  { name = "_ui_input_value", params = ["string"], returns = "string", description = "Get value of input/textarea/select matching selector", expand_strings = true },
+  { name = "_ui_form_json", params = ["string"], returns = "string", description = "Collect all named inputs in form as JSON object string", expand_strings = true },
+  { name = "_ui_form_data", params = ["string"], returns = "string", description = "Collect all named inputs as URL-encoded key=value string", expand_strings = true },
+  { name = "_ui_checked", params = ["string"], returns = "integer", description = "Get checkbox checked state (0=unchecked, 1=checked)", expand_strings = true },
+  { name = "_ui_set_input", params = ["string", "string"], returns = "integer", description = "Set value of input/textarea/select", expand_strings = true },
+]
+
+[language]
+# Block-level keywords that start a declaration
+blocks = ["component", "screen", "page", "styles", "html", "ui"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "state", description = "Component state declaration", context = "block" },
+  { name = "props", description = "Component props declaration", context = "block" },
+  { name = "render", description = "Component render function", context = "block" },
+  { name = "handlers", description = "Event handlers block", context = "block" },
+  { name = "computed", description = "Computed properties", context = "block" },
+  { name = "variables", description = "CSS variables declaration", context = "block" },
+  { name = "global", description = "Global CSS styles", context = "block" },
+  { name = "var", description = "html: block named variable attribute (html: var=\"name\")", context = "attribute" },
+  { name = "if", description = "Conditional rendering directive", context = "directive" },
+  { name = "else", description = "Else clause for conditional", context = "directive" },
+  { name = "iterate", description = "Iterate rendering directive (cl-iterate)", context = "directive" },
+  { name = "bind", description = "Two-way data binding", context = "directive" },
+  { name = "client", description = "Hydration mode attribute", context = "attribute" },
+  { name = "slot", description = "Slot for content projection", context = "directive" },
+  { name = "show", description = "Conditional visibility", context = "directive" },
+  { name = "validate", description = "Form validation directive", context = "directive" },
+  { name = "theme", description = "Theme configuration sub-block inside ui:", context = "block" },
+  { name = "colors", description = "Color variables sub-block inside theme:", context = "block" },
+  { name = "spacing", description = "Spacing variables sub-block inside theme:", context = "block" },
+  { name = "layout", description = "Page layout name (used in <page layout='name'> attribute)", context = "page-attribute" },
+  { name = "auth", description = "Require authentication for page", context = "page-attribute" },
+  { name = "roles", description = "Required roles for page access", context = "page-attribute" },
+  { name = "cache", description = "Page cache max-age in seconds", context = "page-attribute" },
+]
+
+# Custom types provided by the plugin
+types = [
+  { name = "Component", description = "UI component type" },
+  { name = "Props", description = "Component properties type" },
+  { name = "State", description = "Component state type" },
+]
+
+# Built-in functions/expressions
+functions = [
+  { name = "rawHtml", signature = "rawHtml(content)", description = "Render unescaped HTML (use with caution)" },
+  { name = "escape", signature = "escape(text)", description = "Escape HTML entities" },
+  { name = "slot", signature = "slot(name?)", description = "Render slot content" },
+  { name = "_html_escape", signature = "_html_escape(text)", description = "Escape HTML entities (auto-generated by {expr} interpolation in html: blocks)" },
+  { name = "ui.inputValue", signature = "ui.inputValue(selector)", description = "Get value of input/textarea/select by CSS selector", maps_to = "_ui_input_value" },
+  { name = "ui.formJson", signature = "ui.formJson(selector)", description = "Collect all named form inputs as JSON object string", maps_to = "_ui_form_json" },
+  { name = "ui.formData", signature = "ui.formData(selector)", description = "Collect all named form inputs as URL-encoded string", maps_to = "_ui_form_data" },
+  { name = "ui.checked", signature = "ui.checked(selector)", description = "Get checkbox checked state (0 or 1)", maps_to = "_ui_checked" },
+  { name = "ui.setInput", signature = "ui.setInput(selector, value)", description = "Set value of input/textarea/select", maps_to = "_ui_set_input" },
+  { name = "ui.onEvent", signature = "ui.onEvent(selector, eventType, handlerName)", description = "Register event handler by exported function name for CSS selector and event type", maps_to = "_ui_on_event" },
+  { name = "ui.toggleClass", signature = "ui.toggleClass(selector, className)", description = "Toggle CSS class on first matching element", maps_to = "_ui_toggle_class" },
+  { name = "ui.addClass", signature = "ui.addClass(selector, className)", description = "Add CSS class to first matching element", maps_to = "_ui_add_class" },
+  { name = "ui.removeClass", signature = "ui.removeClass(selector, className)", description = "Remove CSS class from first matching element", maps_to = "_ui_remove_class" },
+  { name = "ui.setStyle", signature = "ui.setStyle(selector, property, value)", description = "Set inline style on first matching element", maps_to = "_ui_set_style" },
+  { name = "ui.setState", signature = "ui.setState(id, json)", description = "Set component state by ID", maps_to = "_ui_set_state" },
+  { name = "ui.getState", signature = "ui.getState(id)", description = "Get component state by ID", maps_to = "_ui_get_state" },
+  { name = "ui.updateElement", signature = "ui.updateElement(selector, content)", description = "Update element innerHTML", maps_to = "_ui_update_element" },
+  { name = "ui.updateAttr", signature = "ui.updateAttr(selector, attr, value)", description = "Update element attribute", maps_to = "_ui_update_attr" },
+  { name = "ui.eventAttr", signature = "ui.eventAttr(attr)", description = "Get attribute from current event target", maps_to = "_ui_event_attr" },
+  { name = "ui.eventValue", signature = "ui.eventValue()", description = "Get value/textContent of current event target", maps_to = "_ui_event_value" },
+  { name = "ui.eventClosestAttr", signature = "ui.eventClosestAttr(selector, attr)", description = "Get attribute from closest ancestor matching selector", maps_to = "_ui_event_closest_attr" },
+  { name = "ui.clipboardWrite", signature = "ui.clipboardWrite(text)", description = "Write text to clipboard", maps_to = "_ui_clipboard_write" },
+  { name = "ui.locationHref", signature = "ui.locationHref(url)", description = "Navigate to URL", maps_to = "_ui_location_href" },
+  { name = "ui.locationQuery", signature = "ui.locationQuery(param)", description = "Get URL query parameter", maps_to = "_ui_location_query" },
+  { name = "ui.locationPath", signature = "ui.locationPath()", description = "Get current URL pathname", maps_to = "_ui_location_path" },
+  { name = "ui.observeVisible", signature = "ui.observeVisible(selector, className)", description = "Add class when elements become visible", maps_to = "_ui_observe_visible" },
+  { name = "ui.setTimeout", signature = "ui.setTimeout(handlerName, delayMs)", description = "Call exported handler by name after delay", maps_to = "_ui_set_timeout" },
+  { name = "ui.filterByAttr", signature = "ui.filterByAttr(selector, attr, value)", description = "Show/hide elements by attribute match", maps_to = "_ui_filter_by_attr" },
+  { name = "ui.filterByText", signature = "ui.filterByText(selector, nameAttr, descAttr, query)", description = "Filter elements by text search", maps_to = "_ui_filter_by_text" },
+  { name = "ui.queryAddClass", signature = "ui.queryAddClass(selector, className)", description = "Add class to ALL matching elements", maps_to = "_ui_query_add_class" },
+  { name = "ui.queryRemoveClass", signature = "ui.queryRemoveClass(selector, className)", description = "Remove class from ALL matching elements", maps_to = "_ui_query_remove_class" },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "component ", insert = "component: tag=\"${1:my-tag}\"\n\tprops:\n\t\t${2:string} ${3:name}\n\n\thtml:\n\t\t<div>\n\t\t\t${4:content}\n\t\t</div>" },
+  { trigger = "styles ", insert = "styles ${1:Name}:\n\tvariables:\n\t\t${2:color-primary}: \"${3:#3b82f6}\"" },
+  { trigger = "state:", insert = "state:\n\t${1:field}: ${2:value}" },
+  { trigger = "render:", insert = "render:\n\t${1:// template}" },
+  { trigger = "html:", insert = "html:\n\t<div>\n\t\t${1:content}\n\t</div>" },
+  { trigger = "html: var", insert = "html: var=\"${1:name}\"\n\t<div>\n\t\t${2:content}\n\t</div>" },
+]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["app/ui", "app/ui/pages", "app/ui/components", "app/ui/layouts"]
+
+# Automatically create folders when plugin is imported
+auto_create = true
+
+# File patterns recognized in owned folders
+patterns = ["*.cln", "*.html"]
+
+# Files in owned folders automatically import this plugin
+implicit_import = true
+
+[templates]
+# Starter files created when plugin is added to a project
+files = [
+  { path = "app/ui/pages/index.html", template = "index.html" },
+]
+
+[enforcement]
+severity = "warn"
+
+restricted_functions = []
+
+required_blocks = [
+  { folder = "app/ui/components/", block = "component", message = "Component files should contain 'component' definitions" },
+]
+
+block_folder_rules = [
+  { block = "component", allowed_in = ["app/ui/components/"], message = "component: blocks should be in app/ui/components/" },
+  { block = "screen", allowed_in = ["app/ui/pages/", "app/ui/components/"], message = "screen: blocks should be in app/ui/pages/ or app/ui/components/" },
+]
+
+[ai]
+description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. Use styles: for theming. Never write inline JavaScript."
+constraints = [
+  "Pages go in app/ui/pages/ as .html files — not as .cln files",
+  "Reusable elements belong in component: blocks in app/ui/components/",
+  "Use cl-iterate for lists — never build HTML strings by concatenation",
+  "Use ui.formJson() to collect form inputs — never access DOM fields manually",
+  "Event handlers must be exported Clean functions — never inline JS",
+]
+
+[[ai.patterns]]
+name = "ssr-page-with-islands"
+use_when = "building any page — this is the foundational structure pattern, read it first"
+anti_pattern = "putting logic or data loading in the HTML file, or adding client='on' to every component — the HTML is a static shell; all data comes from the page endpoint; most content should stay client='off' and ship zero JS; only opt into hydration where genuine interactivity is needed"
+example = "patterns/ssr-page-with-islands.cln"
+
+[[ai.patterns]]
+name = "form-with-validation"
+use_when = "any user input form that must show per-field errors before submission"
+anti_pattern = "validating only on submit and showing one generic error — validate on blur per field using cl-validate, show inline errors next to each field so users know exactly what to fix"
+example = "patterns/form-with-validation.cln"
+
+[[ai.patterns]]
+name = "data-table"
+use_when = "displaying a queryable, sortable, filterable list of records"
+anti_pattern = "fetching all rows into the page and filtering client-side — for large datasets this is slow and leaks data; paginate server-side and pass page + sort as query params"
+example = "patterns/data-table.cln"
+
+[[ai.patterns]]
+name = "live-search"
+use_when = "a search or filter input that should narrow results as the user types"
+anti_pattern = "re-fetching on every keystroke — debounce the input (wait 300ms after the user stops typing) and use cl-iterate to render results without a full page reload"
+example = "patterns/live-search.cln"
+
+[[ai.patterns]]
+name = "modal-confirm"
+use_when = "any destructive action (delete, deactivate, cancel subscription) triggered by a button click"
+anti_pattern = "triggering the destructive action immediately on click — always show a confirm modal first; users click the wrong button, and destructive actions must require explicit confirmation"
+example = "patterns/modal-confirm.cln"

@@ -1,0 +1,456 @@
+// frame.server plugin - HTTP Server DSL
+// Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
+// Version: 2.2.3
+// Implements: Frame Server Specification v1.2
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
+
+functions:
+	string expand_block(string block_name, string attributes, string body)
+		if block_name == "endpoints"
+			return expand_endpoints(body)
+		return body
+
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "endpoints"
+			return validate_endpoints(body)
+		return ""
+
+	string get_keywords()
+		// NOTE: Avoid keywords that conflict with built-in namespaces (json, string, http, etc.)
+		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\", \"error\"]"
+
+// ============================================================================
+// ENDPOINTS BLOCK EXPANSION
+// ============================================================================
+
+functions:
+	string expand_endpoints(string body)
+		string result = ""
+		// Bridge functions (_http_respond, _http_redirect, _req_*, etc.) are declared in
+		// plugin.toml [bridge] with expand_strings = true and are imported automatically.
+		// No external: block needed — re-declaring them here would shadow the bridge ABI.
+
+		// Add response helpers
+		result = result + "functions:\n"
+		result = result + "\tstring jsonResponse(string data)\n"
+		result = result + "\t\treturn _http_respond(200, \"application/json\", data)\n\n"
+		result = result + "\tstring jsonResponseStatus(string data, integer status_code)\n"
+		result = result + "\t\treturn _http_respond(status_code, \"application/json\", data)\n\n"
+		result = result + "\tstring htmlResponse(string content)\n"
+		result = result + "\t\treturn _http_respond(200, \"text/html\", content)\n\n"
+		result = result + "\tstring redirectTo(string url)\n"
+		result = result + "\t\treturn _http_redirect(302, url)\n\n"
+		result = result + "\tstring redirectToStatus(string url, integer status_code)\n"
+		result = result + "\t\treturn _http_redirect(status_code, url)\n\n"
+		result = result + "\tstring notFound()\n"
+		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"Resource not found\\\"}}\")\n\n"
+		result = result + "\tstring __json_escape(string s)\n"
+		result = result + "\t\tstring r = s.replace(\"\\\\\", \"\\\\\\\\\")\n"
+		result = result + "\t\tr = r.replace(\"\\\"\", \"\\\\\\\"\")\n"
+		result = result + "\t\treturn r\n\n"
+		result = result + "\tstring notFoundMsg(string message)\n"
+		result = result + "\t\treturn _http_respond(404, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"NOT_FOUND\\\",\\\"message\\\":\\\"\" + __json_escape(message) + \"\\\"}}\")\n\n"
+		result = result + "\tstring badRequest(string message)\n"
+		result = result + "\t\treturn _http_respond(400, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"\" + __json_escape(message) + \"\\\"}}\")\n\n"
+		result = result + "\tstring unauthorized()\n"
+		result = result + "\t\treturn _http_respond(401, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"AUTH_ERROR\\\",\\\"message\\\":\\\"Authentication required\\\"}}\")\n\n"
+		result = result + "\tstring forbidden()\n"
+		result = result + "\t\treturn _http_respond(403, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"PERMISSION_DENIED\\\",\\\"message\\\":\\\"Access denied\\\"}}\")\n\n"
+		result = result + "\tstring httpHeader(string name, string value)\n"
+		result = result + "\t\treturn _http_set_header(name, value)\n\n"
+		result = result + "\tstring error(integer status_code, string message)\n"
+		result = result + "\t\treturn _http_respond(status_code, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"HTTP_ERROR\\\",\\\"message\\\":\\\"\" + __json_escape(message) + \"\\\"}}\")\n\n"
+		result = result + "\tstring redirect(string url, integer status_code)\n"
+		result = result + "\t\treturn _http_redirect(status_code, url)\n\n"
+		result = result + "\tstring httpStatus(integer code, string body)\n"
+		result = result + "\t\treturn _http_respond(code, \"application/json\", body)\n\n"
+		result = result + "\tstring render(string name)\n"
+		result = result + "\t\treturn _ui_render_page(name, \"{}\")\n\n"
+		result = result + "\tstring renderWith(string name, string data)\n"
+		result = result + "\t\treturn _ui_render_page(name, data)\n\n"
+
+		// Parse endpoints - find methods and paths
+		string remaining = body
+		integer handler_idx = 0
+		boolean keep_going = true
+		string route_calls = ""
+
+		while handler_idx < 30 and keep_going
+			// Find method positions — support "GET/", "GET /", and "GET \"" (quoted paths)
+			integer get_pos = find_method_pos(remaining, "GET")
+			integer post_pos = find_method_pos(remaining, "POST")
+			integer put_pos = find_method_pos(remaining, "PUT")
+			integer delete_pos = find_method_pos(remaining, "DELETE")
+			integer patch_pos = find_method_pos(remaining, "PATCH")
+
+			// Find earliest valid position
+			integer method_pos = -1
+			string method = ""
+
+			if get_pos >= 0 and (method_pos == -1 or get_pos < method_pos)
+				method_pos = get_pos
+				method = "GET"
+			if post_pos >= 0 and (method_pos == -1 or post_pos < method_pos)
+				method_pos = post_pos
+				method = "POST"
+			if put_pos >= 0 and (method_pos == -1 or put_pos < method_pos)
+				method_pos = put_pos
+				method = "PUT"
+			if delete_pos >= 0 and (method_pos == -1 or delete_pos < method_pos)
+				method_pos = delete_pos
+				method = "DELETE"
+			if patch_pos >= 0 and (method_pos == -1 or patch_pos < method_pos)
+				method_pos = patch_pos
+				method = "PATCH"
+
+			if method_pos == -1
+				keep_going = false
+			else
+				// Get substring from method position
+				string from_method = remaining.substring(method_pos, remaining.length())
+
+				// path_start: method.length() if no space, method.length()+1 if space
+				integer path_start = method.length()
+				string char_after = from_method.substring(method.length(), method.length() + 1)
+				if char_after == " "
+					path_start = method.length() + 1
+				string after_method = from_method.substring(path_start, from_method.length())
+
+				// Find the colon that terminates the path (before newline)
+				// NOTE: use indexOf (not lastIndexOf) — lastIndexOf causes infinite loop in WASM runtime
+				// Search for '" :' or '":' to skip colons inside path params like :id
+				integer nl_pos = after_method.indexOf("\n")
+				if nl_pos == -1
+					nl_pos = after_method.length()
+				string first_line = after_method.substring(0, nl_pos)
+				integer colon_pos = first_line.indexOf("\" :")
+				if colon_pos >= 0
+					colon_pos = colon_pos + 2
+				if colon_pos == -1
+					integer qc = first_line.indexOf("\":")
+					if qc >= 0
+						colon_pos = qc + 1
+				if colon_pos == -1
+					colon_pos = first_line.indexOf(":")
+				if colon_pos == -1
+					colon_pos = first_line.length()
+
+				integer abs_colon = path_start + colon_pos
+
+				if colon_pos == -1 or colon_pos == first_line.length()
+					keep_going = false
+				else
+					// Extract and clean path
+					string raw_path = first_line.substring(0, colon_pos).trim()
+					// Strip quotes if present (support both quoted and unquoted)
+					string path = raw_path
+					if path.startsWith("\"")
+						path = path.substring(1, path.length())
+					if path.endsWith("\"")
+						path = path.substring(0, path.length() - 1)
+
+					// Find handle: block and extract code
+					string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
+					string handler_code = extract_handle_code(endpoint_body)
+
+					// Generate handler function
+					result = result + "\tstring __route_handler_" + handler_idx.toString() + "()\n"
+					if handler_code.length() > 0
+						result = result + handler_code
+					else
+						result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
+					result = result + "\n"
+
+					// Collect route registration call for start block
+					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
+
+					handler_idx = handler_idx + 1
+
+					// Advance remaining past this endpoint
+					remaining = from_method.substring(abs_colon + 1, from_method.length())
+
+		result = result + "start:\n"
+		result = result + route_calls
+		result = result + "\tprintl(\"Registered " + handler_idx.toString() + " routes\")\n"
+		return result
+
+	integer find_method_pos(string text, string method)
+		return text.indexOf(method + " \"")
+
+	string extract_handle_code(string endpoint_body)
+		// Simplified handler extraction — avoids transform functions that crash in WASM
+		string result = ""
+
+		// Find handle: block
+		integer handle_pos = endpoint_body.indexOf("handle :")
+		integer handle_skip = 8
+		if handle_pos == -1
+			handle_pos = endpoint_body.indexOf("handle:")
+			handle_skip = 7
+
+		string after_handle = ""
+		if handle_pos == -1
+			after_handle = endpoint_body
+		else
+			after_handle = endpoint_body.substring(handle_pos + handle_skip, endpoint_body.length())
+
+		// Find where this handler ends (next endpoint or end of input)
+		integer end_pos = after_handle.length()
+		integer next_get = find_method_pos(after_handle, "GET")
+		integer next_post = find_method_pos(after_handle, "POST")
+		integer next_put = find_method_pos(after_handle, "PUT")
+		integer next_delete = find_method_pos(after_handle, "DELETE")
+		integer next_patch = find_method_pos(after_handle, "PATCH")
+
+		if next_get >= 0 and next_get < end_pos
+			end_pos = next_get
+		if next_post >= 0 and next_post < end_pos
+			end_pos = next_post
+		if next_put >= 0 and next_put < end_pos
+			end_pos = next_put
+		if next_delete >= 0 and next_delete < end_pos
+			end_pos = next_delete
+		if next_patch >= 0 and next_patch < end_pos
+			end_pos = next_patch
+
+		string handler_code = after_handle.substring(0, end_pos)
+
+		// First pass: find minimum tab depth among non-empty lines (base indent to strip)
+		integer min_tabs = 99
+		string scan = handler_code
+		integer scan_safety = 0
+		while scan_safety < 200 and scan.length() > 0
+			scan_safety = scan_safety + 1
+			integer snl = scan.indexOf("\n")
+			string sline = ""
+			if snl == -1
+				sline = scan
+				scan = ""
+			else
+				sline = scan.substring(0, snl)
+				scan = scan.substring(snl + 1, scan.length())
+			if sline.trim().length() > 0
+				integer tabs = 0
+				while tabs < sline.length() and sline.substring(tabs, tabs + 1) == "\t"
+					tabs = tabs + 1
+				if tabs < min_tabs
+					min_tabs = tabs
+		if min_tabs == 99
+			min_tabs = 0
+
+		// Second pass: preserve relative indentation (base → \t\t, sub-levels add one tab each)
+		string remaining = handler_code
+		integer safety = 0
+		while safety < 200 and remaining.length() > 0
+			safety = safety + 1
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				integer orig_tabs = 0
+				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
+					orig_tabs = orig_tabs + 1
+				integer rel_depth = orig_tabs - min_tabs
+				string indent = "\t\t"
+				integer d = 0
+				while d < rel_depth
+					indent = indent + "\t"
+					d = d + 1
+				result = result + indent + trimmed + "\n"
+
+		return result
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+functions:
+	string validate_endpoints(string body)
+		if body.trim().length() == 0
+			return "endpoints: block is empty"
+
+		string remaining = body
+		integer safety = 0
+
+		while safety < 500 and remaining.length() > 0
+			safety = safety + 1
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			string trimmed = line.trim()
+
+			// Item 7 — middleware: must be followed by a valid function name (alphanumeric/underscore only)
+			integer mw_pos = trimmed.indexOf("middleware:")
+			if mw_pos != -1
+				string after_mw = trimmed.substring(mw_pos + 11, trimmed.length()).trim()
+				boolean mw_valid = after_mw.length() > 0
+				if mw_valid
+					integer ci = 0
+					while ci < after_mw.length()
+						string ch = after_mw.substring(ci, ci + 1)
+						boolean is_alpha = ch >= "a" and ch <= "z"
+						boolean is_upper = ch >= "A" and ch <= "Z"
+						boolean is_digit = ch >= "0" and ch <= "9"
+						boolean is_under = ch == "_"
+						if not (is_alpha or is_upper or is_digit or is_under)
+							mw_valid = false
+						ci = ci + 1
+				if not mw_valid
+					return "endpoints: middleware: must be a function name"
+
+			// Item 8 — cache: value validation
+			integer cache_pos = trimmed.indexOf("cache:")
+			if cache_pos != -1
+				string after_cache = trimmed.substring(cache_pos + 6, trimmed.length()).trim()
+				// If nothing on same line, peek at the next non-empty line
+				if after_cache.length() == 0
+					string peek = remaining
+					integer peek_safety = 0
+					while peek_safety < 20 and peek.length() > 0
+						peek_safety = peek_safety + 1
+						integer pnl = peek.indexOf("\n")
+						string pline = ""
+						if pnl == -1
+							pline = peek
+							peek = ""
+						else
+							pline = peek.substring(0, pnl)
+							peek = peek.substring(pnl + 1, peek.length())
+						string ptrimmed = pline.trim()
+						if ptrimmed.length() > 0
+							// Only accept if more indented than cache: line (sub-value)
+							integer cache_indent = 0
+							while cache_indent < line.length() and line.substring(cache_indent, cache_indent + 1) == "\t"
+								cache_indent = cache_indent + 1
+							integer pline_indent = 0
+							while pline_indent < pline.length() and pline.substring(pline_indent, pline_indent + 1) == "\t"
+								pline_indent = pline_indent + 1
+							if pline_indent > cache_indent
+								after_cache = ptrimmed
+							peek = ""
+
+				if after_cache.length() > 0
+					// Strip surrounding quotes for quoted forms
+					string cache_val = after_cache
+					boolean is_quoted = cache_val.startsWith("\"") and cache_val.endsWith("\"")
+					if is_quoted
+						cache_val = cache_val.substring(1, cache_val.length() - 1)
+
+					boolean cache_ok = false
+
+					// Plain integer check (all digits)
+					if not is_quoted
+						boolean all_digits = cache_val.length() > 0
+						integer di = 0
+						while di < cache_val.length()
+							string dch = cache_val.substring(di, di + 1)
+							if dch < "0" or dch > "9"
+								all_digits = false
+							di = di + 1
+						if all_digits
+							cache_ok = true
+
+					// Quoted keyword forms: "no-store", "no-cache", "public", "private"
+					if is_quoted and cache_val == "no-store"
+						cache_ok = true
+					if is_quoted and cache_val == "no-cache"
+						cache_ok = true
+					if is_quoted and cache_val == "public"
+						cache_ok = true
+					if is_quoted and cache_val == "private"
+						cache_ok = true
+
+					// Quoted duration forms: Nd, Nh, Nm (one or more digits + d/h/m)
+					if is_quoted and not cache_ok and cache_val.length() >= 2
+						string last_char = cache_val.substring(cache_val.length() - 1, cache_val.length())
+						boolean valid_suffix = last_char == "d" or last_char == "h" or last_char == "m"
+						if valid_suffix
+							string num_part = cache_val.substring(0, cache_val.length() - 1)
+							boolean num_digits = num_part.length() > 0
+							integer ni = 0
+							while ni < num_part.length()
+								string nch = num_part.substring(ni, ni + 1)
+								if nch < "0" or nch > "9"
+									num_digits = false
+								ni = ni + 1
+							if num_digits
+								cache_ok = true
+
+					if not cache_ok
+						return "endpoints: invalid cache value \"" + after_cache + "\" — use an integer (seconds), \"Nm\"/\"Nh\"/\"Nd\", or \"no-store\""
+
+		// Item 3 — guard: block must contain a recognizable directive
+		string guard_scan = body
+		integer gsafety = 0
+
+		while gsafety < 500 and guard_scan.length() > 0
+			gsafety = gsafety + 1
+			integer gnl = guard_scan.indexOf("\n")
+			string gline = ""
+			if gnl == -1
+				gline = guard_scan
+				guard_scan = ""
+			else
+				gline = guard_scan.substring(0, gnl)
+				guard_scan = guard_scan.substring(gnl + 1, guard_scan.length())
+
+			string gtrimmed = gline.trim()
+			if gtrimmed == "guard:" or gtrimmed == "guard :"
+				// Collect the indented block that follows
+				integer guard_indent = 0
+				while guard_indent < gline.length() and gline.substring(guard_indent, guard_indent + 1) == "\t"
+					guard_indent = guard_indent + 1
+
+				string block_content = ""
+				string block_scan = guard_scan
+				integer bsafety = 0
+				while bsafety < 50 and block_scan.length() > 0
+					bsafety = bsafety + 1
+					integer bnl = block_scan.indexOf("\n")
+					string bline = ""
+					if bnl == -1
+						bline = block_scan
+						block_scan = ""
+					else
+						bline = block_scan.substring(0, bnl)
+						block_scan = block_scan.substring(bnl + 1, block_scan.length())
+					if bline.trim().length() == 0
+						block_content = block_content + "\n"
+					else
+						integer bindent = 0
+						while bindent < bline.length() and bline.substring(bindent, bindent + 1) == "\t"
+							bindent = bindent + 1
+						if bindent > guard_indent
+							block_content = block_content + bline + "\n"
+						else
+							block_scan = ""
+
+				boolean has_directive = false
+				if block_content.indexOf("role:") != -1
+					has_directive = true
+				if block_content.indexOf("permission:") != -1
+					has_directive = true
+				if block_content.indexOf("authenticated") != -1
+					has_directive = true
+				if block_content.indexOf("any") != -1
+					has_directive = true
+
+				if not has_directive
+					return "endpoints: guard: block must specify role:, permission:, or authenticated"
+
+		return ""

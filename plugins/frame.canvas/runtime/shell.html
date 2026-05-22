@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Clean Canvas Application</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1a2e;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    }
+
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #canvas-container canvas {
+      background: #16213e;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Loading screen */
+    #loading {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a2e;
+      color: #e94560;
+      font-size: 24px;
+      z-index: 1000;
+      transition: opacity 0.5s ease;
+    }
+
+    #loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #loading .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #16213e;
+      border-top-color: #e94560;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #loading .progress-bar {
+      width: 200px;
+      height: 4px;
+      background: #16213e;
+      border-radius: 2px;
+      margin-top: 20px;
+      overflow: hidden;
+    }
+
+    #loading .progress-bar .fill {
+      height: 100%;
+      background: #e94560;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* Error screen */
+    #error {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a2e;
+      color: #ff6b6b;
+      padding: 20px;
+      text-align: center;
+      z-index: 1001;
+    }
+
+    #error.visible {
+      display: flex;
+    }
+
+    #error h1 {
+      font-size: 32px;
+      margin-bottom: 20px;
+    }
+
+    #error p {
+      font-size: 16px;
+      color: #a0a0a0;
+      max-width: 500px;
+      line-height: 1.6;
+    }
+
+    #error button {
+      margin-top: 30px;
+      padding: 12px 30px;
+      font-size: 16px;
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    #error button:hover {
+      background: #ff6b6b;
+    }
+
+    /* Controls overlay */
+    #controls {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      gap: 8px;
+      z-index: 100;
+    }
+
+    #controls button {
+      padding: 8px 16px;
+      background: rgba(0, 0, 0, 0.5);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s ease;
+    }
+
+    #controls button:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    /* FPS counter */
+    #fps {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: #4ecdc4;
+      font-size: 14px;
+      font-family: monospace;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    /* Fullscreen styles */
+    :fullscreen #canvas-container,
+    :-webkit-full-screen #canvas-container {
+      background: #000;
+    }
+
+    :fullscreen canvas,
+    :-webkit-full-screen canvas {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <span>Loading...</span>
+    <div class="progress-bar">
+      <div class="fill" id="progress-fill"></div>
+    </div>
+  </div>
+
+  <!-- Error Screen -->
+  <div id="error">
+    <h1>Failed to Load</h1>
+    <p id="error-message">An error occurred while loading the application.</p>
+    <button onclick="location.reload()">Retry</button>
+  </div>
+
+  <!-- FPS Counter -->
+  <div id="fps">FPS: --</div>
+
+  <!-- Controls -->
+  <div id="controls">
+    <button id="btn-pause">Pause</button>
+    <button id="btn-mute">Mute</button>
+    <button id="btn-fullscreen">Fullscreen</button>
+  </div>
+
+  <!-- Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Scripts -->
+  <script src="canvas-bridge.js"></script>
+  <script src="loader.js"></script>
+  <script>
+    // Configuration - can be overridden by query parameters
+    const config = {
+      wasmPath: getQueryParam('wasm') || 'app.wasm',
+      showFps: getQueryParam('fps') !== 'false',
+      showControls: getQueryParam('controls') !== 'false',
+      autoStart: getQueryParam('autostart') !== 'false'
+    };
+
+    // Get query parameter
+    function getQueryParam(name) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(name);
+    }
+
+    // DOM elements
+    const loadingEl = document.getElementById('loading');
+    const progressFill = document.getElementById('progress-fill');
+    const errorEl = document.getElementById('error');
+    const errorMessage = document.getElementById('error-message');
+    const fpsEl = document.getElementById('fps');
+    const controlsEl = document.getElementById('controls');
+    const btnPause = document.getElementById('btn-pause');
+    const btnMute = document.getElementById('btn-mute');
+    const btnFullscreen = document.getElementById('btn-fullscreen');
+
+    // Hide FPS if disabled
+    if (!config.showFps) {
+      fpsEl.style.display = 'none';
+    }
+
+    // Hide controls if disabled
+    if (!config.showControls) {
+      controlsEl.style.display = 'none';
+    }
+
+    // Application instance
+    let app = null;
+
+    // Load the application
+    async function loadApp() {
+      try {
+        // Simulate loading progress
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          progress = Math.min(progress + Math.random() * 10, 90);
+          progressFill.style.width = progress + '%';
+        }, 100);
+
+        // Load WASM
+        app = await CleanCanvas.load(config.wasmPath, {
+          autoStart: config.autoStart
+        });
+
+        // Complete loading
+        clearInterval(progressInterval);
+        progressFill.style.width = '100%';
+
+        // Hide loading screen
+        setTimeout(() => {
+          loadingEl.classList.add('hidden');
+        }, 500);
+
+        // Setup FPS counter
+        if (config.showFps) {
+          setInterval(() => {
+            fpsEl.textContent = `FPS: ${app.getFPS()}`;
+          }, 500);
+        }
+
+        // Setup controls
+        setupControls();
+
+        console.log('[Shell] Application loaded successfully');
+
+      } catch (error) {
+        console.error('[Shell] Error loading application:', error);
+        loadingEl.classList.add('hidden');
+        errorMessage.textContent = error.message || 'Failed to load the application.';
+        errorEl.classList.add('visible');
+      }
+    }
+
+    // Setup control buttons
+    function setupControls() {
+      // Pause button
+      btnPause.addEventListener('click', () => {
+        app.togglePause();
+        btnPause.textContent = app.paused ? 'Resume' : 'Pause';
+      });
+
+      // Mute button
+      btnMute.addEventListener('click', () => {
+        app.toggleMute();
+        btnMute.textContent = app.canvas.isMuted ? 'Unmute' : 'Mute';
+      });
+
+      // Fullscreen button
+      btnFullscreen.addEventListener('click', () => {
+        const container = document.getElementById('canvas-container');
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+          btnFullscreen.textContent = 'Fullscreen';
+        } else {
+          container.requestFullscreen().catch(err => {
+            console.warn('Fullscreen request failed:', err);
+          });
+          btnFullscreen.textContent = 'Exit Fullscreen';
+        }
+      });
+
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'p' || e.key === 'P') {
+          app.togglePause();
+          btnPause.textContent = app.paused ? 'Resume' : 'Pause';
+        } else if (e.key === 'm' || e.key === 'M') {
+          app.toggleMute();
+          btnMute.textContent = app.canvas.isMuted ? 'Unmute' : 'Mute';
+        } else if (e.key === 'f' || e.key === 'F') {
+          btnFullscreen.click();
+        }
+      });
+
+      // Update fullscreen button on fullscreen change
+      document.addEventListener('fullscreenchange', () => {
+        btnFullscreen.textContent = document.fullscreenElement ? 'Exit Fullscreen' : 'Fullscreen';
+      });
+    }
+
+    // Start loading
+    loadApp();
+  </script>
+</body>
+</html>

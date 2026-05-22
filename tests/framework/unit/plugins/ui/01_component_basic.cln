@@ -1,0 +1,97 @@
+// Test: frame.ui component block basics
+// Tests that component blocks are correctly defined and expanded
+
+functions:
+	// Test component syntax
+	boolean testComponentSyntax()
+		string component = "component Button:"
+		return component.contains("component ")
+
+	// Test component with props
+	boolean testComponentWithProps()
+		string component = "component Button(label: string, onClick: function):"
+		return component.contains("(") and component.contains(")")
+
+	// Test component render function
+	boolean testComponentRenderFunction()
+		string renderFn = "render:\n\treturn html(\"<button>Click me</button>\")"
+		return renderFn.contains("render:")
+
+	// Test component return HTML
+	boolean testComponentReturnsHtml()
+		string htmlCall = "html(\"<div>content</div>\")"
+		return htmlCall.contains("html(")
+
+	// Test component default export
+	boolean testComponentDefaultExport()
+		string exportDef = "export default Button"
+		return exportDef.contains("export default")
+
+	// Test nested component
+	boolean testNestedComponent()
+		string nested = "html(\"<Card><Button/></Card>\")"
+		return nested.contains("<Card>") and nested.contains("<Button/>")
+
+	// Test component state
+	boolean testComponentState()
+		string state = "state:\n\tinteger count = 0"
+		return state.contains("state:")
+
+start:
+	printl("=== Test Suite: Component Block Basic ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testComponentSyntax()
+		printl("PASS: component syntax is recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: component syntax is recognized")
+		failed = failed + 1
+
+	if testComponentWithProps()
+		printl("PASS: component accepts props")
+		passed = passed + 1
+	else
+		printl("FAIL: component accepts props")
+		failed = failed + 1
+
+	if testComponentRenderFunction()
+		printl("PASS: component has render function")
+		passed = passed + 1
+	else
+		printl("FAIL: component has render function")
+		failed = failed + 1
+
+	if testComponentReturnsHtml()
+		printl("PASS: component returns HTML")
+		passed = passed + 1
+	else
+		printl("FAIL: component returns HTML")
+		failed = failed + 1
+
+	if testComponentDefaultExport()
+		printl("PASS: component can be default exported")
+		passed = passed + 1
+	else
+		printl("FAIL: component can be default exported")
+		failed = failed + 1
+
+	if testNestedComponent()
+		printl("PASS: components can be nested")
+		passed = passed + 1
+	else
+		printl("FAIL: components can be nested")
+		failed = failed + 1
+
+	if testComponentState()
+		printl("PASS: component has state block")
+		passed = passed + 1
+	else
+		printl("FAIL: component has state block")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

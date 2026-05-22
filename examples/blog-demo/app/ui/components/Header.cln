@@ -1,0 +1,15 @@
+// Header component
+// Tag: <blog-header>
+
+component: tag="blog-header"
+	html:
+		<header class="site-header">
+			<nav>
+				<a href="/" class="logo">Blog Demo</a>
+				<div class="nav-links">
+					<a href="/">Home</a>
+					<a href="/blog">Blog</a>
+					<a href="/about">About</a>
+				</div>
+			</nav>
+		</header>

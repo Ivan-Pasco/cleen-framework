@@ -1,0 +1,9 @@
+// UserBadge Component
+// Displays a user avatar and name
+
+component: tag="user-badge"
+	html:
+		<div class="user-badge">
+			<img src="/images/default-avatar.png" alt="" class="avatar">
+			<span class="name">User</span>
+		</div>

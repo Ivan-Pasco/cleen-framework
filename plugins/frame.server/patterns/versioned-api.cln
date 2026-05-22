@@ -1,0 +1,60 @@
+// Pattern: versioned-api
+// Use when: building a public or partner-facing API that must stay stable
+// Anti-pattern: DON'T put routes at unversioned paths like GET "/users".
+//   The moment you need a breaking change (rename a field, change a status code,
+//   drop a parameter) you break every client. Prefix all public routes with
+//   /v1/ from day one. Adding /v2/ later is trivial; retrofitting it is not.
+
+plugins:
+	frame.server
+
+// v1 — original contract, must never change shape while clients depend on it
+endpoints:
+	GET "/v1/users/:id":
+		let id = req.params.id
+		return json({
+			"id" to id,
+			"name" to "Alice",
+			"email" to "alice@example.com"
+		})
+
+	POST "/v1/users":
+		let body = req.json(CreateUserV1)
+		// v1 only has name + email
+		return json({
+			"id" to "new-123",
+			"name" to body.name,
+			"email" to body.email
+		})
+
+// v2 — breaking change: profile_url added, name split into first_name/last_name
+// v1 stays untouched so existing clients keep working
+endpoints:
+	GET "/v2/users/:id":
+		let id = req.params.id
+		return json({
+			"id" to id,
+			"first_name" to "Alice",
+			"last_name" to "Smith",
+			"email" to "alice@example.com",
+			"profile_url" to "/profiles/alice"
+		})
+
+	POST "/v2/users":
+		let body = req.json(CreateUserV2)
+		return json({
+			"id" to "new-124",
+			"first_name" to body.first_name,
+			"last_name" to body.last_name,
+			"email" to body.email
+		})
+
+// Deprecation pattern: v1 still works but sends a header warning clients to upgrade
+middleware DeprecationWarning
+	functions:
+		Request handle(Request req)
+			if req.path().startsWith("/v1/")
+				_http_set_header("Deprecation", "true")
+				_http_set_header("Sunset", "2027-01-01")
+				_http_set_header("Link", "</v2/docs>; rel=successor-version")
+			return req

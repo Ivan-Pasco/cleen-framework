@@ -1,0 +1,15 @@
+// Database Schema - Task Management Application
+// Model definitions
+
+functions:
+	string getUserSchema()
+		return "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT UNIQUE NOT NULL, name TEXT)"
+
+	string getProjectSchema()
+		return "CREATE TABLE IF NOT EXISTS projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT)"
+
+	string getTaskSchema()
+		return "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT, status TEXT DEFAULT 'pending', project_id INTEGER, assignee_id INTEGER)"
+
+start:
+	printl("Schema definitions loaded")

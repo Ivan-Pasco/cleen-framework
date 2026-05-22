@@ -1,0 +1,13 @@
+// Registration Form Example
+// A complete frontend example using Frame Framework plugins
+
+plugins:
+	frame.ui
+	frame.server
+
+config:
+	name: "Registration Form"
+	version: "1.0.0"
+
+server port=3000:
+	static: "./public"

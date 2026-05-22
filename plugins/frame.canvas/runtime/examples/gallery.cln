@@ -1,0 +1,221 @@
+// Orbital Gallery - Clean Language Canvas Demo
+// 6 photo cards fetched from picsum.photos orbit a glowing nebula core.
+// Click anywhere to trigger a burst that sends all cards flying outward.
+
+plugins:
+	frame.canvas
+
+functions:
+	void start()
+		integer canvas = _canvas_init(800, 600, "gallery")
+		integer s1 = _canvas_var_set("time", 0.0)
+		integer s2 = _canvas_var_set("burst", 0.0)
+		integer fr = _canvas_request_frame(canvas)
+
+	void _frame_callback(integer canvas)
+		number dt = _canvas_get_delta_time()
+		number t = _canvas_var_get("time", 0.0) + dt
+		integer sv = _canvas_var_set("time", t)
+		number burst = _canvas_var_get("burst", 0.0)
+		number newBurst = burst * 0.92
+		integer sb = _canvas_var_set("burst", newBurst)
+
+		// Background
+		integer bg = _canvas_clear_color(canvas, "#040412")
+
+		// Stars (fixed positions — scattered background dots)
+		integer ds = drawStars(canvas)
+
+		// Nebula glow at center
+		integer dn = drawNebula(canvas, t)
+
+		// Orbit outlines (faint elliptical guides)
+		integer oo1 = _canvas_circle_outline(canvas, 400.0, 300.0, 130.0, "#ffffff0a")
+		integer oo2 = _canvas_circle_outline(canvas, 400.0, 300.0, 170.0, "#0033ff0a")
+		integer oo3 = _canvas_circle_outline(canvas, 400.0, 300.0, 210.0, "#ffffff0a")
+		integer oo4 = _canvas_circle_outline(canvas, 400.0, 300.0, 150.0, "#0033ff0a")
+		integer oo5 = _canvas_circle_outline(canvas, 400.0, 300.0, 190.0, "#ffffff0a")
+		integer oo6 = _canvas_circle_outline(canvas, 400.0, 300.0, 230.0, "#0033ff0a")
+
+		// Draw all 6 orbital photo cards
+		integer d1 = drawCard1(canvas, t, newBurst)
+		integer d2 = drawCard2(canvas, t, newBurst)
+		integer d3 = drawCard3(canvas, t, newBurst)
+		integer d4 = drawCard4(canvas, t, newBurst)
+		integer d5 = drawCard5(canvas, t, newBurst)
+		integer d6 = drawCard6(canvas, t, newBurst)
+
+		// Title overlay
+		integer ttl = _canvas_text(canvas, "Orbital Gallery", 8.0, 20.0, 14.0, "#334466")
+
+		integer fr = _canvas_request_frame(canvas)
+
+	// ---------------------------------------------------------------------------
+	// Nebula glow — 5 large faint circles + bright core, pulsing with time
+	// ---------------------------------------------------------------------------
+	integer drawNebula(integer canvas, number t)
+		number pulse = 1.0 + math.sin(t * 0.7) * 0.15
+		integer g5 = _canvas_circle_filled(canvas, 400.0, 300.0, 230.0 * pulse, "#0000ff0d")
+		integer g4 = _canvas_circle_filled(canvas, 400.0, 300.0, 160.0 * pulse, "#0022ff15")
+		integer g3 = _canvas_circle_filled(canvas, 400.0, 300.0, 110.0 * pulse, "#2244ff20")
+		integer g2 = _canvas_circle_filled(canvas, 400.0, 300.0, 70.0 * pulse, "#4466ff2a")
+		integer g1 = _canvas_circle_filled(canvas, 400.0, 300.0, 40.0 * pulse, "#6688ffaa")
+		integer core = _canvas_circle_filled(canvas, 400.0, 300.0, 12.0, "#aabbff")
+		integer ccore = _canvas_circle_filled(canvas, 400.0, 300.0, 5.0, "#ffffff")
+		return ccore
+
+	// ---------------------------------------------------------------------------
+	// Stars — 18 fixed small dots scattered across the canvas
+	// ---------------------------------------------------------------------------
+	integer drawStars(integer canvas)
+		integer s01 = _canvas_circle_filled(canvas, 42.0, 87.0, 1.5, "#ffffff44")
+		integer s02 = _canvas_circle_filled(canvas, 118.0, 33.0, 1.0, "#ffffff55")
+		integer s03 = _canvas_circle_filled(canvas, 203.0, 511.0, 1.5, "#ffffff33")
+		integer s04 = _canvas_circle_filled(canvas, 67.0, 244.0, 1.0, "#ffffff44")
+		integer s05 = _canvas_circle_filled(canvas, 345.0, 47.0, 1.5, "#ffffff55")
+		integer s06 = _canvas_circle_filled(canvas, 527.0, 19.0, 1.0, "#ffffff44")
+		integer s07 = _canvas_circle_filled(canvas, 612.0, 83.0, 1.5, "#ffffff33")
+		integer s08 = _canvas_circle_filled(canvas, 731.0, 142.0, 1.0, "#ffffff55")
+		integer s09 = _canvas_circle_filled(canvas, 776.0, 271.0, 1.5, "#ffffff44")
+		integer s10 = _canvas_circle_filled(canvas, 758.0, 419.0, 1.0, "#ffffff33")
+		integer s11 = _canvas_circle_filled(canvas, 689.0, 543.0, 1.5, "#ffffff55")
+		integer s12 = _canvas_circle_filled(canvas, 524.0, 578.0, 1.0, "#ffffff44")
+		integer s13 = _canvas_circle_filled(canvas, 183.0, 562.0, 1.5, "#ffffff33")
+		integer s14 = _canvas_circle_filled(canvas, 89.0, 411.0, 1.0, "#ffffff55")
+		integer s15 = _canvas_circle_filled(canvas, 154.0, 176.0, 1.5, "#ffffff44")
+		integer s16 = _canvas_circle_filled(canvas, 461.0, 532.0, 1.0, "#ffffff33")
+		integer s17 = _canvas_circle_filled(canvas, 38.0, 329.0, 1.5, "#ffffff55")
+		integer s18 = _canvas_circle_filled(canvas, 712.0, 377.0, 1.0, "#ffffff44")
+		return s18
+
+	// ---------------------------------------------------------------------------
+	// Card 1 — alpine, orbit_r=130, speed=0.40, phase=0.0, tilt=12deg=0.20944rad
+	// ---------------------------------------------------------------------------
+	integer drawCard1(integer canvas, number t, number burst)
+		number orbitAngle = t * 0.40 + 0.0
+		number r = 130.0 + burst * 120.0
+		number cx = 400.0
+		number cy = 300.0
+		number px = cx + math.cos(orbitAngle) * r
+		number py = cy + math.sin(orbitAngle) * r * 0.7
+		integer sh = _canvas_circle_filled(canvas, px + 4.0, py + 4.0, 42.0, "#00000066")
+		integer sv = _canvas_save(canvas)
+		integer tr = _canvas_translate(canvas, px, py)
+		integer ro = _canvas_rotate(canvas, 0.20944)
+		integer bg = _canvas_rect_filled(canvas, -32.0, -32.0, 64.0, 64.0, "#111133")
+		integer im = _canvas_image(canvas, "https://picsum.photos/seed/alpine/120/120", -30.0, -30.0, 60.0, 60.0)
+		integer bd = _canvas_rect_outline(canvas, -32.0, -32.0, 64.0, 64.0, "#4466aa")
+		integer rs = _canvas_restore(canvas)
+		integer lbl = _canvas_text(canvas, "alpine", px - 18.0, py + 46.0, 9.0, "#445577")
+		return rs
+
+	// ---------------------------------------------------------------------------
+	// Card 2 — coral, orbit_r=170, speed=0.30, phase=1.05, tilt=-18deg=-0.31416rad
+	// ---------------------------------------------------------------------------
+	integer drawCard2(integer canvas, number t, number burst)
+		number orbitAngle = t * 0.30 + 1.05
+		number r = 170.0 + burst * 120.0
+		number cx = 400.0
+		number cy = 300.0
+		number px = cx + math.cos(orbitAngle) * r
+		number py = cy + math.sin(orbitAngle) * r * 0.7
+		integer sh = _canvas_circle_filled(canvas, px + 4.0, py + 4.0, 42.0, "#00000066")
+		integer sv = _canvas_save(canvas)
+		integer tr = _canvas_translate(canvas, px, py)
+		integer ro = _canvas_rotate(canvas, -0.31416)
+		integer bg = _canvas_rect_filled(canvas, -32.0, -32.0, 64.0, 64.0, "#111133")
+		integer im = _canvas_image(canvas, "https://picsum.photos/seed/coral/120/120", -30.0, -30.0, 60.0, 60.0)
+		integer bd = _canvas_rect_outline(canvas, -32.0, -32.0, 64.0, 64.0, "#4466aa")
+		integer rs = _canvas_restore(canvas)
+		integer lbl = _canvas_text(canvas, "coral", px - 14.0, py + 46.0, 9.0, "#445577")
+		return rs
+
+	// ---------------------------------------------------------------------------
+	// Card 3 — cosmos, orbit_r=210, speed=0.22, phase=2.09, tilt=8deg=0.13963rad
+	// ---------------------------------------------------------------------------
+	integer drawCard3(integer canvas, number t, number burst)
+		number orbitAngle = t * 0.22 + 2.09
+		number r = 210.0 + burst * 120.0
+		number cx = 400.0
+		number cy = 300.0
+		number px = cx + math.cos(orbitAngle) * r
+		number py = cy + math.sin(orbitAngle) * r * 0.7
+		integer sh = _canvas_circle_filled(canvas, px + 4.0, py + 4.0, 42.0, "#00000066")
+		integer sv = _canvas_save(canvas)
+		integer tr = _canvas_translate(canvas, px, py)
+		integer ro = _canvas_rotate(canvas, 0.13963)
+		integer bg = _canvas_rect_filled(canvas, -32.0, -32.0, 64.0, 64.0, "#111133")
+		integer im = _canvas_image(canvas, "https://picsum.photos/seed/cosmos/120/120", -30.0, -30.0, 60.0, 60.0)
+		integer bd = _canvas_rect_outline(canvas, -32.0, -32.0, 64.0, 64.0, "#4466aa")
+		integer rs = _canvas_restore(canvas)
+		integer lbl = _canvas_text(canvas, "cosmos", px - 19.0, py + 46.0, 9.0, "#445577")
+		return rs
+
+	// ---------------------------------------------------------------------------
+	// Card 4 — rapids, orbit_r=150, speed=0.35, phase=3.14, tilt=-10deg=-0.17453rad
+	// ---------------------------------------------------------------------------
+	integer drawCard4(integer canvas, number t, number burst)
+		number orbitAngle = t * 0.35 + 3.14
+		number r = 150.0 + burst * 120.0
+		number cx = 400.0
+		number cy = 300.0
+		number px = cx + math.cos(orbitAngle) * r
+		number py = cy + math.sin(orbitAngle) * r * 0.7
+		integer sh = _canvas_circle_filled(canvas, px + 4.0, py + 4.0, 42.0, "#00000066")
+		integer sv = _canvas_save(canvas)
+		integer tr = _canvas_translate(canvas, px, py)
+		integer ro = _canvas_rotate(canvas, -0.17453)
+		integer bg = _canvas_rect_filled(canvas, -32.0, -32.0, 64.0, 64.0, "#111133")
+		integer im = _canvas_image(canvas, "https://picsum.photos/seed/rapids/120/120", -30.0, -30.0, 60.0, 60.0)
+		integer bd = _canvas_rect_outline(canvas, -32.0, -32.0, 64.0, 64.0, "#4466aa")
+		integer rs = _canvas_restore(canvas)
+		integer lbl = _canvas_text(canvas, "rapids", px - 17.0, py + 46.0, 9.0, "#445577")
+		return rs
+
+	// ---------------------------------------------------------------------------
+	// Card 5 — tokyo, orbit_r=190, speed=0.25, phase=4.19, tilt=15deg=0.26180rad
+	// ---------------------------------------------------------------------------
+	integer drawCard5(integer canvas, number t, number burst)
+		number orbitAngle = t * 0.25 + 4.19
+		number r = 190.0 + burst * 120.0
+		number cx = 400.0
+		number cy = 300.0
+		number px = cx + math.cos(orbitAngle) * r
+		number py = cy + math.sin(orbitAngle) * r * 0.7
+		integer sh = _canvas_circle_filled(canvas, px + 4.0, py + 4.0, 42.0, "#00000066")
+		integer sv = _canvas_save(canvas)
+		integer tr = _canvas_translate(canvas, px, py)
+		integer ro = _canvas_rotate(canvas, 0.26180)
+		integer bg = _canvas_rect_filled(canvas, -32.0, -32.0, 64.0, 64.0, "#111133")
+		integer im = _canvas_image(canvas, "https://picsum.photos/seed/tokyo/120/120", -30.0, -30.0, 60.0, 60.0)
+		integer bd = _canvas_rect_outline(canvas, -32.0, -32.0, 64.0, 64.0, "#4466aa")
+		integer rs = _canvas_restore(canvas)
+		integer lbl = _canvas_text(canvas, "tokyo", px - 14.0, py + 46.0, 9.0, "#445577")
+		return rs
+
+	// ---------------------------------------------------------------------------
+	// Card 6 — sahara, orbit_r=230, speed=0.18, phase=5.24, tilt=-6deg=-0.10472rad
+	// ---------------------------------------------------------------------------
+	integer drawCard6(integer canvas, number t, number burst)
+		number orbitAngle = t * 0.18 + 5.24
+		number r = 230.0 + burst * 120.0
+		number cx = 400.0
+		number cy = 300.0
+		number px = cx + math.cos(orbitAngle) * r
+		number py = cy + math.sin(orbitAngle) * r * 0.7
+		integer sh = _canvas_circle_filled(canvas, px + 4.0, py + 4.0, 42.0, "#00000066")
+		integer sv = _canvas_save(canvas)
+		integer tr = _canvas_translate(canvas, px, py)
+		integer ro = _canvas_rotate(canvas, -0.10472)
+		integer bg = _canvas_rect_filled(canvas, -32.0, -32.0, 64.0, 64.0, "#111133")
+		integer im = _canvas_image(canvas, "https://picsum.photos/seed/sahara/120/120", -30.0, -30.0, 60.0, 60.0)
+		integer bd = _canvas_rect_outline(canvas, -32.0, -32.0, 64.0, 64.0, "#4466aa")
+		integer rs = _canvas_restore(canvas)
+		integer lbl = _canvas_text(canvas, "sahara", px - 18.0, py + 46.0, 9.0, "#445577")
+		return rs
+
+	// ---------------------------------------------------------------------------
+	// Click handler — set burst to 1.0
+	// ---------------------------------------------------------------------------
+	void _on_pointer_down(integer canvas, number mx, number my)
+		integer sb = _canvas_var_set("burst", 1.0)

@@ -1,0 +1,10 @@
+// Admin stats endpoint
+// Route: GET /api/admin/stats
+
+functions:
+	string __route_handler_0()
+		return "{\"users\": 0, \"posts\": 0, \"comments\": 0}"
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/admin/stats", 0)

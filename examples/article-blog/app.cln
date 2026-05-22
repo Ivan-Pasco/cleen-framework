@@ -1,0 +1,381 @@
+// Article Blog - The Inkwell
+// A refined editorial magazine experience
+
+functions:
+	string __route_handler_0()
+		string html = "<!DOCTYPE html><html lang=\"en\"><head>"
+		html = html + "<meta charset=\"UTF-8\">"
+		html = html + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+		html = html + "<title>The Inkwell</title>"
+		html = html + "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">"
+		html = html + "<link href=\"https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&display=swap\" rel=\"stylesheet\">"
+		html = html + "<style>"
+		html = html + getCSS()
+		html = html + "</style></head><body>"
+		html = html + getHeader()
+		html = html + "<main>"
+		html = html + getHero()
+		html = html + "<section class=\"articles\">"
+		html = html + getArticleCards()
+		html = html + "</section>"
+		html = html + "</main>"
+		html = html + getFooter()
+		html = html + "</body></html>"
+		return html
+
+	string __route_handler_1()
+		return "[\{\"id\":1,\"title\":\"The Renaissance of Analog\"\}]"
+
+	string __route_handler_2()
+		string slug = _req_param("slug")
+		printl("DEBUG: Slug received: [" + slug + "]")
+		string html = "<!DOCTYPE html><html lang=\"en\"><head>"
+		html = html + "<meta charset=\"UTF-8\">"
+		html = html + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+		html = html + "<title>Article | The Inkwell</title>"
+		html = html + "<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">"
+		html = html + "<link href=\"https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@400;500;600&display=swap\" rel=\"stylesheet\">"
+		html = html + "<style>"
+		html = html + getCSS()
+		html = html + "</style></head><body>"
+		html = html + getHeader()
+		html = html + "<main>"
+		html = html + getArticleBySlug(slug)
+		html = html + "</main>"
+		html = html + getFooter()
+		html = html + "</body></html>"
+		return html
+
+	string getHeader()
+		string h = "<header>"
+		h = h + "<nav>"
+		h = h + "<a href=\"/\" class=\"logo\">The Inkwell</a>"
+		h = h + "<div class=\"nav-right\">"
+		h = h + "<a href=\"/\">Essays</a>"
+		h = h + "<a href=\"/\">Archive</a>"
+		h = h + "<a href=\"/\" class=\"subscribe\">Subscribe</a>"
+		h = h + "</div>"
+		h = h + "</nav>"
+		h = h + "</header>"
+		return h
+
+	string getHero()
+		string h = "<section class=\"hero\">"
+		h = h + "<span class=\"hero-label\">A Digital Literary Journal</span>"
+		h = h + "<h1>Thoughtful essays on culture, craft, and the art of living</h1>"
+		h = h + "<p class=\"hero-sub\">For the intellectually curious</p>"
+		h = h + "</section>"
+		return h
+
+	string getArticleCards()
+		string c = ""
+		c = c + "<article class=\"card featured\">"
+		c = c + "<a href=\"/articles/renaissance-of-analog\">"
+		c = c + "<div class=\"card-img\"><img src=\"https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=900&q=80\" alt=\"\"></div>"
+		c = c + "<div class=\"card-body\">"
+		c = c + "<span class=\"card-cat\">Culture</span>"
+		c = c + "<h2>The Renaissance of Analog</h2>"
+		c = c + "<p>In an age of infinite digital streams, a growing movement rediscovers the tactile joy of vinyl records and film photography.</p>"
+		c = c + "<div class=\"card-meta\"><span>Elena Marchetti</span><span>8 min</span></div>"
+		c = c + "</div></a></article>"
+		c = c + "<article class=\"card\">"
+		c = c + "<a href=\"/articles/designing-next-billion\">"
+		c = c + "<div class=\"card-img\"><img src=\"https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=600&q=80\" alt=\"\"></div>"
+		c = c + "<div class=\"card-body\">"
+		c = c + "<span class=\"card-cat\">Design</span>"
+		c = c + "<h2>Designing for the Next Billion</h2>"
+		c = c + "<p>How inclusive principles reshape technology for emerging markets.</p>"
+		c = c + "<div class=\"card-meta\"><span>Sofia Andersson</span><span>6 min</span></div>"
+		c = c + "</div></a></article>"
+		c = c + "<article class=\"card\">"
+		c = c + "<a href=\"/articles/battery-revolution\">"
+		c = c + "<div class=\"card-img\"><img src=\"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80\" alt=\"\"></div>"
+		c = c + "<div class=\"card-body\">"
+		c = c + "<span class=\"card-cat\">Technology</span>"
+		c = c + "<h2>The Quiet Revolution in Batteries</h2>"
+		c = c + "<p>Solid-state batteries promise transformation from EVs to grid storage.</p>"
+		c = c + "<div class=\"card-meta\"><span>James Chen</span><span>7 min</span></div>"
+		c = c + "</div></a></article>"
+		c = c + "<article class=\"card\">"
+		c = c + "<a href=\"/articles/architecture-solitude\">"
+		c = c + "<div class=\"card-img\"><img src=\"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&q=80\" alt=\"\"></div>"
+		c = c + "<div class=\"card-body\">"
+		c = c + "<span class=\"card-cat\">Architecture</span>"
+		c = c + "<h2>The Architecture of Solitude</h2>"
+		c = c + "<p>A meditation on spaces designed for one.</p>"
+		c = c + "<div class=\"card-meta\"><span>Elena Marchetti</span><span>5 min</span></div>"
+		c = c + "</div></a></article>"
+		return c
+
+	string getArticleBySlug(string slug)
+		// Use indexOf to check for substring match since == comparison has issues
+		if slug.indexOf("renaissance") != -1
+			return getArticleAnalog()
+		if slug.indexOf("designing") != -1
+			return getArticleDesign()
+		if slug.indexOf("battery") != -1
+			return getArticleBattery()
+		if slug.indexOf("architecture") != -1
+			return getArticleArchitecture()
+		return getArticle404()
+
+	string getArticleAnalog()
+		string h = "<article class=\"detail\">"
+		h = h + "<header class=\"detail-header\">"
+		h = h + "<span class=\"detail-cat\">Culture</span>"
+		h = h + "<h1>The Renaissance of Analog</h1>"
+		h = h + "<p class=\"detail-lead\">In an age of infinite digital streams, a growing movement rediscovers the tactile joy of vinyl records, film photography, and handwritten letters.</p>"
+		h = h + "<div class=\"detail-meta\">"
+		h = h + "<img src=\"https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&q=80\" alt=\"\" class=\"author-img\">"
+		h = h + "<div><strong>Elena Marchetti</strong><span>Senior Editor</span></div>"
+		h = h + "<span class=\"read-time\">8 min read</span>"
+		h = h + "</div></header>"
+		h = h + "<figure class=\"detail-cover\"><img src=\"https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=1200&q=80\" alt=\"\"></figure>"
+		h = h + "<div class=\"detail-content\">"
+		h = h + "<p>There is something happening in the cultural zeitgeist that feels both nostalgic and revolutionary. As our lives become increasingly mediated by screens and algorithms, a quiet rebellion is taking shape in living rooms, studios, and coffee shops around the world.</p>"
+		h = h + "<h2>The Vinyl Revival</h2>"
+		h = h + "<p>Record sales have surged for the sixteenth consecutive year, with vinyl now outselling CDs for the first time since 1987. But this is not mere nostalgia. It is a conscious choice to engage with music differently.</p>"
+		h = h + "<blockquote>When I put on a record, I am committing to an experience. There is no skipping, no shuffle. Just presence.</blockquote>"
+		h = h + "<p>The ritual matters. The careful removal from the sleeve, the gentle placement on the turntable, the satisfying click of the needle finding its groove. These physical interactions create a relationship with music that playlists simply cannot replicate.</p>"
+		h = h + "<h2>Film Photography Returns</h2>"
+		h = h + "<p>Similarly, film photography has experienced a renaissance among both hobbyists and professionals. The limitations of film have become features rather than bugs. Every click of the shutter becomes a decision, not just a reflex.</p>"
+		h = h + "</div>"
+		h = h + "<footer class=\"detail-footer\"><a href=\"/\">Back to essays</a></footer>"
+		h = h + "</article>"
+		return h
+
+	string getArticleDesign()
+		string h = "<article class=\"detail\">"
+		h = h + "<header class=\"detail-header\">"
+		h = h + "<span class=\"detail-cat\">Design</span>"
+		h = h + "<h1>Designing for the Next Billion</h1>"
+		h = h + "<p class=\"detail-lead\">How inclusive design principles are reshaping technology for emerging markets and underserved communities worldwide.</p>"
+		h = h + "<div class=\"detail-meta\">"
+		h = h + "<img src=\"https://images.unsplash.com/photo-1580489944761-15a19d654956?w=120&q=80\" alt=\"\" class=\"author-img\">"
+		h = h + "<div><strong>Sofia Andersson</strong><span>Design Lead</span></div>"
+		h = h + "<span class=\"read-time\">6 min read</span>"
+		h = h + "</div></header>"
+		h = h + "<figure class=\"detail-cover\"><img src=\"https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=1200&q=80\" alt=\"\"></figure>"
+		h = h + "<div class=\"detail-content\">"
+		h = h + "<p>The next billion internet users will come from places and circumstances very different from Silicon Valley. Designing for them requires a fundamental rethinking of our assumptions about connectivity, devices, and digital literacy.</p>"
+		h = h + "<h2>Beyond High-Speed Connectivity</h2>"
+		h = h + "<p>In many regions, 2G networks remain the norm. Data is expensive, often paid by the megabyte. Apps must be designed to work offline, sync intelligently, and minimize bandwidth usage without sacrificing functionality.</p>"
+		h = h + "<blockquote>Good design is not about the latest features. It is about solving real problems for real people in their real contexts.</blockquote>"
+		h = h + "<h2>Device Constraints as Design Opportunities</h2>"
+		h = h + "<p>Entry-level smartphones often have limited storage, processing power, and screen resolution. Rather than seeing these as limitations, forward-thinking designers view them as opportunities to create more focused, efficient experiences.</p>"
+		h = h + "</div>"
+		h = h + "<footer class=\"detail-footer\"><a href=\"/\">Back to essays</a></footer>"
+		h = h + "</article>"
+		return h
+
+	string getArticleBattery()
+		string h = "<article class=\"detail\">"
+		h = h + "<header class=\"detail-header\">"
+		h = h + "<span class=\"detail-cat\">Technology</span>"
+		h = h + "<h1>The Quiet Revolution in Batteries</h1>"
+		h = h + "<p class=\"detail-lead\">Solid-state batteries promise to transform everything from electric vehicles to grid-scale energy storage.</p>"
+		h = h + "<div class=\"detail-meta\">"
+		h = h + "<img src=\"https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&q=80\" alt=\"\" class=\"author-img\">"
+		h = h + "<div><strong>James Chen</strong><span>Tech Editor</span></div>"
+		h = h + "<span class=\"read-time\">7 min read</span>"
+		h = h + "</div></header>"
+		h = h + "<figure class=\"detail-cover\"><img src=\"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&q=80\" alt=\"\"></figure>"
+		h = h + "<div class=\"detail-content\">"
+		h = h + "<p>While headlines focus on AI and social media, a quieter revolution is unfolding in materials science labs around the world. Solid-state batteries could be the technology that finally makes sustainable energy truly practical.</p>"
+		h = h + "<h2>Beyond Lithium-Ion</h2>"
+		h = h + "<p>Lithium-ion batteries have served us well, but they are approaching their theoretical limits. Solid-state technology promises higher energy density, faster charging, longer lifespan, and dramatically improved safety.</p>"
+		h = h + "<blockquote>The transition from liquid to solid electrolytes is not just an incremental improvement. It is a paradigm shift in how we store energy.</blockquote>"
+		h = h + "<h2>From Lab to Production</h2>"
+		h = h + "<p>The challenge now is scaling production. Several companies have announced breakthrough results, and major automotive manufacturers are racing to bring solid-state vehicles to market by 2027.</p>"
+		h = h + "</div>"
+		h = h + "<footer class=\"detail-footer\"><a href=\"/\">Back to essays</a></footer>"
+		h = h + "</article>"
+		return h
+
+	string getArticleArchitecture()
+		string h = "<article class=\"detail\">"
+		h = h + "<header class=\"detail-header\">"
+		h = h + "<span class=\"detail-cat\">Architecture</span>"
+		h = h + "<h1>The Architecture of Solitude</h1>"
+		h = h + "<p class=\"detail-lead\">A meditation on spaces designed for one, and what they reveal about our relationship with ourselves.</p>"
+		h = h + "<div class=\"detail-meta\">"
+		h = h + "<img src=\"https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&q=80\" alt=\"\" class=\"author-img\">"
+		h = h + "<div><strong>Elena Marchetti</strong><span>Senior Editor</span></div>"
+		h = h + "<span class=\"read-time\">5 min read</span>"
+		h = h + "</div></header>"
+		h = h + "<figure class=\"detail-cover\"><img src=\"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&q=80\" alt=\"\"></figure>"
+		h = h + "<div class=\"detail-content\">"
+		h = h + "<p>In an age of constant connection, architects are increasingly designing spaces meant for solitude. These are not merely small spaces, but thoughtful environments that encourage introspection and presence.</p>"
+		h = h + "<h2>The Cabin Movement</h2>"
+		h = h + "<p>From Scandinavia to the Pacific Northwest, minimalist cabins have become symbols of intentional living. These structures strip away the unnecessary, leaving only what serves contemplation and rest.</p>"
+		h = h + "<blockquote>Architecture can create the conditions for solitude, but it cannot force us to be present. That remains our choice.</blockquote>"
+		h = h + "<h2>Urban Retreats</h2>"
+		h = h + "<p>Not everyone can escape to a forest cabin. Urban architects are responding with micro-retreats, rooftop sanctuaries, and thoughtfully designed corners that offer moments of quiet within the city.</p>"
+		h = h + "</div>"
+		h = h + "<footer class=\"detail-footer\"><a href=\"/\">Back to essays</a></footer>"
+		h = h + "</article>"
+		return h
+
+	string getArticle404()
+		string h = "<article class=\"detail\">"
+		h = h + "<header class=\"detail-header\">"
+		h = h + "<span class=\"detail-cat\">Not Found</span>"
+		h = h + "<h1>Article Not Found</h1>"
+		h = h + "<p class=\"detail-lead\">The article you are looking for does not exist or has been moved.</p>"
+		h = h + "</header>"
+		h = h + "<div class=\"detail-content\">"
+		h = h + "<p>Please check the URL or return to our homepage to browse our collection of essays.</p>"
+		h = h + "</div>"
+		h = h + "<footer class=\"detail-footer\"><a href=\"/\">Back to essays</a></footer>"
+		h = h + "</article>"
+		return h
+
+	string getFooter()
+		string f = "<footer class=\"site-footer\">"
+		f = f + "<div class=\"footer-inner\">"
+		f = f + "<div class=\"footer-brand\"><span>The Inkwell</span><p>Stories worth your time</p></div>"
+		f = f + "<div class=\"footer-links\"><a href=\"#\">About</a><a href=\"#\">Contact</a><a href=\"#\">RSS</a></div>"
+		f = f + "</div></footer>"
+		return f
+
+	string getCSS()
+		string s = "*,*::before,*::after"
+		s = s + brace("box-sizing:border-box;margin:0;padding:0")
+		s = s + ":root"
+		s = s + brace("--bg:#faf8f5;--ink:#1c1917;--muted:#78716c;--accent:#b45309;--card:#fff")
+		s = s + "body"
+		s = s + brace("font-family:'Cormorant Garamond',Georgia,serif;background:var(--bg);color:var(--ink);line-height:1.7;font-size:18px")
+		s = s + "header"
+		s = s + brace("position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(250,248,245,.92);backdrop-filter:blur(12px);border-bottom:1px solid rgba(28,25,23,.06)")
+		s = s + "nav"
+		s = s + brace("max-width:1100px;margin:0 auto;padding:1rem 2rem;display:flex;justify-content:space-between;align-items:center")
+		s = s + ".logo"
+		s = s + brace("font-size:1.5rem;font-weight:500;text-decoration:none;color:var(--ink);letter-spacing:-0.02em")
+		s = s + ".nav-right"
+		s = s + brace("display:flex;gap:2rem;align-items:center")
+		s = s + ".nav-right a"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.85rem;text-decoration:none;color:var(--muted);transition:color .2s")
+		s = s + ".nav-right a:hover"
+		s = s + brace("color:var(--ink)")
+		s = s + ".subscribe"
+		s = s + brace("background:var(--ink);color:var(--bg) !important;padding:0.5rem 1.25rem;border-radius:2rem")
+		s = s + "main"
+		s = s + brace("padding-top:80px")
+		s = s + ".hero"
+		s = s + brace("max-width:720px;margin:4rem auto 5rem;text-align:center;padding:0 2rem")
+		s = s + ".hero-label"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.2em;color:var(--accent);display:block;margin-bottom:1.5rem")
+		s = s + ".hero h1"
+		s = s + brace("font-size:2.5rem;font-weight:400;line-height:1.25;margin-bottom:1rem;letter-spacing:-0.02em")
+		s = s + ".hero-sub"
+		s = s + brace("font-size:1.1rem;color:var(--muted);font-style:italic")
+		s = s + ".articles"
+		s = s + brace("max-width:1100px;margin:0 auto 4rem;padding:0 2rem;display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:1.5rem")
+		s = s + ".card"
+		s = s + brace("background:var(--card);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04);transition:transform .4s,box-shadow .4s")
+		s = s + ".card:hover"
+		s = s + brace("transform:translateY(-4px);box-shadow:0 12px 32px rgba(0,0,0,.08)")
+		s = s + ".card.featured"
+		s = s + brace("grid-row:span 2")
+		s = s + ".card a"
+		s = s + brace("display:flex;flex-direction:column;height:100%;text-decoration:none;color:inherit")
+		s = s + ".card-img"
+		s = s + brace("height:180px;overflow:hidden")
+		s = s + ".card.featured .card-img"
+		s = s + brace("height:280px")
+		s = s + ".card-img img"
+		s = s + brace("width:100%;height:100%;object-fit:cover;transition:transform .5s")
+		s = s + ".card:hover .card-img img"
+		s = s + brace("transform:scale(1.03)")
+		s = s + ".card-body"
+		s = s + brace("padding:1.25rem;flex:1;display:flex;flex-direction:column")
+		s = s + ".card-cat"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.65rem;font-weight:600;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin-bottom:0.5rem")
+		s = s + ".card h2"
+		s = s + brace("font-size:1.15rem;font-weight:500;line-height:1.35;margin-bottom:0.6rem;transition:color .2s")
+		s = s + ".card.featured h2"
+		s = s + brace("font-size:1.5rem")
+		s = s + ".card:hover h2"
+		s = s + brace("color:var(--accent)")
+		s = s + ".card p"
+		s = s + brace("font-size:0.95rem;color:var(--muted);line-height:1.55;flex:1")
+		s = s + ".card-meta"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.75rem;color:var(--muted);display:flex;justify-content:space-between;margin-top:1rem;padding-top:0.75rem;border-top:1px solid rgba(0,0,0,.05)")
+		s = s + ".detail"
+		s = s + brace("max-width:680px;margin:3rem auto 4rem;padding:0 2rem")
+		s = s + ".detail-header"
+		s = s + brace("text-align:center;margin-bottom:2.5rem")
+		s = s + ".detail-cat"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.15em;color:var(--accent);display:block;margin-bottom:1rem")
+		s = s + ".detail h1"
+		s = s + brace("font-size:2.5rem;font-weight:400;line-height:1.2;margin-bottom:1.25rem;letter-spacing:-0.02em")
+		s = s + ".detail-lead"
+		s = s + brace("font-size:1.2rem;color:var(--muted);font-style:italic;max-width:540px;margin:0 auto 2rem;line-height:1.6")
+		s = s + ".detail-meta"
+		s = s + brace("display:flex;align-items:center;justify-content:center;gap:1rem;padding-top:1.5rem;border-top:1px solid rgba(0,0,0,.08)")
+		s = s + ".author-img"
+		s = s + brace("width:44px;height:44px;border-radius:50%;object-fit:cover")
+		s = s + ".detail-meta div"
+		s = s + brace("text-align:left")
+		s = s + ".detail-meta strong"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.85rem;font-weight:600;display:block")
+		s = s + ".detail-meta span"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.75rem;color:var(--muted)")
+		s = s + ".read-time"
+		s = s + brace("margin-left:auto")
+		s = s + ".detail-cover"
+		s = s + brace("margin:0 -4rem 2.5rem;border-radius:12px;overflow:hidden;box-shadow:0 16px 48px rgba(0,0,0,.1)")
+		s = s + ".detail-cover img"
+		s = s + brace("width:100%;display:block")
+		s = s + ".detail-content"
+		s = s + brace("font-size:1.1rem;line-height:1.85")
+		s = s + ".detail-content p"
+		s = s + brace("margin-bottom:1.5rem")
+		s = s + ".detail-content h2"
+		s = s + brace("font-size:1.6rem;font-weight:500;margin:2.5rem 0 1rem")
+		s = s + ".detail-content blockquote"
+		s = s + brace("margin:2rem 0;padding:1.25rem 1.5rem;background:linear-gradient(135deg,rgba(180,83,9,.06),rgba(180,83,9,.02));border-left:3px solid var(--accent);border-radius:0 8px 8px 0;font-style:italic;color:var(--muted)")
+		s = s + ".detail-footer"
+		s = s + brace("margin-top:3rem;padding-top:1.5rem;border-top:1px solid rgba(0,0,0,.08);text-align:center")
+		s = s + ".detail-footer a"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.9rem;color:var(--muted);text-decoration:none")
+		s = s + ".detail-footer a:hover"
+		s = s + brace("color:var(--accent)")
+		s = s + ".site-footer"
+		s = s + brace("background:var(--ink);color:rgba(255,255,255,.85);padding:3rem 2rem;margin-top:2rem")
+		s = s + ".footer-inner"
+		s = s + brace("max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center")
+		s = s + ".footer-brand span"
+		s = s + brace("font-size:1.25rem")
+		s = s + ".footer-brand p"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.8rem;opacity:0.6;margin-top:0.25rem")
+		s = s + ".footer-links"
+		s = s + brace("display:flex;gap:1.5rem")
+		s = s + ".footer-links a"
+		s = s + brace("font-family:Inter,sans-serif;font-size:0.85rem;color:rgba(255,255,255,.6);text-decoration:none")
+		s = s + ".footer-links a:hover"
+		s = s + brace("color:#fff")
+		s = s + "@media(max-width:800px)"
+		s = s + brace(".articles\{grid-template-columns:1fr\}.card.featured\{grid-row:auto\}.hero h1,.detail h1\{font-size:1.8rem\}.detail-cover\{margin:0 0 2rem;border-radius:8px\}.footer-inner\{flex-direction:column;gap:1.5rem;text-align:center\}")
+		return s
+
+	string brace(string content)
+		return "\{" + content + "\}"
+
+start:
+	printl("================================")
+	printl("  The Inkwell - Article Blog")
+	printl("================================")
+	printl("")
+	printl("Registering routes...")
+
+	integer status = 0
+	status = _http_route("GET", "/", 0)
+	status = _http_route("GET", "/api/articles", 1)
+	status = _http_route("GET", "/articles/:slug", 2)
+
+	printl("  GET  /")
+	printl("  GET  /api/articles")
+	printl("  GET  /articles/:slug")
+	printl("")
+	printl("Server ready on http://localhost:3000")

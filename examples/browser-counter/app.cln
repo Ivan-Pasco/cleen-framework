@@ -1,0 +1,71 @@
+// Clean Language Counter — Bridge Function Approach
+// Compiles to WASM, runs via loader.js runtime
+
+plugins:
+	frame.ui
+
+state:
+	integer count = 0
+	integer clicks = 0
+	integer progress = 25
+	boolean darkMode = true
+
+start:
+	integer s = ui.onEvent(".btn-increment", "click", "increment")
+	s = ui.onEvent(".btn-decrement", "click", "decrement")
+	s = ui.onEvent(".btn-reset", "click", "resetCount")
+	s = ui.onEvent(".btn-prog-up", "click", "progressUp")
+	s = ui.onEvent(".btn-prog-down", "click", "progressDown")
+	s = ui.onEvent(".btn-theme", "click", "toggleTheme")
+
+functions:
+	updateDisplay()
+		integer s = ui.updateElement("#count-value", count.toString())
+		s = ui.updateElement("#clicks-value", clicks.toString())
+		s = ui.updateElement("#progress-label", progress.toString() + "% complete")
+		s = ui.setStyle(".progress-bar", "width", progress.toString() + "%")
+
+	increment()
+		count = count + 1
+		clicks = clicks + 1
+		updateDisplay()
+		if count == 10
+			integer s = ui.updateElement("#status-msg", "Nice! You reached 10!")
+		if count == 50
+			integer s = ui.updateElement("#status-msg", "On fire! 50!")
+		if count == 100
+			integer s = ui.updateElement("#status-msg", "LEGENDARY! 100!")
+
+	decrement()
+		count = count - 1
+		clicks = clicks + 1
+		updateDisplay()
+
+	resetCount()
+		count = 0
+		clicks = clicks + 1
+		updateDisplay()
+		integer s = ui.updateElement("#status-msg", "Counter reset to zero")
+
+	progressUp()
+		progress = progress + 10
+		clicks = clicks + 1
+		if progress > 100
+			progress = 100
+		updateDisplay()
+		if progress == 100
+			integer s = ui.updateElement("#status-msg", "Progress complete!")
+
+	progressDown()
+		progress = progress - 10
+		clicks = clicks + 1
+		if progress < 0
+			progress = 0
+		updateDisplay()
+
+	toggleTheme()
+		darkMode = not darkMode
+		clicks = clicks + 1
+		integer s = ui.toggleClass(".dashboard", "dark")
+		s = ui.toggleClass(".dashboard", "light")
+		updateDisplay()

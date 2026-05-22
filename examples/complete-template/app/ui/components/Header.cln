@@ -1,0 +1,6 @@
+// Header component
+// Tag: <app-header>
+
+component: tag="app-header"
+	html:
+		<header><nav><a href="/">My App</a></nav></header>

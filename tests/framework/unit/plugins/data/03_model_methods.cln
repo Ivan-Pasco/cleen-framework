@@ -1,0 +1,109 @@
+// Test: frame.data model CRUD methods
+// Tests that models generate correct CRUD methods
+
+functions:
+	// Test find method generation
+	boolean testFindMethod()
+		string method = "User.find(id)"
+		return method.contains(".find(")
+
+	// Test findAll method generation
+	boolean testFindAllMethod()
+		string method = "User.findAll()"
+		return method.contains(".findAll(")
+
+	// Test create method generation
+	boolean testCreateMethod()
+		string method = "User.create(data)"
+		return method.contains(".create(")
+
+	// Test update method generation
+	boolean testUpdateMethod()
+		string method = "user.update(data)"
+		return method.contains(".update(")
+
+	// Test delete method generation
+	boolean testDeleteMethod()
+		string method = "user.delete()"
+		return method.contains(".delete(")
+
+	// Test save method generation
+	boolean testSaveMethod()
+		string method = "user.save()"
+		return method.contains(".save(")
+
+	// Test count method generation
+	boolean testCountMethod()
+		string method = "User.count()"
+		return method.contains(".count(")
+
+	// Test exists method generation
+	boolean testExistsMethod()
+		string method = "User.exists(id)"
+		return method.contains(".exists(")
+
+start:
+	printl("=== Test Suite: Model CRUD Methods ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testFindMethod()
+		printl("PASS: find method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: find method is generated")
+		failed = failed + 1
+
+	if testFindAllMethod()
+		printl("PASS: findAll method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: findAll method is generated")
+		failed = failed + 1
+
+	if testCreateMethod()
+		printl("PASS: create method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: create method is generated")
+		failed = failed + 1
+
+	if testUpdateMethod()
+		printl("PASS: update method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: update method is generated")
+		failed = failed + 1
+
+	if testDeleteMethod()
+		printl("PASS: delete method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: delete method is generated")
+		failed = failed + 1
+
+	if testSaveMethod()
+		printl("PASS: save method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: save method is generated")
+		failed = failed + 1
+
+	if testCountMethod()
+		printl("PASS: count method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: count method is generated")
+		failed = failed + 1
+
+	if testExistsMethod()
+		printl("PASS: exists method is generated")
+		passed = passed + 1
+	else
+		printl("FAIL: exists method is generated")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

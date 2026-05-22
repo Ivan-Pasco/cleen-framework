@@ -1,0 +1,9 @@
+// Task Card Component
+
+component: tag="task-card"
+	html:
+		<div class="task-card">
+			<h4>Sample Task</h4>
+			<p>Task description goes here</p>
+			<span class="task-status">In Progress</span>
+		</div>

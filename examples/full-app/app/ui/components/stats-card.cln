@@ -1,0 +1,8 @@
+// Stats Card Component
+
+component: tag="stats-card"
+	html:
+		<div class="stats-card">
+			<span class="stats-value">--</span>
+			<span class="stats-title">Tasks</span>
+		</div>

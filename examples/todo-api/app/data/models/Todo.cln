@@ -1,0 +1,9 @@
+// Todo Model
+// Todo item with user relationship
+
+functions:
+	string getTodoSchema()
+		return "CREATE TABLE IF NOT EXISTS todos (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT DEFAULT '', completed INTEGER DEFAULT 0, priority INTEGER DEFAULT 0, owner_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME, due_date DATETIME)"
+
+start:
+	printl("Todo model loaded")

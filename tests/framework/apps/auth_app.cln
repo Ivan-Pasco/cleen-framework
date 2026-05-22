@@ -1,0 +1,81 @@
+// Test Application: Auth API
+// Authentication flow testing application
+
+functions:
+	// Handler 0: Home page
+	string __route_handler_0()
+		return "Auth Service"
+
+	// Handler 1: Register (POST /auth/register)
+	string __route_handler_1()
+		string body = _req_body()
+		return "success:true,message:User registered,userId:1"
+
+	// Handler 2: Login (POST /auth/login)
+	string __route_handler_2()
+		string body = _req_body()
+		if body.contains("test@test.com") and body.contains("secret123")
+			return "success:true,token:jwt_token_123,refreshToken:refresh_456"
+		else
+			return "error:AUTH_ERROR,message:Invalid credentials"
+
+	// Handler 3: Profile (GET /api/profile) - Protected
+	string __route_handler_3()
+		string authHeader = _req_header("Authorization")
+		if authHeader.contains("Bearer")
+			return "id:1,email:test@test.com,name:Test User"
+		else
+			return "error:UNAUTHORIZED,message:No token provided"
+
+	// Handler 4: Refresh token (POST /auth/refresh)
+	string __route_handler_4()
+		string body = _req_body()
+		if body.contains("refresh_token")
+			return "success:true,token:new_jwt_token_789"
+		else
+			return "error:AUTH_ERROR,message:Invalid refresh token"
+
+	// Handler 5: Logout (POST /auth/logout)
+	string __route_handler_5()
+		return "success:true,message:Logged out successfully"
+
+	// Handler 6: Change password (PUT /auth/password)
+	string __route_handler_6()
+		string body = _req_body()
+		if body.contains("oldPassword") and body.contains("newPassword")
+			return "success:true,message:Password changed"
+		else
+			return "error:VALIDATION_ERROR,message:Invalid password data"
+
+	// Handler 7: Validate registration (test validation errors)
+	string __route_handler_7()
+		string body = _req_body()
+		if body.contains("invalid")
+			return "error:VALIDATION_ERROR,message:Invalid email format"
+		if body.contains("short")
+			return "error:VALIDATION_ERROR,message:Password too short"
+		return "success:true"
+
+	// Handler 8: Health check
+	string __route_handler_8()
+		return "status:healthy,service:auth"
+
+start:
+	printl("Starting Auth Service...")
+	integer status = 0
+
+	// Register routes
+	status = _http_route("GET", "/", 0)
+	status = _http_route("POST", "/auth/register", 1)
+	status = _http_route("POST", "/auth/login", 2)
+	status = _http_route("GET", "/api/profile", 3)
+	status = _http_route("POST", "/auth/refresh", 4)
+	status = _http_route("POST", "/auth/logout", 5)
+	status = _http_route("PUT", "/auth/password", 6)
+	status = _http_route("POST", "/auth/validate", 7)
+	status = _http_route("GET", "/health", 8)
+
+	printl("Auth Service routes registered")
+
+	// Start listening
+	integer listenStatus = _http_listen(3000)

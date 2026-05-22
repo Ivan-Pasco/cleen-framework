@@ -1,0 +1,135 @@
+[plugin]
+name = "frame.client"
+version = "1.0.1"
+description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, and SSE feeds"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[handles]
+blocks = []
+
+[exports]
+get_keywords = "get_keywords"
+
+[bridge]
+functions = [
+  # ========== API: HTTP Requests ==========
+  { name = "_api_get", params = ["string", "string"], returns = "integer", description = "GET request: url, response handler name (exported function)", expand_strings = true },
+  { name = "_api_post", params = ["string", "string", "string"], returns = "integer", description = "POST request: url, body, response handler name", expand_strings = true },
+  { name = "_api_put", params = ["string", "string", "string"], returns = "integer", description = "PUT request: url, body, response handler name", expand_strings = true },
+  { name = "_api_patch", params = ["string", "string", "string"], returns = "integer", description = "PATCH request: url, body, response handler name", expand_strings = true },
+  { name = "_api_delete", params = ["string", "string"], returns = "integer", description = "DELETE request: url, response handler name", expand_strings = true },
+  { name = "_api_header", params = ["string", "string"], returns = "integer", description = "Set header for next request: name, value", expand_strings = true },
+  { name = "_api_timeout", params = ["integer"], returns = "integer", description = "Set timeout in ms for next request" },
+  { name = "_api_auth", params = ["string", "string"], returns = "integer", description = "Set auth for all requests: scheme (bearer/basic), credential", expand_strings = true },
+  { name = "_api_clearAuth", params = [], returns = "integer", description = "Clear stored auth credentials" },
+  { name = "_api_submit", params = ["string", "string", "string", "string"], returns = "integer", description = "Collect form JSON + send: form selector, url, method, response handler name", expand_strings = true },
+
+  # ========== API: Response Context ==========
+  { name = "_api_status", params = [], returns = "integer", description = "HTTP status code (0 = network error)" },
+  { name = "_api_body", params = [], returns = "string", description = "Response body as string" },
+  { name = "_api_ok", params = [], returns = "integer", description = "1 if status 200-299, 0 otherwise" },
+  { name = "_api_json", params = ["string"], returns = "string", description = "Extract value from JSON response via dot-notation path", expand_strings = true },
+  { name = "_api_responseHeader", params = ["string"], returns = "string", description = "Get response header value", expand_strings = true },
+
+  # ========== Live: WebSocket ==========
+  { name = "_live_open", params = ["string", "string", "string", "string"], returns = "integer", description = "Open WebSocket: url, onMessage handler name, onClose handler name, onError handler name. Returns connection ID.", expand_strings = true },
+  { name = "_live_send", params = ["integer", "string"], returns = "integer", description = "Send message: connId, message", expand_strings = true },
+  { name = "_live_close", params = ["integer"], returns = "integer", description = "Close connection: connId" },
+  { name = "_live_state", params = ["integer"], returns = "string", description = "Connection state: connecting, open, closing, closed" },
+
+  # ========== Live: WebSocket Context ==========
+  { name = "_live_message", params = [], returns = "string", description = "Message data (in onMessage handler)" },
+  { name = "_live_connId", params = [], returns = "integer", description = "Connection ID that triggered this handler" },
+  { name = "_live_closeCode", params = [], returns = "integer", description = "Close code (in onClose handler)" },
+  { name = "_live_closeReason", params = [], returns = "string", description = "Close reason (in onClose handler)" },
+  { name = "_live_error", params = [], returns = "string", description = "Error description (in onError handler)" },
+
+  # ========== Feed: Server-Sent Events ==========
+  { name = "_feed_open", params = ["string", "string", "string"], returns = "integer", description = "Open SSE feed: url, onMessage handler name, onError handler name. Returns connection ID.", expand_strings = true },
+  { name = "_feed_on", params = ["integer", "string", "string"], returns = "integer", description = "Listen for named event: connId, event name, handler name", expand_strings = true },
+  { name = "_feed_close", params = ["integer"], returns = "integer", description = "Close feed: connId" },
+
+  # ========== Feed: SSE Context ==========
+  { name = "_feed_data", params = [], returns = "string", description = "Event data" },
+  { name = "_feed_eventType", params = [], returns = "string", description = "Event type name" },
+  { name = "_feed_lastId", params = [], returns = "string", description = "Last event ID" },
+  { name = "_feed_connId", params = [], returns = "integer", description = "Connection ID that triggered this handler" },
+]
+
+[language]
+blocks = []
+
+keywords = [
+  { name = "api", description = "HTTP API client namespace", context = "namespace" },
+  { name = "live", description = "WebSocket live connection namespace", context = "namespace" },
+  { name = "feed", description = "Server-Sent Events feed namespace", context = "namespace" },
+]
+
+types = []
+
+functions = [
+  # API
+  { name = "api.get", signature = "api.get(url, handlerName)", description = "Send GET request, dispatch response to handler (exported function name)" },
+  { name = "api.post", signature = "api.post(url, body, handlerName)", description = "Send POST request with body (handler is exported function name)" },
+  { name = "api.put", signature = "api.put(url, body, handlerName)", description = "Send PUT request with body (handler is exported function name)" },
+  { name = "api.patch", signature = "api.patch(url, body, handlerName)", description = "Send PATCH request with body (handler is exported function name)" },
+  { name = "api.delete", signature = "api.delete(url, handlerName)", description = "Send DELETE request (handler is exported function name)" },
+  { name = "api.header", signature = "api.header(name, value)", description = "Set header for next request" },
+  { name = "api.timeout", signature = "api.timeout(ms)", description = "Set timeout for next request in ms" },
+  { name = "api.auth", signature = "api.auth(scheme, credential)", description = "Set auth for all requests (bearer or basic)" },
+  { name = "api.clearAuth", signature = "api.clearAuth()", description = "Clear stored auth" },
+  { name = "api.submit", signature = "api.submit(formSelector, url, method, handlerName)", description = "Collect form data as JSON, send to URL (handler is exported function name)" },
+  { name = "api.status", signature = "api.status()", description = "Response status code (in handler)" },
+  { name = "api.body", signature = "api.body()", description = "Response body string (in handler)" },
+  { name = "api.ok", signature = "api.ok()", description = "1 if status 200-299 (in handler)" },
+  { name = "api.json", signature = "api.json(path)", description = "Extract JSON value by dot-path (in handler)" },
+  { name = "api.responseHeader", signature = "api.responseHeader(name)", description = "Get response header (in handler)" },
+  # Live
+  { name = "live.open", signature = "live.open(url, onMessageName, onCloseName, onErrorName)", description = "Open WebSocket connection (handlers are exported function names), returns connection ID" },
+  { name = "live.send", signature = "live.send(connId, message)", description = "Send message on connection" },
+  { name = "live.close", signature = "live.close(connId)", description = "Close connection" },
+  { name = "live.state", signature = "live.state(connId)", description = "Get connection state" },
+  { name = "live.message", signature = "live.message()", description = "Message data (in handler)" },
+  { name = "live.connId", signature = "live.connId()", description = "Connection ID (in handler)" },
+  { name = "live.closeCode", signature = "live.closeCode()", description = "Close code (in handler)" },
+  { name = "live.closeReason", signature = "live.closeReason()", description = "Close reason (in handler)" },
+  { name = "live.error", signature = "live.error()", description = "Error message (in handler)" },
+  # Feed
+  { name = "feed.open", signature = "feed.open(url, onMessageName, onErrorName)", description = "Open SSE feed (handlers are exported function names), returns connection ID" },
+  { name = "feed.on", signature = "feed.on(connId, eventName, handlerName)", description = "Listen for named event type (handler is exported function name)" },
+  { name = "feed.close", signature = "feed.close(connId)", description = "Close feed" },
+  { name = "feed.data", signature = "feed.data()", description = "Event data (in handler)" },
+  { name = "feed.eventType", signature = "feed.eventType()", description = "Event type name (in handler)" },
+  { name = "feed.lastId", signature = "feed.lastId()", description = "Last event ID (in handler)" },
+  { name = "feed.connId", signature = "feed.connId()", description = "Connection ID (in handler)" },
+]
+
+completions = [
+  { trigger = "api.get", insert = "api.get(\"${1:/api/}\", \"${2:onResponse}\")" },
+  { trigger = "api.post", insert = "api.post(\"${1:/api/}\", ${2:body}, \"${3:onResponse}\")" },
+  { trigger = "api.submit", insert = "api.submit(\"${1:#form}\", \"${2:/api/}\", \"POST\", \"${3:onResponse}\")" },
+  { trigger = "api.auth", insert = "api.auth(\"bearer\", ${1:token})" },
+  { trigger = "live.open", insert = "live.open(\"${1:wss://}\", \"${2:onMessage}\", \"${3:onClose}\", \"${4:onError}\")" },
+  { trigger = "live.send", insert = "live.send(${1:conn}, ${2:message})" },
+  { trigger = "feed.open", insert = "feed.open(\"${1:/api/stream}\", \"${2:onMessage}\", \"${3:onError}\")" },
+  { trigger = "feed.on", insert = "feed.on(${1:conn}, \"${2:event}\", \"${3:onEvent}\")" },
+]
+
+[paths]
+owns = []
+auto_create = false
+patterns = []
+implicit_import = false
+
+[templates]
+files = []
+
+[enforcement]
+severity = "warn"
+restricted_functions = []
+required_blocks = []
+block_folder_rules = []

@@ -1,0 +1,6 @@
+// Comment model
+data Comment
+	integer post_id
+	integer author_id
+	string body
+	string created_at

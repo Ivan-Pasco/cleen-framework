@@ -1,0 +1,11 @@
+// Single User API
+// Route: GET /api/users/:id
+
+functions:
+	string __route_handler_0()
+		string odI = _req_param("id")
+		return "User details for " + odI
+
+start:
+	integer s = 0
+	s = _http_route("GET", "/api/users/:id", 0)

@@ -1,0 +1,17 @@
+// Test: frame.ui/html_class_attr
+// Verifies that html: blocks preserve class attribute names (FW001 regression)
+// Expected output:
+//   <div class="container"><h1 class="title">Hello</h1></div>
+
+plugins:
+	frame.ui
+
+start:
+	print(renderCard("Hello"))
+
+functions:
+	string renderCard(string title)
+		html:
+			<div class="container">
+				<h1 class="title">{title}</h1>
+			</div>

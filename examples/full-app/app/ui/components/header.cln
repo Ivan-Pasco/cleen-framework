@@ -1,0 +1,17 @@
+// Header Component - Navigation Bar
+
+component: tag="app-header"
+	html:
+		<header class="app-header">
+			<div class="header-left">
+				<a href="/" class="logo">TaskFlow</a>
+				<nav class="main-nav">
+					<a href="/dashboard" class="nav-link">Dashboard</a>
+					<a href="/projects" class="nav-link">Projects</a>
+					<a href="/tasks" class="nav-link">Tasks</a>
+				</nav>
+			</div>
+			<div class="header-right">
+				<a href="/settings" class="user-menu">Settings</a>
+			</div>
+		</header>

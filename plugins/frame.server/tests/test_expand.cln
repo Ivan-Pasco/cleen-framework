@@ -1,0 +1,50 @@
+// Tests for frame.server plugin
+// Fixed: functions were declared at top level — spec (grammar.ebnf) requires functions: block
+
+start:
+	test_server_expansion()
+	test_route_expansion()
+	test_middleware_expansion()
+	test_route_validation_missing_method()
+	test_route_validation_missing_path()
+	test_route_validation_invalid_method()
+	test_server_validation_invalid_port()
+	test_unknown_block_passthrough()
+
+functions:
+	test_server_expansion()
+		result = expand_block("server", "{\"port\": \"3000\"}", "// body")
+		assert(result.contains("_http_listen"))
+		assert(result.contains("3000"))
+		assert(result.contains("start:"))
+
+	test_route_expansion()
+		result = expand_block("route", "{\"method\": \"GET\", \"path\": \"/hello\"}", "return {}")
+		assert(result.contains("_http_route"))
+		assert(result.contains("GET"))
+		assert(result.contains("/hello"))
+
+	test_middleware_expansion()
+		result = expand_block("middleware", "{}", "return next(request)")
+		assert(result.contains("_http_middleware"))
+		assert(result.contains("next"))
+
+	test_route_validation_missing_method()
+		result = validate_block("route", "{\"path\": \"/\"}", "")
+		assert(result.contains("method attribute is required"))
+
+	test_route_validation_missing_path()
+		result = validate_block("route", "{\"method\": \"GET\"}", "")
+		assert(result.contains("path attribute is required"))
+
+	test_route_validation_invalid_method()
+		result = validate_block("route", "{\"method\": \"INVALID\", \"path\": \"/\"}", "")
+		assert(result.contains("must be one of"))
+
+	test_server_validation_invalid_port()
+		result = validate_block("server", "{\"port\": \"99999\"}", "")
+		assert(result.contains("port must be a number"))
+
+	test_unknown_block_passthrough()
+		result = expand_block("unknown", "{}", "original body")
+		assert(result == "original body")

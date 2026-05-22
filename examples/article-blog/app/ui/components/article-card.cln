@@ -1,0 +1,18 @@
+// Article Card Component
+
+component: tag="article-card"
+	html:
+		<article class="article-card">
+			<div class="card-image">
+				<img src="/public/images/placeholder.jpg" alt="Article thumbnail">
+			</div>
+			<div class="card-content">
+				<span class="category">Technology</span>
+				<h3><a href="/articles/sample-article">Sample Article Title</a></h3>
+				<p>This is a brief excerpt from the article that gives readers a preview of the content...</p>
+				<div class="meta">
+					<span class="author">By Author Name</span>
+					<span class="read-time">5 min read</span>
+				</div>
+			</div>
+		</article>

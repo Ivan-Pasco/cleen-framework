@@ -1,0 +1,74 @@
+// Pattern: pagination
+// Use when: endpoints return lists of records that can grow large over time
+// Anti-pattern: DON'T use deep OFFSET pagination.
+//   OFFSET N skips N rows by scanning from row 0 every time. At page 50 with
+//   20 items/page, the DB reads 1000 rows to discard 999. Use cursor pagination
+//   instead: the client sends the last seen id, and the query filters id > cursor.
+//   This is O(log N) via the primary key index regardless of page depth.
+
+plugins:
+	frame.data
+
+data Post:
+	id: integer pk auto
+	author_id: integer
+	title: string
+	published_at: datetime nullable
+	created_at: datetime auto
+
+functions:
+	// CURSOR PAGINATION — use this for lists that can grow beyond a few pages
+	// cursor: the last id seen by the client (0 or null for first page)
+	pairs list_posts_cursor(integer cursor, integer page_size)
+		let effective_cursor = cursor
+		if effective_cursor == 0
+			effective_cursor = 0
+
+		let rows = Post.find:
+			where:
+				id > effective_cursor
+				published_at != null
+			order:
+				id asc
+			limit:
+				page_size + 1           // fetch one extra to detect hasMore
+
+		let has_more = rows.length() > page_size
+		let items = rows
+		if has_more
+			items = rows.slice(0, page_size)
+
+		let next_cursor = 0
+		if has_more
+			next_cursor = items.last().id
+
+		return pairs(
+			"items" to items,
+			"next_cursor" to next_cursor,
+			"has_more" to has_more
+		)
+
+	// OFFSET PAGINATION — only acceptable for small, slow-growing datasets
+	// (admin panels, reports) where total rows stay under ~1000
+	pairs list_posts_offset(integer page, integer page_size)
+		let skip = page * page_size
+		let rows = Post.find:
+			where:
+				published_at != null
+			order:
+				created_at desc
+			limit:
+				page_size
+			offset:
+				skip
+
+		let total = Post.count:
+			where:
+				published_at != null
+
+		return pairs(
+			"items" to rows,
+			"page" to page,
+			"total" to total,
+			"total_pages" to (total / page_size)
+		)

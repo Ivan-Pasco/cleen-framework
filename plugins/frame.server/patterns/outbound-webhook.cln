@@ -1,0 +1,95 @@
+// Pattern: outbound-webhook
+// Use when: your service must notify external systems when events occur
+// Anti-pattern: DON'T call http.post inline in the request handler.
+//   If the external endpoint is slow or down, your response is blocked and
+//   the client times out. Send webhooks asynchronously, retry on failure,
+//   and always sign the payload with HMAC so recipients can verify authenticity.
+
+plugins:
+	frame.server
+	frame.data
+
+// Webhook delivery log — tracks every attempt for retry and auditing
+data WebhookDelivery:
+	id: integer pk auto
+	event_type: string              // "order.completed", "user.created", etc.
+	target_url: string
+	payload: string                 // JSON payload sent
+	signature: string               // HMAC-SHA256 of payload
+	status: string                  // "pending", "delivered", "failed"
+	attempt_count: integer default 0
+	last_attempted_at: datetime nullable
+	delivered_at: datetime nullable
+	error_message: string nullable
+	created_at: datetime auto
+
+functions:
+	// Queue a webhook for async delivery (call this from your event handlers)
+	integer queue_webhook(string event_type, string target_url, string payload)
+		let secret = _env_get("WEBHOOK_SECRET")
+		let signature = _crypto_hmac(payload, secret, "sha256")
+
+		let id = WebhookDelivery.insert:
+			event_type = event_type
+			target_url = target_url
+			payload = payload
+			signature = signature
+			status = "pending"
+		return id
+
+	// Deliver one pending webhook (called by a background job, not a request handler)
+	integer deliver_webhook(integer delivery_id)
+		let delivery = WebhookDelivery.first:
+			where:
+				id == delivery_id
+
+		// Set the signature header so recipients can verify authenticity
+		let response = http_post_with_headers(
+			delivery.target_url,
+			delivery.payload,
+			"{\"Content-Type\":\"application/json\",\"X-Webhook-Signature\":\"" + delivery.signature + "\"}"
+		)
+
+		let status_code = http_get_response_code()
+		let attempt = delivery.attempt_count + 1
+
+		if status_code >= 200 and status_code < 300
+			WebhookDelivery.update:
+				set:
+					status = "delivered"
+					attempt_count = attempt
+					delivered_at = now()
+				where:
+					id == delivery_id
+			return 1
+
+		// Failed — record error, mark for retry (up to 5 attempts)
+		let new_status = "pending"
+		if attempt >= 5
+			new_status = "failed"
+
+		WebhookDelivery.update:
+			set:
+				status = new_status
+				attempt_count = attempt
+				last_attempted_at = now()
+				error_message = "HTTP " + status_code.toString()
+			where:
+				id == delivery_id
+		return 0
+
+endpoints:
+	// Example: queue a webhook when an order is completed
+	POST "/orders/:id/complete":
+		let order_id = req.params.id
+
+		// ... complete the order ...
+
+		// Queue the notification — do NOT call http.post here
+		queue_webhook(
+			"order.completed",
+			"https://partner.example.com/webhooks",
+			"{\"order_id\":\"" + order_id + "\",\"status\":\"completed\"}"
+		)
+
+		return json({"order_id" to order_id, "status" to "completed"})

@@ -1,0 +1,13 @@
+// Blog Demo Configuration
+
+config:
+	project:
+		name = "blog-demo"
+		version = "1.0.0"
+		description = "Blog demo with file-based routing"
+
+	build:
+		output = "dist"
+
+	server:
+		port = 3000

@@ -1,0 +1,1433 @@
+// frame.data plugin - ORM and Database DSL
+// Provides: data models, CRUD operations, transactions, queries
+// Version: 2.0.0
+// Implements: Frame Data Specification v1.2
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
+
+functions:
+	// Extract plain model name from compiler-formatted JSON attributes.
+	// The compiler passes attributes as {"ModelName":true}; this returns "ModelName".
+	// If the raw value is already a plain identifier, it is returned as-is.
+	string extract_model_name(string raw)
+		if not raw.startsWith("{")
+			return raw.trim()
+		integer first_quote = raw.indexOf("\"")
+		if first_quote == -1
+			return raw.trim()
+		integer second_quote = raw.indexOf("\"", first_quote + 1)
+		if second_quote == -1
+			return raw.trim()
+		return raw.substring(first_quote + 1, second_quote)
+
+	// Main entry point - called by compiler for each framework block
+	string expand_block(string block_name, string attributes, string body)
+		// Handle 'data' model definitions and configuration blocks
+		if block_name == "data"
+			// If attributes is empty or "config", treat as database configuration block
+			if attributes.length() == 0 or attributes.trim() == "config"
+				return expand_data_config(body)
+			return expand_data_model(extract_model_name(attributes), body)
+
+		// Handle 'migrate' migration definition blocks
+		if block_name == "migrate"
+			return expand_migrate_block(attributes, body)
+
+		// Handle Data.tx: transaction blocks
+		if block_name == "Data.tx"
+			return expand_transaction(body)
+
+		// Handle db.query: raw queries
+		if block_name == "db.query"
+			return expand_raw_query(body)
+
+		// Handle db.queryAs: typed raw queries
+		if block_name.startsWith("db.queryAs")
+			return expand_typed_query(block_name, body)
+
+		return body
+
+	// Validation entry point
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "data"
+			return validate_data_model(extract_model_name(attributes), body)
+		if block_name == "migrate"
+			return validate_migrate_block(attributes, body)
+		return ""
+
+	// Keywords for IDE support
+	string get_keywords()
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"Data.tx\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\"]"
+
+// ============================================================================
+// DATA MODEL EXPANSION
+// ============================================================================
+
+functions:
+	// Detect whether a data model body declares tenant isolation.
+	// A model is tenant-aware when it contains a field named "tenantId" or a field
+	// with the ": tenant" constraint.
+	boolean detect_tenant_field(string body)
+		if body.indexOf("tenantId") != -1
+			return true
+		if body.indexOf(": tenant") != -1
+			return true
+		return false
+
+	// Expand 'data ModelName' block into a class with ORM methods
+	string expand_data_model(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string fields_code = parse_fields(body)
+		string field_names = extract_field_names(body)
+		string field_types = extract_field_types(body)
+		boolean has_tenant = detect_tenant_field(body)
+
+		// Generate the class with static ORM methods
+		string result = "class " + model_name + "\n"
+		result = result + fields_code
+		result = result + "\n\tfunctions:\n"
+
+		// Generate save() method
+		result = result + "\t\tboolean save()\n"
+		result = result + "\t\t\tif id == 0\n"
+		if has_tenant
+			// For tenant-aware models, auto-inject tenantId on INSERT
+			result = result + "\t\t\t\tstring __tenant_id = tenant_getId()\n"
+			result = result + "\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
+			result = result + "\t\t\t\tstring params = __to_params_with_tenant(__tenant_id)\n"
+		else
+			result = result + "\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
+			result = result + "\t\t\t\tstring params = __to_params()\n"
+		result = result + "\t\t\t\tstring result = _db_query(sql, params)\n"
+		result = result + "\t\t\t\tid = __extract_id(result)\n"
+		result = result + "\t\t\t\treturn id > 0\n"
+		result = result + "\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
+		result = result + "\t\t\tstring params = __to_update_params()\n"
+		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
+		result = result + "\t\t\treturn affected > 0\n"
+
+		// Generate delete() instance method
+		result = result + "\n\t\tboolean delete()\n"
+		result = result + "\t\t\tif id == 0\n"
+		result = result + "\t\t\t\treturn false\n"
+		if has_tenant
+			// Scope delete to the current tenant so cross-tenant deletes are impossible
+			result = result + "\t\t\tstring __tenant_id = tenant_getId()\n"
+			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '\" + __tenant_id + \"'\"\n"
+		else
+			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
+		result = result + "\t\t\tstring params = \"[\" + id.toString() + \"]\"\n"
+		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
+		result = result + "\t\t\treturn affected > 0\n"
+
+		// Generate private helper methods
+		result = result + generate_helper_methods(model_name, field_names, field_types, body, has_tenant)
+
+		// Generate static methods
+		result = result + generate_static_methods(model_name, table_name, has_tenant)
+
+		// Generate validate method (field-level validation constraints)
+		result = result + generate_validate_method(model_name, body)
+
+		// Close the class definition
+		result = result + "\n"
+
+		return result
+
+	// Expand a 'data:' configuration block (no model name) into _db_configure() call
+	string expand_data_config(string body)
+		string engine = extract_config_value(body, "engine", "sqlite")
+		string host = extract_config_value(body, "host", "localhost")
+		string port = extract_config_value(body, "port", "5432")
+		string database = extract_config_value(body, "database", "app")
+		string user = extract_config_value(body, "user", "")
+		string password = extract_config_value(body, "password", "")
+
+		// Parse pool sub-block
+		string pool_config = extract_subblock(body, "pool:")
+		string pool_max = "10"
+		string pool_idle = "30000"
+		if pool_config.length() > 0
+			pool_max = extract_config_value(pool_config, "max", "10")
+			pool_idle = extract_config_value(pool_config, "idleTimeout", "30000")
+
+		string result = "// Database configuration\n"
+		result = result + "_db_configure(\"" + engine + "\", \"" + host + "\", " + port + ", \"" + database + "\", \"" + user + "\", \"" + password + "\", " + pool_max + ", " + pool_idle + ")\n\n"
+		return result
+
+	// Extract a named key=value from a configuration block body
+	// Handles: plain values, quoted strings, and env("VAR") references
+	string extract_config_value(string config, string key, string default_val)
+		string pattern = key + " = "
+		integer pos = config.indexOf(pattern)
+		if pos == -1
+			return default_val
+
+		integer value_start = pos + pattern.length()
+		integer value_end = config.indexOf("\n", value_start)
+		if value_end == -1
+			value_end = config.length()
+
+		string value = config.substring(value_start, value_end).trim()
+
+		// Strip surrounding double-quotes
+		if value.startsWith("\"") and value.endsWith("\"")
+			value = value.substring(1, value.length() - 1)
+
+		// Translate env("VAR") to a runtime env lookup
+		if value.startsWith("env(\"")
+			integer env_end = value.indexOf("\")")
+			if env_end == -1
+				return default_val
+			return "_env_get(\"" + value.substring(5, env_end) + "\")"
+
+		if value.length() == 0
+			return default_val
+
+		return value
+
+	// Parse field definitions from body
+	string parse_fields(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_code = parse_field_line(line)
+				if field_code.length() > 0
+					result = result + "\t" + field_code + "\n"
+
+			line_start = line_end + 1
+
+		return result
+
+	// Parse a single field line like "string email : unique" or "boolean active = true"
+	string parse_field_line(string line)
+		// Check for constraints (colon separator)
+		integer colon_pos = line.indexOf(" : ")
+		string field_part = line
+		string constraints = ""
+
+		if colon_pos != -1
+			field_part = line.substring(0, colon_pos).trim()
+			constraints = line.substring(colon_pos + 3, line.length()).trim()
+
+		// Check for default value (equals separator)
+		integer equals_pos = field_part.indexOf(" = ")
+		string default_val = ""
+
+		if equals_pos != -1
+			default_val = field_part.substring(equals_pos + 3, field_part.length()).trim()
+			field_part = field_part.substring(0, equals_pos).trim()
+
+		// Parse type and name
+		integer space_pos = field_part.indexOf(" ")
+		if space_pos == -1
+			return ""
+
+		string field_type = field_part.substring(0, space_pos).trim()
+		string field_name = field_part.substring(space_pos + 1, field_part.length()).trim()
+
+		// Generate field declaration
+		string result = field_type + " " + field_name
+		if default_val.length() > 0
+			result = result + " = " + default_val
+
+		return result
+
+	// Extract field names as comma-separated list
+	string extract_field_names(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_name = extract_field_name_from_line(line)
+				if field_name.length() > 0
+					if result.length() > 0
+						result = result + ","
+					result = result + field_name
+
+			line_start = line_end + 1
+
+		return result
+
+	// Extract field name from a line
+	string extract_field_name_from_line(string line)
+		// Remove constraints
+		integer colon_pos = line.indexOf(" : ")
+		if colon_pos != -1
+			line = line.substring(0, colon_pos)
+
+		// Remove default value
+		integer equals_pos = line.indexOf(" = ")
+		if equals_pos != -1
+			line = line.substring(0, equals_pos)
+
+		// Get the name (second word)
+		line = line.trim()
+		integer space_pos = line.indexOf(" ")
+		if space_pos == -1
+			return ""
+
+		return line.substring(space_pos + 1, line.length()).trim()
+
+	// Extract field types as comma-separated list (parallel to extract_field_names)
+	string extract_field_types(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_type = extract_field_type_from_line(line)
+				if field_type.length() > 0
+					if result.length() > 0
+						result = result + ","
+					result = result + field_type
+
+			line_start = line_end + 1
+
+		return result
+
+	// Extract field type from a line (first word)
+	string extract_field_type_from_line(string line)
+		// Remove constraints
+		integer colon_pos = line.indexOf(" : ")
+		if colon_pos != -1
+			line = line.substring(0, colon_pos)
+
+		// Remove default value
+		integer equals_pos = line.indexOf(" = ")
+		if equals_pos != -1
+			line = line.substring(0, equals_pos)
+
+		line = line.trim()
+		integer space_pos = line.indexOf(" ")
+		if space_pos == -1
+			return ""
+
+		return line.substring(0, space_pos).trim()
+
+// ============================================================================
+// STATIC METHOD GENERATION (find, first, count, insert, update, delete)
+// ============================================================================
+
+functions:
+	// Generate static ORM methods for find, first, count, insert, update, delete.
+	// When has_tenant is true every read/write operation is automatically scoped
+	// to the tenant returned by tenant_getId() so that cross-tenant data leaks
+	// are impossible at the query level.
+	string generate_static_methods(string model_name, string table_name, boolean has_tenant)
+		string result = "\n"
+
+		// Static find method - returns JSON array of matching records
+		result = result + "\n\t\tstring find(string where_clause, string order_clause, string limit_clause)\n"
+		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\tif order_clause.length() > 0\n"
+		result = result + "\t\t\t\tsql = sql + \" ORDER BY \" + order_clause\n"
+		result = result + "\t\t\tif limit_clause.length() > 0\n"
+		result = result + "\t\t\t\tsql = sql + \" LIMIT \" + limit_clause\n"
+		result = result + "\t\t\treturn _db_query(sql, \"[]\")\n"
+
+		// Static first method - returns first matching record
+		result = result + "\n\t\tstring first(string where_clause)\n"
+		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\treturn _db_query(sql, \"[]\")\n"
+
+		// Static count method - returns count of matching records
+		result = result + "\n\t\tinteger count(string where_clause)\n"
+		result = result + "\t\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\tstring result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\treturn __extract_count(result)\n"
+
+		// Static exists method - returns 1 if any matching record exists, 0 otherwise
+		result = result + "\n\t\tinteger exists(string where_clause)\n"
+		result = result + "\t\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\tstring __exists_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\tif __extract_count(__exists_result) > 0\n"
+		result = result + "\t\t\t\treturn 1\n"
+		result = result + "\t\t\treturn 0\n"
+
+		// Static findOrFail method - returns first matching record or throws NOT_FOUND
+		result = result + "\n\t\tstring findOrFail(string where_clause)\n"
+		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\tstring __fail_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\tif __fail_result == \"[]\"\n"
+		result = result + "\t\t\t\tthrow \"NOT_FOUND\"\n"
+		result = result + "\t\t\treturn __fail_result\n"
+
+		// Helper to extract count from query result
+		result = result + "\n\t\tinteger __extract_count(string result)\n"
+		result = result + "\t\t\tinteger count_pos = result.indexOf(\"\\\"count\\\":\")\n"
+		result = result + "\t\t\tif count_pos == -1\n"
+		result = result + "\t\t\t\treturn 0\n"
+		result = result + "\t\t\tinteger value_start = count_pos + 8\n"
+		result = result + "\t\t\tinteger value_end = value_start\n"
+		result = result + "\t\t\twhile value_end < result.length()\n"
+		result = result + "\t\t\t\tstring ch = result.substring(value_end, value_end + 1)\n"
+		result = result + "\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
+		result = result + "\t\t\t\t\tbreak\n"
+		result = result + "\t\t\t\tvalue_end = value_end + 1\n"
+		result = result + "\t\t\treturn parseInt(result.substring(value_start, value_end))\n"
+
+		// Static migrate method - generates CREATE TABLE statement.
+		// For tenant-aware models the tenant_id column is added automatically when
+		// it is not already declared as an explicit field in the model body.
+		result = result + "\n\t\tboolean migrate()\n"
+		if has_tenant
+			result = result + "\t\t\tstring __field_defs = __field_definitions()\n"
+			result = result + "\t\t\tif __field_defs.indexOf(\"tenant_id\") == -1\n"
+			result = result + "\t\t\t\t__field_defs = \"tenant_id TEXT NOT NULL, \" + __field_defs\n"
+			result = result + "\t\t\tstring sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_defs + \")\"\n"
+		else
+			result = result + "\t\t\tstring sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_definitions() + \")\"\n"
+		result = result + "\t\t\tinteger affected = _db_execute(sql, \"[]\")\n"
+		result = result + "\t\t\treturn affected >= 0\n"
+
+		return result
+
+	// Generate a validate() static method that checks all field validation constraints
+	// Recognises: min=N, max=N, email, range=N..M on string and integer fields
+	// Returns an empty string on success, or an error message describing the first failure
+	string generate_validate_method(string model_name, string body)
+		string validate_body = ""
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				// Only process lines that have constraint section
+				integer colon_pos = line.indexOf(" : ")
+				if colon_pos != -1
+					string field_part = line.substring(0, colon_pos).trim()
+					string constraints = line.substring(colon_pos + 3, line.length()).trim()
+
+					// Remove default value from field_part
+					integer eq_pos = field_part.indexOf(" = ")
+					if eq_pos != -1
+						field_part = field_part.substring(0, eq_pos).trim()
+
+					// Parse type and name
+					integer space_pos = field_part.indexOf(" ")
+					if space_pos != -1
+						string field_type = field_part.substring(0, space_pos).trim()
+						string field_name = field_part.substring(space_pos + 1, field_part.length()).trim()
+
+						// Skip pk/auto fields - no user-facing validation needed
+						if constraints.indexOf("pk") == -1
+							// min=N constraint (string length minimum)
+							integer min_pos = constraints.indexOf("min=")
+							if min_pos != -1
+								integer min_end = min_pos + 4
+								while min_end < constraints.length()
+									string ch = constraints.substring(min_end, min_end + 1)
+									if ch == "," or ch == " "
+										break
+									min_end = min_end + 1
+								string min_val = constraints.substring(min_pos + 4, min_end).trim()
+								validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\" and value.length() < " + min_val + "\n"
+								validate_body = validate_body + "\t\t\t\treturn \"" + field_name + " must be at least " + min_val + " characters\"\n"
+
+							// max=N constraint (string length maximum)
+							integer max_pos = constraints.indexOf("max=")
+							if max_pos != -1
+								integer max_end = max_pos + 4
+								while max_end < constraints.length()
+									string ch = constraints.substring(max_end, max_end + 1)
+									if ch == "," or ch == " "
+										break
+									max_end = max_end + 1
+								string max_val = constraints.substring(max_pos + 4, max_end).trim()
+								validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\" and value.length() > " + max_val + "\n"
+								validate_body = validate_body + "\t\t\t\treturn \"" + field_name + " must be at most " + max_val + " characters\"\n"
+
+							// email constraint (presence of @ character)
+							if constraints.indexOf("email") != -1
+								validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\" and value.indexOf(\"@\") == -1\n"
+								validate_body = validate_body + "\t\t\t\treturn \"" + field_name + " must be a valid email address\"\n"
+
+							// range=N..M constraint (numeric range check)
+							integer range_pos = constraints.indexOf("range=")
+							if range_pos != -1
+								integer range_end = range_pos + 6
+								while range_end < constraints.length()
+									string ch = constraints.substring(range_end, range_end + 1)
+									if ch == "," or ch == " "
+										break
+									range_end = range_end + 1
+								string range_expr = constraints.substring(range_pos + 6, range_end).trim()
+								integer dots_pos = range_expr.indexOf("..")
+								if dots_pos != -1
+									string range_min = range_expr.substring(0, dots_pos).trim()
+									string range_max = range_expr.substring(dots_pos + 2, range_expr.length()).trim()
+									validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\"\n"
+									validate_body = validate_body + "\t\t\t\tinteger __range_val = parseInt(value)\n"
+									validate_body = validate_body + "\t\t\t\tif __range_val < " + range_min + " or __range_val > " + range_max + "\n"
+									validate_body = validate_body + "\t\t\t\t\treturn \"" + field_name + " must be between " + range_min + " and " + range_max + "\"\n"
+
+			line_start = line_end + 1
+
+		// Build the method signature and body
+		string result = "\n"
+		result = result + "\t\tstring validate(string field_name, string value)\n"
+		if validate_body.length() > 0
+			result = result + validate_body
+		result = result + "\t\t\treturn \"\"\n"
+		return result
+
+	// Generate helper methods for serialization.
+	// When has_tenant is true an additional __to_params_with_tenant helper is
+	// generated so that INSERT operations automatically include the tenant_id
+	// column without requiring the caller to set it explicitly.
+	string generate_helper_methods(string model_name, string field_names, string field_types, string body, boolean has_tenant)
+		string result = "\n"
+
+		result = result + "\t\tstring __field_list()\n"
+		result = result + "\t\t\treturn \"" + field_names.replace(",", ", ") + "\"\n\n"
+
+		// Generate __field_definitions() - returns field definitions with SQL types for CREATE TABLE
+		string field_defs = generate_field_definitions(body)
+		result = result + "\t\tstring __field_definitions()\n"
+		result = result + "\t\t\treturn \"" + field_defs + "\"\n"
+
+		result = result + "\n\t\tstring __placeholder_list()\n"
+		result = result + "\t\t\treturn __generate_placeholders(" + count_fields(field_names).toString() + ")\n"
+
+		result = result + "\n\t\tstring __generate_placeholders(integer count)\n"
+		result = result + "\t\t\tstring result = \"\"\n"
+		result = result + "\t\t\tinteger i = 1\n"
+		result = result + "\t\t\twhile i <= count\n"
+		result = result + "\t\t\t\tif i > 1\n"
+		result = result + "\t\t\t\t\tresult = result + \", \"\n"
+		result = result + "\t\t\t\tresult = result + \"$\" + i.toString()\n"
+		result = result + "\t\t\t\ti = i + 1\n"
+		result = result + "\t\t\treturn result\n"
+
+		// Generate __to_params() - serializes all fields (except id) to JSON array for INSERT
+		result = result + "\n\t\tstring __to_params()\n"
+		result = result + "\t\t\tstring params = \"[\"\n"
+		result = result + generate_field_serialization(field_names, field_types, false)
+		result = result + "\t\t\tparams = params + \"]\"\n"
+		result = result + "\t\t\treturn params\n"
+
+		// Generate __to_params_with_tenant() - same as __to_params but prepends the
+		// current tenant_id as the first parameter in the JSON array.  This is only
+		// emitted for tenant-aware models and keeps the field list in sync with the
+		// auto-expanded INSERT SQL that prepends the tenant_id column.
+		if has_tenant
+			result = result + "\n\t\tstring __to_params_with_tenant(string tenant_id)\n"
+			result = result + "\t\t\tstring params = \"[\\\"\" + tenant_id + \"\\\"\"\n"
+			result = result + generate_field_serialization(field_names, field_types, true)
+			result = result + "\t\t\tparams = params + \"]\"\n"
+			result = result + "\t\t\treturn params\n"
+
+		// Generate __to_update_params() - serializes id first, then other fields for UPDATE
+		result = result + "\n\t\tstring __to_update_params()\n"
+		result = result + "\t\t\tstring params = \"[\" + id.toString()\n"
+		result = result + generate_field_serialization(field_names, field_types, true)
+		result = result + "\t\t\tparams = params + \"]\"\n"
+		result = result + "\t\t\treturn params\n"
+
+		// Generate __update_set() - generates "field1 = $2, field2 = $3, ..."
+		result = result + "\n\t\tstring __update_set()\n"
+		result = result + "\t\t\treturn \"" + generate_update_set_sql(field_names) + "\"\n"
+
+		// Generate __extract_id() - extracts id from query result JSON
+		result = result + "\n\t\tinteger __extract_id(string result)\n"
+		result = result + "\t\t\tinteger id_pos = result.indexOf(\"\\\"id\\\":\")\n"
+		result = result + "\t\t\tif id_pos == -1\n"
+		result = result + "\t\t\t\treturn 0\n"
+		result = result + "\t\t\tinteger value_start = id_pos + 5\n"
+		result = result + "\t\t\tinteger value_end = value_start\n"
+		result = result + "\t\t\twhile value_end < result.length()\n"
+		result = result + "\t\t\t\tstring ch = result.substring(value_end, value_end + 1)\n"
+		result = result + "\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
+		result = result + "\t\t\t\t\tbreak\n"
+		result = result + "\t\t\t\tvalue_end = value_end + 1\n"
+		result = result + "\t\t\treturn parseInt(result.substring(value_start, value_end))\n"
+
+		return result
+
+	// Generate field serialization code (for INSERT and UPDATE params)
+	// String/datetime values are quoted in JSON, integer/number/boolean are unquoted
+	string generate_field_serialization(string field_names, string field_types, boolean skip_first)
+		string result = ""
+		string fields = field_names
+		string types = field_types
+		integer pos = 0
+		integer type_pos = 0
+		boolean first_added = false
+
+		while pos < fields.length()
+			// Find end of current field name
+			integer comma_pos = fields.indexOf(",", pos)
+			if comma_pos == -1
+				comma_pos = fields.length()
+
+			// Find end of current field type
+			integer type_comma = types.indexOf(",", type_pos)
+			if type_comma == -1
+				type_comma = types.length()
+
+			string field = fields.substring(pos, comma_pos).trim()
+			string ftype = types.substring(type_pos, type_comma).trim()
+
+			// Skip 'id' field for INSERT params
+			if field != "id"
+				// Determine if this type needs JSON quoting
+				boolean needs_quotes = true
+				if ftype == "integer" or ftype == "number" or ftype == "boolean"
+					needs_quotes = false
+
+				string separator = ""
+				if skip_first or first_added
+					separator = ", "
+
+				if needs_quotes
+					result = result + "\t\t\tparams = params + \"" + separator + "\\\"\" + " + field + ".toString() + \"\\\"\"\n"
+				else
+					result = result + "\t\t\tparams = params + \"" + separator + "\" + " + field + ".toString()\n"
+				first_added = true
+
+			pos = comma_pos + 1
+			type_pos = type_comma + 1
+
+		return result
+
+	// Generate UPDATE SET clause SQL
+	string generate_update_set_sql(string field_names)
+		string result = ""
+		string fields = field_names
+		integer pos = 0
+		integer param_idx = 2
+
+		while pos < fields.length()
+			integer comma_pos = fields.indexOf(",", pos)
+			if comma_pos == -1
+				comma_pos = fields.length()
+
+			string field = fields.substring(pos, comma_pos).trim()
+
+			// Skip 'id' field
+			if field != "id"
+				if result.length() > 0
+					result = result + ", "
+				result = result + field + " = $" + param_idx.toString()
+				param_idx = param_idx + 1
+
+			pos = comma_pos + 1
+
+		return result
+
+	// Count comma-separated fields
+	integer count_fields(string field_names)
+		if field_names.length() == 0
+			return 0
+		integer count = 1
+		integer pos = 0
+		while pos < field_names.length()
+			if field_names.substring(pos, pos + 1) == ","
+				count = count + 1
+			pos = pos + 1
+		return count
+
+// ============================================================================
+// CRUD EXPRESSION EXPANSION
+// ============================================================================
+
+functions:
+	// Expand Model.find: block.
+	// When the model body declares a tenantId field or a ": tenant" constraint,
+	// the generated SQL automatically prepends a tenant_id filter so that callers
+	// never have to include it explicitly in their where: sub-blocks.
+	string expand_find(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		string order_clause = extract_subblock(body, "order:")
+		string limit_clause = extract_subblock(body, "limit:")
+		string link_clause = extract_subblock(body, "link:")
+		boolean has_tenant = detect_tenant_field(body)
+
+		string sql = "SELECT * FROM " + table_name
+
+		// Handle link clause (joins)
+		if link_clause.length() > 0
+			sql = sql + " " + parse_link_clause(link_clause, table_name)
+
+		// Build WHERE clause with optional tenant isolation prefix
+		if has_tenant
+			string __tf_result = "string __tf_sql = \"SELECT * FROM " + table_name
+			if link_clause.length() > 0
+				__tf_result = __tf_result + " " + parse_link_clause(link_clause, table_name)
+			__tf_result = __tf_result + "\"\n"
+			__tf_result = __tf_result + "string __tf_tenant = tenant_getId()\n"
+			__tf_result = __tf_result + "string __tf_filter = \"tenant_id = '\" + __tf_tenant + \"'\"\n"
+			if where_clause.length() > 0
+				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" WHERE \" + __tf_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
+			else
+				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" WHERE \" + __tf_filter\n"
+			if order_clause.length() > 0
+				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
+			if limit_clause.length() > 0
+				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" LIMIT " + limit_clause.trim() + "\"\n"
+			string __tf_offset = extract_subblock(body, "offset:")
+			if __tf_offset.length() > 0
+				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" OFFSET " + __tf_offset.trim() + "\"\n"
+			__tf_result = __tf_result + "_db_query(__tf_sql, \"[]\")"
+			return __tf_result
+
+		// Handle where clause (non-tenant path)
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		// Handle order clause
+		if order_clause.length() > 0
+			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
+
+		// Handle limit
+		if limit_clause.length() > 0
+			sql = sql + " LIMIT " + limit_clause.trim()
+
+		// Handle offset
+		string offset_clause = extract_subblock(body, "offset:")
+		if offset_clause.length() > 0
+			sql = sql + " OFFSET " + offset_clause.trim()
+
+		return "_db_query(\"" + sql + "\", \"[]\")"
+
+	// Expand Model.first: block
+	string expand_first(string model_name, string body)
+		string find_expr = expand_find(model_name, body)
+		// Add LIMIT 1 if not present
+		if find_expr.indexOf("LIMIT") == -1
+			integer close_quote = find_expr.lastIndexOf("\"")
+			find_expr = find_expr.substring(0, close_quote) + " LIMIT 1" + find_expr.substring(close_quote, find_expr.length())
+		return "__parse_first(" + find_expr + ")"
+
+	// Expand Model.count: block.
+	// Tenant-aware models automatically scope the COUNT query.
+	string expand_count(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		boolean has_tenant = detect_tenant_field(body)
+
+		if has_tenant
+			string parsed_where = ""
+			if where_clause.length() > 0
+				parsed_where = parse_where_clause(where_clause)
+			string __tc_result = "string __tc_sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+			__tc_result = __tc_result + "string __tc_tenant = tenant_getId()\n"
+			__tc_result = __tc_result + "string __tc_filter = \"tenant_id = '\" + __tc_tenant + \"'\"\n"
+			if where_clause.length() > 0
+				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter + \" AND " + parsed_where + "\"\n"
+			else
+				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter\n"
+			__tc_result = __tc_result + "__parse_count(_db_query(__tc_sql, \"[]\"))"
+			return __tc_result
+
+		string sql = "SELECT COUNT(*) as count FROM " + table_name
+
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		return "__parse_count(_db_query(\"" + sql + "\", \"[]\"))"
+
+	// Expand Model.insert: block.
+	// For tenant-aware models, the tenant_id column is prepended automatically
+	// so that application code never sets it explicitly and cannot forge it.
+	string expand_insert(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		boolean has_tenant = detect_tenant_field(body)
+		string fields = ""
+		string values = ""
+		string params = "["
+		integer param_idx = 1
+
+		// For tenant-aware models, inject tenant_id as the first column/value pair.
+		// The tenant value is resolved at runtime via tenant_getId() so the INSERT
+		// expression becomes a multi-statement block.
+		if has_tenant
+			// If the caller already supplies tenantId explicitly, skip auto-injection
+			// to avoid duplicating the column.
+			if body.indexOf("tenantId = ") == -1 and body.indexOf("tenant_id = ") == -1
+				fields = "tenant_id"
+				values = "$1"
+				params = "[\" + tenant_getId() + \""
+				param_idx = 2
+
+		// Parse field assignments from the block body
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer eq_pos = line.indexOf(" = ")
+				if eq_pos != -1
+					string field_name = line.substring(0, eq_pos).trim()
+					string field_value = line.substring(eq_pos + 3, line.length()).trim()
+
+					if fields.length() > 0
+						fields = fields + ", "
+						values = values + ", "
+						params = params + ", "
+
+					fields = fields + field_name
+					values = values + "$" + param_idx.toString()
+					params = params + format_param_value(field_value)
+					param_idx = param_idx + 1
+
+			line_start = line_end + 1
+
+		params = params + "]"
+
+		string sql = "INSERT INTO " + table_name + " (" + fields + ") VALUES (" + values + ") RETURNING *"
+		return "_db_query(\"" + sql + "\", " + params + ")"
+
+	// Expand Model.update: block.
+	// For tenant-aware models the WHERE clause is automatically scoped to the
+	// current tenant so that update operations cannot affect other tenants.
+	string expand_update(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string set_clause = extract_subblock(body, "set:")
+		string where_clause = extract_subblock(body, "where:")
+		boolean has_tenant = detect_tenant_field(body)
+
+		if set_clause.length() == 0
+			return "// ERROR: update requires set: block"
+
+		string sql = "UPDATE " + table_name + " SET " + parse_set_clause(set_clause)
+
+		if has_tenant
+			string __tu_result = "string __tu_sql = \"" + sql + "\"\n"
+			__tu_result = __tu_result + "string __tu_tenant = tenant_getId()\n"
+			__tu_result = __tu_result + "string __tu_filter = \"tenant_id = '\" + __tu_tenant + \"'\"\n"
+			if where_clause.length() > 0
+				__tu_result = __tu_result + "__tu_sql = __tu_sql + \" WHERE \" + __tu_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
+			else
+				__tu_result = __tu_result + "__tu_sql = __tu_sql + \" WHERE \" + __tu_filter\n"
+			__tu_result = __tu_result + "_db_execute(__tu_sql, \"[]\")"
+			return __tu_result
+
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		return "_db_execute(\"" + sql + "\", \"[]\")"
+
+	// Expand Model.delete: block.
+	// For tenant-aware models the WHERE clause is automatically scoped to the
+	// current tenant so that delete operations cannot affect other tenants.
+	string expand_delete(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		boolean has_tenant = detect_tenant_field(body)
+
+		if has_tenant
+			string __td_result = "string __td_sql = \"DELETE FROM " + table_name + "\"\n"
+			__td_result = __td_result + "string __td_tenant = tenant_getId()\n"
+			__td_result = __td_result + "string __td_filter = \"tenant_id = '\" + __td_tenant + \"'\"\n"
+			if where_clause.length() > 0
+				__td_result = __td_result + "__td_sql = __td_sql + \" WHERE \" + __td_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
+			else
+				__td_result = __td_result + "__td_sql = __td_sql + \" WHERE \" + __td_filter\n"
+			__td_result = __td_result + "_db_execute(__td_sql, \"[]\")"
+			return __td_result
+
+		string sql = "DELETE FROM " + table_name
+
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+
+		return "_db_execute(\"" + sql + "\", \"[]\")"
+
+// ============================================================================
+// TRANSACTION EXPANSION
+// ============================================================================
+
+functions:
+	// Expand Data.tx: block
+	string expand_transaction(string body)
+		string result = "string __tx_id = _db_begin()\n"
+		result = result + "boolean __tx_success = true\n"
+		result = result + "try\n"
+		result = result + "\t" + body.replace("\n", "\n\t") + "\n"
+		result = result + "\t_db_commit(__tx_id)\n"
+		result = result + "catch any __tx_error\n"
+		result = result + "\t_db_rollback(__tx_id)\n"
+		result = result + "\t__tx_success = false\n"
+		result = result + "\tthrow __tx_error\n"
+		return result
+
+// ============================================================================
+// RAW QUERY EXPANSION
+// ============================================================================
+
+functions:
+	// Expand db.query: block
+	string expand_raw_query(string body)
+		string sql = extract_subblock(body, "sql:")
+		string params = extract_subblock(body, "params:")
+
+		if params.length() == 0
+			params = "[]"
+
+		return "_db_query(" + sql + ", " + params + ")"
+
+	// Expand db.queryAs(Type): block
+	string expand_typed_query(string block_name, string body)
+		// Extract type from db.queryAs(Type)
+		integer paren_start = block_name.indexOf("(")
+		integer paren_end = block_name.indexOf(")")
+		string type_name = ""
+		if paren_start != -1 and paren_end != -1
+			type_name = block_name.substring(paren_start + 1, paren_end)
+
+		string raw = expand_raw_query(body)
+		return "__parse_as_" + type_name + "(" + raw + ")"
+
+// ============================================================================
+// MIGRATION EXPANSION
+// ============================================================================
+
+functions:
+	// Expand a 'migrate "name":' block from a migration file.
+	// The block body must contain up: and down: sub-blocks with raw SQL.
+	// Generates two named functions (__migration_<name>_up / _down) and
+	// registers the migration with the runtime via _db_register_migration().
+	//
+	// Example source:
+	//   migrate "001_create_users":
+	//     up:
+	//       CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT)
+	//     down:
+	//       DROP TABLE users
+	string expand_migrate_block(string attrs, string body)
+		// Resolve the migration name from the attribute string
+		string migration_name = attrs.trim()
+
+		// Strip surrounding double-quotes when present
+		if migration_name.startsWith("\"")
+			migration_name = migration_name.substring(1, migration_name.length())
+		if migration_name.endsWith("\"")
+			migration_name = migration_name.substring(0, migration_name.length() - 1)
+
+		migration_name = migration_name.trim()
+
+		// Derive a clean identifier suitable for use in function names
+		string func_name = migration_name.replace("-", "_").replace(".", "_").replace(" ", "_").replace("/", "_")
+
+		// Extract up: and down: sub-block content
+		string up_sql = extract_subblock(body, "up:")
+		string down_sql = extract_subblock(body, "down:")
+
+		// Collapse multi-line SQL to a single line and escape for string literal embedding
+		string escaped_up = up_sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\t", " ").trim()
+		string escaped_down = down_sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\t", " ").trim()
+
+		// Normalise consecutive spaces that result from collapsing newlines/tabs
+		// (single-pass: replace double-space with single-space)
+		while escaped_up.indexOf("  ") != -1
+			escaped_up = escaped_up.replace("  ", " ")
+		while escaped_down.indexOf("  ") != -1
+			escaped_down = escaped_down.replace("  ", " ")
+
+		string result = "// Migration: " + migration_name + "\n"
+		result = result + "functions:\n"
+
+		// Up function - applies the migration
+		result = result + "\tinteger __migration_" + func_name + "_up()\n"
+		if escaped_up.length() > 0
+			result = result + "\t\treturn _db_execute(\"" + escaped_up + "\", \"[]\")\n"
+		else
+			result = result + "\t\treturn 0\n"
+		result = result + "\n"
+
+		// Down function - rolls back the migration
+		result = result + "\tinteger __migration_" + func_name + "_down()\n"
+		if escaped_down.length() > 0
+			result = result + "\t\treturn _db_execute(\"" + escaped_down + "\", \"[]\")\n"
+		else
+			result = result + "\t\treturn 0\n"
+		result = result + "\n"
+
+		// Register the migration with the runtime so it is tracked in the
+		// migrations version table.  The runtime stores name, version hash,
+		// and applied_at timestamp; the function pointers are resolved by name.
+		result = result + "\n"
+		result = result + "_db_register_migration(\"" + migration_name + "\")\n"
+
+		return result
+
+	// Generate an auto-migration diff check for a model definition.
+	// When the model class is first loaded this code asks the runtime to compare
+	// the declared field definitions against the live database schema and execute
+	// any ALTER TABLE statements required to bring the table up to date.
+	string generate_migration_diff(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string field_defs = generate_field_definitions(body)
+
+		// Escape the field definitions for embedding in a string literal
+		string escaped_defs = field_defs.replace("\\", "\\\\").replace("\"", "\\\"")
+
+		string result = "string __diff_sql_" + table_name + " = _db_migration_diff(\"" + table_name + "\", \"" + escaped_defs + "\")\n"
+		result = result + "if __diff_sql_" + table_name + ".length() > 0\n"
+		result = result + "\t_db_execute(__diff_sql_" + table_name + ", \"[]\")\n"
+		result = result + "\n"
+
+		return result
+
+	// Validate a migrate: block before expansion.
+	// Returns an error string on failure, empty string when valid.
+	string validate_migrate_block(string attrs, string body)
+		string migration_name = attrs.trim()
+		if migration_name.length() == 0
+			return "migrate: migration name is required (e.g. migrate \"001_create_users\":)"
+
+		// Strip surrounding double-quotes for length check
+		if migration_name.startsWith("\"")
+			migration_name = migration_name.substring(1, migration_name.length())
+		if migration_name.endsWith("\"")
+			migration_name = migration_name.substring(0, migration_name.length() - 1)
+
+		migration_name = migration_name.trim()
+		if migration_name.length() == 0
+			return "migrate: migration name must not be empty"
+
+		// Require an up: block — a migration with no up is always an error
+		string up_content = extract_subblock(body, "up:")
+		if up_content.trim().length() == 0
+			return "migrate \"" + migration_name + "\": up: block is required and must contain SQL"
+
+		// Require a down: block — spec DAT-C007 mandates both up and down
+		string down_content = extract_subblock(body, "down:")
+		if down_content.trim().length() == 0
+			return "migrate \"" + migration_name + "\": down: block is required (spec DAT-C007) — add SQL to reverse this migration"
+
+		return ""
+
+// ============================================================================
+// CLAUSE PARSERS
+// ============================================================================
+
+functions:
+	// Extract a sub-block from body (e.g., "where:", "order:")
+	string extract_subblock(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return ""
+
+		integer content_start = start_pos + block_name.length()
+
+		// Find the end of this sub-block (next sub-block or end of body)
+		string subblock_markers = ",where:,order:,limit:,offset:,link:,set:,sql:,params:,up:,down:,"
+		integer end_pos = body.length()
+
+		integer search_pos = content_start
+		while search_pos < body.length()
+			// Check for any sub-block marker
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				string after_newline = body.substring(search_pos + 1, body.length()).trim()
+				// Check if next line starts a new sub-block
+				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+
+		return body.substring(content_start, end_pos).trim()
+
+	// Parse where: clause into SQL
+	string parse_where_clause(string where_body)
+		string result = ""
+		string lines = where_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + " AND "
+				result = result + parse_condition(line)
+
+			line_start = line_end + 1
+
+		return result
+
+	// Parse a single condition (e.g., "active == true" -> "active = true")
+	string parse_condition(string condition)
+		// Convert Clean operators to SQL
+		string result = condition
+		result = result.replace(" == ", " = ")
+		result = result.replace(" != ", " <> ")
+		result = result.replace(" and ", " AND ")
+		result = result.replace(" or ", " OR ")
+		return result
+
+	// Parse order: clause into SQL
+	string parse_order_clause(string order_body)
+		string result = ""
+		string lines = order_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				// Handle "field desc" or "field asc" or just "field"
+				// Only uppercase the direction keyword, preserve field name case
+				integer dir_pos = line.indexOf(" ")
+				if dir_pos != -1
+					string field = line.substring(0, dir_pos)
+					string direction = line.substring(dir_pos + 1, line.length()).trim().toUpperCase()
+					result = result + field + " " + direction
+				else
+					result = result + line
+
+			line_start = line_end + 1
+
+		return result
+
+	// Parse set: clause into SQL (for UPDATE)
+	string parse_set_clause(string set_body)
+		string result = ""
+		string lines = set_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				// Convert "field = value" to SQL
+				result = result + line
+
+			line_start = line_end + 1
+
+		return result
+
+	// Parse link: clause into JOIN statements
+	string parse_link_clause(string link_body, string base_table)
+		string result = ""
+		string lines = link_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				// Parse "ModelName field == otherField"
+				integer space_pos = line.indexOf(" ")
+				if space_pos != -1
+					string join_model = line.substring(0, space_pos)
+					string join_table = pluralize(to_snake_case(join_model))
+					string join_condition = line.substring(space_pos + 1, line.length()).trim()
+
+					// Replace == with =
+					join_condition = join_condition.replace(" == ", " = ")
+
+					// Replace "id" with "base_table.id"
+					if join_condition.indexOf(base_table + ".") == -1
+						join_condition = join_condition.replace(" id", " " + base_table + ".id")
+						join_condition = join_condition.replace("id ", base_table + ".id ")
+
+					result = result + "JOIN " + join_table + " ON " + join_condition + " "
+
+			line_start = line_end + 1
+
+		return result
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+functions:
+	// Map Clean type to SQL column type
+	string clean_type_to_sql(string clean_type)
+		if clean_type == "integer"
+			return "INTEGER"
+		if clean_type == "number"
+			return "REAL"
+		if clean_type == "string"
+			return "TEXT"
+		if clean_type == "boolean"
+			return "BOOLEAN"
+		if clean_type == "datetime"
+			return "TIMESTAMP"
+		// Foreign key or unknown type - default to INTEGER (FK reference)
+		return "INTEGER"
+
+	// Map Clean constraint to SQL constraint
+	// Note: onDelete=cascade is handled separately in generate_field_definitions
+	//       because it requires knowledge of the referenced table name
+	string clean_constraint_to_sql(string constraint)
+		string result = ""
+		if constraint.indexOf("unique") != -1
+			result = result + " UNIQUE"
+		if constraint.indexOf("default=now") != -1
+			result = result + " DEFAULT CURRENT_TIMESTAMP"
+		return result
+
+	// Determine whether a Clean Language type name is a primitive scalar
+	// Returns true for integer, number, string, boolean, datetime; false for model refs
+	boolean is_primitive_type(string type_name)
+		if type_name == "integer"
+			return true
+		if type_name == "number"
+			return true
+		if type_name == "string"
+			return true
+		if type_name == "boolean"
+			return true
+		if type_name == "datetime"
+			return true
+		return false
+
+	// Generate SQL field definitions from body for CREATE TABLE
+	string generate_field_definitions(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				// Parse constraints
+				integer colon_pos = line.indexOf(" : ")
+				string field_part = line
+				string constraints = ""
+				if colon_pos != -1
+					field_part = line.substring(0, colon_pos).trim()
+					constraints = line.substring(colon_pos + 3, line.length()).trim()
+
+				// Skip pk/auto fields (id is handled separately)
+				if constraints.indexOf("pk") != -1 and constraints.indexOf("auto") != -1
+					line_start = line_end + 1
+					continue
+
+				// Remove default value part
+				integer eq_pos = field_part.indexOf(" = ")
+				string default_val = ""
+				if eq_pos != -1
+					default_val = field_part.substring(eq_pos + 3, field_part.length()).trim()
+					field_part = field_part.substring(0, eq_pos).trim()
+
+				// Parse type and name
+				integer space_pos = field_part.indexOf(" ")
+				if space_pos != -1
+					string field_type = field_part.substring(0, space_pos).trim()
+					string field_name = field_part.substring(space_pos + 1, field_part.length()).trim()
+
+					if result.length() > 0
+						result = result + ", "
+
+					if is_primitive_type(field_type)
+						// Standard scalar field
+						string sql_type = clean_type_to_sql(field_type)
+						string sql_constraint = clean_constraint_to_sql(constraints)
+						result = result + field_name + " " + sql_type + sql_constraint
+
+						if default_val.length() > 0 and constraints.indexOf("default=") == -1
+							if default_val == "true" or default_val == "false"
+								result = result + " DEFAULT " + default_val
+							else
+								// Escape single quotes in default value to prevent SQL injection
+								result = result + " DEFAULT '" + default_val.replace("'", "''") + "'"
+					else
+						// Non-primitive type: treat as foreign key reference to another model
+						// Column stored as INTEGER referencing the related table's id column
+						string ref_table = pluralize(to_snake_case(field_type))
+						string fk_col = field_name + "_id"
+						result = result + fk_col + " INTEGER REFERENCES " + ref_table + "(id)"
+						// Append ON DELETE clause when onDelete=cascade constraint is present
+						if constraints.indexOf("onDelete=cascade") != -1
+							result = result + " ON DELETE CASCADE"
+						// Apply any additional scalar constraints (e.g. UNIQUE) from the constraint string
+						result = result + clean_constraint_to_sql(constraints)
+
+			line_start = line_end + 1
+
+		return result
+
+	// Convert PascalCase to snake_case (for table names)
+	string to_snake_case(string name)
+		string result = ""
+		integer i = 0
+		while i < name.length()
+			string ch = name.substring(i, i + 1)
+			string lower = ch.toLowerCase()
+			if ch != lower and i > 0
+				result = result + "_"
+			result = result + lower
+			i = i + 1
+		return result
+
+	// Pluralize a snake_case name to match standard database table naming conventions.
+	// Handles the most common English pluralization patterns:
+	//   word ending in consonant+'y'  -> replace 'y' with 'ies'  (e.g. category -> categories)
+	//   word ending in 'x' or 'z'    -> append 'es'              (e.g. index -> indexes)
+	//   word ending in 'ch' or 'sh'  -> append 'es'              (e.g. match -> matches)
+	//   already ends in 's'          -> return as-is             (already plural)
+	//   everything else              -> append 's'               (e.g. user -> users)
+	string pluralize(string name)
+		integer len = name.length()
+		if len == 0
+			return name
+		string last = name.substring(len - 1, len)
+		if last == "s"
+			return name
+		if last == "y" and len > 1
+			string vowels = "aeiou"
+			string prev = name.substring(len - 2, len - 1)
+			if vowels.indexOf(prev) == -1
+				return name.substring(0, len - 1) + "ies"
+			return name + "s"
+		if last == "x" or last == "z"
+			return name + "es"
+		if last == "h" and len > 1
+			string prev = name.substring(len - 2, len - 1)
+			if prev == "c" or prev == "s"
+				return name + "es"
+		return name + "s"
+
+	// Format a parameter value for JSON array
+	string format_param_value(string value)
+		// Check if it's a string literal
+		if value.startsWith("\"") and value.endsWith("\"")
+			return value
+		// Check if it's a number
+		if is_numeric(value)
+			return value
+		// Check if it's a boolean
+		if value == "true" or value == "false"
+			return value
+		// Otherwise it's a variable reference
+		return "\" + " + value + ".toString() + \""
+
+	// Check if string is numeric
+	boolean is_numeric(string s)
+		if s.length() == 0
+			return false
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch != "0" and ch != "1" and ch != "2" and ch != "3" and ch != "4" and ch != "5" and ch != "6" and ch != "7" and ch != "8" and ch != "9" and ch != "." and ch != "-"
+				return false
+			i = i + 1
+		return true
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+functions:
+	// Validate data model definition
+	string validate_data_model(string model_name, string body)
+		if model_name.length() == 0
+			return "data: model name is required"
+
+		// Check for at least one field
+		if body.trim().length() == 0
+			return "data " + model_name + ": at least one field is required"
+
+		return ""
