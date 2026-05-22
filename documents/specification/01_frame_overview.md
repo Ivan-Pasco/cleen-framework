@@ -96,7 +96,7 @@ Frame is divided into three main components:
 
 1. Developer declares plugins in `app.cln` and writes Clean code with framework blocks in the appropriate folder:
    ```clean
-   // app/backend/api/hello.cln
+   // app/server/api/hello.cln
    // No import needed — frame.server is declared in app.cln and owns this folder
 
    endpoints:
@@ -204,31 +204,31 @@ Frame uses a clean architecture-based folder structure with clear separation of 
 
 ```
 myapp/
-├── app.cln                 # Main entry point with plugins: block
-├── project.toml            # Project configuration
+├── app.cln                 # Project metadata + plugins: block
 │
 └── app/
-    ├── pages/              # SSR pages (frame.ui)
-    │   ├── index.html      # HTML template with {{ }} and cl-* directives
-    │   ├── index.cln       # Companion data loader (load/guard functions)
-    │   ├── about.html
-    │   └── blog/
-    │       ├── [slug].html
-    │       └── [slug].cln
+    ├── ui/
+    │   ├── pages/          # SSR pages (frame.ui)
+    │   │   ├── index.html  # HTML template with {{ }} and cl-* directives
+    │   │   ├── index.cln   # Companion data loader (load/guard functions)
+    │   │   ├── about.html
+    │   │   └── blog/
+    │   │       ├── [slug].html
+    │   │       └── [slug].cln
+    │   │
+    │   ├── components/     # Reusable UI components (frame.ui)
+    │   │   ├── Header.cln
+    │   │   └── Footer.cln
+    │   │
+    │   └── layouts/        # Page layout wrappers (frame.ui)
+    │       └── main.html
     │
-    ├── components/         # Reusable UI components (frame.ui)
-    │   ├── Header.cln
-    │   └── Footer.cln
-    │
-    ├── layouts/            # Page layout wrappers (frame.ui)
-    │   └── main.html
-    │
-    ├── backend/            # HTTP server (frame.server)
+    ├── server/             # HTTP server (frame.server)
     │   ├── api/            # API endpoints
     │   │   ├── users.cln
     │   │   └── posts.cln
     │   ├── services/       # Business logic
-    │   └── middleware/      # Middleware
+    │   └── middleware/     # Middleware
     │
     ├── data/               # Data models/ORM (frame.data)
     │   ├── models/
@@ -241,16 +241,16 @@ myapp/
     ├── auth/               # Auth configuration (frame.auth)
     │   └── auth.cln
     │
-    ├── canvas/             # Canvas applications (frame.canvas)
-    │   ├── scenes/
-    │   ├── sprites/
-    │   └── audio/
-    │
-    └── public/             # Static assets (served as-is)
-        └── css/
-            └── style.css
+    └── canvas/             # Canvas applications (frame.canvas)
+        ├── scenes/
+        ├── sprites/
+        └── audio/
 
-├── dist/                   # Compiled WASM output
+public/                     # Static assets (served as-is, project root)
+└── css/
+    └── style.css
+
+dist/                       # Compiled WASM output
 ```
 
 ### Folder Ownership by Plugin
@@ -259,8 +259,8 @@ Each plugin declares the folders it owns in its `plugin.toml` file. When a plugi
 
 | Plugin | Owned Folders |
 |--------|---------------|
-| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.ui` | `app/ui/pages/`, `app/ui/components/`, `app/ui/layouts/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
@@ -282,14 +282,14 @@ Once a plugin is declared, `implicit_import = true` in the plugin's `plugin.toml
 
 | File Location | Plugin that processes it | Import needed? |
 |---------------|--------------------------|----------------|
-| `app/backend/api/users.cln` | `frame.server` (declared in app.cln) | No |
+| `app/server/api/users.cln` | `frame.server` (declared in app.cln) | No |
 | `app/data/models/User.cln` | `frame.data` (declared in app.cln) | No |
 | `app/auth/auth.cln` | `frame.auth` (declared in app.cln) | No |
-| `app/pages/index.cln` | `frame.ui` (declared in app.cln) | No |
-| `app/components/Header.cln` | `frame.ui` (declared in app.cln) | No |
+| `app/ui/pages/index.cln` | `frame.ui` (declared in app.cln) | No |
+| `app/ui/components/Header.cln` | `frame.ui` (declared in app.cln) | No |
 | `app/canvas/scenes/main.cln` | `frame.canvas` (declared in app.cln) | No |
 
-This means a file at `app/backend/api/users.cln` does not need to import `frame.server` explicitly — but the plugin must still be declared in `app.cln`.
+This means a file at `app/server/api/users.cln` does not need to import `frame.server` explicitly — but the plugin must still be declared in `app.cln`.
 
 ### Folder Creation
 
@@ -365,7 +365,7 @@ auth:
 		ttlMinutes: 60
 ```
 
-**`app/backend/api/users.cln`** — API endpoints (processed by `frame.server`, declared in app.cln):
+**`app/server/api/users.cln`** — API endpoints (processed by `frame.server`, declared in app.cln):
 ```clean
 endpoints:
 	POST "/login" :

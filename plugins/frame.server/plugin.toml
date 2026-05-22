@@ -77,9 +77,9 @@ functions = [
   { name = "_http_no_cache", params = [], returns = "integer", description = "Set no-cache headers" },
 
   # HTML Page Rendering (SSR)
-  # Renders app/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
+  # Renders app/ui/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
   # Implemented by clean-server: resolves the page template, substitutes interpolations, returns HTML.
-  { name = "_ui_render_page", params = ["string", "string"], returns = "string", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/pages/<name>.html", expand_strings = true },
+  { name = "_ui_render_page", params = ["string", "string"], returns = "string", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/ui/pages/<name>.html", expand_strings = true },
 
   # JSON Encoding/Decoding
   { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true },
@@ -155,7 +155,7 @@ types = [
 # Built-in functions/expressions
 functions = [
   # Response helpers
-  { name = "render", signature = "render(name)", description = "Render HTML page from app/pages/<name>.html and return as 200 text/html response" },
+  { name = "render", signature = "render(name)", description = "Render HTML page from app/ui/pages/<name>.html and return as 200 text/html response" },
   { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page with JSON data string for {{ key }} template substitution" },
   { name = "json", signature = "json(data)", description = "Return JSON response with Content-Type: application/json" },
   { name = "html", signature = "html(content)", description = "Return HTML response" },
@@ -201,7 +201,7 @@ completions = [
 
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["app/backend", "app/backend/api", "app/backend/services", "app/backend/middleware"]
+owns = ["app/server", "app/server/api", "app/server/services", "app/server/middleware"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -215,7 +215,7 @@ implicit_import = true
 [templates]
 # Starter files created when plugin is added to a project
 files = [
-  { path = "app/backend/api/health.cln", template = "health.cln" },
+  { path = "app/server/api/health.cln", template = "health.cln" },
 ]
 
 [enforcement]
@@ -229,13 +229,13 @@ restricted_functions = [
 ]
 
 required_blocks = [
-  { folder = "app/backend/api/", block = "endpoints", message = "API endpoint files should use 'endpoints:' block" },
+  { folder = "app/server/api/", block = "endpoints", message = "API endpoint files should use 'endpoints:' block" },
 ]
 
 block_folder_rules = [
-  { block = "endpoints", allowed_in = ["app/backend/", "app/server/"], message = "endpoints: block should be in app/backend/ or app/server/" },
-  { block = "middleware", allowed_in = ["app/backend/middleware/", "app/backend/"], message = "middleware: block should be in app/backend/middleware/" },
-  { block = "server", allowed_in = ["app/backend/", "app/server/", "app/"], message = "server: block should be in backend or app root" },
+  { block = "endpoints", allowed_in = ["app/server/"], message = "endpoints: block should be in app/server/" },
+  { block = "middleware", allowed_in = ["app/server/middleware/", "app/server/"], message = "middleware: block should be in app/server/middleware/" },
+  { block = "server", allowed_in = ["app/server/", "app/"], message = "server: block should be in app/server/ or app root" },
 ]
 
 [ai]

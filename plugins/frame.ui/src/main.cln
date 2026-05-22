@@ -43,6 +43,9 @@ functions:
 	string expand_block(string block_name, string attributes, string body)
 
 		if block_name == "component"
+			// Idempotency guard: expansion marker present means this block was already expanded
+			if body.indexOf("// __frame_ui_expanded__") != -1
+				return body
 			return expand_component(attributes, body)
 
 		if block_name == "html"
@@ -1592,7 +1595,8 @@ functions:
 		if name == ""
 			name = "Component"
 
-		string result = "class " + name + "\n"
+		string result = "// __frame_ui_expanded__\n"
+		result = result + "class " + name + "\n"
 
 		// Add tag and hydration metadata
 		if tag != ""

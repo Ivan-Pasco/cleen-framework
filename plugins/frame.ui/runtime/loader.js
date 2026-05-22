@@ -174,6 +174,9 @@
 			// Console
 			print: (ptr, len) => console.log(readString(ptr, len)),
 			printl: (ptr, len) => console.log(readString(ptr, len)),
+			print_integer: (ptr, len) => console.log(readString(ptr, len)),
+			print_float:   (ptr, len) => console.log(readString(ptr, len)),
+			print_boolean: (ptr, len) => console.log(readString(ptr, len)),
 			'string.concat': (hptr1, hptr2) => {
 				const dv = new DataView(memory.buffer);
 				const s1 = readString(hptr1 + 4, dv.getUint32(hptr1, true));
@@ -310,8 +313,8 @@
 			},
 
 			_ui_event_closest_attr: (selectorPtr, selectorLen, attrPtr, attrLen) => {
-				if (!currentEventTarget) return writeString('');
-				const el = currentEventTarget.closest(readString(selectorPtr, selectorLen));
+				if (!currentEvent) return writeString('');
+				const el = currentEvent.target.closest(readString(selectorPtr, selectorLen));
 				if (!el) return writeString('');
 				return writeString(el.getAttribute(readString(attrPtr, attrLen)) || '');
 			},

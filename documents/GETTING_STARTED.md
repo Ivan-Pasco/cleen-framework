@@ -26,22 +26,21 @@ This creates a project with automatic file discovery:
 
 ```
 my-app/
-├── app.cln                  # Main entry point (plugins: block)
-├── project.toml             # Project configuration
-└── app/
-    ├── pages/               # SSR pages (.html)          → frame.ui
-    ├── components/          # Reusable UI components     → frame.ui
-    ├── backend/api/         # HTTP endpoints (.cln)      → frame.server
-    ├── data/models/         # Data model definitions     → frame.data
-    ├── auth/                # Auth configuration         → frame.auth
-    └── public/css/          # Static styles
+├── app.cln                  # Project metadata + plugin configuration
+├── app/
+│   ├── server/api/          # HTTP endpoints (.cln)      → frame.server
+│   ├── data/models/         # Data model definitions     → frame.data
+│   ├── ui/pages/            # SSR pages (.html)          → frame.ui
+│   ├── ui/components/       # Reusable UI components     → frame.ui
+│   └── auth/                # Auth configuration         → frame.auth
+└── public/css/              # Static styles
 ```
 
 For the full folder reference, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md).
 
 ## Your First Page
 
-Edit `app/pages/index.html`:
+Edit `app/ui/pages/index.html`:
 
 ```html
 <html>
@@ -61,7 +60,7 @@ Edit `app/pages/index.html`:
 Pages get their data from a companion `.cln` file with the same name:
 
 ```clean
-// app/pages/index.cln
+// app/ui/pages/index.cln
 functions:
 	any load(Request request)
 		return { appName: "My App" }
@@ -83,7 +82,7 @@ Open http://localhost:3000 in your browser.
 
 ## Add More Pages
 
-Create `app/pages/about.html`:
+Create `app/ui/pages/about.html`:
 
 ```html
 <html>
@@ -98,7 +97,7 @@ Rebuild and the `/about` route is automatically available.
 
 ## Dynamic Routes
 
-Create `app/pages/blog/[slug].html` for dynamic URLs:
+Create `app/ui/pages/blog/[slug].html` for dynamic URLs:
 
 ```html
 <html>
@@ -109,7 +108,7 @@ Create `app/pages/blog/[slug].html` for dynamic URLs:
 </html>
 ```
 
-With companion loader `app/pages/blog/[slug].cln`:
+With companion loader `app/ui/pages/blog/[slug].cln`:
 
 ```clean
 functions:
@@ -125,7 +124,7 @@ This handles URLs like `/blog/hello-world`, `/blog/my-first-post`, etc.
 
 ## Add an API Endpoint
 
-Create `app/backend/api/users.cln`:
+Create `app/server/api/users.cln`:
 
 ```clean
 endpoints:
@@ -170,19 +169,19 @@ Models are auto-discovered and available in your pages and API endpoints.
 
 | Folder | Purpose | Plugin |
 |--------|---------|--------|
-| `app/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
-| `app/components/` | Reusable components (.cln) | frame.ui |
-| `app/layouts/` | Page layouts (.html) | frame.ui |
-| `app/backend/api/` | HTTP endpoints (.cln) | frame.server |
-| `app/backend/services/` | Business logic (.cln) | frame.server |
+| `app/server/api/` | HTTP endpoints (.cln) | frame.server |
+| `app/server/services/` | Business logic (.cln) | frame.server |
 | `app/data/models/` | Data model definitions (.cln) | frame.data |
 | `app/data/migrations/` | Schema migrations (.cln) | frame.data |
+| `app/ui/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
+| `app/ui/components/` | Reusable components (.cln) | frame.ui |
+| `app/ui/layouts/` | Page layouts (.html) | frame.ui |
 | `app/auth/` | Auth configuration (.cln) | frame.auth |
-| `app/public/` | Static files (CSS, images) | (served as-is) |
+| `public/` | Static files (CSS, images) | (served as-is) |
 
 | File Pattern | Route |
 |--------------|-------|
-| `pages/index.html` | `/` |
-| `pages/about.html` | `/about` |
-| `pages/blog/[slug].html` | `/blog/:slug` |
-| `backend/api/users.cln` | `/api/users` |
+| `app/ui/pages/index.html` | `/` |
+| `app/ui/pages/about.html` | `/about` |
+| `app/ui/pages/blog/[slug].html` | `/blog/:slug` |
+| `app/server/api/users.cln` | `/api/users` |

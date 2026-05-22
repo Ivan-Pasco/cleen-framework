@@ -6,18 +6,9 @@
 
 ```
 my-project/
-├── app.cln                      # Main entry point / plugin configuration
-├── project.toml                 # Project metadata and build settings
+├── app.cln                      # Project metadata + plugin configuration
 ├── app/
-│   ├── pages/                   # SSR page routes (.html)        → frame.ui
-│   │   ├── index.html           # Home page (/)
-│   │   ├── index.cln            # Companion data loader
-│   │   └── blog/
-│   │       ├── [slug].html      # Dynamic route (/blog/:slug)
-│   │       └── [slug].cln       # Companion loader
-│   ├── components/              # Reusable UI components (.cln)  → frame.ui
-│   ├── layouts/                 # Page layout wrappers (.html)   → frame.ui
-│   ├── backend/                 # HTTP server layer              → frame.server
+│   ├── server/                  # HTTP server layer              → frame.server
 │   │   ├── api/                 # HTTP endpoint handlers (.cln)
 │   │   ├── services/            # Business logic (.cln)
 │   │   └── middleware/          # Request filters (.cln)
@@ -26,16 +17,30 @@ my-project/
 │   │   ├── queries/             # Reusable named queries (.cln)
 │   │   ├── migrations/          # Schema migration files (.cln)
 │   │   └── repositories/        # Data access layer (.cln)
+│   ├── ui/                      # UI layer                       → frame.ui
+│   │   ├── pages/               # SSR page routes (.html)
+│   │   │   ├── index.html       # Home page (/)
+│   │   │   ├── index.cln        # Companion data loader
+│   │   │   └── blog/
+│   │   │       ├── [slug].html  # Dynamic route (/blog/:slug)
+│   │   │       └── [slug].cln   # Companion loader
+│   │   ├── components/          # Reusable UI components (.cln)
+│   │   └── layouts/             # Page layout wrappers (.html)
 │   ├── auth/                    # Auth configuration (.cln)      → frame.auth
 │   ├── canvas/                  # Canvas applications            → frame.canvas
 │   │   ├── scenes/              # Scene definitions (.cln)
 │   │   ├── sprites/             # Sprite definitions (.cln)
 │   │   └── audio/               # Audio config (.cln)
-│   └── public/                  # Static assets (served as-is)
-│       ├── css/
-│       └── images/
+│   └── client/                  # Client-side communication      → frame.client
+├── public/                      # Static assets (served as-is)
+│   ├── css/
+│   └── images/
 └── dist/                        # Build output (generated)
 ```
+
+## Naming Rule
+
+**Folder name = plugin name after the dot.** `frame.server` → `server/`, `frame.data` → `data/`, `frame.ui` → `ui/`, `frame.auth` → `auth/`, `frame.canvas` → `canvas/`, `frame.client` → `client/`. No lookup table needed — the folder declares ownership.
 
 ## Plugin Folder Ownership
 
@@ -43,111 +48,22 @@ Plugins must be declared in `app.cln` via the `plugins:` block. Once declared, f
 
 | Path Pattern | Owning Plugin |
 |---|---|
-| `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
-| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.server` |
+| `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` | `frame.server` |
 | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `frame.data` |
+| `app/ui/`, `app/ui/pages/`, `app/ui/components/`, `app/ui/layouts/` | `frame.ui` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
+| `app/client/` | `frame.client` |
 
 ## Folder Reference
 
-### `app/pages/`
-
-HTML page routes. Each `.html` file becomes a GET route returning server-rendered HTML. Owned by `frame.ui`.
-
-| File | Route |
-|------|-------|
-| `index.html` | `/` |
-| `about.html` | `/about` |
-| `blog/index.html` | `/blog` |
-| `blog/[slug].html` | `/blog/:slug` |
-| `users/[id]/profile.html` | `/users/:id/profile` |
-
-**Companion files**: Each page can have a matching `.cln` file (same name) that provides server-side data via `load()` and access control via `guard()`.
-
-```
-app/pages/
-├── profile.html         # Template with {expression} interpolation
-└── profile.cln          # Companion: load() provides data, guard() checks access
-```
-
-**Example page:**
-```html
-<!-- app/pages/blog/[slug].html -->
-<page layout="main"></page>
-
-<article>
-    <h1>{post.title}</h1>
-    <p>{post.content}</p>
-</article>
-```
-
-**Example companion:**
-```clean
-// app/pages/blog/[slug].cln
-functions:
-	any load(Request request)
-		string slug = request.params.slug
-		Post post = Post.first:
-			where:
-				slug == slug
-		return { post: post }
-```
-
-**Interpolation syntax:**
-- `{expression}` — HTML-escaped output (safe, default)
-- `{!expression}` — Raw HTML output (trusted content only)
-
-### `app/components/`
-
-Reusable UI components. PascalCase filename becomes a kebab-case tag. Owned by `frame.ui`.
-
-| File | Tag |
-|------|-----|
-| `Header.cln` | `<app-header>` |
-| `Footer.cln` | `<app-footer>` |
-| `UserCard.cln` | `<user-card>` |
-
-**Example component:**
-```clean
-// app/components/UserCard.cln
-component: tag="user-card"
-	props:
-		string userId
-
-	html:
-		<div class="user-card">
-			<h3>{this.userId}</h3>
-		</div>
-```
-
-### `app/layouts/`
-
-Page layout wrappers referenced by pages via `<page layout="name">`. Owned by `frame.ui`.
-
-**Example layout:**
-```html
-<!-- app/layouts/main.html -->
-<html>
-<head>
-    <title>My Site</title>
-    <link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-    <app-header></app-header>
-    <main><slot></slot></main>
-    <app-footer></app-footer>
-</body>
-</html>
-```
-
-### `app/backend/api/`
+### `app/server/api/`
 
 HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.server`.
 
 **Example endpoint:**
 ```clean
-// app/backend/api/users.cln
+// app/server/api/users.cln
 endpoints:
 	GET "/api/users" :
 		handle:
@@ -197,13 +113,103 @@ data User
 	datetime createdAt : default=now
 ```
 
+### `app/ui/pages/`
+
+HTML page routes. Each `.html` file becomes a GET route returning server-rendered HTML. Owned by `frame.ui`.
+
+| File | Route |
+|------|-------|
+| `index.html` | `/` |
+| `about.html` | `/about` |
+| `blog/index.html` | `/blog` |
+| `blog/[slug].html` | `/blog/:slug` |
+| `users/[id]/profile.html` | `/users/:id/profile` |
+
+**Companion files**: Each page can have a matching `.cln` file (same name) that provides server-side data via `load()` and access control via `guard()`.
+
+```
+app/ui/pages/
+├── profile.html         # Template with {expression} interpolation
+└── profile.cln          # Companion: load() provides data, guard() checks access
+```
+
+**Example page:**
+```html
+<!-- app/ui/pages/blog/[slug].html -->
+<page layout="main"></page>
+
+<article>
+    <h1>{post.title}</h1>
+    <p>{post.content}</p>
+</article>
+```
+
+**Example companion:**
+```clean
+// app/ui/pages/blog/[slug].cln
+functions:
+	any load(Request request)
+		string slug = request.params.slug
+		Post post = Post.first:
+			where:
+				slug == slug
+		return { post: post }
+```
+
+**Interpolation syntax:**
+- `{expression}` — HTML-escaped output (safe, default)
+- `{!expression}` — Raw HTML output (trusted content only)
+
+### `app/ui/components/`
+
+Reusable UI components. PascalCase filename becomes a kebab-case tag. Owned by `frame.ui`.
+
+| File | Tag |
+|------|-----|
+| `Header.cln` | `<app-header>` |
+| `Footer.cln` | `<app-footer>` |
+| `UserCard.cln` | `<user-card>` |
+
+**Example component:**
+```clean
+// app/ui/components/UserCard.cln
+component: tag="user-card"
+	props:
+		string userId
+
+	html:
+		<div class="user-card">
+			<h3>{this.userId}</h3>
+		</div>
+```
+
+### `app/ui/layouts/`
+
+Page layout wrappers referenced by pages via `<page layout="name">`. Owned by `frame.ui`.
+
+**Example layout:**
+```html
+<!-- app/ui/layouts/main.html -->
+<html>
+<head>
+    <title>My Site</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <app-header></app-header>
+    <main><slot></slot></main>
+    <app-footer></app-footer>
+</body>
+</html>
+```
+
 ### `app/auth/`
 
 Authentication and authorization configuration. Owned by `frame.auth`.
 
 **Example auth config:**
 ```clean
-// app/auth/auth.cln
+// app/auth/config.cln
 auth:
 	session:
 		cookie = "frame.sid"
@@ -251,18 +257,26 @@ canvasScene: width=800 height=600
 		// handle key press
 ```
 
-### `app/public/`
+### `app/client/`
 
-Static assets served directly without processing.
+Client-side communication — API calls, realtime subscriptions, live feeds. Owned by `frame.client`.
+
+### `public/`
+
+Static assets served directly without processing. Lives at the project root, not under `app/` — it is not compiled.
 
 Access via URL path: `/css/style.css`, `/images/logo.png`
 
 ## app.cln Configuration
 
-The top-level `app.cln` file declares plugins. This is required.
+The top-level `app.cln` file is the single project manifest. It declares project metadata and plugins. No separate `project.toml` is needed.
 
 ```clean
 // app.cln
+project:
+	name = "my-project"
+	version = "1.0.0"
+
 plugins:
 	frame.ui
 	frame.server

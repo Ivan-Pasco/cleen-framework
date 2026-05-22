@@ -93,7 +93,7 @@ Password hashing and verification use `host:crypto` functions (`hash` and `verif
 
 ### Example: Login handler (Clean)
 ```clean
-// app/backend/api/auth.cln
+// app/server/api/auth.cln
 endpoints:
     POST "/auth/login" :
         LoginForm form = req.json(LoginForm)
@@ -302,8 +302,8 @@ When prompting an AI agent:
 ## 15. File Locations
 
 - Config: `/app/auth/auth.cln`, `/app/auth/roles.cln`
-- Server handlers: `/app/backend/api/auth/*.cln`
-- UI: gated components under `/app/components/` and pages in `/app/pages/`
+- Server handlers: `/app/server/api/auth/*.cln`
+- UI: gated components under `/app/ui/components/` and pages in `/app/ui/pages/`
 - Tests: `/tests/auth/`
 
 ---

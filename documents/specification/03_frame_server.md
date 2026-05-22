@@ -33,20 +33,20 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 > **Canonical reference:** [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) — complete folder reference.
 
 ```
-/app/backend/            # Owned by frame.server plugin
-/app/backend/api/*.cln   # API modules using `endpoints:`
-/app/backend/services/   # Business logic services
-/app/backend/middleware/ # Custom middleware
-/app/pages/*.html        # SSR page templates (HTML)
-/app/pages/*.cln         # Companion data loaders (paired by filename)
-/app/components/*.cln    # UI components
-/app/layouts/*.html      # Page layout wrappers
+/app/server/             # Owned by frame.server plugin
+/app/server/api/*.cln    # API modules using `endpoints:`
+/app/server/services/    # Business logic services
+/app/server/middleware/  # Custom middleware
+/app/ui/pages/*.html     # SSR page templates (HTML)
+/app/ui/pages/*.cln      # Companion data loaders (paired by filename)
+/app/ui/components/*.cln # UI components
+/app/ui/layouts/*.html   # Page layout wrappers
 /app/data/*.cln          # Data models / ORM
 /app/auth/*.cln          # Auth configuration (frame.auth)
 /public/*                # Static assets
 ```
 
-**Plugin Folder Ownership:** Files placed in `app/backend/`, `app/backend/api/`, or `app/backend/services/` are processed by the `frame.server` plugin. The plugin must be declared in `app.cln` via the `plugins:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
+**Plugin Folder Ownership:** Files placed in `app/server/`, `app/server/api/`, or `app/server/services/` are processed by the `frame.server` plugin. The plugin must be declared in `app.cln` via the `plugins:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
 
 ---
 
@@ -54,7 +54,7 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 Each API module exposes a single `endpoints:` block. Endpoints are declared by **METHOD + PATH** and the block body handles the request.
 
 ```clean
-// /app/backend/api/users.cln
+// /app/server/api/users.cln
 endpoints:
     GET "/api/users" :
         list<User> users = User.find:
@@ -188,7 +188,7 @@ cleen api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ---
 
 ## 11. SSR Pipeline (UI)
-- Server renders pages from `/app/pages/*.html`. Data is supplied by paired companion `.cln` files.
+- Server renders pages from `/app/ui/pages/*.html`. Data is supplied by paired companion `.cln` files.
 - Output HTML is streamed or buffered (host adapter decides).
 - Hydration islands are scheduled according to `client="on|visible|idle|only"`.
 
@@ -237,10 +237,10 @@ cleen api:sdk      # Client SDKs
 
 ## 16. Middleware
 
-Middleware files live in `app/backend/middleware/`. They inspect or modify requests before the endpoint handler runs.
+Middleware files live in `app/server/middleware/`. They inspect or modify requests before the endpoint handler runs.
 
 ```clean
-// app/backend/middleware/RateLimit.cln
+// app/server/middleware/RateLimit.cln
 middleware RateLimit
     functions:
         Request handle(Request req)
@@ -269,7 +269,7 @@ endpoints:
 The server can make outbound HTTP requests using the `http.*` bridge functions. This is separate from client-side communication (`frame.client`).
 
 ```clean
-// app/backend/api/proxy.cln
+// app/server/api/proxy.cln
 endpoints:
     GET "/api/weather" :
         handle:
@@ -303,7 +303,7 @@ Available: `http.get(url)`, `http.postJson(url, body)`, `http.put(url, body)`, `
 
 ### 19.1 Simple CRUD
 ```clean
-// /app/backend/api/posts.cln
+// /app/server/api/posts.cln
 endpoints:
     GET "/api/posts" :
         list<Post> posts = Post.find:

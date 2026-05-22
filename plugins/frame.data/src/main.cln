@@ -78,7 +78,7 @@ functions:
 
 	// Expand 'data ModelName' block into a class with ORM methods
 	string expand_data_model(string model_name, string body)
-		string table_name = to_snake_case(model_name)
+		string table_name = pluralize(to_snake_case(model_name))
 		string fields_code = parse_fields(body)
 		string field_names = extract_field_names(body)
 		string field_types = extract_field_types(body)
@@ -719,7 +719,7 @@ functions:
 	// the generated SQL automatically prepends a tenant_id filter so that callers
 	// never have to include it explicitly in their where: sub-blocks.
 	string expand_find(string model_name, string body)
-		string table_name = to_snake_case(model_name)
+		string table_name = pluralize(to_snake_case(model_name))
 		string where_clause = extract_subblock(body, "where:")
 		string order_clause = extract_subblock(body, "order:")
 		string limit_clause = extract_subblock(body, "limit:")
@@ -785,7 +785,7 @@ functions:
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
 	string expand_count(string model_name, string body)
-		string table_name = to_snake_case(model_name)
+		string table_name = pluralize(to_snake_case(model_name))
 		string where_clause = extract_subblock(body, "where:")
 		boolean has_tenant = detect_tenant_field(body)
 
@@ -814,7 +814,7 @@ functions:
 	// For tenant-aware models, the tenant_id column is prepended automatically
 	// so that application code never sets it explicitly and cannot forge it.
 	string expand_insert(string model_name, string body)
-		string table_name = to_snake_case(model_name)
+		string table_name = pluralize(to_snake_case(model_name))
 		boolean has_tenant = detect_tenant_field(body)
 		string fields = ""
 		string values = ""
@@ -870,7 +870,7 @@ functions:
 	// For tenant-aware models the WHERE clause is automatically scoped to the
 	// current tenant so that update operations cannot affect other tenants.
 	string expand_update(string model_name, string body)
-		string table_name = to_snake_case(model_name)
+		string table_name = pluralize(to_snake_case(model_name))
 		string set_clause = extract_subblock(body, "set:")
 		string where_clause = extract_subblock(body, "where:")
 		boolean has_tenant = detect_tenant_field(body)
@@ -900,7 +900,7 @@ functions:
 	// For tenant-aware models the WHERE clause is automatically scoped to the
 	// current tenant so that delete operations cannot affect other tenants.
 	string expand_delete(string model_name, string body)
-		string table_name = to_snake_case(model_name)
+		string table_name = pluralize(to_snake_case(model_name))
 		string where_clause = extract_subblock(body, "where:")
 		boolean has_tenant = detect_tenant_field(body)
 
@@ -1045,7 +1045,7 @@ functions:
 	// the declared field definitions against the live database schema and execute
 	// any ALTER TABLE statements required to bring the table up to date.
 	string generate_migration_diff(string model_name, string body)
-		string table_name = to_snake_case(model_name)
+		string table_name = pluralize(to_snake_case(model_name))
 		string field_defs = generate_field_definitions(body)
 
 		// Escape the field definitions for embedding in a string literal
@@ -1216,7 +1216,7 @@ functions:
 				integer space_pos = line.indexOf(" ")
 				if space_pos != -1
 					string join_model = line.substring(0, space_pos)
-					string join_table = to_snake_case(join_model)
+					string join_table = pluralize(to_snake_case(join_model))
 					string join_condition = line.substring(space_pos + 1, line.length()).trim()
 
 					// Replace == with =
@@ -1336,7 +1336,7 @@ functions:
 					else
 						// Non-primitive type: treat as foreign key reference to another model
 						// Column stored as INTEGER referencing the related table's id column
-						string ref_table = to_snake_case(field_type)
+						string ref_table = pluralize(to_snake_case(field_type))
 						string fk_col = field_name + "_id"
 						result = result + fk_col + " INTEGER REFERENCES " + ref_table + "(id)"
 						// Append ON DELETE clause when onDelete=cascade constraint is present
@@ -1361,6 +1361,34 @@ functions:
 			result = result + lower
 			i = i + 1
 		return result
+
+	// Pluralize a snake_case name to match standard database table naming conventions.
+	// Handles the most common English pluralization patterns:
+	//   word ending in consonant+'y'  -> replace 'y' with 'ies'  (e.g. category -> categories)
+	//   word ending in 'x' or 'z'    -> append 'es'              (e.g. index -> indexes)
+	//   word ending in 'ch' or 'sh'  -> append 'es'              (e.g. match -> matches)
+	//   already ends in 's'          -> return as-is             (already plural)
+	//   everything else              -> append 's'               (e.g. user -> users)
+	string pluralize(string name)
+		integer len = name.length()
+		if len == 0
+			return name
+		string last = name.substring(len - 1, len)
+		if last == "s"
+			return name
+		if last == "y" and len > 1
+			string vowels = "aeiou"
+			string prev = name.substring(len - 2, len - 1)
+			if vowels.indexOf(prev) == -1
+				return name.substring(0, len - 1) + "ies"
+			return name + "s"
+		if last == "x" or last == "z"
+			return name + "es"
+		if last == "h" and len > 1
+			string prev = name.substring(len - 2, len - 1)
+			if prev == "c" or prev == "s"
+				return name + "es"
+		return name + "s"
 
 	// Format a parameter value for JSON array
 	string format_param_value(string value)
