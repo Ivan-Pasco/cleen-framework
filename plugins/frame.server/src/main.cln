@@ -1,6 +1,6 @@
 // frame.server plugin - HTTP Server DSL
 // Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
-// Version: 2.1.2
+// Version: 2.2.3
 // Implements: Frame Server Specification v1.2
 
 // ============================================================================
@@ -20,7 +20,7 @@ functions:
 
 	string get_keywords()
 		// NOTE: Avoid keywords that conflict with built-in namespaces (json, string, http, etc.)
-		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\", \"error\"]"
+		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\", \"error\"]"
 
 // ============================================================================
 // ENDPOINTS BLOCK EXPANSION
@@ -63,6 +63,8 @@ functions:
 		result = result + "\t\treturn _http_set_header(name, value)\n\n"
 		result = result + "\tstring error(integer status_code, string message)\n"
 		result = result + "\t\treturn _http_respond(status_code, \"application/json\", \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"HTTP_ERROR\\\",\\\"message\\\":\\\"\" + __json_escape(message) + \"\\\"}}\")\n\n"
+		result = result + "\tstring redirect(string url, integer status_code)\n"
+		result = result + "\t\treturn _http_redirect(status_code, url)\n\n"
 		result = result + "\tstring httpStatus(integer code, string body)\n"
 		result = result + "\t\treturn _http_respond(code, \"application/json\", body)\n\n"
 		result = result + "\tstring render(string name)\n"
