@@ -426,7 +426,7 @@ functions:
 		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
 		result = result + "\t\t\tstring __fail_result = _db_query(sql, \"[]\")\n"
 		result = result + "\t\t\tif __fail_result == \"[]\"\n"
-		result = result + "\t\t\t\tthrow \"NOT_FOUND\"\n"
+		result = result + "\t\t\t\terror(\"NOT_FOUND\")\n"
 		result = result + "\t\t\treturn __fail_result\n"
 
 		// Helper to extract count from query result
@@ -931,13 +931,13 @@ functions:
 	string expand_transaction(string body)
 		string result = "string __tx_id = _db_begin()\n"
 		result = result + "boolean __tx_success = true\n"
-		result = result + "try\n"
-		result = result + "\t" + body.replace("\n", "\n\t") + "\n"
-		result = result + "\t_db_commit(__tx_id)\n"
-		result = result + "catch any __tx_error\n"
+		result = result + body + "\n"
+		result = result + "_db_commit(__tx_id)\n"
+		result = result + "__tx_success = true\n"
+		result = result + "onError:\n"
 		result = result + "\t_db_rollback(__tx_id)\n"
 		result = result + "\t__tx_success = false\n"
-		result = result + "\tthrow __tx_error\n"
+		result = result + "\terror(\"transaction failed\")\n"
 		return result
 
 // ============================================================================
