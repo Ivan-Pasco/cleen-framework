@@ -441,7 +441,7 @@ functions:
 		result = result + "\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
 		result = result + "\t\t\t\t\tbreak\n"
 		result = result + "\t\t\t\tvalue_end = value_end + 1\n"
-		result = result + "\t\t\treturn parseInt(result.substring(value_start, value_end))\n"
+		result = result + "\t\t\treturn result.substring(value_start, value_end).toInteger()\n"
 
 		// Static migrate method - generates CREATE TABLE statement.
 		// For tenant-aware models the tenant_id column is added automatically when
@@ -539,7 +539,7 @@ functions:
 									string range_min = range_expr.substring(0, dots_pos).trim()
 									string range_max = range_expr.substring(dots_pos + 2, range_expr.length()).trim()
 									validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\"\n"
-									validate_body = validate_body + "\t\t\t\tinteger __range_val = parseInt(value)\n"
+									validate_body = validate_body + "\t\t\t\tinteger __range_val = value.toInteger()\n"
 									validate_body = validate_body + "\t\t\t\tif __range_val < " + range_min + " or __range_val > " + range_max + "\n"
 									validate_body = validate_body + "\t\t\t\t\treturn \"" + field_name + " must be between " + range_min + " and " + range_max + "\"\n"
 
@@ -622,7 +622,7 @@ functions:
 		result = result + "\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
 		result = result + "\t\t\t\t\tbreak\n"
 		result = result + "\t\t\t\tvalue_end = value_end + 1\n"
-		result = result + "\t\t\treturn parseInt(result.substring(value_start, value_end))\n"
+		result = result + "\t\t\treturn result.substring(value_start, value_end).toInteger()\n"
 
 		return result
 
