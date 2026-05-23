@@ -197,7 +197,10 @@ Reference: [02_frame_cli.md](documents/specification/02_frame_cli.md)
 #### Frame Server (`frame-server/`)
 Reference: [03_frame_server.md](documents/specification/03_frame_server.md)
 - Use `endpoints:` blocks for all HTTP APIs
-- Support declarative sub-blocks: `guard:`, `returns:`, `cache:`, `handle:`
+- Inline route modifiers in fixed order: `[roles]` guard, `cache()`, `middleware()`
+- Global error handling: `server: handle:` block in the server config (catches errors from all endpoints)
+- Per-statement error handling: `onError:` (core Clean Language syntax)
+- `guard:`, `returns:`, `cache:`, `handle:` as sub-blocks are removed — parse error if used
 - Implement standard response helpers: `json()`, `html()`, `redirect()`, `notFound()`, etc.
 - Use Host Bridge for all I/O operations
 
