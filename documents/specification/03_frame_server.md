@@ -1,7 +1,7 @@
 # Frame Server Specification (03)
 
 **Project:** Frame – Full-Stack Framework for Clean Language  
-**Version:** 1.2 (adopts `endpoints:` for HTTP APIs)  
+**Version:** 1.3 (inline route modifiers: `[guard] cache() middleware()`)  
 **Location (repo):** `/documents/specification/03_frame_server.md`
 
 ---
@@ -89,29 +89,62 @@ endpoints:
 
 ---
 
-## 5. Optional Sub‑blocks (Declarative)
-Sub‑blocks improve clarity and documentation. All are optional.
+## 5. Inline Route Modifiers
+Route metadata lives on the route header line, not in sub-blocks. All modifiers are optional and must appear in this fixed order: **`[guard] cache() middleware()`**.
 
 ```clean
 endpoints:
-    GET "/api/secure" :
-        guard:
-            role in ["admin", "editor"]
-        returns:
-            json list<User>
-        cache:
-            maxAge = 60
-        handle:
-            list<User> users = User.find:
-                where:
-                    active == true
-            return json(users)
+    // no modifiers — open route
+    GET "/api/public" :
+        return json(data)
+
+    // guard only — user must hold at least one listed role
+    GET "/api/users" [admin, editor] :
+        list<User> users = User.find()
+        return json(users)
+
+    // cache only — sets Cache-Control: max-age=300
+    GET "/api/feed" cache(300) :
+        return json(feed)
+
+    // guard + cache
+    GET "/api/reports" [admin] cache("1h") :
+        return json(buildReport())
+
+    // guard + cache + middleware
+    GET "/api/secure" [admin] cache(60) middleware(RateLimit, Audit) :
+        return json(secureData)
 ```
 
-- **guard:** authorization rules (evaluated before handler).  
-- **returns:** output declaration to drive OpenAPI/SDKs.  
-- **cache:** HTTP cache hints for host adapters.  
-- **handle:** If present, the logic lives inside; otherwise, the endpoint body is the handler.
+### `[guard]` — Role-based access
+A bracket-delimited list of role identifiers. The server checks the current user holds **at least one** of the listed roles before running the handler. Fails with `401 Unauthorized`.
+
+```clean
+GET "/api/admin"         [admin] :          // single role
+GET "/api/posts"         [admin, editor] :  // any of these roles
+GET "/api/dashboard"     [admin, editor, viewer] :
+```
+
+### `cache()` — HTTP cache hints
+
+| Form | Cache-Control emitted |
+|------|----------------------|
+| `cache(300)` | `max-age=300` |
+| `cache("5m")` | `max-age=300` |
+| `cache("2h")` | `max-age=7200` |
+| `cache("1d")` | `max-age=86400` |
+| `cache("no-store")` | `no-store` |
+| `cache("no-cache")` | `no-cache` |
+| `cache("public")` | `public` |
+| `cache("private")` | `private` |
+
+### `middleware()` — Per-route middleware
+A comma-separated list of middleware function names. Each is called in order before the handler. A middleware function returns an empty string to pass through or a response string to short-circuit.
+
+```clean
+GET "/api/data" middleware(RateLimit) :
+GET "/api/admin" [admin] middleware(RateLimit, Audit) :
+```
 
 ---
 
@@ -154,27 +187,27 @@ Typical codes: `AUTH_ERROR`, `NOT_FOUND`, `VALIDATION_ERROR`, `NETWORK_FAIL`.
 ---
 
 ## 9. Auth Integration
-Auth lives in `app/auth/auth.cln` and exposes guards usable inside `guard:` blocks or imperative checks.
+Auth lives in `app/auth/auth.cln`. Use the `[roles]` guard modifier on the route header for declarative role checks, or call auth helpers imperatively inside the handler.
 
 ```clean
 endpoints:
-    GET "/api/admin" :
-        guard:
-            role in ["admin"]
-        handle:
-            return json({ ok: true })
+    GET "/api/admin" [admin] :
+        return json({ ok: true })
+
+    GET "/api/content" [admin, editor] :
+        return json(content)
 ```
 
-You can also check explicitly:
+For permission checks inside a handler:
 ```clean
-if not auth.can(user, "post.publish"):
+if not auth.can(user, "post.publish")
     return unauthorized()
 ```
 
 ---
 
 ## 10. OpenAPI & SDK Generation
-The server can emit OpenAPI 3.1 by inspecting `endpoints:` declarations, `returns:`, typed params, and DTOs.
+The server can emit OpenAPI 3.1 by inspecting `endpoints:` declarations, typed params, and DTOs.
 
 ```bash
 cleen api:spec   # writes openapi.json
@@ -182,7 +215,7 @@ cleen api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ```
 
 **Conventions**
-- If `returns:` is omitted, the tool infers from `return` calls.
+- Response types are inferred from `return` calls (`return json(users)` → array of User).
 - Path params (`:id`) are typed from local variable assignments (e.g., `integer id = req.params.id`).
 
 ---
@@ -252,14 +285,15 @@ middleware RateLimit
             return req
 ```
 
-Register middleware in `app.cln` or per-endpoint:
+Register middleware globally in `app.cln`, or per-endpoint using the `middleware()` modifier:
 
 ```clean
 endpoints:
-    GET "/api/data" :
-        middleware: [RateLimit, VerifyJWT]
-        handle:
-            return json({ ok: true })
+    GET "/api/data" middleware(RateLimit, VerifyJWT) :
+        return json({ ok: true })
+
+    POST "/api/upload" [admin] middleware(RateLimit) :
+        return json({ uploaded: true })
 ```
 
 ---
@@ -321,19 +355,16 @@ endpoints:
         return json(p), status(201)
 ```
 
-### 19.2 Guard + Returns + Cache
+### 19.2 Guard + Cache + Middleware
 ```clean
 endpoints:
-    GET "/api/reports/daily" :
-        guard:
-            role in ["admin"]
-        returns:
-            json Report
-        cache:
-            maxAge = 300
-        handle:
-            Report r = buildDailyReport()
-            return json(r)
+    GET "/api/reports/daily" [admin] cache(300) :
+        Report r = buildDailyReport()
+        return json(r)
+
+    GET "/api/reports/live" [admin, analyst] cache("no-store") middleware(Audit) :
+        Report r = buildLiveReport()
+        return json(r)
 ```
 
 ---

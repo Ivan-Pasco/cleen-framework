@@ -1,7 +1,7 @@
 // frame.server plugin - HTTP Server DSL
-// Provides: server, endpoints blocks with guard/returns/cache/handle sub-blocks
-// Version: 2.2.3
-// Implements: Frame Server Specification v1.2
+// Provides: endpoints block with inline route modifiers [guard] cache() middleware()
+// Version: 2.3.0
+// Implements: Frame Server Specification v1.3
 
 // ============================================================================
 // MAIN ENTRY POINTS
@@ -19,8 +19,7 @@ functions:
 		return ""
 
 	string get_keywords()
-		// NOTE: Avoid keywords that conflict with built-in namespaces (json, string, http, etc.)
-		return "[\"endpoints\", \"guard\", \"returns\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\", \"error\"]"
+		return "[\"endpoints\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\", \"error\", \"middleware\"]"
 
 // ============================================================================
 // ENDPOINTS BLOCK EXPANSION
@@ -29,9 +28,6 @@ functions:
 functions:
 	string expand_endpoints(string body)
 		string result = ""
-		// Bridge functions (_http_respond, _http_redirect, _req_*, etc.) are declared in
-		// plugin.toml [bridge] with expand_strings = true and are imported automatically.
-		// No external: block needed — re-declaring them here would shadow the bridge ABI.
 
 		// Add response helpers
 		result = result + "functions:\n"
@@ -72,21 +68,20 @@ functions:
 		result = result + "\tstring renderWith(string name, string data)\n"
 		result = result + "\t\treturn _ui_render_page(name, data)\n\n"
 
-		// Parse endpoints - find methods and paths
+		// Parse endpoints
 		string remaining = body
 		integer handler_idx = 0
 		boolean keep_going = true
 		string route_calls = ""
 
 		while handler_idx < 30 and keep_going
-			// Find method positions — support "GET/", "GET /", and "GET \"" (quoted paths)
+			// Find earliest HTTP method
 			integer get_pos = find_method_pos(remaining, "GET")
 			integer post_pos = find_method_pos(remaining, "POST")
 			integer put_pos = find_method_pos(remaining, "PUT")
 			integer delete_pos = find_method_pos(remaining, "DELETE")
 			integer patch_pos = find_method_pos(remaining, "PATCH")
 
-			// Find earliest valid position
 			integer method_pos = -1
 			string method = ""
 
@@ -109,68 +104,79 @@ functions:
 			if method_pos == -1
 				keep_going = false
 			else
-				// Get substring from method position
 				string from_method = remaining.substring(method_pos, remaining.length())
 
-				// path_start: method.length() if no space, method.length()+1 if space
+				// Skip optional space between method and quoted path
 				integer path_start = method.length()
-				string char_after = from_method.substring(method.length(), method.length() + 1)
-				if char_after == " "
+				if from_method.substring(method.length(), method.length() + 1) == " "
 					path_start = method.length() + 1
 				string after_method = from_method.substring(path_start, from_method.length())
 
-				// Find the colon that terminates the path (before newline)
-				// NOTE: use indexOf (not lastIndexOf) — lastIndexOf causes infinite loop in WASM runtime
-				// Search for '" :' or '":' to skip colons inside path params like :id
-				integer nl_pos = after_method.indexOf("\n")
-				if nl_pos == -1
-					nl_pos = after_method.length()
-				string first_line = after_method.substring(0, nl_pos)
-				integer colon_pos = first_line.indexOf("\" :")
-				if colon_pos >= 0
-					colon_pos = colon_pos + 2
-				if colon_pos == -1
-					integer qc = first_line.indexOf("\":")
-					if qc >= 0
-						colon_pos = qc + 1
-				if colon_pos == -1
-					colon_pos = first_line.indexOf(":")
-				if colon_pos == -1
-					colon_pos = first_line.length()
+				// Extract path — everything between the opening and closing quote
+				integer open_q = after_method.indexOf("\"")
+				string after_open = after_method.substring(open_q + 1, after_method.length())
+				integer close_q = after_open.indexOf("\"")
+				string path = after_open.substring(0, close_q)
 
-				integer abs_colon = path_start + colon_pos
-
-				if colon_pos == -1 or colon_pos == first_line.length()
-					keep_going = false
+				// Header remainder: closing quote → route ':'
+				string after_path_raw = after_open.substring(close_q + 1, after_open.length())
+				integer first_nl = after_path_raw.indexOf("\n")
+				string header_line = ""
+				if first_nl == -1
+					header_line = after_path_raw
 				else
-					// Extract and clean path
-					string raw_path = first_line.substring(0, colon_pos).trim()
-					// Strip quotes if present (support both quoted and unquoted)
-					string path = raw_path
-					if path.startsWith("\"")
-						path = path.substring(1, path.length())
-					if path.endsWith("\"")
-						path = path.substring(0, path.length() - 1)
+					header_line = after_path_raw.substring(0, first_nl)
 
-					// Find handle: block and extract code
-					string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
-					string handler_code = extract_handle_code(endpoint_body)
+				// Route ':' is the last ':' on the header line
+				// Scan from the right to find it
+				integer colon_pos = header_line.length() - 1
+				integer cscan = 0
+				while cscan < header_line.length()
+					if header_line.substring(cscan, cscan + 1) == ":"
+						colon_pos = cscan
+					cscan = cscan + 1
 
-					// Generate handler function
-					result = result + "\tstring __route_handler_" + handler_idx.toString() + "()\n"
-					if handler_code.length() > 0
-						result = result + handler_code
-					else
-						result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
-					result = result + "\n"
+				string modifiers = ""
+				if colon_pos > 0
+					modifiers = header_line.substring(0, colon_pos).trim()
 
-					// Collect route registration call for start block
-					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
+				// Absolute position of route ':' from start of from_method
+				integer abs_colon = path_start + open_q + 1 + close_q + 1 + colon_pos
 
-					handler_idx = handler_idx + 1
+				// Parse inline modifiers
+				string guard_roles = parse_guard_roles(modifiers)
+				string cache_arg = parse_cache_arg(modifiers)
+				string mw_list = parse_middleware_list(modifiers)
 
-					// Advance remaining past this endpoint
-					remaining = from_method.substring(abs_colon + 1, from_method.length())
+				// Extract handler body (after route ':' newline, up to next route)
+				string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
+				string handler_code = extract_handler_body(endpoint_body)
+
+				// Emit handler function
+				result = result + "\tstring __route_handler_" + handler_idx.toString() + "()\n"
+
+				// Guard: check roles, short-circuit with 401 if none match
+				if guard_roles.length() > 0
+					result = result + generate_guard_code(guard_roles)
+
+				// Cache: emit Cache-Control header
+				if cache_arg.length() > 0
+					result = result + generate_cache_code(cache_arg)
+
+				// Middleware: call each in order, short-circuit on non-empty result
+				if mw_list.length() > 0
+					result = result + generate_middleware_code(mw_list)
+
+				// Handler body
+				if handler_code.length() > 0
+					result = result + handler_code
+				else
+					result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
+				result = result + "\n"
+
+				route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
+				handler_idx = handler_idx + 1
+				remaining = from_method.substring(abs_colon + 1, from_method.length())
 
 		result = result + "start:\n"
 		result = result + route_calls
@@ -180,30 +186,136 @@ functions:
 	integer find_method_pos(string text, string method)
 		return text.indexOf(method + " \"")
 
-	string extract_handle_code(string endpoint_body)
-		// Simplified handler extraction — avoids transform functions that crash in WASM
+	// -------------------------------------------------------------------------
+	// Inline modifier parsers
+	// -------------------------------------------------------------------------
+
+	// Returns comma-separated roles from "[admin, editor]" → "admin,editor"
+	string parse_guard_roles(string modifiers)
+		integer open_b = modifiers.indexOf("[")
+		if open_b == -1
+			return ""
+		integer close_b = modifiers.indexOf("]")
+		if close_b == -1
+			return ""
+		string raw = modifiers.substring(open_b + 1, close_b)
+		return raw.replace(" ", "")
+
+	// Returns the raw argument inside cache(...): "300", "\"5m\"", "\"no-store\""
+	string parse_cache_arg(string modifiers)
+		integer cache_p = modifiers.indexOf("cache(")
+		if cache_p == -1
+			return ""
+		string after = modifiers.substring(cache_p + 6, modifiers.length())
+		integer close_p = after.indexOf(")")
+		if close_p == -1
+			return ""
+		return after.substring(0, close_p).trim()
+
+	// Returns comma-separated names from "middleware(RateLimit, VerifyJWT)" → "RateLimit,VerifyJWT"
+	string parse_middleware_list(string modifiers)
+		integer mw_p = modifiers.indexOf("middleware(")
+		if mw_p == -1
+			return ""
+		string after = modifiers.substring(mw_p + 11, modifiers.length())
+		integer close_p = after.indexOf(")")
+		if close_p == -1
+			return ""
+		return after.substring(0, close_p).replace(" ", "")
+
+	// -------------------------------------------------------------------------
+	// Code generators for inline modifiers
+	// -------------------------------------------------------------------------
+
+	// Guard: emit role checks; return unauthorized() if user holds none
+	string generate_guard_code(string roles)
+		string result = "\t\tboolean __auth_ok = false\n"
+		string remaining = roles
+		integer safety = 0
+		while safety < 20 and remaining.length() > 0
+			safety = safety + 1
+			integer comma = remaining.indexOf(",")
+			string role = ""
+			if comma == -1
+				role = remaining.trim()
+				remaining = ""
+			else
+				role = remaining.substring(0, comma).trim()
+				remaining = remaining.substring(comma + 1, remaining.length())
+			if role.length() > 0
+				result = result + "\t\tif _auth_require_role(\"" + role + "\") == 1\n"
+				result = result + "\t\t\t__auth_ok = true\n"
+		result = result + "\t\tif not __auth_ok\n"
+		result = result + "\t\t\treturn unauthorized()\n"
+		return result
+
+	// Cache: convert cache() arg to the correct bridge call
+	string generate_cache_code(string cache_arg)
+		// Quoted string form
+		if cache_arg.startsWith("\"") and cache_arg.endsWith("\"")
+			string val = cache_arg.substring(1, cache_arg.length() - 1)
+			if val == "no-store" or val == "no-cache"
+				return "\t\t_http_no_cache()\n"
+			if val == "public" or val == "private"
+				return "\t\t_http_set_header(\"Cache-Control\", \"" + val + "\")\n"
+			// Duration string: convert to seconds
+			string secs = duration_to_seconds(val)
+			return "\t\t_http_set_cache(" + secs + ")\n"
+		// Plain integer
+		return "\t\t_http_set_cache(" + cache_arg + ")\n"
+
+	// Convert duration string to seconds: "5m"→"300", "2h"→"7200", "1d"→"86400"
+	string duration_to_seconds(string val)
+		if val.length() < 2
+			return val
+		string unit = val.substring(val.length() - 1, val.length())
+		string num_str = val.substring(0, val.length() - 1)
+		integer num = num_str.toInteger()
+		if unit == "m"
+			return (num * 60).toString()
+		if unit == "h"
+			return (num * 3600).toString()
+		if unit == "d"
+			return (num * 86400).toString()
+		return val
+
+	// Middleware: call each function; short-circuit if it returns a non-empty response
+	string generate_middleware_code(string mw_list)
 		string result = ""
+		string remaining = mw_list
+		integer idx = 0
+		integer safety = 0
+		while safety < 10 and remaining.length() > 0
+			safety = safety + 1
+			integer comma = remaining.indexOf(",")
+			string name = ""
+			if comma == -1
+				name = remaining.trim()
+				remaining = ""
+			else
+				name = remaining.substring(0, comma).trim()
+				remaining = remaining.substring(comma + 1, remaining.length())
+			if name.length() > 0
+				result = result + "\t\tstring __mw_" + idx.toString() + " = " + name + "()\n"
+				result = result + "\t\tif __mw_" + idx.toString() + ".length() > 0\n"
+				result = result + "\t\t\treturn __mw_" + idx.toString() + "\n"
+				idx = idx + 1
+		return result
 
-		// Find handle: block
-		integer handle_pos = endpoint_body.indexOf("handle :")
-		integer handle_skip = 8
-		if handle_pos == -1
-			handle_pos = endpoint_body.indexOf("handle:")
-			handle_skip = 7
+	// -------------------------------------------------------------------------
+	// Handler body extraction
+	// -------------------------------------------------------------------------
 
-		string after_handle = ""
-		if handle_pos == -1
-			after_handle = endpoint_body
-		else
-			after_handle = endpoint_body.substring(handle_pos + handle_skip, endpoint_body.length())
-
-		// Find where this handler ends (next endpoint or end of input)
-		integer end_pos = after_handle.length()
-		integer next_get = find_method_pos(after_handle, "GET")
-		integer next_post = find_method_pos(after_handle, "POST")
-		integer next_put = find_method_pos(after_handle, "PUT")
-		integer next_delete = find_method_pos(after_handle, "DELETE")
-		integer next_patch = find_method_pos(after_handle, "PATCH")
+	// Extract handler code from the block following the route ':', up to the
+	// next route declaration. Strips base indentation and re-indents to \t\t.
+	string extract_handler_body(string endpoint_body)
+		// Find next endpoint boundary
+		integer end_pos = endpoint_body.length()
+		integer next_get = find_method_pos(endpoint_body, "GET")
+		integer next_post = find_method_pos(endpoint_body, "POST")
+		integer next_put = find_method_pos(endpoint_body, "PUT")
+		integer next_delete = find_method_pos(endpoint_body, "DELETE")
+		integer next_patch = find_method_pos(endpoint_body, "PATCH")
 
 		if next_get >= 0 and next_get < end_pos
 			end_pos = next_get
@@ -216,9 +328,9 @@ functions:
 		if next_patch >= 0 and next_patch < end_pos
 			end_pos = next_patch
 
-		string handler_code = after_handle.substring(0, end_pos)
+		string handler_code = endpoint_body.substring(0, end_pos)
 
-		// First pass: find minimum tab depth among non-empty lines (base indent to strip)
+		// Pass 1: find minimum tab depth of non-empty lines
 		integer min_tabs = 99
 		string scan = handler_code
 		integer scan_safety = 0
@@ -241,19 +353,20 @@ functions:
 		if min_tabs == 99
 			min_tabs = 0
 
-		// Second pass: preserve relative indentation (base → \t\t, sub-levels add one tab each)
-		string remaining = handler_code
+		// Pass 2: re-indent relative to \t\t base
+		string result = ""
+		string rem = handler_code
 		integer safety = 0
-		while safety < 200 and remaining.length() > 0
+		while safety < 200 and rem.length() > 0
 			safety = safety + 1
-			integer nl = remaining.indexOf("\n")
+			integer nl = rem.indexOf("\n")
 			string line = ""
 			if nl == -1
-				line = remaining
-				remaining = ""
+				line = rem
+				rem = ""
 			else
-				line = remaining.substring(0, nl)
-				remaining = remaining.substring(nl + 1, remaining.length())
+				line = rem.substring(0, nl)
+				rem = rem.substring(nl + 1, rem.length())
 			string trimmed = line.trim()
 			if trimmed.length() > 0
 				integer orig_tabs = 0
@@ -293,164 +406,108 @@ functions:
 				remaining = remaining.substring(nl + 1, remaining.length())
 
 			string trimmed = line.trim()
+			if trimmed.length() == 0
+				continue
 
-			// Item 7 — middleware: must be followed by a valid function name (alphanumeric/underscore only)
-			integer mw_pos = trimmed.indexOf("middleware:")
-			if mw_pos != -1
-				string after_mw = trimmed.substring(mw_pos + 11, trimmed.length()).trim()
-				boolean mw_valid = after_mw.length() > 0
-				if mw_valid
-					integer ci = 0
-					while ci < after_mw.length()
-						string ch = after_mw.substring(ci, ci + 1)
-						boolean is_alpha = ch >= "a" and ch <= "z"
-						boolean is_upper = ch >= "A" and ch <= "Z"
-						boolean is_digit = ch >= "0" and ch <= "9"
-						boolean is_under = ch == "_"
-						if not (is_alpha or is_upper or is_digit or is_under)
-							mw_valid = false
-						ci = ci + 1
-				if not mw_valid
-					return "endpoints: middleware: must be a function name"
+			// Validate route declaration lines
+			boolean is_route = trimmed.startsWith("GET \"") or trimmed.startsWith("POST \"") or trimmed.startsWith("PUT \"") or trimmed.startsWith("DELETE \"") or trimmed.startsWith("PATCH \"")
+			if not is_route
+				continue
 
-			// Item 8 — cache: value validation
-			integer cache_pos = trimmed.indexOf("cache:")
-			if cache_pos != -1
-				string after_cache = trimmed.substring(cache_pos + 6, trimmed.length()).trim()
-				// If nothing on same line, peek at the next non-empty line
-				if after_cache.length() == 0
-					string peek = remaining
-					integer peek_safety = 0
-					while peek_safety < 20 and peek.length() > 0
-						peek_safety = peek_safety + 1
-						integer pnl = peek.indexOf("\n")
-						string pline = ""
-						if pnl == -1
-							pline = peek
-							peek = ""
-						else
-							pline = peek.substring(0, pnl)
-							peek = peek.substring(pnl + 1, peek.length())
-						string ptrimmed = pline.trim()
-						if ptrimmed.length() > 0
-							// Only accept if more indented than cache: line (sub-value)
-							integer cache_indent = 0
-							while cache_indent < line.length() and line.substring(cache_indent, cache_indent + 1) == "\t"
-								cache_indent = cache_indent + 1
-							integer pline_indent = 0
-							while pline_indent < pline.length() and pline.substring(pline_indent, pline_indent + 1) == "\t"
-								pline_indent = pline_indent + 1
-							if pline_indent > cache_indent
-								after_cache = ptrimmed
-							peek = ""
+			// Find the route ':' — scan for last ':' on the line
+			integer last_colon = -1
+			integer ci = 0
+			while ci < trimmed.length()
+				if trimmed.substring(ci, ci + 1) == ":"
+					last_colon = ci
+				ci = ci + 1
+			if last_colon == -1
+				return "endpoints: route declaration must end with ':'"
 
-				if after_cache.length() > 0
-					// Strip surrounding quotes for quoted forms
-					string cache_val = after_cache
-					boolean is_quoted = cache_val.startsWith("\"") and cache_val.endsWith("\"")
-					if is_quoted
-						cache_val = cache_val.substring(1, cache_val.length() - 1)
+			string header = trimmed.substring(0, last_colon).trim()
 
-					boolean cache_ok = false
+			// Extract modifiers: everything after the closing path quote
+			integer open_q = header.indexOf("\"")
+			if open_q == -1
+				return "endpoints: route path must be a quoted string"
+			string after_open = header.substring(open_q + 1, header.length())
+			integer close_q = after_open.indexOf("\"")
+			if close_q == -1
+				return "endpoints: route path must be a quoted string"
+			string modifiers = after_open.substring(close_q + 1, after_open.length()).trim()
 
-					// Plain integer check (all digits)
-					if not is_quoted
-						boolean all_digits = cache_val.length() > 0
-						integer di = 0
-						while di < cache_val.length()
-							string dch = cache_val.substring(di, di + 1)
-							if dch < "0" or dch > "9"
-								all_digits = false
-							di = di + 1
-						if all_digits
+			// Validate guard [roles]
+			integer open_b = modifiers.indexOf("[")
+			if open_b != -1
+				integer close_b = modifiers.indexOf("]")
+				if close_b == -1
+					return "endpoints: guard role list must be closed with ]"
+				// [guard] must come before cache() and middleware()
+				integer cache_pos = modifiers.indexOf("cache(")
+				integer mw_pos = modifiers.indexOf("middleware(")
+				if cache_pos != -1 and cache_pos < open_b
+					return "endpoints: [guard] must appear before cache()"
+				if mw_pos != -1 and mw_pos < open_b
+					return "endpoints: [guard] must appear before middleware()"
+				// Validate role identifiers
+				string roles_raw = modifiers.substring(open_b + 1, close_b).replace(" ", "").replace(",", "")
+				integer ri = 0
+				while ri < roles_raw.length()
+					string ch = roles_raw.substring(ri, ri + 1)
+					boolean ok = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "_"
+					if not ok
+						return "endpoints: guard role names must be valid identifiers (letters, digits, underscore)"
+					ri = ri + 1
+
+			// Validate cache(...)
+			integer cache_p = modifiers.indexOf("cache(")
+			if cache_p != -1
+				string after_cache = modifiers.substring(cache_p + 6, modifiers.length())
+				integer close_p = after_cache.indexOf(")")
+				if close_p == -1
+					return "endpoints: cache() must be closed with )"
+				string arg = after_cache.substring(0, close_p).trim()
+				if arg.length() == 0
+					return "endpoints: cache() requires a value — use an integer (seconds) or \"5m\"/\"2h\"/\"1d\"/\"no-store\""
+				boolean cache_ok = false
+				if arg.startsWith("\"") and arg.endsWith("\"")
+					string val = arg.substring(1, arg.length() - 1)
+					if val == "no-store" or val == "no-cache" or val == "public" or val == "private"
+						cache_ok = true
+					if not cache_ok and val.length() >= 2
+						string last = val.substring(val.length() - 1, val.length())
+						if last == "m" or last == "h" or last == "d"
 							cache_ok = true
-
-					// Quoted keyword forms: "no-store", "no-cache", "public", "private"
-					if is_quoted and cache_val == "no-store"
+				if not arg.startsWith("\"")
+					boolean all_digits = arg.length() > 0
+					integer di = 0
+					while di < arg.length()
+						if arg.substring(di, di + 1) < "0" or arg.substring(di, di + 1) > "9"
+							all_digits = false
+						di = di + 1
+					if all_digits
 						cache_ok = true
-					if is_quoted and cache_val == "no-cache"
-						cache_ok = true
-					if is_quoted and cache_val == "public"
-						cache_ok = true
-					if is_quoted and cache_val == "private"
-						cache_ok = true
+				if not cache_ok
+					return "endpoints: invalid cache() value — use integer seconds, or \"no-store\"/\"no-cache\"/\"public\"/\"private\"/\"5m\"/\"2h\"/\"1d\""
 
-					// Quoted duration forms: Nd, Nh, Nm (one or more digits + d/h/m)
-					if is_quoted and not cache_ok and cache_val.length() >= 2
-						string last_char = cache_val.substring(cache_val.length() - 1, cache_val.length())
-						boolean valid_suffix = last_char == "d" or last_char == "h" or last_char == "m"
-						if valid_suffix
-							string num_part = cache_val.substring(0, cache_val.length() - 1)
-							boolean num_digits = num_part.length() > 0
-							integer ni = 0
-							while ni < num_part.length()
-								string nch = num_part.substring(ni, ni + 1)
-								if nch < "0" or nch > "9"
-									num_digits = false
-								ni = ni + 1
-							if num_digits
-								cache_ok = true
-
-					if not cache_ok
-						return "endpoints: invalid cache value \"" + after_cache + "\" — use an integer (seconds), \"Nm\"/\"Nh\"/\"Nd\", or \"no-store\""
-
-		// Item 3 — guard: block must contain a recognizable directive
-		string guard_scan = body
-		integer gsafety = 0
-
-		while gsafety < 500 and guard_scan.length() > 0
-			gsafety = gsafety + 1
-			integer gnl = guard_scan.indexOf("\n")
-			string gline = ""
-			if gnl == -1
-				gline = guard_scan
-				guard_scan = ""
-			else
-				gline = guard_scan.substring(0, gnl)
-				guard_scan = guard_scan.substring(gnl + 1, guard_scan.length())
-
-			string gtrimmed = gline.trim()
-			if gtrimmed == "guard:" or gtrimmed == "guard :"
-				// Collect the indented block that follows
-				integer guard_indent = 0
-				while guard_indent < gline.length() and gline.substring(guard_indent, guard_indent + 1) == "\t"
-					guard_indent = guard_indent + 1
-
-				string block_content = ""
-				string block_scan = guard_scan
-				integer bsafety = 0
-				while bsafety < 50 and block_scan.length() > 0
-					bsafety = bsafety + 1
-					integer bnl = block_scan.indexOf("\n")
-					string bline = ""
-					if bnl == -1
-						bline = block_scan
-						block_scan = ""
-					else
-						bline = block_scan.substring(0, bnl)
-						block_scan = block_scan.substring(bnl + 1, block_scan.length())
-					if bline.trim().length() == 0
-						block_content = block_content + "\n"
-					else
-						integer bindent = 0
-						while bindent < bline.length() and bline.substring(bindent, bindent + 1) == "\t"
-							bindent = bindent + 1
-						if bindent > guard_indent
-							block_content = block_content + bline + "\n"
-						else
-							block_scan = ""
-
-				boolean has_directive = false
-				if block_content.indexOf("role:") != -1
-					has_directive = true
-				if block_content.indexOf("permission:") != -1
-					has_directive = true
-				if block_content.indexOf("authenticated") != -1
-					has_directive = true
-				if block_content.indexOf("any") != -1
-					has_directive = true
-
-				if not has_directive
-					return "endpoints: guard: block must specify role:, permission:, or authenticated"
+			// Validate middleware(...)
+			integer mw_p = modifiers.indexOf("middleware(")
+			if mw_p != -1
+				string after_mw = modifiers.substring(mw_p + 11, modifiers.length())
+				integer close_p = after_mw.indexOf(")")
+				if close_p == -1
+					return "endpoints: middleware() must be closed with )"
+				string names = after_mw.substring(0, close_p).replace(" ", "")
+				if names.length() == 0
+					return "endpoints: middleware() requires at least one function name"
+				// Validate each name
+				string name_check = names.replace(",", "")
+				integer mi = 0
+				while mi < name_check.length()
+					string ch = name_check.substring(mi, mi + 1)
+					boolean ok = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "_"
+					if not ok
+						return "endpoints: middleware function names must be valid identifiers"
+					mi = mi + 1
 
 		return ""
