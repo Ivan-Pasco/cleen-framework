@@ -64,9 +64,9 @@ functions:
 		result = result + "\tstring httpStatus(integer code, string body)\n"
 		result = result + "\t\treturn _http_respond(code, \"application/json\", body)\n\n"
 		result = result + "\tstring render(string name)\n"
-		result = result + "\t\treturn _ui_render_page(name, \"{}\")\n\n"
+		result = result + "\t\treturn _ui_render_page(\"app/ui/pages/\" + name + \".html\", \"{}\")\n\n"
 		result = result + "\tstring renderWith(string name, string data)\n"
-		result = result + "\t\treturn _ui_render_page(name, data)\n\n"
+		result = result + "\t\treturn _ui_render_page(\"app/ui/pages/\" + name + \".html\", data)\n\n"
 
 		// Parse endpoints
 		string remaining = body
