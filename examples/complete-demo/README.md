@@ -128,11 +128,9 @@ data User:
 ```clean
 endpoints:
     POST "/api/users/register":
-        body:
-            email: string
-            password: string
-        handle:
-            // Type-safe request handling
+        string email = req.json(User).email
+        string password = req.json(User).password
+        // Type-safe request handling
 ```
 
 ### Canvas Animations

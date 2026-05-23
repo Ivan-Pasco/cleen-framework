@@ -124,16 +124,15 @@ This handles URLs like `/blog/hello-world`, `/blog/my-first-post`, etc.
 
 ## Add an API Endpoint
 
-Create `app/server/api/users.cln`:
+Create `app/backend/api/users.cln`:
 
 ```clean
 endpoints:
-	GET "/api/users" :
-		handle:
-			list users = User.find:
-				where:
-					active == true
-			return json(users)
+	GET "/api/users":
+		list users = User.find:
+			where:
+				active == true
+		return json(users)
 ```
 
 Access it at `/api/users`.

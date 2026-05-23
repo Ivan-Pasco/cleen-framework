@@ -183,12 +183,8 @@ if not auth.can(user, "post.publish")
 ### Guard in Endpoints
 ```clean
 endpoints:
-    POST "/admin/publish" :
-        guard:
-            role in ["editor", "admin"]
-        handle:
-            // handler logic
-            return json({ ok: true })
+    POST "/admin/publish" [editor, admin]:
+        return json({ ok: true })
 ```
 
 ### Policy Functions (Pro)

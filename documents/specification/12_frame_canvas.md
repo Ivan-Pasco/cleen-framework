@@ -2868,10 +2868,9 @@ canvasScene: width=800 height=600 id="game"
 ```clean
 // app/backend/api/game.cln
 endpoints:
-	get "/api/highscore":
-		returns: json
-		handle:
-			// fetch and return high score
+	GET "/api/highscore":
+		// fetch and return high score
+		return json(HighScore.first:)
 ```
 
 ### Sharing State with frame.ui

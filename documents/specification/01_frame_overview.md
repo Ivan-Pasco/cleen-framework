@@ -96,13 +96,12 @@ Frame is divided into three main components:
 
 1. Developer declares plugins in `app.cln` and writes Clean code with framework blocks in the appropriate folder:
    ```clean
-   // app/server/api/hello.cln
+   // app/backend/api/hello.cln
    // No import needed — frame.server is declared in app.cln and owns this folder
 
    endpoints:
-       GET "/hello" :
-           handle:
-               return json({"message": "Hello World"})
+       GET "/hello":
+           return json({"message": "Hello World"})
    ```
 
 2. Compiler reads the `plugins:` block in `app.cln`, loads `frame.server`, and uses folder ownership to determine which files that plugin processes
@@ -377,13 +376,10 @@ endpoints:
 		Session s = auth.session.create(user.id, claims: { email: user.email, role: user.role })
 		return auth.session.setCookie(s, redirect("/dashboard"))
 
-	GET "/profile" :
-		guard:
-			require_auth()
-		handle:
-			User user = User.first:
-				where: id == req.context.claims.sub
-			return json(user)
+	GET "/profile" [auth]:
+		User user = User.first:
+			where: id == req.context.claims.sub
+		return json(user)
 ```
 
 ---

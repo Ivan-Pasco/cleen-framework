@@ -188,14 +188,9 @@ functions:
 ```clean
 // Protect routes with authentication
 endpoints:
-	POST "/api/posts" -> createPost
-		guard: requireAuth
-
-functions:
-	boolean requireAuth() {
-		data user = Auth.currentUser()
-		return user != null
-	}
+	POST "/api/posts" [auth]:
+		Post post = Post.create(req.json(Post))
+		return json(post)
 ```
 
 ### 6. Database Queries

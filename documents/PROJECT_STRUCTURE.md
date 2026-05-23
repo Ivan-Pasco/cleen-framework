@@ -63,33 +63,26 @@ HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.server`.
 
 **Example endpoint:**
 ```clean
-// app/server/api/users.cln
+// app/backend/api/users.cln
 endpoints:
-	GET "/api/users" :
-		handle:
-			list<User> users = User.find:
-				where:
-					active == true
-			return json(users)
+	GET "/api/users":
+		list<User> users = User.find:
+			where:
+				active == true
+		return json(users)
 
-	POST "/api/users" :
-		body:
-			name : string
-			email : string
-		handle:
-			User u = User.insert:
-				name = name
-				email = email
-			return json(u)
+	POST "/api/users":
+		User u = User.insert:
+			name = req.body("name")
+			email = req.body("email")
+		return json(u)
 
-	GET "/api/users/:id" :
-		params:
-			id : integer
-		handle:
-			User user = User.first:
-				where:
-					id == id
-			return json(user)
+	GET "/api/users/:id":
+		integer id = req.params.id.toInteger()
+		User user = User.first:
+			where:
+				id == id
+		return json(user)
 ```
 
 ### `app/data/models/`

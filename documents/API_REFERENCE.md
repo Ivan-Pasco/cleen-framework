@@ -648,16 +648,14 @@ endpoints:
 **With guards and caching:**
 ```clean
 endpoints:
-    GET "/admin/stats" -> adminStats
-        guard: role("admin")
-        cache: 60
+    GET "/admin/stats" [admin] cache(60):
+        return adminStats()
 
-    POST "/posts" -> createPost
-        guard: auth
-        returns: Post
+    POST "/posts" [auth]:
+        return createPost()
 
-    GET "/public/data" -> publicData
-        cache: 300
+    GET "/public/data" cache(300):
+        return publicData()
 ```
 
 **Full handler example** (`app/backend/api/users.cln`):
@@ -787,15 +785,11 @@ middleware RateLimit
 **Applying middleware to endpoints:**
 ```clean
 endpoints:
-    GET "/api/protected" :
-        middleware: [RequireAuth]
-        handle:
-            return protectedHandler()
+    GET "/api/protected" middleware(RequireAuth):
+        return protectedHandler()
 
-    GET "/api/admin" :
-        middleware: [RequireAuth, RequireAdmin]
-        handle:
-            return adminHandler()
+    GET "/api/admin" middleware(RequireAuth, RequireAdmin):
+        return adminHandler()
 ```
 
 ### File-Based Routing
@@ -1162,43 +1156,32 @@ boolean isAdmin = auth.hasRole(user, "admin")
 **In endpoint blocks:**
 ```clean
 endpoints:
-    GET "/admin/*" :
-        guard: role("admin")
-        handle:
-            return adminHandler()
+    GET "/admin/*" [admin]:
+        return adminHandler()
 
-    POST "/api/posts/publish" :
-        guard: permission("post.publish")
-        handle:
-            return publishPost()
+    POST "/api/posts/publish" [editor, admin]:
+        return publishPost()
 
-    GET "/api/profile" :
-        guard: auth
-        handle:
-            return getProfile()
+    GET "/api/profile" [auth]:
+        return getProfile()
 ```
 
-**`protected:` block** - Protect entire sections:
+**Guarded route groups** — apply inline `[role]` to each route individually:
 ```clean
-protected:
-    guard: auth
-    endpoints:
-        GET "/dashboard" :
-            return dashboard()
-        GET "/profile" :
-            return profile()
-        PUT "/profile" :
-            return updateProfile()
+endpoints:
+    GET "/dashboard" [auth]:
+        return dashboard()
+    GET "/profile" [auth]:
+        return profile()
+    PUT "/profile" [auth]:
+        return updateProfile()
 
-protected:
-    guard: role("admin")
-    endpoints:
-        GET "/admin" :
-            return adminDashboard()
-        GET "/admin/users" :
-            return listUsers()
-        DELETE "/admin/users/:id" :
-            return deleteUser()
+    GET "/admin" [admin]:
+        return adminDashboard()
+    GET "/admin/users" [admin]:
+        return listUsers()
+    DELETE "/admin/users/:id" [admin]:
+        return deleteUser()
 ```
 
 **`login:` block** - Login flow configuration:

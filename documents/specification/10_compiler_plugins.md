@@ -31,9 +31,8 @@ This document describes the **compiler plugin architecture** where plugins are w
 │       frame.data                                                         │
 │                                                                          │
 │   endpoints:                                                             │
-│       GET "/users" :                                                     │
-│           handle:                                                        │
-│               return User.all()                                          │
+│       GET "/users":                                                      │
+│           return User.all()                                              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -178,9 +177,8 @@ plugins:
 // and processes this file because app/backend/api/ is in its owned folders
 
 endpoints:
-    GET "/users" :
-        handle:
-            return User.all()
+    GET "/users":
+        return User.all()
 ```
 
 This tells the compiler to load `frame.server` and `frame.data` plugins.
@@ -204,9 +202,8 @@ When the compiler encounters a framework block:
 
 ```clean
 endpoints:
-    GET "/users" :
-        handle:
-            return User.all()
+    GET "/users":
+        return User.all()
 ```
 
 It serializes the block into a JSON string and calls the plugin's `expand` WASM export:
@@ -215,7 +212,7 @@ It serializes the block into a JSON string and calls the plugin's `expand` WASM 
 Input JSON:
 {
   "name": "endpoints",
-  "content": "GET \"/users\" :\n\thandle:\n\t\treturn User.all()",
+  "content": "GET \"/users\":\n\treturn User.all()",
   "attributes": []
 }
 
@@ -689,7 +686,7 @@ completions = [
 # Snippets for autocompletion
 snippets = [
   { trigger = "data", body = "data ${1:ModelName}\n\tinteger id : pk, auto\n\t${0}", description = "Create a data model" },
-  { trigger = "endpoint", body = "${1:GET} /${2:path}:\n\thandle:\n\t\t${0}", description = "Create an endpoint" },
+  { trigger = "endpoint", body = "${1:GET} /${2:path}:\n\t${0}", description = "Create an endpoint" },
 ]
 
 # Diagnostics rules
@@ -870,14 +867,12 @@ plugins:
 // frame.server is declared in app.cln and owns this folder
 
 endpoints:
-    GET "/users" :
-        handle:
-            return User.all()
+    GET "/users":
+        return User.all()
 
-    POST "/users" :
-        handle:
-            user = User.create(request.body)
-            return user
+    POST "/users":
+        User user = User.create(req.json(User))
+        return json(user)
 ```
 
 ### frame.data
