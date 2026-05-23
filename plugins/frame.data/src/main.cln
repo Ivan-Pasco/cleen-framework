@@ -724,17 +724,31 @@ functions:
 		string order_clause = extract_subblock(body, "order:")
 		string limit_clause = extract_subblock(body, "limit:")
 		string link_clause = extract_subblock(body, "link:")
+		string join_clause = extract_subblock(body, "join:")
 		boolean has_tenant = detect_tenant_field(body)
+
+		// Resolve ModelName.field references in where/order clauses using join context
+		if join_clause.length() > 0
+			where_clause = resolve_model_refs(where_clause, model_name, join_clause)
+			order_clause = resolve_model_refs(order_clause, model_name, join_clause)
+		else if link_clause.length() > 0
+			where_clause = resolve_model_refs(where_clause, model_name, link_clause)
 
 		string sql = "SELECT * FROM " + table_name
 
-		// Handle link clause (joins)
+		// Handle join: clause (inner/left/right ModelName on condition)
+		if join_clause.length() > 0
+			sql = sql + " " + parse_join_clause(join_clause, model_name)
+
+		// Handle link: clause (legacy format)
 		if link_clause.length() > 0
 			sql = sql + " " + parse_link_clause(link_clause, table_name)
 
 		// Build WHERE clause with optional tenant isolation prefix
 		if has_tenant
 			string __tf_result = "string __tf_sql = \"SELECT * FROM " + table_name
+			if join_clause.length() > 0
+				__tf_result = __tf_result + " " + parse_join_clause(join_clause, model_name)
 			if link_clause.length() > 0
 				__tf_result = __tf_result + " " + parse_link_clause(link_clause, table_name)
 			__tf_result = __tf_result + "\"\n"
@@ -1101,7 +1115,7 @@ functions:
 		integer content_start = start_pos + block_name.length()
 
 		// Find the end of this sub-block (next sub-block or end of body)
-		string subblock_markers = ",where:,order:,limit:,offset:,link:,set:,sql:,params:,up:,down:,"
+		string subblock_markers = ",where:,order:,limit:,offset:,link:,join:,set:,sql:,params:,up:,down:,"
 		integer end_pos = body.length()
 
 		integer search_pos = content_start
@@ -1110,7 +1124,7 @@ functions:
 			if body.substring(search_pos, search_pos + 1) == "\n"
 				string after_newline = body.substring(search_pos + 1, body.length()).trim()
 				// Check if next line starts a new sub-block
-				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:")
+				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:")
 					end_pos = search_pos
 					break
 			search_pos = search_pos + 1
@@ -1231,6 +1245,86 @@ functions:
 
 			line_start = line_end + 1
 
+		return result
+
+	// Replace ModelName.field references with table_name.field in SQL expressions.
+	// Detects PascalCase words immediately before a dot and converts them using
+	// pluralize(to_snake_case()). The primary model and all joined models are resolved.
+	string resolve_model_refs(string sql, string primary_model, string join_body)
+		string result = sql
+
+		// Replace primary model references (e.g. Page. → pages.)
+		if primary_model.length() > 0
+			string primary_table = pluralize(to_snake_case(primary_model))
+			result = result.replace(primary_model + ".", primary_table + ".")
+
+		// Replace each joined model found in the join_body lines
+		if join_body.length() > 0
+			string lines = join_body
+			integer line_start = 0
+			while line_start < lines.length()
+				integer line_end = lines.indexOf("\n", line_start)
+				if line_end == -1
+					line_end = lines.length()
+				string line = lines.substring(line_start, line_end).trim()
+				if line.length() > 0
+					// Formats: "inner ModelName on ..." / "left ModelName on ..." / "ModelName field == other"
+					integer sp1 = line.indexOf(" ")
+					if sp1 != -1
+						string first_word = line.substring(0, sp1)
+						string join_model = ""
+						if first_word == "inner" or first_word == "left" or first_word == "right" or first_word == "full"
+							string rest = line.substring(sp1 + 1, line.length()).trim()
+							integer sp2 = rest.indexOf(" ")
+							if sp2 != -1
+								join_model = rest.substring(0, sp2)
+							else
+								join_model = rest
+						else
+							join_model = first_word
+						if join_model.length() > 0
+							string join_table = pluralize(to_snake_case(join_model))
+							result = result.replace(join_model + ".", join_table + ".")
+				line_start = line_end + 1
+
+		return result
+
+	// Parse join: clause (inner/left/right ModelName on condition) into SQL JOIN statements.
+	string parse_join_clause(string join_body, string primary_model)
+		string result = ""
+		string lines = join_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string join_type = "INNER JOIN"
+				string rest = line
+				if line.startsWith("left ")
+					join_type = "LEFT JOIN"
+					rest = line.substring(5, line.length()).trim()
+				else if line.startsWith("inner ")
+					rest = line.substring(6, line.length()).trim()
+				else if line.startsWith("right ")
+					join_type = "RIGHT JOIN"
+					rest = line.substring(6, line.length()).trim()
+				else if line.startsWith("full ")
+					join_type = "FULL JOIN"
+					rest = line.substring(5, line.length()).trim()
+
+				// rest is "ModelName on condition"
+				integer on_pos = rest.indexOf(" on ")
+				if on_pos != -1
+					string join_model = rest.substring(0, on_pos).trim()
+					string join_table = pluralize(to_snake_case(join_model))
+					string join_cond = rest.substring(on_pos + 4, rest.length()).trim()
+					// Resolve ModelName. references and convert == to =
+					join_cond = resolve_model_refs(join_cond, primary_model, join_body)
+					join_cond = join_cond.replace(" == ", " = ")
+					result = result + join_type + " " + join_table + " ON " + join_cond + " "
+			line_start = line_end + 1
 		return result
 
 // ============================================================================

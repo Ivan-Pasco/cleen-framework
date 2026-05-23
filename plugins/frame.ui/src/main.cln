@@ -1613,9 +1613,10 @@ functions:
 		if html_content != ""
 			// html: block found - generate render() from it
 
-			// Add sections before html: (typically props:, state:)
+			// Add sections before html: (typically props:, state:, handlers:)
 			if before_html.trim().length() > 0
-				result = result + "\t" + before_html + "\n"
+				string norm_before = normalize_handlers(before_html)
+				result = result + "\t" + norm_before.replace("\n", "\n\t") + "\n"
 
 			// Generate render() function from html: block content
 			string cleaned_html = strip_block_indent(html_content)
@@ -1644,8 +1645,9 @@ functions:
 				if after_html.trim().length() > 0
 					result = result + "\n\t" + after_html + "\n"
 		else
-			// No html: block - pass body through as before (backward compatible)
-			result = result + "\t" + body + "\n"
+			// No html: block - normalize handler syntax and fix per-line indentation
+			string norm_body = normalize_handlers(body)
+			result = result + "\t" + norm_body.replace("\n", "\n\t") + "\n"
 
 		// Add slot setter and SSR wrapper
 		if html_content != "" and after_html.trim().startsWith("functions:")
@@ -1683,6 +1685,17 @@ functions:
 			return default_val
 
 		return attrs.substring(quote_start + 1, quote_end)
+
+	// Normalize component handlers: block content to valid Clean Language class syntax.
+	// Translates handlers: → functions:, removes void prefix, strips trailing : from function names (onMount(): → onMount()).
+	string normalize_handlers(string content)
+		string result = content
+		result = result.replace("handlers:", "functions:")
+		result = result.replace("\tvoid ", "\t")
+		result = result.replace("):\n", ")\n")
+		if result.endsWith("):")
+			result = result.substring(0, result.length() - 1)
+		return result
 
 // ============================================================================
 // LINE-BASED PARSING UTILITIES
