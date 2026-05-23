@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.2.3"
+version = "2.3.0"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -133,10 +133,7 @@ keywords = [
   { name = "PUT", description = "HTTP PUT endpoint", context = "block" },
   { name = "PATCH", description = "HTTP PATCH endpoint", context = "block" },
   { name = "DELETE", description = "HTTP DELETE endpoint", context = "block" },
-  { name = "guard", description = "Authentication/authorization guard", context = "block" },
-  { name = "returns", description = "Response type declaration", context = "block" },
-  { name = "cache", description = "Response caching configuration", context = "block" },
-  { name = "handle", description = "Request handler block", context = "block" },
+  { name = "cache", description = "Cache hint modifier: cache(seconds) or cache(\"5m\"|\"2h\"|\"1d\"|\"no-store\"|\"no-cache\")", context = "route_header" },
   { name = "middleware", description = "Middleware definition block", context = "block" },
   { name = "body", description = "Request body parameter declaration", context = "block" },
   { name = "params", description = "Route parameter declaration", context = "block" },
@@ -195,7 +192,7 @@ completions = [
   { trigger = "endpoints:", insert = "endpoints:\n\t${1:GET} \"${2:/path}\" :\n\t\treturn json({ ${3:data} })" },
   { trigger = "GET ", insert = "GET \"${1:/path}\" :\n\treturn json({ ${2:data} })" },
   { trigger = "POST ", insert = "POST \"${1:/path}\" :\n\t${2:Type} body = req.json(${2:Type})\n\treturn json({ ${3:data} })" },
-  { trigger = "guard:", insert = "guard:\n\trole in [\"${1:admin}\"]" },
+  { trigger = "[", insert = "[${1:role}]", context = "route_header" },
   { trigger = "middleware ", insert = "middleware ${1:Name}\n\tfunctions:\n\t\tRequest handle(Request req)\n\t\t\t${2:// inspect or modify request}\n\t\t\treturn req" },
 ]
 
@@ -223,7 +220,7 @@ severity = "warn"
 
 restricted_functions = [
   { name = "_http_route", use_instead = "endpoints:", message = "Use 'endpoints:' block to define routes instead of calling _http_route() directly" },
-  { name = "_http_route_protected", use_instead = "endpoints: with guard:", message = "Use 'endpoints:' block with guard: sub-block for protected routes" },
+  { name = "_http_route_protected", use_instead = "endpoints: with [role] inline guard", message = "Use 'endpoints:' block with [role] inline guard on the route header for protected routes" },
   { name = "_http_listen", use_instead = "server:", message = "Use 'server:' block to configure and start the HTTP server" },
   { name = "_http_respond", use_instead = "return json()/html()/redirect()", message = "Use response helpers inside endpoints: handlers" },
 ]
@@ -242,7 +239,7 @@ block_folder_rules = [
 description = "HTTP server plugin. Define all routes inside endpoints: blocks. Use guard: for auth checks. Use response helpers (json, html, redirect) — never call _http_respond or _http_route directly."
 constraints = [
   "All routes must be declared inside endpoints: blocks — never call _http_route() directly",
-  "Protected routes must use guard: sub-block, not inline role checks",
+  "Protected routes must use [role] inline guard on the route header line — e.g. GET \"/path\" [admin] :",
   "Always return a response helper (json, html, redirect, notFound) — never leave a handler without a return",
   "Validate request body at the endpoint boundary before passing to service functions",
 ]
