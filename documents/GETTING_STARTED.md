@@ -124,7 +124,7 @@ This handles URLs like `/blog/hello-world`, `/blog/my-first-post`, etc.
 
 ## Add an API Endpoint
 
-Create `app/backend/api/users.cln`:
+Create `app/server/api/users.cln`:
 
 ```clean
 endpoints:

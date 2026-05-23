@@ -119,15 +119,35 @@ data Post {
 ```clean
 // HTTP API endpoints
 endpoints:
-	GET "/api/posts" -> listPosts
-	POST "/api/posts" -> createPost
-	GET "/api/posts/{id}" -> getPost
-	PUT "/api/posts/{id}" -> updatePost
-	DELETE "/api/posts/{id}" -> deletePost
+	GET "/api/posts":
+		return json(Post.find: order: createdAt desc)
 
-	POST "/api/login" -> login
-	POST "/api/logout" -> logout
-	GET "/api/me" -> getCurrentUser
+	POST "/api/posts" [auth]:
+		Post post = Post.insert(req.json(Post))
+		return json(post)
+
+	GET "/api/posts/:id":
+		Post? post = Post.first: where: id == req.params.id.toInteger()
+		if post == null
+			return notFound()
+		return json(post)
+
+	PUT "/api/posts/:id" [auth]:
+		Post post = Post.update(req.params.id.toInteger(), req.json(Post))
+		return json(post)
+
+	DELETE "/api/posts/:id" [auth]:
+		Post.delete: where: id == req.params.id.toInteger()
+		return json({ deleted: true })
+
+	POST "/api/login":
+		return auth.session.login(req.json(Credentials))
+
+	POST "/api/logout":
+		return auth.session.logout()
+
+	GET "/api/me" [auth]:
+		return json(req.context.user)
 ```
 
 ### 3. Components with Islands

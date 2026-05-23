@@ -63,7 +63,7 @@ HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.server`.
 
 **Example endpoint:**
 ```clean
-// app/backend/api/users.cln
+// app/server/api/users.cln
 endpoints:
 	GET "/api/users":
 		list<User> users = User.find:

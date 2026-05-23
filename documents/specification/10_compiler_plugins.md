@@ -111,7 +111,7 @@ functions = [
 
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/backend", "app/backend/api", "app/backend/services", "app/backend/middleware"]
+owns = ["app/server", "app/server/api", "app/server/services", "app/server/middleware"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -172,9 +172,9 @@ plugins:
 **Implicit via folder ownership**: Files placed in plugin-owned folders don't need explicit `import` statements — the declared plugin processes them automatically based on folder ownership. The compiler checks the source file path against each plugin's `owns` list to determine which declared plugin handles the file.
 
 ```clean
-// app/backend/api/users.cln
+// app/server/api/users.cln
 // No explicit import statement needed — frame.server is declared in app.cln
-// and processes this file because app/backend/api/ is in its owned folders
+// and processes this file because app/server/api/ is in its owned folders
 
 endpoints:
     GET "/users":
@@ -573,7 +573,7 @@ Plugins can define folder ownership through the `[paths]` section in `plugin.tom
 ```toml
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/backend", "app/backend/api", "app/backend/services", "app/backend/middleware"]
+owns = ["app/server", "app/server/api", "app/server/services", "app/server/middleware"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -597,7 +597,7 @@ implicit_import = true
 | Plugin | Owned Folders |
 |--------|---------------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
@@ -619,10 +619,10 @@ Creating project 'myapp'...
   [frame.data] Creating app/data/queries/
   [frame.data] Creating app/data/migrations/
   [frame.data] Creating app/data/repositories/
-  [frame.server] Creating app/backend/
-  [frame.server] Creating app/backend/api/
-  [frame.server] Creating app/backend/services/
-  [frame.server] Creating app/backend/middleware/
+  [frame.server] Creating app/server/
+  [frame.server] Creating app/server/api/
+  [frame.server] Creating app/server/services/
+  [frame.server] Creating app/server/middleware/
   [frame.ui] Creating app/pages/
   [frame.ui] Creating app/components/
   [frame.ui] Creating app/layouts/
@@ -774,7 +774,7 @@ The language server detects active plugins using these methods (in order):
 
 3. **Folder ownership** (for per-file plugin routing)
    - File in `app/data/` → routed to frame.data (must be declared in app.cln or project.toml)
-   - File in `app/backend/` → routed to frame.server (must be declared)
+   - File in `app/server/` → routed to frame.server (must be declared)
    - File in `app/auth/` → routed to frame.auth (must be declared)
    - File in `app/canvas/` → routed to frame.canvas (must be declared)
    - File in `app/pages/` or `app/components/` → routed to frame.ui (must be declared)
@@ -850,7 +850,7 @@ echo "Built $(basename $(pwd)) plugin → plugin.wasm"
 
 ### frame.server
 
-Handles HTTP server DSL blocks. Must be declared in `app.cln`. Files in `app/backend/`, `app/backend/api/`, `app/backend/services/`, and `app/backend/middleware/` are processed by this plugin without needing per-file import statements.
+Handles HTTP server DSL blocks. Must be declared in `app.cln`. Files in `app/server/`, `app/server/api/`, `app/server/services/`, and `app/server/middleware/` are processed by this plugin without needing per-file import statements.
 
 **Blocks:** `server`, `endpoints`
 
@@ -861,9 +861,9 @@ plugins:
     frame.server
 ```
 
-**Usage (no import statement needed — file is in app/backend/api/):**
+**Usage (no import statement needed — file is in app/server/api/):**
 ```clean
-// app/backend/api/users.cln
+// app/server/api/users.cln
 // frame.server is declared in app.cln and owns this folder
 
 endpoints:

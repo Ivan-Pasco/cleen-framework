@@ -2866,7 +2866,7 @@ canvasScene: width=800 height=600 id="game"
 **3. Backend endpoint provides data:**
 
 ```clean
-// app/backend/api/game.cln
+// app/server/api/game.cln
 endpoints:
 	GET "/api/highscore":
 		// fetch and return high score

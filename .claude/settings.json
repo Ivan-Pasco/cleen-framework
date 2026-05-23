@@ -29,7 +29,10 @@
       "Bash(cat plugins/frame.server/plugin.toml)",
       "Bash(cln check *)",
       "Bash(export ERROR_API_KEY=$\\(cat ~/.cleen/error-api-key\\))",
-      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" log --all --grep=\"SSR001\" --format=\"%h %s\" -n 5)"
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" log --all --grep=\"SSR001\" --format=\"%h %s\" -n 5)",
+      "Bash(perl -i -pe 's|app/backend/|app/server/|g' documents/specification/07_frame_plugins.md documents/specification/09_frame_dev_guidelines.md documents/specification/10_compiler_plugins.md documents/specification/frame_internal_map.md documents/API_REFERENCE.md documents/PLUGIN_GUIDE.md documents/specification/12_frame_canvas.md)",
+      "Bash(grep -c \"app/backend/\" documents/specification/07_frame_plugins.md documents/specification/09_frame_dev_guidelines.md documents/specification/10_compiler_plugins.md documents/specification/frame_internal_map.md documents/API_REFERENCE.md documents/PLUGIN_GUIDE.md documents/specification/12_frame_canvas.md)",
+      "Bash(perl -i -pe 's|app/backend|app/server|g' documents/specification/02_frame_cli.md)"
     ]
   }
 }

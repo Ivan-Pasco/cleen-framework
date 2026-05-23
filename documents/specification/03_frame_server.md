@@ -303,10 +303,10 @@ endpoints:
 The server can make outbound HTTP requests using the `http.*` bridge functions. This is separate from client-side communication (`frame.client`).
 
 ```clean
-// app/backend/api/proxy.cln
+// app/server/api/proxy.cln
 endpoints:
     GET "/api/weather":
-        string city = req.query("city")
+        string city = req.query.city
         string url = "https://weather.example.com/api?city=" + city
         string response = http.get(url)
         return json(response)

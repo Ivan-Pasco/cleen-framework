@@ -42,12 +42,13 @@ plugins:
     frame.server
 ```
 
-Plugins with `implicit_import = true` in their `plugin.toml` allow files inside their owned folders (e.g. `app/backend/api/` for `frame.server`) to skip individual import statements. The plugin declaration in `app.cln` is still required — what's implicit is the per-file import, not the plugin declaration itself.
+Plugins with `implicit_import = true` in their `plugin.toml` allow files inside their owned folders (e.g. `app/server/api/` for `frame.server`) to skip individual import statements. The plugin declaration in `app.cln` is still required — what's implicit is the per-file import, not the plugin declaration itself.
 
 3. **Use its new blocks:**
 ```clean
 endpoints:
-    GET "/users" -> listUsers
+    GET "/users":
+        return json(User.find:)
 ```
 
 4. **Compile as usual:**
@@ -190,7 +191,7 @@ you get something like (actual folders depend on the plugins and preset you choo
 my-app/
   app.cln
   app/
-    backend/
+    server/
       api/
         users.cln
         orders.cln
@@ -218,7 +219,7 @@ my-app/
 **Key points:**
 - `app.cln` lives at the **root** and configures the project, compiler, plugins and framework.
 - The `plugins:` block in `app.cln` declares which plugins are active.
-- `app/backend/` and its subfolders are owned by `frame.server` (endpoints, services, middleware).
+- `app/server/` and its subfolders are owned by `frame.server` (endpoints, services, middleware).
 - `app/data/` and its subfolders are owned by `frame.data`.
 - `app/auth/` is owned by `frame.auth`.
 - `app/pages/`, `app/components/`, and `app/layouts/` are owned by `frame.ui`.
@@ -246,10 +247,10 @@ Each plugin can define the folder(s) it uses. When a framework project is create
 Examples:
 
 - `frame.server` (web/API plugin) owns:
-  - `app/backend/` → HTTP endpoints, services, and middleware.
-  - `app/backend/api/` → endpoint handler files.
-  - `app/backend/services/` → service layer files.
-  - `app/backend/middleware/` → middleware files.
+  - `app/server/` → HTTP endpoints, services, and middleware.
+  - `app/server/api/` → endpoint handler files.
+  - `app/server/services/` → service layer files.
+  - `app/server/middleware/` → middleware files.
 - `frame.ui` (UI/HTML plugin) owns:
   - `app/pages/` → SSR page templates.
   - `app/components/` → reusable UI components.
@@ -364,15 +365,13 @@ start:
     // No per-file import statements needed.
 ```
 
-**`app/backend/api/users.cln` (API endpoints owned by `frame.server`)**
+**`app/server/api/users.cln` (API endpoints owned by `frame.server`)**
 
 ```clean
 endpoints:
-    GET "/users" -> listUsers
-
-listUsers:
-    // Implementation of the handler
-    // This block is expanded by frame.server into normal Clean code.
+    GET "/users":
+        list<User> users = User.find:
+        return json(users)
 ```
 
 **`app/pages/home.html` (HTML + custom tags owned by `frame.ui`)**
@@ -396,7 +395,7 @@ In this example:
 
 - `app.cln` declares the project, compiler, plugins and framework via the `plugins:` block.
 - `main.cln` defines `start`, the entrypoint block executed by the framework runtime.
-- `app/backend/api/users.cln` is discovered by `frame.server` (its owned folder) and turned into real endpoint registration code.
+- `app/server/api/users.cln` is discovered by `frame.server` (its owned folder) and turned into real endpoint registration code.
 - `app/pages/home.html` is discovered by `frame.ui` (its owned folder) and compiled into a renderable page template.
 
 Developers do not need extra boilerplate; they only need to respect the folder structure and file conventions.

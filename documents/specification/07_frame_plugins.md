@@ -293,7 +293,7 @@ Plugins are loaded via the `plugins:` block in `app.cln`. This declaration is al
 
 **Source:** `plugins/frame.server/src/main.cln`
 
-**Owned Folders:** `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/`
+**Owned Folders:** `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/`
 
 ```clean
 // frame.server plugin - HTTP server and routing DSL
@@ -341,7 +341,7 @@ server: port=3000
 **Usage (in an owned folder — no import statement needed in the file):**
 
 ```clean
-// app/backend/api/users.cln
+// app/server/api/users.cln
 // No import needed — frame.server declared in app.cln, processes files in this folder
 
 endpoints:
@@ -539,7 +539,7 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 |--------|---------------|------------|---------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` | `.html`, `.cln` | Pages, components, layouts |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `.cln` | Data models, ORM, queries, migrations |
-| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `.cln` | HTTP server, API routes, endpoints |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` | `.cln` | HTTP server, API routes, endpoints |
 | `frame.auth` | `app/auth/` | `.cln` | Auth configuration |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `.cln` | Canvas rendering, animation, sprites, audio |
 
@@ -561,7 +561,7 @@ myapp/
     │   └── Card.cln            # Processed by frame.ui (no import needed)
     ├── layouts/                # Owned by frame.ui
     │   └── main.html           # Layout wrapper
-    ├── backend/                # Owned by frame.server
+    ├── server/                 # Owned by frame.server
     │   ├── api/
     │   │   ├── users.cln       # Processed by frame.server (no import needed)
     │   │   └── posts.cln       # Processed by frame.server (no import needed)
@@ -619,7 +619,7 @@ The Clean Language compiler resolves which plugin processes each source file by 
 
 | File Path Pattern | Owning Plugin (when declared in app.cln) |
 |-------------------|------------------------------------------|
-| `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` | `frame.server` |
+| `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` | `frame.server` |
 | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `frame.data` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
@@ -641,7 +641,7 @@ plugins:
 ```
 
 ```clean
-// File: app/backend/api/users.cln
+// File: app/server/api/users.cln
 // No import statement needed — frame.server declared in app.cln, owns this folder
 
 endpoints:

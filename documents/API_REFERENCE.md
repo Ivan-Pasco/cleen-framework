@@ -620,13 +620,13 @@ cleen db:rollback  # Roll back last migration
 ## Frame Server
 
 **Plugin:** `frame.server`
-**Owned folders:** `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/`
+**Owned folders:** `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/`
 **Handled blocks:** `server`, `endpoints`
 **Spec:** [03_frame_server.md](specification/03_frame_server.md)
 
 ### Plugin Registration
 
-Files placed in `app/backend/` are processed by `frame.server` automatically. For explicit registration:
+Files placed in `app/server/` are processed by `frame.server` automatically. For explicit registration:
 
 ```clean
 plugins:
@@ -638,11 +638,24 @@ plugins:
 **`endpoints:`** - Define HTTP routes
 ```clean
 endpoints:
-    GET "/users" -> getUsers
-    POST "/users" -> createUser
-    GET "/users/:id" -> getUser
-    PUT "/users/:id" -> updateUser
-    DELETE "/users/:id" -> deleteUser
+    GET "/users":
+        return json(User.find:)
+
+    POST "/users":
+        User u = User.insert(req.json(User))
+        return json(u)
+
+    GET "/users/:id":
+        User? user = User.first: where: id == req.params.id.toInteger()
+        return json(user)
+
+    PUT "/users/:id":
+        User u = User.update(req.params.id.toInteger(), req.json(User))
+        return json(u)
+
+    DELETE "/users/:id":
+        User.delete: where: id == req.params.id.toInteger()
+        return json({ deleted: true })
 ```
 
 **With guards and caching:**
@@ -658,27 +671,20 @@ endpoints:
         return publicData()
 ```
 
-**Full handler example** (`app/backend/api/users.cln`):
+**Full handler example** (`app/server/api/users.cln`):
 ```clean
 endpoints:
-    GET "/users" -> getUsers
-    POST "/users" -> createUser
-    GET "/users/:id" -> getUser
-
-functions:
-    list<User> getUsers(Request req)
+    GET "/users":
         list<User> users = User.find:
             where: active == true
             order: name asc
         return json(users)
 
-    User createUser(Request req)
-        User newUser = User.insert:
-            name = req.body.name
-            email = req.body.email
+    POST "/users":
+        User newUser = User.insert(req.json(User))
         return json(newUser)
 
-    User getUser(Request req)
+    GET "/users/:id":
         integer id = req.params.id.toInteger()
         User? user = User.first: where: id == id
         if user == null
@@ -794,12 +800,12 @@ endpoints:
 
 ### File-Based Routing
 
-Routes are automatically derived from file paths under `app/backend/api/`:
+Routes are automatically derived from file paths under `app/server/api/`:
 
 ```
-app/backend/api/users.cln              → /api/users
-app/backend/api/users/[id].cln         → /api/users/:id
-app/backend/api/posts/[id]/comments.cln → /api/posts/:id/comments
+app/server/api/users.cln              → /api/users
+app/server/api/users/[id].cln         → /api/users/:id
+app/server/api/posts/[id]/comments.cln → /api/posts/:id/comments
 ```
 
 Page routes from `app/pages/`:

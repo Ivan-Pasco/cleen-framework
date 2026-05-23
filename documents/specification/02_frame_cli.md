@@ -46,7 +46,7 @@ When creating a project, the CLI reads each plugin's `plugin.toml` and auto-crea
 ```toml
 # Example from plugin.toml
 [paths]
-owns = ["app/backend"]
+owns = ["app/server"]
 auto_create = true
 ```
 
@@ -67,7 +67,7 @@ Creating project 'myapp'...
 
   Creating folders...
   [frame.data] Creating app/data/
-  [frame.server] Creating app/backend/
+  [frame.server] Creating app/server/
   [frame.ui] Creating app/pages/
   [frame.ui] Creating app/components/
   [frame.ui] Creating app/layouts/
@@ -79,7 +79,7 @@ Creating project 'myapp'...
   [core] Creating project.toml
   [frame.auth] Creating app/auth/auth.cln
   [frame.ui] Creating app/pages/index.html
-  [frame.server] Creating app/backend/health.cln
+  [frame.server] Creating app/server/health.cln
 
 Project created successfully!
 
@@ -91,8 +91,9 @@ myapp/
     │   └── index.html               # Home page
     ├── components/
     ├── layouts/
-    ├── backend/
-    │   └── health.cln               # Health check endpoint
+    ├── server/
+    │   └── api/
+    │       └── health.cln           # Health check endpoint
     ├── data/
     ├── auth/
     │   └── auth.cln                 # Auth configuration
@@ -109,7 +110,7 @@ Plugins can provide starter file templates in their `[templates]` section:
 [templates]
 files = [
   { path = "app/auth/auth.cln", template = "auth_config.cln" },
-  { path = "app/backend/health.cln", template = "health_endpoint.cln" },
+  { path = "app/server/health.cln", template = "health_endpoint.cln" },
 ]
 ```
 

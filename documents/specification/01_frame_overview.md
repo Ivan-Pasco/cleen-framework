@@ -96,7 +96,7 @@ Frame is divided into three main components:
 
 1. Developer declares plugins in `app.cln` and writes Clean code with framework blocks in the appropriate folder:
    ```clean
-   // app/backend/api/hello.cln
+   // app/server/api/hello.cln
    // No import needed — frame.server is declared in app.cln and owns this folder
 
    endpoints:

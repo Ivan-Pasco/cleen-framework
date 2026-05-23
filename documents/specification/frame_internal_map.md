@@ -78,10 +78,10 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 /app/pages/*.cln               → Companion data loaders (paired by filename: load/guard)   [frame.ui]
 /app/components/*.cln          → Reusable UI components                                    [frame.ui]
 /app/layouts/*.html            → Page layout wrappers                                      [frame.ui]
-/app/backend/*.cln             → Server entry points                                       [frame.server]
-/app/backend/api/*.cln         → HTTP API endpoints                                        [frame.server]
-/app/backend/services/*.cln    → Business logic services                                   [frame.server]
-/app/backend/middleware/*.cln  → Request middleware                                        [frame.server]
+/app/server/*.cln             → Server entry points                                       [frame.server]
+/app/server/api/*.cln         → HTTP API endpoints                                        [frame.server]
+/app/server/services/*.cln    → Business logic services                                   [frame.server]
+/app/server/middleware/*.cln  → Request middleware                                        [frame.server]
 /app/data/*.cln                → Data models / ORM                                         [frame.data]
 /app/data/models/*.cln         → Model definitions                                         [frame.data]
 /app/data/queries/*.cln        → Reusable query definitions                                [frame.data]
@@ -103,7 +103,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 | Plugin | Owned Paths |
 |--------|-------------|
 | `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.server` | `app/backend/`, `app/backend/api/`, `app/backend/services/`, `app/backend/middleware/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
