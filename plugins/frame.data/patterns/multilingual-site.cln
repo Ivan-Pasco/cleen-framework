@@ -29,11 +29,11 @@ data ArticleTranslation:
 functions:
 	// Fetch a translated article; falls back to English when locale has no row
 	pairs get_article(string slug, string locale)
-		let article = Article.first:
+		pairs article = Article.first:
 			where:
 				slug == slug
 
-		let translation = ArticleTranslation.first:
+		pairs translation = ArticleTranslation.first:
 			where:
 				article_id == article.id
 				locale == locale
@@ -55,7 +55,7 @@ functions:
 
 	// Upsert: update existing translation or insert a new one
 	integer save_translation(integer article_id, string locale, string title, string body)
-		let existing = ArticleTranslation.first:
+		pairs existing = ArticleTranslation.first:
 			where:
 				article_id == article_id
 				locale == locale
@@ -69,7 +69,7 @@ functions:
 					id == existing.id
 			return existing.id
 
-		let result = ArticleTranslation.insert:
+		integer result = ArticleTranslation.insert:
 			article_id = article_id
 			locale = locale
 			title = title
@@ -78,7 +78,7 @@ functions:
 
 	// List every locale that has a translation for this article
 	list<string> list_locales(integer article_id)
-		let rows = ArticleTranslation.find:
+		list<pairs> rows = ArticleTranslation.find:
 			select:
 				locale
 			where:

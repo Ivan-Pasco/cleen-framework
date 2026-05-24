@@ -1,0 +1,6 @@
+package: EndpointsTest
+    version: "1.0.0"
+
+    target: web
+        plugins: [frame.server]
+        entry: app/web/pages/index.html

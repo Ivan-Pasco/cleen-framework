@@ -299,7 +299,7 @@ When prompting an AI agent:
 
 - Config: `/app/auth/auth.cln`, `/app/auth/roles.cln`
 - Server handlers: `/app/server/api/auth/*.cln`
-- UI: gated components under `/app/ui/components/` and pages in `/app/ui/pages/`
+- UI: gated components under `/app/web/components/` and pages in `/app/web/pages/`
 - Tests: `/tests/auth/`
 
 ---

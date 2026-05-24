@@ -1,0 +1,11 @@
+// Main server routes - Clean Framework Demo
+
+endpoints:
+	GET "/":
+		return render("index")
+
+	GET "/register":
+		return render("register")
+
+	GET "/dashboard":
+		return render("dashboard")

@@ -1,10 +1,9 @@
-// User API
-// Route: GET /api/user
+// User lookup endpoint
 
-functions:
-	string __route_handler_0()
-		return "{\"user\": {}}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/user", 0)
+endpoints:
+	GET "/api/user":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string session = _auth_get_session()
+		return jsonResponse("{\"ok\": true, \"user\": " + session + "}")

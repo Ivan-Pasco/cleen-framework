@@ -26,10 +26,10 @@ data WebhookDelivery:
 functions:
 	// Queue a webhook for async delivery (call this from your event handlers)
 	integer queue_webhook(string event_type, string target_url, string payload)
-		let secret = _env_get("WEBHOOK_SECRET")
-		let signature = _crypto_hmac(payload, secret, "sha256")
+		string secret = _env_get("WEBHOOK_SECRET")
+		string signature = _crypto_hmac(payload, secret, "sha256")
 
-		let id = WebhookDelivery.insert:
+		integer id = WebhookDelivery.insert:
 			event_type = event_type
 			target_url = target_url
 			payload = payload
@@ -38,20 +38,23 @@ functions:
 		return id
 
 	// Deliver one pending webhook (called by a background job, not a request handler)
+	// NOTE: http_post_with_headers and http_get_response_code are outbound HTTP calls.
+	// Requires frame.client plugin for outbound HTTP (api.post / api.get bridge functions).
 	integer deliver_webhook(integer delivery_id)
-		let delivery = WebhookDelivery.first:
+		any delivery = WebhookDelivery.first:
 			where:
 				id == delivery_id
 
 		// Set the signature header so recipients can verify authenticity
-		let response = http_post_with_headers(
+		string headersJson = "{\"Content-Type\":\"application/json\",\"X-Webhook-Signature\":\"" + delivery.signature + "\"}"
+		any response = http_post_with_headers(
 			delivery.target_url,
 			delivery.payload,
-			"{\"Content-Type\":\"application/json\",\"X-Webhook-Signature\":\"" + delivery.signature + "\"}"
+			headersJson
 		)
 
-		let status_code = http_get_response_code()
-		let attempt = delivery.attempt_count + 1
+		integer status_code = http_get_response_code()
+		integer attempt = delivery.attempt_count + 1
 
 		if status_code >= 200 and status_code < 300
 			WebhookDelivery.update:
@@ -64,7 +67,7 @@ functions:
 			return 1
 
 		// Failed — record error, mark for retry (up to 5 attempts)
-		let new_status = "pending"
+		string new_status = "pending"
 		if attempt >= 5
 			new_status = "failed"
 
@@ -81,7 +84,7 @@ functions:
 endpoints:
 	// Example: queue a webhook when an order is completed
 	POST "/orders/:id/complete":
-		let order_id = req.params.id
+		string order_id = param("id")
 
 		// ... complete the order ...
 
@@ -92,4 +95,4 @@ endpoints:
 			"{\"order_id\":\"" + order_id + "\",\"status\":\"completed\"}"
 		)
 
-		return json({"order_id" to order_id, "status" to "completed"})
+		return jsonResponse("{\"order_id\": \"" + order_id + "\", \"status\": \"completed\"}")

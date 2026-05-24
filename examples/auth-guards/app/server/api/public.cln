@@ -1,10 +1,5 @@
 // Public endpoint - no authentication required
-// Route: GET /api/public
 
-functions:
-	string __route_handler_0()
-		return "{\"message\": \"This is public\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/public", 0)
+endpoints:
+	GET "/api/public":
+		return jsonResponse("{\"message\": \"This is public\"}")

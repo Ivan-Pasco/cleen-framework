@@ -13,57 +13,32 @@ plugins:
 
 endpoints:
 	POST "/orders":
-		let product_id = req.body_field("product_id")
-		let quantity = req.body_field("quantity")
+		string product_id = req.body_field("product_id")
+		string quantity = req.body_field("quantity")
 
 		// Validation error — includes field
 		if product_id.length() == 0
-			return badRequest(json({
-				"code" to "VALIDATION_ERROR",
-				"message" to "product_id is required",
-				"field" to "product_id"
-			}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"message\": \"product_id is required\", \"field\": \"product_id\"}"))
 
-		let qty = quantity.toInteger()
+		integer qty = quantity.toInteger()
 		if qty <= 0
-			return badRequest(json({
-				"code" to "VALIDATION_ERROR",
-				"message" to "quantity must be greater than zero",
-				"field" to "quantity"
-			}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"message\": \"quantity must be greater than zero\", \"field\": \"quantity\"}"))
 
 		// Business rule error — no field, but still structured
 		if qty > 100
-			return status(422, json({
-				"code" to "QUANTITY_LIMIT_EXCEEDED",
-				"message" to "Maximum order quantity is 100 units"
-			}))
+			return httpStatus(422, "{\"code\": \"QUANTITY_LIMIT_EXCEEDED\", \"message\": \"Maximum order quantity is 100 units\"}")
 
 		// Resource not found — consistent 404 shape
-		let product_exists = false  // would normally query DB
+		boolean product_exists = false  // would normally query DB
 		if product_exists == false
-			return notFound(json({
-				"code" to "NOT_FOUND",
-				"message" to "Product not found"
-			}))
+			return notFound(jsonResponse("{\"code\": \"NOT_FOUND\", \"message\": \"Product not found\"}"))
 
 		// Success — consistent success shape
-		return json({
-			"order_id" to "ord-123",
-			"product_id" to product_id,
-			"quantity" to qty,
-			"status" to "pending"
-		})
+		return jsonResponse("{\"order_id\": \"ord-123\", \"product_id\": \"" + product_id + "\", \"quantity\": " + qty.toString() + ", \"status\": \"pending\"}")
 
 	GET "/orders/:id":
-		let id = req.params.id
+		string id = param("id")
 		if id == "0"
-			return notFound(json({
-				"code" to "NOT_FOUND",
-				"message" to "Order not found"
-			}))
+			return notFound(jsonResponse("{\"code\": \"NOT_FOUND\", \"message\": \"Order not found\"}"))
 
-		return json({
-			"order_id" to id,
-			"status" to "shipped"
-		})
+		return jsonResponse("{\"order_id\": \"" + id + "\", \"status\": \"shipped\"}")

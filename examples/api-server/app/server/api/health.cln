@@ -1,10 +1,5 @@
 // Health check endpoint
-// Route: GET /api/health
 
-functions:
-	string __route_handler_0()
-		return "{\"status\": \"ok\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/health", 0)
+endpoints:
+	GET "/api/health":
+		return jsonResponse("{\"ok\": true, \"status\": \"ok\"}")

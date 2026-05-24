@@ -45,22 +45,22 @@ cleen server run dist/app.wasm --port 3000
 
 | Route | File | Description |
 |-------|------|-------------|
-| `GET /` | `app/ui/pages/index.html` | Home page |
-| `GET /about` | `app/ui/pages/about.html` | About page |
-| `GET /blog` | `app/ui/pages/blog/index.html` | Blog listing |
-| `GET /blog/:slug` | `app/ui/pages/blog/[slug].html` | Single post |
+| `GET /` | `app/web/pages/index.html` | Home page |
+| `GET /about` | `app/web/pages/about.html` | About page |
+| `GET /blog` | `app/web/pages/blog/index.html` | Blog listing |
+| `GET /blog/:slug` | `app/web/pages/blog/[slug].html` | Single post |
 | `GET /api/posts` | `app/server/api/posts.cln` | Posts JSON API |
 
 ## Components
 
 | Tag | File |
 |-----|------|
-| `<app-header>` | `app/ui/components/Header.cln` |
-| `<app-footer>` | `app/ui/components/Footer.cln` |
+| `<app-header>` | `app/web/components/Header.cln` |
+| `<app-footer>` | `app/web/components/Footer.cln` |
 
 ## Key Features
 
-1. **File-based routing**: Pages in `app/ui/pages/` automatically become routes
+1. **File-based routing**: Pages in `app/web/pages/` automatically become routes
 2. **Dynamic routes**: `[param]` syntax creates URL parameters
 3. **Auto-discovery**: No manual route registration needed
 4. **Custom elements**: Components become HTML tags

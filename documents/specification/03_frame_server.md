@@ -35,18 +35,19 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 ```
 /app/server/             # Owned by frame.server plugin
 /app/server/api/*.cln    # API modules using `endpoints:`
-/app/server/services/    # Business logic services
 /app/server/middleware/  # Custom middleware
-/app/ui/pages/*.html     # SSR page templates (HTML)
-/app/ui/pages/*.cln      # Companion data loaders (paired by filename)
-/app/ui/components/*.cln # UI components
-/app/ui/layouts/*.html   # Page layout wrappers
+/app/logic/              # Business logic services
+/app/web/pages/*.html    # SSR page templates (HTML)
+/app/web/pages/*.cln     # Companion data loaders (paired by filename)
+/app/web/routes.cln      # Routing file: guards, redirects, rewrites, error pages
+/app/web/components/*.cln # UI components
+/app/web/layouts/*.html  # Page layout wrappers
 /app/data/*.cln          # Data models / ORM
 /app/auth/*.cln          # Auth configuration (frame.auth)
 /public/*                # Static assets
 ```
 
-**Plugin Folder Ownership:** Files placed in `app/server/`, `app/server/api/`, or `app/server/services/` are processed by the `frame.server` plugin. The plugin must be declared in `app.cln` via the `plugins:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
+**Plugin Folder Ownership:** Files placed in `app/server/` or `app/server/api/` are processed by the `frame.server` plugin. The plugin must be declared in `main.cln` via the `target:` block. Once declared, individual source files in plugin-owned folders do not need their own `import` statement — the folder location determines which plugin processes them.
 
 ---
 
@@ -221,7 +222,7 @@ cleen api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ---
 
 ## 11. SSR Pipeline (UI)
-- Server renders pages from `/app/ui/pages/*.html`. Data is supplied by paired companion `.cln` files.
+- Server renders pages from `/app/web/pages/*.html`. Data is supplied by paired companion `.cln` files.
 - Output HTML is streamed or buffered (host adapter decides).
 - Hydration islands are scheduled according to `client="on|visible|idle|only"`.
 
@@ -261,7 +262,7 @@ The Clean code never calls host APIs directly—only via these bridges.
 ## 15. CLI
 ```bash
 cleen serve        # dev server with hot reload
-cln compile app.cln -o app.wasm --plugins    # produce WASM
+cln compile main.cln -o app.wasm --plugins    # produce WASM
 cleen api:spec     # OpenAPI
 cleen api:sdk      # Client SDKs
 ```
@@ -285,7 +286,7 @@ middleware RateLimit
             return req
 ```
 
-Register middleware globally in `app.cln`, or per-endpoint using the `middleware()` modifier:
+Register middleware globally in `main.cln`, or per-endpoint using the `middleware()` modifier:
 
 ```clean
 endpoints:
@@ -298,7 +299,34 @@ endpoints:
 
 ---
 
-## 17. Server-Side HTTP Client
+## 17. Routing File (`app/web/routes.cln`)
+
+The `routes.cln` file handles routing concerns that cannot be expressed as page files: guards, redirects, rewrites, and custom error pages. Grammar: `frame-server.ebnf §10`.
+
+**Rule:** if a page maps cleanly to a URL, use `app/web/pages/`. Use `routes.cln` only when a page file is not sufficient — guards on path patterns, permanent/temporary redirects, path rewrites with dynamic resolution, or custom error responses.
+
+```clean
+// app/web/routes.cln
+routes:
+    redirect: "/old-about" → "/about"
+    guard: "/admin/*" [admin]
+    error: 404 → "pages/not-found.cln"
+    rewrite: "/:username" → "pages/profile/[id].cln"
+        resolve: username → User.first({ handle: username })
+```
+
+**Directive reference**
+
+| Directive | Purpose |
+|-----------|---------|
+| `redirect: <from> → <to>` | Permanent (301) redirect from one path to another |
+| `guard: <pattern> [roles]` | Require at least one listed role to access the matched paths |
+| `error: <code> → <page>` | Map an HTTP error status to a custom error page |
+| `rewrite: <pattern> → <page>` | Rewrite a URL pattern to a page file; `resolve:` sub-block maps path segments to model lookups |
+
+---
+
+## 18. Server-Side HTTP Client
 
 The server can make outbound HTTP requests using the `http.*` bridge functions. This is separate from client-side communication (`frame.client`).
 
@@ -323,7 +351,7 @@ Available: `http.get(url)`, `http.postJson(url, body)`, `http.put(url, body)`, `
 
 ---
 
-## 18. Security
+## 19. Security
 - Enforce HTTPS at host; set HSTS as appropriate.
 - Use `HttpOnly` + `SameSite` cookies for sessions.
 - Limit CORS; expose only required origins/headers.
@@ -331,9 +359,9 @@ Available: `http.get(url)`, `http.postJson(url, body)`, `http.put(url, body)`, `
 
 ---
 
-## 19. Examples
+## 20. Examples
 
-### 19.1 Simple CRUD
+### 20.1 Simple CRUD
 ```clean
 // /app/server/api/posts.cln
 endpoints:
@@ -353,7 +381,7 @@ endpoints:
         return json(p), status(201)
 ```
 
-### 19.2 Guard + Cache + Middleware
+### 20.2 Guard + Cache + Middleware
 ```clean
 endpoints:
     GET "/api/reports/daily" [admin] cache(300) :
@@ -367,5 +395,5 @@ endpoints:
 
 ---
 
-**End of Document 03 — Frame Server Specification (endpoints)**
+**End of Document 03 — Frame Server Specification (endpoints, routing)**
 

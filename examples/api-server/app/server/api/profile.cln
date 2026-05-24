@@ -1,19 +1,23 @@
-// User profile endpoint
-// Route: GET, PUT /api/profile
+// User profile endpoints
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	GET "/api/profile":
+		_auth_require_auth()
+		string session = _auth_get_session()
+		string user = User.first:
+			where:
+				id = session
+		if user == "" or user == "null"
+			return notFound()
+		return jsonResponse("{\"ok\": true, \"user\": " + user + "}")
 
-		if method == "GET"
-			return "{\"message\": \"user profile\"}"
-
-		if method == "PUT"
-			return "{\"message\": \"profile updated\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/profile", 0)
-	s = _http_route("PUT", "/api/profile", 0)
+	PUT "/api/profile":
+		_auth_require_auth()
+		string session = _auth_get_session()
+		string body = body()
+		User.update:
+			set:
+				name = body
+			where:
+				id = session
+		return jsonResponse("{\"ok\": true, \"message\": \"profile updated\"}")

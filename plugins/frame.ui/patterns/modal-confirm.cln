@@ -103,8 +103,8 @@ endpoints:
 	DELETE "/api/users/:id":
 		guard:
 			require auth
-		let id = req.params.id.toInteger()
+		integer id = param("id").toInteger()
 		User.delete:
 			where:
 				id == id
-		return json({"deleted" to id})
+		return jsonResponse({"deleted" to id})

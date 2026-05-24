@@ -1,0 +1,19 @@
+// User data model - frame.data plugin
+
+data User:
+	fields:
+		id: integer primary autoincrement
+		email: string unique
+		username: string
+		password_hash: string
+		created_at: timestamp default now()
+		is_active: boolean default true
+
+	validations:
+		email: required email
+		username: required min=3 max=50
+		password_hash: required
+
+	indexes:
+		idx_email: email
+		idx_username: username

@@ -39,7 +39,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │                        COMPILER                                  │
 │                                                                  │
-│   1. Parse plugins: block in app.cln                            │
+│   1. Parse plugins: block in main.cln                            │
 │   2. Load plugins from ~/.cleen/plugins/                        │
 │   3. Find framework blocks (myblock:)                           │
 │   4. Call plugin.expand_block("myblock", attrs, body)           │
@@ -118,7 +118,7 @@ handles = ["myblock", "another"]  # DSL blocks this plugin handles
 owns = ["src/mymodule"]           # Folders this plugin owns
 auto_create = true                # Create folders on plugin import
 patterns = ["*.cln"]              # File patterns in owned folders
-implicit_import = true            # Files in owned folders skip import statements (plugin still declared in app.cln)
+implicit_import = true            # Files in owned folders skip import statements (plugin still declared in main.cln)
 ```
 
 ### Manifest Fields
@@ -138,7 +138,7 @@ implicit_import = true            # Files in owned folders skip import statement
 | `[paths]` | owns | No | List of folder paths this plugin owns |
 | | auto_create | No | Create folders automatically (default: true) |
 | | patterns | No | File patterns recognized in owned folders |
-| | implicit_import | No | Skip import statements in files inside owned folders; plugin must still be declared in app.cln (default: true) |
+| | implicit_import | No | Skip import statements in files inside owned folders; plugin must still be declared in main.cln (default: true) |
 
 ---
 
@@ -262,7 +262,7 @@ cleen plugin build
 # Install to local plugins directory
 cleen plugin add ./
 
-# Create test file using plugins: block in app.cln
+# Create test file using plugins: block in main.cln
 echo 'plugins:
     my-plugin
 
@@ -285,7 +285,7 @@ cleen plugin publish
 
 ## 6. Official Frame Plugins
 
-Plugins are loaded via the `plugins:` block in `app.cln`. This declaration is always required. There are no `import:` blocks for plugins. When `implicit_import = true` is set in a plugin's `plugin.toml`, individual source files in the plugin's owned folders do not need to declare the plugin themselves — it is already declared in `app.cln` and the compiler knows which folders it owns.
+Plugins are loaded via the `plugins:` block in `main.cln`. This declaration is always required. There are no `import:` blocks for plugins. When `implicit_import = true` is set in a plugin's `plugin.toml`, individual source files in the plugin's owned folders do not need to declare the plugin themselves — it is already declared in `main.cln` and the compiler knows which folders it owns.
 
 ### frame.server
 
@@ -293,7 +293,7 @@ Plugins are loaded via the `plugins:` block in `app.cln`. This declaration is al
 
 **Source:** `plugins/frame.server/src/main.cln`
 
-**Owned Folders:** `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/`
+**Owned Folders:** `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/`
 
 ```clean
 // frame.server plugin - HTTP server and routing DSL
@@ -322,10 +322,10 @@ functions:
 "
 ```
 
-**Usage (via `plugins:` block in app.cln):**
+**Usage (via `plugins:` block in main.cln):**
 
 ```clean
-// app.cln
+// main.cln
 plugins:
     frame.server
 
@@ -342,7 +342,7 @@ server: port=3000
 
 ```clean
 // app/server/api/users.cln
-// No import needed — frame.server declared in app.cln, processes files in this folder
+// No import needed — frame.server declared in main.cln, processes files in this folder
 
 endpoints:
     GET "/users" :
@@ -359,7 +359,7 @@ endpoints:
 
 **Source:** `plugins/frame.data/src/main.cln`
 
-**Owned Folders:** `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/`
+**Owned Folders:** `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/`
 
 ```clean
 // frame.data plugin - ORM DSL
@@ -401,7 +401,7 @@ class " + name + "
 
 ```clean
 // app/data/User.cln
-// No import needed — frame.data declared in app.cln, processes files in this folder
+// No import needed — frame.data declared in main.cln, processes files in this folder
 
 data User
     string email
@@ -431,7 +431,7 @@ data Post
 
 ```clean
 // app/auth/auth.cln
-// No import needed — frame.auth declared in app.cln, processes files in this folder
+// No import needed — frame.auth declared in main.cln, processes files in this folder
 
 auth: strategy="jwt" secret="$JWT_SECRET"
 
@@ -452,13 +452,13 @@ protected: role="user"
 
 **Source:** `plugins/frame.ui/src/main.cln`
 
-**Owned Folders:** `app/pages/`, `app/components/`, `app/layouts/`
+**Owned Folders:** `app/web/pages/`, `app/web/components/`, `app/web/layouts/`
 
 **Usage (in an owned folder — no import statement needed in the file):**
 
 ```clean
-// app/components/Button.cln
-// No import needed — frame.ui declared in app.cln, processes files in this folder
+// app/web/components/Button.cln
+// No import needed — frame.ui declared in main.cln, processes files in this folder
 
 component Button
     string label
@@ -480,7 +480,7 @@ component Button
 
 ```clean
 // app/canvas/GameScene.cln
-// No import needed — frame.canvas declared in app.cln, processes files in this folder
+// No import needed — frame.canvas declared in main.cln, processes files in this folder
 
 canvasScene: name="GameScene" width=800 height=600
 
@@ -497,7 +497,7 @@ canvasScene: name="GameScene" width=800 height=600
 
 ## 7. Folder Conventions
 
-Plugins can declare **folder ownership** to provide convention-over-configuration semantics. When a plugin is declared in `app.cln` and `implicit_import = true`, files placed in that plugin's owned folders receive the plugin's context without needing an explicit import statement in each file.
+Plugins can declare **folder ownership** to provide convention-over-configuration semantics. When a plugin is declared in `main.cln` and `implicit_import = true`, files placed in that plugin's owned folders receive the plugin's context without needing an explicit import statement in each file.
 
 ### How Folder Conventions Work
 
@@ -505,7 +505,7 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 ┌─────────────────────────────────────────────────────────────────┐
 │                     PROJECT INITIALIZATION                       │
 │                                                                  │
-│   app.cln declares:                                             │
+│   main.cln declares:                                             │
 │       plugins:                                                   │
 │           frame.ui                                               │
 │           frame.data                                             │
@@ -537,19 +537,19 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 
 | Plugin | Owned Folders | File Types | Purpose |
 |--------|---------------|------------|---------|
-| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` | `.html`, `.cln` | Pages, components, layouts |
-| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `.cln` | Data models, ORM, queries, migrations |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` | `.cln` | HTTP server, API routes, endpoints |
+| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` | `.html`, `.cln` | Pages, components, layouts |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` | `.cln` | Data models, ORM, queries, migrations |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` | `.cln` | HTTP server, API routes, endpoints |
 | `frame.auth` | `app/auth/` | `.cln` | Auth configuration |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `.cln` | Canvas rendering, animation, sprites, audio |
 
 ### Project Structure Example
 
-After plugins are declared in `app.cln`, the framework creates this structure:
+After plugins are declared in `main.cln`, the framework creates this structure:
 
 ```
 myapp/
-├── app.cln                     # Application entry point (plugins: block here)
+├── main.cln                     # Application entry point (plugins: block here)
 ├── project.toml                # Project manifest
 └── app/
     ├── pages/                  # Owned by frame.ui
@@ -590,13 +590,13 @@ myapp/
 
 ### Implicit Import Behavior
 
-When `implicit_import = true` in a plugin's `plugin.toml`, individual source files in the plugin's owned folders do not need to declare the plugin or add any import statement — the compiler knows the plugin owns that folder because the plugin was declared in `app.cln`. The plugin itself must always be declared in `app.cln`.
+When `implicit_import = true` in a plugin's `plugin.toml`, individual source files in the plugin's owned folders do not need to declare the plugin or add any import statement — the compiler knows the plugin owns that folder because the plugin was declared in `main.cln`. The plugin itself must always be declared in `main.cln`.
 
 `implicit_import = true` controls whether **files skip import statements**, not whether **the plugin skips declaration**.
 
-**Always required — plugin declaration in app.cln:**
+**Always required — plugin declaration in main.cln:**
 ```clean
-// app.cln
+// main.cln
 plugins:
     frame.data
 ```
@@ -604,7 +604,7 @@ plugins:
 **What implicit_import = true enables — no import statement needed in individual files:**
 ```clean
 // app/data/User.cln
-// No import statement needed — frame.data is declared in app.cln and owns this folder
+// No import statement needed — frame.data is declared in main.cln and owns this folder
 
 data User
     string email
@@ -613,21 +613,21 @@ data User
 
 ### Compiler Folder Ownership Resolution
 
-The Clean Language compiler resolves which plugin processes each source file by checking the folder ownership declared in each plugin's `plugin.toml`. This is not automatic detection — it depends entirely on which plugins are declared in `app.cln`.
+The Clean Language compiler resolves which plugin processes each source file by checking the folder ownership declared in each plugin's `plugin.toml`. This is not automatic detection — it depends entirely on which plugins are declared in `main.cln`.
 
 **Resolution Rules:**
 
-| File Path Pattern | Owning Plugin (when declared in app.cln) |
+| File Path Pattern | Owning Plugin (when declared in main.cln) |
 |-------------------|------------------------------------------|
-| `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` | `frame.server` |
-| `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` | `frame.data` |
+| `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` | `frame.server` |
+| `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` | `frame.data` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
-| `app/pages/`, `app/components/`, `app/layouts/` | `frame.ui` |
+| `app/web/pages/`, `app/web/components/`, `app/web/layouts/` | `frame.ui` |
 
 **How It Works:**
 
-1. The compiler reads the `plugins:` block in `app.cln` and loads each declared plugin
+1. The compiler reads the `plugins:` block in `main.cln` and loads each declared plugin
 2. For each loaded plugin, it reads the `[paths]` section of `plugin.toml` to learn which folders that plugin owns
 3. When compiling a source file, it checks which declared plugin owns the file's folder
 4. If `implicit_import = true`, the plugin's blocks are available in that file without any import statement
@@ -635,14 +635,14 @@ The Clean Language compiler resolves which plugin processes each source file by 
 **Example — file in an owned folder:**
 
 ```clean
-// app.cln — frame.server must be declared here
+// main.cln — frame.server must be declared here
 plugins:
     frame.server
 ```
 
 ```clean
 // File: app/server/api/users.cln
-// No import statement needed — frame.server declared in app.cln, owns this folder
+// No import statement needed — frame.server declared in main.cln, owns this folder
 
 endpoints:
     GET "/users" :
@@ -653,7 +653,7 @@ endpoints:
         return json({"ok": true})
 ```
 
-**Important:** If `frame.server` is not declared in `app.cln`, no plugin will process this file regardless of its folder path.
+**Important:** If `frame.server` is not declared in `main.cln`, no plugin will process this file regardless of its folder path.
 
 ### Folder Priority Rules
 

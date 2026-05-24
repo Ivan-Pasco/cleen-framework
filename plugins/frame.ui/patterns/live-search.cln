@@ -3,6 +3,7 @@
 // Anti-pattern: DON'T fire a server request on every keystroke.
 //   Debounce: wait 300ms after the user stops typing before sending the request.
 //   Use cl-iterate to re-render the result list without a full page reload.
+// Requires: frame.client plugin for client-side API calls
 
 plugins:
 	frame.ui
@@ -11,11 +12,11 @@ plugins:
 
 endpoints:
 	GET "/api/search/users":
-		let q = req.query.q
+		string q = req.query.q
 		if q.length() < 2
-			return json({"results" to []})
+			return jsonResponse("{\"results\": []}")
 
-		let results = User.find:
+		any results = User.find:
 			where:
 				name like q
 			order:
@@ -23,7 +24,7 @@ endpoints:
 			limit:
 				10
 
-		return json({"results" to results})
+		return jsonResponse("{\"results\": " + results + "}")
 
 component: tag="live-search"
 	props:
@@ -56,8 +57,8 @@ component: tag="live-search"
 				state.loading = false
 				return
 
-			let url = props.api_url + "?q=" + state.query
-			let data = http.get(url)
+			string url = props.api_url + "?q=" + state.query
+			any data = api.get(url)
 			state.results = data.results
 			state.loading = false
 

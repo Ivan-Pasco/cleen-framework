@@ -57,7 +57,7 @@ functions:
 
 	// DEEP TREE: insert a new node and populate closure table in one transaction
 	integer insert_category(integer parent_id, string name, string slug)
-		let new_id = 0
+		integer new_id = 0
 
 		Data.tx:
 			new_id = Category.insert:

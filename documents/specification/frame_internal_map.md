@@ -74,19 +74,19 @@ Each Frame subsystem has a clear boundary and relies on the Host Bridge as the s
 Standard paths used across all Frame-based projects. Each path is owned by the plugin whose `plugin.toml` declares it under `[paths] owns`.
 
 ```
-/app/pages/*.html              → SSR page templates (HTML with {{ }} and cl-* directives)  [frame.ui]
-/app/pages/*.cln               → Companion data loaders (paired by filename: load/guard)   [frame.ui]
-/app/components/*.cln          → Reusable UI components                                    [frame.ui]
-/app/layouts/*.html            → Page layout wrappers                                      [frame.ui]
+/app/web/pages/*.html              → SSR page templates (HTML with {{ }} and cl-* directives)  [frame.ui]
+/app/web/pages/*.cln               → Companion data loaders (paired by filename: load/guard)   [frame.ui]
+/app/web/components/*.cln          → Reusable UI components                                    [frame.ui]
+/app/web/layouts/*.html            → Page layout wrappers                                      [frame.ui]
 /app/server/*.cln             → Server entry points                                       [frame.server]
 /app/server/api/*.cln         → HTTP API endpoints                                        [frame.server]
-/app/server/services/*.cln    → Business logic services                                   [frame.server]
+/app/logic/*.cln    → Business logic services                                   [frame.server]
 /app/server/middleware/*.cln  → Request middleware                                        [frame.server]
 /app/data/*.cln                → Data models / ORM                                         [frame.data]
 /app/data/models/*.cln         → Model definitions                                         [frame.data]
-/app/data/queries/*.cln        → Reusable query definitions                                [frame.data]
+/app/data/*.cln        → Reusable query definitions                                [frame.data]
 /app/data/migrations/*.cln     → Schema migration files                                    [frame.data]
-/app/data/repositories/*.cln   → Repository layer                                          [frame.data]
+/app/data/*.cln   → Repository layer                                          [frame.data]
 /app/auth/*.cln                → Authentication and authorization configuration            [frame.auth]
 /app/canvas/*.cln              → Canvas application entry points                           [frame.canvas]
 /app/canvas/scenes/*.cln       → Scene definitions                                         [frame.canvas]
@@ -102,9 +102,9 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 
 | Plugin | Owned Paths |
 |--------|-------------|
-| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` |
-| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
 | `frame.client` | *(no owned folders — used in component handlers and backend code)* |

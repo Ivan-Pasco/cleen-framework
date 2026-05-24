@@ -1,10 +1,9 @@
 // Logout endpoint
-// Route: POST /api/auth/logout
 
-functions:
-	string __route_handler_0()
-		return "{\"message\": \"logged out\"}"
-
-start:
-	integer s = 0
-	s = _http_route("POST", "/api/auth/logout", 0)
+endpoints:
+	POST "/api/auth/logout":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		_auth_logout()
+		return jsonResponse("{\"ok\": true}")

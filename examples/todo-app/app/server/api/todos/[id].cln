@@ -1,23 +1,56 @@
 // Single Todo API
-// Route: GET /api/todos/:id - Get a todo
-// Route: PUT /api/todos/:id - Update a todo
-// Route: DELETE /api/todos/:id - Delete a todo
 
-functions:
-	string __route_handler_0()
-		string odI = _req_param("id")
-		string method = _req_method()
+endpoints:
+	GET "/api/todos/:id":
+		string todoId = param("id")
 
-		if method == "PUT"
-			return "{\"message\": \"Todo " + odI + " updated\"}"
+		string todo = Todo.first:
+			where:
+				id = todoId
 
-		if method == "DELETE"
-			return "{\"message\": \"Todo " + odI + " deleted\"}"
+		if todo == null
+			return notFound()
 
-		return "{\"id\": " + odI + ", \"title\": \"Sample Todo\", \"done\": false}"
+		return jsonResponse(todo)
 
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/todos/:id", 0)
-	s = _http_route("PUT", "/api/todos/:id", 0)
-	s = _http_route("DELETE", "/api/todos/:id", 0)
+	PUT "/api/todos/:id":
+		string todoId = param("id")
+
+		string body = body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return badRequest("Invalid JSON")
+
+		any titleField = bodyData.title
+		any descField = bodyData.description
+		any completedField = bodyData.completed
+
+		string title = ""
+		string desc = ""
+		integer completed = 0
+
+		if titleField != null
+			title = titleField.toString()
+		if descField != null
+			desc = descField.toString()
+		if completedField != null
+			completed = completedField.toInteger()
+
+		Todo.update:
+			set:
+				title = title
+				description = desc
+				completed = completed
+			where:
+				id = todoId
+
+		return jsonResponse("{\"ok\":true}")
+
+	DELETE "/api/todos/:id":
+		string todoId = param("id")
+
+		Todo.delete:
+			where:
+				id = todoId
+
+		return jsonResponse("{\"ok\":true}")

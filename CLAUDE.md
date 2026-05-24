@@ -91,7 +91,7 @@ See **[PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md)** — canonical ref
 
 #### Key Rules
 
-1. **Standard HTML for pages** — Use `.html` in `app/pages/`. Full editor support (Emmet, Prettier, syntax highlighting).
+1. **Standard HTML for pages** — Use `.html` in `app/web/pages/`. Full editor support (Emmet, Prettier, syntax highlighting).
 
 2. **Standard CSS for styles** — Use `.css` in `public/css/`. No inline `<style>` tags. No CSS in HTML files.
 
@@ -102,7 +102,7 @@ See **[PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md)** — canonical ref
    <div cl-if="user.isAdmin">Admin Panel</div>
    ```
 
-4. **Folder Ownership** — Plugins must be declared in `app.cln` via the `plugins:` block. Files in plugin-owned folders are processed automatically (`implicit_import = true`) — no per-file imports needed. See [PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md) for the ownership table.
+4. **Folder Ownership** — Plugins must be declared in `main.cln` via the `target:` block. Files in plugin-owned folders are processed automatically (`implicit_import = true`) — no per-file imports needed. See [PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md) for the ownership table.
 
 5. **No CSS in HTML** — Inline styles are prohibited. All CSS in `public/css/`, linked via `<link>` tags.
 
@@ -140,10 +140,11 @@ This is a HARD RULE with NO EXCEPTIONS. Violations include:
 
 ```
 example/
-├── app.cln                 # Clean config (NO JS)
-├── app/
-│   ├── pages/
-│   │   └── index.html      # Static HTML, NO <script> tags
+├── main.cln                # Clean config (NO JS)
+├── src/
+│   ├── web/
+│   │   └── pages/
+│   │       └── index.html  # Static HTML, NO <script> tags
 │   ├── data/
 │   │   └── models/
 │   │       └── User.cln    # Clean model (NO JS)
@@ -229,7 +230,7 @@ Reference: [06_frame_auth.md](documents/specification/06_frame_auth.md)
 #### Frame Canvas (`frame.canvas/`)
 Reference: [12_frame_canvas.md](documents/specification/12_frame_canvas.md)
 - `canvasScene:` is the root block; all sub-blocks (`assets:`, `tween`, `timeline`, `animState`, `particles`, `draw:`, event handlers, etc.) live inside it
-- Canvas files go in `app/canvas/` (auto-imported when `frame.canvas` is declared in `app.cln`)
+- Canvas files go in `app/canvas/` (auto-imported when `frame.canvas` is declared in `main.cln`)
 - All drawing, audio, animation, and input calls go through the Host Bridge — never write raw JS
 - `draw:` is immediate-mode per-frame rendering; `onFrame:` is per-frame update logic; state lives in `state:`
 

@@ -1,0 +1,16 @@
+// Database schema - Task Management Application
+
+data User
+	string email
+	string name
+
+data Project
+	string name
+	string description
+
+data Task
+	string title
+	string description
+	string status
+	integer project_id
+	integer assignee_id

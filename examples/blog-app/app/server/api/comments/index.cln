@@ -1,19 +1,30 @@
-// Comments API
-// Route: GET, POST /api/comments
+// Comments collection endpoints
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	GET "/api/comments":
+		string postId = param("post_id")
+		string comments = Comment.find:
+			where:
+				post_id = postId
+			order: created_at asc
+		return jsonResponse("{\"ok\": true, \"comments\": " + comments + "}")
 
-		if method == "GET"
-			return "{\"comments\": []}"
-
-		if method == "POST"
-			return "{\"message\": \"comment created\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/comments", 0)
-	s = _http_route("POST", "/api/comments", 0)
+	[user, admin] POST "/api/comments":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string body = body()
+		any data = json.tryTextToData(body)
+		if data == null
+			return badRequest("Invalid JSON")
+		string postId = json.get(data, "post_id")
+		string commentBody = json.get(data, "body")
+		if postId == "" or commentBody == ""
+			return badRequest("post_id and body are required")
+		string session = _auth_get_session()
+		string authorId = json.getField(session, "id")
+		Comment.insert:
+			post_id = postId
+			author_id = authorId
+			body = commentBody
+		return jsonResponse("{\"ok\": true}")

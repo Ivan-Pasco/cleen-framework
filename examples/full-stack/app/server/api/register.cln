@@ -1,10 +1,11 @@
 // Register endpoint
-// Route: POST /api/register
 
-functions:
-	string __route_handler_0()
-		return "{\"message\": \"registered\"}"
-
-start:
-	integer s = 0
-	s = _http_route("POST", "/api/register", 0)
+endpoints:
+	POST "/api/register":
+		string body = body()
+		string hash = _auth_hash_password(body)
+		User.insert:
+			password_hash = hash
+			role = "user"
+			active = true
+		return jsonResponse("{\"ok\": true, \"message\": \"registered\"}")

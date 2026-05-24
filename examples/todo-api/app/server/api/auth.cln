@@ -1,0 +1,95 @@
+// Authentication Endpoints
+// Register, login, logout, and session management
+
+endpoints:
+	POST "/auth/register":
+		string body = body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return badRequest("Invalid JSON")
+
+		any emailField = bodyData.email
+		any passwordField = bodyData.password
+		any nameField = bodyData.name
+
+		if emailField == null
+			return badRequest("Email required")
+		if passwordField == null
+			return badRequest("Password required")
+
+		string email = emailField.toString()
+		string password = passwordField.toString()
+		string name = ""
+		if nameField != null
+			name = nameField.toString()
+
+		string hashedPassword = _auth_hash_password(password)
+
+		integer newId = User.insert:
+			email = email
+			password_hash = hashedPassword
+			name = name
+			role = "user"
+
+		return jsonResponse("{\"ok\":true,\"message\":\"User registered\",\"id\":" + newId.toString() + "}")
+
+	POST "/auth/login":
+		string body = body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return badRequest("Invalid JSON")
+
+		any emailField = bodyData.email
+		any passwordField = bodyData.password
+
+		if emailField == null
+			return badRequest("Email required")
+		if passwordField == null
+			return badRequest("Password required")
+
+		string email = emailField.toString()
+		string password = passwordField.toString()
+
+		string userJson = User.first:
+			where:
+				email = email
+
+		if userJson == null
+			return unauthorized()
+
+		any userData = json.tryTextToData(userJson)
+		if userData == null
+			return unauthorized()
+
+		any hashField = userData.password_hash
+		string storedHash = hashField.toString()
+		integer verified = _auth_verify_password(password, storedHash)
+		if verified == 0
+			return unauthorized()
+
+		any idField = userData.id
+		any nameField = userData.name
+		any roleField = userData.role
+		string userId = idField.toString()
+		string userName = nameField.toString()
+		string userRole = roleField.toString()
+
+		string sessionPayload = "{\"userId\":" + userId + ",\"name\":\"" + userName + "\",\"role\":\"" + userRole + "\"}"
+		integer sessionResult = _auth_create_session(sessionPayload)
+
+		return jsonResponse("{\"ok\":true,\"user\":" + userJson + "}")
+
+	POST "/auth/logout":
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return unauthorized()
+
+		return jsonResponse("{\"ok\":true,\"message\":\"Logged out\"}")
+
+	GET "/auth/me":
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return unauthorized()
+
+		string session = _auth_get_session()
+		return jsonResponse("{\"ok\":true,\"user\":" + session + "}")

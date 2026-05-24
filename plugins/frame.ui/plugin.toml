@@ -67,7 +67,7 @@ functions = [
   { name = "_ui_get_component", params = ["string"], returns = "string", description = "Get component class by tag name", expand_strings = true },
 
   # Layout Loading
-  { name = "_ui_load_layout", params = ["string"], returns = "string", description = "Load layout HTML template by name from app/ui/layouts/", expand_strings = true },
+  { name = "_ui_load_layout", params = ["string"], returns = "string", description = "Load layout HTML template by name from app/web/layouts/", expand_strings = true },
 
   # Slot Management
   { name = "_ui_set_slot", params = ["string", "string"], returns = "integer", description = "Set slot content: slot name, content", expand_strings = true },
@@ -223,7 +223,7 @@ completions = [
 
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["app/ui", "app/ui/pages", "app/ui/components", "app/ui/layouts"]
+owns = ["app/ui", "app/web", "app/web/pages", "app/web/components", "app/web/layouts"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -237,7 +237,7 @@ implicit_import = true
 [templates]
 # Starter files created when plugin is added to a project
 files = [
-  { path = "app/ui/pages/index.html", template = "index.html" },
+  { path = "app/web/pages/index.html", template = "index.html" },
 ]
 
 [enforcement]
@@ -246,19 +246,19 @@ severity = "warn"
 restricted_functions = []
 
 required_blocks = [
-  { folder = "app/ui/components/", block = "component", message = "Component files should contain 'component' definitions" },
+  { folder = "app/web/components/", block = "component", message = "Component files should contain 'component' definitions" },
 ]
 
 block_folder_rules = [
-  { block = "component", allowed_in = ["app/ui/components/"], message = "component: blocks should be in app/ui/components/" },
-  { block = "screen", allowed_in = ["app/ui/pages/", "app/ui/components/"], message = "screen: blocks should be in app/ui/pages/ or app/ui/components/" },
+  { block = "component", allowed_in = ["app/web/components/", "app/ui/"], message = "component: blocks should be in app/web/components/ or app/ui/" },
+  { block = "screen", allowed_in = ["app/web/pages/", "app/web/components/", "app/ui/"], message = "screen: blocks should be in app/web/pages/ or app/web/components/ or app/ui/" },
 ]
 
 [ai]
 description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. Use styles: for theming. Never write inline JavaScript."
 constraints = [
-  "Pages go in app/ui/pages/ as .html files — not as .cln files",
-  "Reusable elements belong in component: blocks in app/ui/components/",
+  "Pages go in app/web/pages/ as .html files — not as .cln files",
+  "Reusable elements belong in component: blocks in app/web/components/ or app/ui/ for cross-platform components",
   "Use cl-iterate for lists — never build HTML strings by concatenation",
   "Use ui.formJson() to collect form inputs — never access DOM fields manually",
   "Event handlers must be exported Clean functions — never inline JS",

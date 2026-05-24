@@ -52,7 +52,7 @@ Higher layers depend on lower layers — you can use Layer 1 without Layer 2, an
 
 ### Plugin Ownership
 
-Frame Canvas owns the `app/canvas/` folder. When `frame.canvas` is declared in `app.cln`, all `.cln` files inside `app/canvas/` and its subfolders are automatically processed by the plugin — no per-file import statements are needed (`implicit_import = true`).
+Frame Canvas owns the `app/canvas/` folder. When `frame.canvas` is declared in `main.cln`, all `.cln` files inside `app/canvas/` and its subfolders are automatically processed by the plugin — no per-file import statements are needed (`implicit_import = true`).
 
 ```
 myapp/
@@ -2831,7 +2831,7 @@ Canvas files connect to HTML pages through the canvas element binding. The recom
 **1. HTML page declares the canvas element:**
 
 ```html
-<!-- app/pages/game.html -->
+<!-- app/web/pages/game.html -->
 <!DOCTYPE html>
 <html>
 <head>

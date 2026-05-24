@@ -50,12 +50,12 @@ For the canonical folder layout, see [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE
 
 | Plugin | Owned paths |
 |--------|-------------|
-| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` |
-| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
-| `frame.client` | *(no owned folders — available everywhere once declared in `app.cln`)* |
+| `frame.client` | *(no owned folders — available everywhere once declared in `main.cln`)* |
 
 ---
 

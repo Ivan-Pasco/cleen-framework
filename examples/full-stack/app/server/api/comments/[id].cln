@@ -1,11 +1,10 @@
 // Single comment API
-// Route: DELETE /api/comments/:id
 
-functions:
-	string __route_handler_0()
-		string odI = _req_param("id")
-		return "{\"message\": \"comment deleted\", \"id\": \"" + odI + "\"}"
-
-start:
-	integer s = 0
-	s = _http_route("DELETE", "/api/comments/:id", 0)
+endpoints:
+	DELETE "/api/comments/:id":
+		_auth_require_auth()
+		string id = param("id")
+		Comment.delete:
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"comment deleted\", \"id\": \"" + id + "\"}")

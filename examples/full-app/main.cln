@@ -1,0 +1,14 @@
+package: FullApp
+	version: "1.0.0"
+	description: "Full application with all features"
+
+	target: web
+		plugins: [frame.ui, frame.server, frame.data, frame.auth]
+		entry: app/web/pages/index.html
+
+	server:
+		port: 3000
+
+	auth:
+		strategy: session
+		secret: env("APP_SECRET")
