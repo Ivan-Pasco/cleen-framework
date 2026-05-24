@@ -251,6 +251,9 @@
 				return writeString(stateStore.has(key) ? stateStore.get(key) : '');
 			},
 
+			_state_reset_all: () => {},
+			_state_reset_named: () => {},
+
 			// ========== DOM Manipulation ==========
 
 			_ui_update_element: (selectorPtr, selectorLen, contentPtr, contentLen) => {

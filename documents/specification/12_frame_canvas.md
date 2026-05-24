@@ -203,8 +203,8 @@ Loads a static image for use with `canvas.image`.
 
 ```clean
 assets:
-	image "background" src="assets/bg.jpg"
-	image "logo" src="assets/logo.png"
+	image "background" src="public/bg.jpg"
+	image "logo" src="public/logo.png"
 ```
 
 | Attribute | Type | Required | Description |
@@ -264,8 +264,8 @@ Loads a web font for use with the `font=` attribute on `canvas.text`.
 
 ```clean
 assets:
-	font "mainFont" src="assets/fonts/roboto.woff2"
-	font "titleFont" src="assets/fonts/bebas.woff2"
+	font "mainFont" src="public/fonts/roboto.woff2"
+	font "titleFont" src="public/fonts/bebas.woff2"
 ```
 
 | Attribute | Type | Required | Description |
@@ -278,8 +278,8 @@ assets:
 canvasScene: width=800 height=600
 
 	assets:
-		image "background" src="assets/space-bg.jpg"
-		image "logo" src="assets/logo.png"
+		image "background" src="public/space-bg.jpg"
+		image "logo" src="public/logo.png"
 		spritesheet "hero" src="sprites/hero.png" frameWidth=48 frameHeight=64
 		spritesheet "enemy" src="sprites/enemy.png" frameWidth=32 frameHeight=32
 		spritesheet "explosions" src="sprites/fx.png" frameWidth=64 frameHeight=64
@@ -288,7 +288,7 @@ canvasScene: width=800 height=600
 		sound "powerup" src="sounds/powerup.wav"
 		music "theme" src="music/space-theme.mp3"
 		music "boss" src="music/boss.mp3"
-		font "mainFont" src="assets/fonts/roboto.woff2"
+		font "mainFont" src="public/fonts/roboto.woff2"
 
 	init:
 		audio.music.play "theme" loop=true volume=0.5

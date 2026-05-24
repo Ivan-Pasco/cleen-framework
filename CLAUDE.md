@@ -141,16 +141,16 @@ This is a HARD RULE with NO EXCEPTIONS. Violations include:
 ```
 example/
 ├── main.cln                # Clean config (NO JS)
-├── src/
+├── app/
 │   ├── web/
 │   │   └── pages/
 │   │       └── index.html  # Static HTML, NO <script> tags
 │   ├── data/
 │   │   └── models/
 │   │       └── User.cln    # Clean model (NO JS)
-│   └── backend/
+│   └── server/
 │       └── api/
-│       └── users.cln       # Clean endpoints (NO JS)
+│           └── users.cln   # Clean endpoints (NO JS)
 └── public/
     └── css/
         └── style.css       # CSS only (NO JS)

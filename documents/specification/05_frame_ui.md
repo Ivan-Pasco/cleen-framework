@@ -341,21 +341,32 @@ Use curly braces for dynamic values:
 
 Pages get their server-side data from a **companion `.cln` file** paired by filename. This is the only mechanism for providing data to HTML templates. No `<script>` tags of any kind are allowed in page templates.
 
-There are two companion patterns:
+There are three layers involved in serving a page:
 
-**Pattern 1 — Page companion** (lives alongside the `.html` in `app/web/pages/`):
+| Layer | Location | Responsibility |
+|-------|----------|----------------|
+| Business logic | `app/logic/` | Data-fetching queries, shared across all targets |
+| Web adapter | `app/web/pages/name.cln` | URL params, guard, calls `app/logic/` |
+| Reactive state | `app/state/` | Client-side state, drives multiple targets |
+
+**Page companion** (lives alongside the `.html` in `app/web/pages/`):
+
+The companion is a thin **web adapter**. It handles what is web-specific — URL params, request context, access guards — then delegates data-fetching to `app/logic/`. It does not query the database directly.
 
 ```
+app/logic/
+└── users.cln            # Shared: getById(), findActive(), etc.
+
 app/web/pages/
 ├── profile.html         # Template (pure HTML + { } + cl-*)
-└── profile.cln          # Companion: load() and guard() for this page
+└── profile.cln          # Web adapter: params + guard, calls app/logic/users
 ```
 
-**Pattern 2 — State companion** (lives in `app/state/` and drives the same view across multiple render targets):
+**State companion** (lives in `app/state/`, drives the same view across multiple render targets):
 
 ```
 app/state/dashboard.cln  ──→  app/web/pages/dashboard.cln (web)
-                          ──→  (future: desktop/screens/dashboard.cln)
+                          ──→  app/desktop/screens/dashboard.cln (future)
 ```
 
 The state companion uses a `state:` block with optional `computed:` properties:
@@ -371,8 +382,6 @@ state:
             return userName ?? "Guest"
 ```
 
-A web page companion in `app/web/pages/` imports a state companion to share reactive state across targets without duplicating logic.
-
 **Companion file contract:**
 
 The companion `.cln` file may export two functions:
@@ -387,7 +396,18 @@ Both functions must be inside a `functions:` block. The `request` parameter give
 **Example — Profile page:**
 
 ```clean
+// app/logic/users.cln
+functions:
+	User getById(integer id)
+		return User.first:
+			where:
+				id == id
+```
+
+```clean
 // app/web/pages/profile.cln
+import "app/logic/users"
+
 functions:
 	any guard(Request request)
 		if not request.auth.loggedIn
@@ -396,7 +416,7 @@ functions:
 
 	any load(Request request)
 		integer id = request.params.id
-		User user = User.find(id)
+		User user = users.getById(id)
 		return { user: user }
 ```
 
@@ -421,6 +441,7 @@ functions:
 - Data returned by `load()` is merged into the template's variable scope
 - Path parameters (e.g., from `[id].html`) are available as `request.params.id`
 - The compiler type-checks the companion's return type against template variable usage
+- Data-fetching logic belongs in `app/logic/` so it can be reused by other targets and API endpoints
 
 ### 5.3 Conditional Rendering
 
@@ -1043,19 +1064,31 @@ For client-server communication (HTTP, WebSocket, SSE), see [14_frame_ui_client_
 
 ### 15.2 Dynamic Page with Data
 
-Blog detail page using the companion file pattern:
+Blog detail page using the three-layer pattern — logic in `app/logic/`, companion as thin web adapter:
+
+```clean
+// app/logic/posts.cln
+functions:
+	Post getBySlug(string slug)
+		return Post.first:
+			where:
+				slug == slug
+
+	list<Comment> getComments(Post post)
+		return post.comments:
+			order:
+				createdAt desc
+```
 
 ```clean
 // app/web/pages/blog/[slug].cln
+import "app/logic/posts"
+
 functions:
 	any load(Request request)
 		string slug = request.params.slug
-		Post post = Post.find:
-			where:
-				slug == slug
-		list<Comment> comments = post.comments:
-			order:
-				createdAt desc
+		Post post = posts.getBySlug(slug)
+		list<Comment> comments = posts.getComments(post)
 		return { post: post, comments: comments }
 ```
 

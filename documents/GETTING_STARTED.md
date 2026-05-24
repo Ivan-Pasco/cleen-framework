@@ -108,16 +108,27 @@ Create `app/web/pages/blog/[slug].html` for dynamic URLs:
 </html>
 ```
 
-With companion loader `app/web/pages/blog/[slug].cln`:
+Put the query in `app/logic/posts.cln` so it can be reused by other pages and API endpoints:
 
 ```clean
+// app/logic/posts.cln
+functions:
+	Post getBySlug(string slug)
+		return Post.first:
+			where:
+				slug == slug
+```
+
+Then the companion `app/web/pages/blog/[slug].cln` is a thin web adapter that just binds the URL param and calls the logic:
+
+```clean
+// app/web/pages/blog/[slug].cln
+import "app/logic/posts"
+
 functions:
 	any load(Request request)
 		string slug = request.params.slug
-		Post post = Post.first:
-			where:
-				slug == slug
-		return { post: post }
+		return { post: posts.getBySlug(slug) }
 ```
 
 This handles URLs like `/blog/hello-world`, `/blog/my-first-post`, etc.

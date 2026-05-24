@@ -8,15 +8,15 @@
 my-app/
 ├── main.cln                     # Package declaration + target configuration
 │
-├── src/
+├── app/
 │   ├── data/                    # ORM / database layer              → frame.data
 │   │   ├── models/              # Data model definitions (.cln)
 │   │   ├── migrations/          # Schema migration files (.cln)
 │   │   └── seeds/               # Seed data (.cln)
 │   │
-│   ├── logic/                   # Pure business logic functions (no renderer code)
+│   ├── logic/                   # Shared data-fetching & business logic, reusable across all targets
 │   │
-│   ├── state/                   # Reactive state files, companion to each screen
+│   ├── state/                   # Reactive client-side state, drives multiple render targets
 │   │
 │   ├── server/                  # HTTP API layer                    → frame.server
 │   │   ├── api/                 # Endpoint handlers (endpoints: blocks)
@@ -29,15 +29,16 @@ my-app/
 │       ├── pages/               # Auto-routed page files
 │       │   ├── home.cln         # Home page (/) — Clean component
 │       │   ├── about.html       # About page (/about) — HTML template
-│       │   ├── about.cln        # Companion data loader for about.html
+│       │   ├── about.cln        # Web adapter: URL binding + guard for about.html
 │       │   └── blog/
 │       │       ├── [slug].html  # Dynamic route (/blog/:slug)
-│       │       └── [slug].cln   # Companion loader
+│       │       └── [slug].cln   # Web adapter: URL binding + guard
 │       ├── components/          # Web-specific reusable components
 │       ├── layouts/             # Page layout wrappers (.html)
 │       └── routes.cln           # Special routing rules only (see below)
 │
-└── assets/
+└── public/
+    ├── css/
     ├── images/
     └── fonts/
 ```
@@ -55,7 +56,7 @@ package: MyApp
         entry: app/web/pages/home.cln
 ```
 
-Multiple targets share the same `app/data/`, `app/logic/`, and `app/state/` folders — logic is written once and runs on every target.
+Multiple targets share the same `app/data/`, `app/logic/`, and `app/state/` folders — logic is written once and runs on every target. The `public/` folder at the project root is served directly by the HTTP server without compilation.
 
 ## Naming Rule
 
@@ -139,6 +140,27 @@ data User
 	datetime createdAt : default=now
 ```
 
+### `app/logic/`
+
+Shared data-fetching and business logic. Functions here are reusable across all targets (web, mobile, desktop) — they never receive an HTTP `Request` and have no knowledge of web-specific concepts.
+
+**Example:**
+```clean
+// app/logic/posts.cln
+functions:
+	Post getBySlug(string slug)
+		return Post.first:
+			where:
+				slug == slug
+
+	list<Comment> getComments(Post post)
+		return post.comments:
+			order:
+				createdAt desc
+```
+
+Page companions and API endpoints call into `app/logic/` rather than querying the database directly, so the same logic can serve a web page, a mobile screen, and a REST endpoint without duplication.
+
 ### `app/web/pages/`
 
 Page files auto-routed by file path. Each file becomes a GET route. Owned by `frame.ui`. Accepts both `.html` templates and `.cln` components.
@@ -151,12 +173,12 @@ Page files auto-routed by file path. Each file becomes a GET route. Owned by `fr
 | `blog/[slug].html` | `/blog/:slug` |
 | `users/[id]/profile.html` | `/users/:id/profile` |
 
-**Companion files**: Each `.html` page can have a matching `.cln` file (same name) that provides server-side data via `load()` and access control via `guard()`.
+**Companion files**: Each `.html` page can have a matching `.cln` file (same name). The companion is a thin **web adapter** — it parses URL params, enforces guards, then delegates data-fetching to `app/logic/`. It never queries the database directly.
 
 ```
 app/web/pages/
 ├── about.html               # HTML template
-└── about.cln                # Companion: load() provides data, guard() checks access
+└── about.cln                # Web adapter: URL binding + guard for about.html
 ```
 
 **Example page:**
@@ -170,15 +192,15 @@ app/web/pages/
 </article>
 ```
 
-**Example companion:**
+**Example companion** (delegates to `app/logic/posts`):
 ```clean
 // app/web/pages/blog/[slug].cln
+import "app/logic/posts"
+
 functions:
 	any load(Request request)
 		string slug = request.params.slug
-		Post post = Post.first:
-			where:
-				slug == slug
+		Post post = posts.getBySlug(slug)
 		return { post: post }
 ```
 
@@ -212,11 +234,11 @@ routes:
 
 ### `app/state/`
 
-Reactive state files. Each file is a companion to a view file — the same state file drives multiple render targets.
+Reactive client-side state. Each file drives the same view across multiple render targets — web, mobile, desktop — without duplicating logic.
 
 ```
-app/state/dashboard.cln  ──→  app/web/pages/dashboard.cln
-                          ──→  src/desktop/screens/dashboard.cln (future)
+app/state/dashboard.cln  ──→  app/web/pages/dashboard.cln (web)
+                          ──→  app/desktop/screens/dashboard.cln (future)
 ```
 
 State uses the `state:` block:
@@ -299,11 +321,17 @@ canvasScene: width=800 height=600
 		// handle click at (x, y)
 ```
 
-### `assets/`
+### `public/`
 
-Static assets served directly without processing. Lives at the project root, not under `src/` — it is not compiled.
+Static assets served directly without processing. Lives at the project root, outside `app/` — not compiled or processed by any plugin.
 
-Access via URL path: `/images/logo.png`, `/fonts/inter.woff2`
+| Sub-folder | Purpose |
+|---|---|
+| `css/` | Stylesheets, linked via `<link>` tags |
+| `images/` | Images, served at `/images/...` |
+| `fonts/` | Web fonts, served at `/fonts/...` |
+
+Access via URL path: `/css/style.css`, `/images/logo.png`, `/fonts/inter.woff2`
 
 ## Commands
 
