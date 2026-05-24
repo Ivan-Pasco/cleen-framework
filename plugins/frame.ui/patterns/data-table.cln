@@ -3,6 +3,7 @@
 // Anti-pattern: DON'T fetch all rows and filter client-side.
 //   For large datasets this transfers too much data and is slow.
 //   Paginate and sort server-side; pass page + sort + filter as query params.
+// Requires: frame.client plugin for client-side API calls
 
 plugins:
 	frame.ui
@@ -12,10 +13,10 @@ plugins:
 // Server: accepts page, sort, order, search as query params
 endpoints:
 	GET "/users":
-		let page = req.query.page.toInteger()
-		let sort = req.query.sort
-		let order = req.query.order
-		let search = req.query.search
+		integer page = req.query.page.toInteger()
+		string sort = req.query.sort
+		string order = req.query.order
+		string search = req.query.search
 
 		if page <= 0
 			page = 1
@@ -24,12 +25,12 @@ endpoints:
 		if order.length() == 0
 			order = "asc"
 
-		let page_size = 20
-		let offset = (page - 1) * page_size
+		integer page_size = 20
+		integer offset = (page - 1) * page_size
 
 		// Server does the filtering — never pull all rows to the client
 		// ORM like operator maps to ILIKE on PostgreSQL (case-insensitive)
-		let users = User.find:
+		any users = User.find:
 			where:
 				name like search
 			order:
@@ -39,16 +40,11 @@ endpoints:
 			offset:
 				offset
 
-		let total = User.count:
+		integer total = User.count:
 			where:
 				name like search
 
-		return json({
-			"users" to users,
-			"page" to page,
-			"total" to total,
-			"total_pages" to (total / page_size + 1)
-		})
+		return jsonResponse("{\"users\": " + users + ", \"page\": " + page.toString() + ", \"total\": " + total.toString() + ", \"total_pages\": " + (total / page_size + 1).toString() + "}")
 
 // UI component: data table with sort headers and pagination
 component: tag="data-table"
@@ -64,8 +60,8 @@ component: tag="data-table"
 
 	handlers:
 		void load()
-			let url = props.api_url + "?page=" + state.page + "&sort=" + state.sort + "&order=" + state.order
-			let result = http.get(url)
+			string url = props.api_url + "?page=" + state.page + "&sort=" + state.sort + "&order=" + state.order
+			any result = api.get(url)
 			state.rows = result.users
 			state.total_pages = result.total_pages
 

@@ -10,47 +10,42 @@ plugins:
 
 endpoints:
 	POST "/users":
-		let name = req.body_field("name")
-		let email = req.body_field("email")
-		let age = req.body_field("age")
+		string name = req.body_field("name")
+		string email = req.body_field("email")
+		string age = req.body_field("age")
 
 		// Validate required fields at the boundary — fail fast with 400
 		if name.length() == 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "name is required"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"name\", \"message\": \"name is required\"}"))
 
 		if email.length() == 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "email", "message" to "email is required"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"email\", \"message\": \"email is required\"}"))
 
 		// Email format check
 		if email.indexOf("@") == -1
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "email", "message" to "email must contain @"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"email\", \"message\": \"email must contain @\"}"))
 
 		// Type coercion check — age must be a positive integer
-		let age_int = age.toInteger()
+		integer age_int = age.toInteger()
 		if age_int <= 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "age", "message" to "age must be a positive integer"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"age\", \"message\": \"age must be a positive integer\"}"))
 
 		if age_int > 150
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "age", "message" to "age must be 150 or less"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"age\", \"message\": \"age must be 150 or less\"}"))
 
 		// Only reach service logic once all inputs are validated
-		return json({
-			"id" to "new-user-id",
-			"name" to name,
-			"email" to email,
-			"age" to age_int
-		})
+		return jsonResponse("{\"id\": \"new-user-id\", \"name\": \"" + name + "\", \"email\": \"" + email + "\", \"age\": " + age_int.toString() + "}")
 
 	PUT "/users/:id":
-		let id = req.params.id
+		string id = param("id")
 
 		// Path param must be a positive integer
-		let id_int = id.toInteger()
+		integer id_int = id.toInteger()
 		if id_int <= 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "id", "message" to "id must be a positive integer"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"id\", \"message\": \"id must be a positive integer\"}"))
 
-		let name = req.body_field("name")
+		string name = req.body_field("name")
 		if name.length() == 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "name is required"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"name\", \"message\": \"name is required\"}"))
 
-		return json({"id" to id_int, "name" to name, "updated" to true})
+		return jsonResponse("{\"id\": " + id_int.toString() + ", \"name\": \"" + name + "\", \"updated\": true}")

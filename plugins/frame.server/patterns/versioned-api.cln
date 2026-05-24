@@ -11,49 +11,38 @@ plugins:
 // v1 — original contract, must never change shape while clients depend on it
 endpoints:
 	GET "/v1/users/:id":
-		let id = req.params.id
-		return json({
-			"id" to id,
-			"name" to "Alice",
-			"email" to "alice@example.com"
-		})
+		string id = param("id")
+		return jsonResponse("{\"id\": \"" + id + "\", \"name\": \"Alice\", \"email\": \"alice@example.com\"}")
 
 	POST "/v1/users":
-		let body = req.json(CreateUserV1)
+		string bodyRaw = body()
+		any body = json.tryTextToData(bodyRaw)
 		// v1 only has name + email
-		return json({
-			"id" to "new-123",
-			"name" to body.name,
-			"email" to body.email
-		})
+		any nameField = body.name
+		any emailField = body.email
+		return jsonResponse("{\"id\": \"new-123\", \"name\": \"" + nameField.toString() + "\", \"email\": \"" + emailField.toString() + "\"}")
 
 // v2 — breaking change: profile_url added, name split into first_name/last_name
 // v1 stays untouched so existing clients keep working
 endpoints:
 	GET "/v2/users/:id":
-		let id = req.params.id
-		return json({
-			"id" to id,
-			"first_name" to "Alice",
-			"last_name" to "Smith",
-			"email" to "alice@example.com",
-			"profile_url" to "/profiles/alice"
-		})
+		string id = param("id")
+		return jsonResponse("{\"id\": \"" + id + "\", \"first_name\": \"Alice\", \"last_name\": \"Smith\", \"email\": \"alice@example.com\", \"profile_url\": \"/profiles/alice\"}")
 
 	POST "/v2/users":
-		let body = req.json(CreateUserV2)
-		return json({
-			"id" to "new-124",
-			"first_name" to body.first_name,
-			"last_name" to body.last_name,
-			"email" to body.email
-		})
+		string bodyRaw = body()
+		any body = json.tryTextToData(bodyRaw)
+		any firstNameField = body.first_name
+		any lastNameField = body.last_name
+		any emailField = body.email
+		return jsonResponse("{\"id\": \"new-124\", \"first_name\": \"" + firstNameField.toString() + "\", \"last_name\": \"" + lastNameField.toString() + "\", \"email\": \"" + emailField.toString() + "\"}")
 
 // Deprecation pattern: v1 still works but sends a header warning clients to upgrade
 middleware DeprecationWarning
 	functions:
 		Request handle(Request req)
-			if req.path().startsWith("/v1/")
+			string path = _req_path()
+			if path.startsWith("/v1/")
 				_http_set_header("Deprecation", "true")
 				_http_set_header("Sunset", "2027-01-01")
 				_http_set_header("Link", "</v2/docs>; rel=successor-version")

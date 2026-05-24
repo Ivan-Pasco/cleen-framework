@@ -1,0 +1,36 @@
+// Register endpoint
+// Route: POST /api/register
+
+endpoints:
+	POST "/api/register":
+		string body = body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return badRequest("Invalid JSON")
+
+		any nameField = bodyData.name
+		any emailField = bodyData.email
+		any passwordField = bodyData.password
+
+		if nameField == null
+			return badRequest("Name required")
+		if emailField == null
+			return badRequest("Email required")
+		if passwordField == null
+			return badRequest("Password required")
+
+		string name = nameField.toString()
+		string email = emailField.toString()
+		string password = passwordField.toString()
+
+		if name.length() < 2
+			return badRequest("Name must be at least 2 characters")
+
+		if email.indexOf("@") < 0
+			return badRequest("Invalid email address")
+
+		if password.length() < 8
+			return badRequest("Password must be at least 8 characters")
+
+		// In production, hash password and save to database
+		return jsonResponse("{\"ok\":true,\"user\":{\"name\":\"" + name + "\",\"email\":\"" + email + "\"}}")

@@ -1,0 +1,9 @@
+package: DatabaseDemo
+	version: "1.0.0"
+	description: "Database operations demo"
+
+	target: server
+		plugins: [frame.server, frame.data]
+
+	server:
+		port: 3000

@@ -12,7 +12,7 @@ A complete REST API example demonstrating Frame Framework plugins.
 
 ```
 todo-api/
-├── app.cln                    # Main entry point
+├── main.cln                    # Main entry point
 ├── app/
 │   ├── data/
 │   │   └── models.cln         # Data models (User, Todo, Category)

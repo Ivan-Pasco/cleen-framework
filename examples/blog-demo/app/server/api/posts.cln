@@ -1,16 +1,16 @@
-// Posts API endpoint
-// Route: GET /api/posts
-// Returns JSON array of blog posts
+// Posts API endpoints
 
-functions:
-	string __route_handler_0()
-		string json = "["
-		json = json + "{\"slug\": \"hello-world\", \"title\": \"Hello World\", \"excerpt\": \"Welcome to Clean Framework\", \"readTime\": 5},"
-		json = json + "{\"slug\": \"getting-started\", \"title\": \"Getting Started\", \"excerpt\": \"Learn how to build web apps\", \"readTime\": 10},"
-		json = json + "{\"slug\": \"framework-guide\", \"title\": \"Framework Guide\", \"excerpt\": \"A comprehensive guide\", \"readTime\": 15}"
-		json = json + "]"
-		return json
+endpoints:
+	GET "/api/posts":
+		string posts = Post.find:
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"posts\": " + posts + "}")
 
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/posts", 0)
+	GET "/api/posts/:slug":
+		string slug = param("slug")
+		string post = Post.first:
+			where:
+				slug = slug
+		if post == "" or post == "null"
+			return notFound()
+		return jsonResponse("{\"ok\": true, \"post\": " + post + "}")

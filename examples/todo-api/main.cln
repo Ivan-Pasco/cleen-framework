@@ -1,0 +1,6 @@
+package: TodoApi
+    version: "1.0.0"
+
+    target: web
+        plugins: [frame.data, frame.server, frame.auth]
+        entry: app/web/pages/index.html

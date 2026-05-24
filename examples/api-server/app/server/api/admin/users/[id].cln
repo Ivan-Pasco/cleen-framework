@@ -1,12 +1,9 @@
 // Admin user management endpoint
-// Route: DELETE /api/admin/users/:id
-// Requires: admin role
 
-functions:
-	string __route_handler_0()
-		string odI = _req_param("id")
-		return "{\"message\": \"user deleted\", \"id\": \"" + odI + "\"}"
-
-start:
-	integer s = 0
-	s = _http_route("DELETE", "/api/admin/users/:id", 0)
+endpoints:
+	[admin] DELETE "/api/admin/users/:id":
+		string id = param("id")
+		User.delete:
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"user deleted\", \"id\": \"" + id + "\"}")

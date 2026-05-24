@@ -26,36 +26,36 @@ roles:
 endpoints:
 	// Public — no guard needed
 	GET "/":
-		return json({"message" to "Welcome"})
+		return jsonResponse("{\"message\": \"Welcome\"}")
 
 	// Any authenticated user
 	GET "/profile":
 		guard:
 			require auth
-		let user = auth.getCurrentUser()
-		return json({"user_id" to user.id, "role" to user.role})
+		string user = auth.getCurrentUser()
+		return jsonResponse("{\"user_id\": " + user.id + ", \"role\": \"" + user.role + "\"}")
 
 	// Editor or admin
 	GET "/reports":
 		guard:
 			role in ["admin", "editor"]
-		return json({"reports" to []})
+		return jsonResponse("{\"reports\": []}")
 
 	// Admin only — by role name
 	GET "/admin/users":
 		guard:
 			role in ["admin"]
-		return json({"users" to []})
+		return jsonResponse("{\"users\": []}")
 
 	// Permission-based check — more granular than role-based
 	DELETE "/admin/users/:id":
 		guard:
 			role in ["admin"]
-		let id = req.params.id
+		string id = param("id")
 		// auth.can checks if the current user's role has the "users.delete" permission
 		if auth.can("users.delete") == 0
 			return unauthorized("Insufficient permissions")
-		return json({"deleted" to id})
+		return jsonResponse("{\"deleted\": \"" + id + "\"}")
 
 	// Settings — only admin with specific permission
 	PUT "/settings":
@@ -63,4 +63,4 @@ endpoints:
 			role in ["admin"]
 		if auth.can("settings.write") == 0
 			return unauthorized("settings.write permission required")
-		return json({"updated" to true})
+		return jsonResponse("{\"updated\": true}")

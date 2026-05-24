@@ -29,7 +29,7 @@ data ProjectMember:
 functions:
 	// Always read tenant_id from the session — never from user input
 	list<pairs> list_projects()
-		let tid = tenant_getId()
+		integer tid = tenant_getId()
 		return Project.find:
 			where:
 				tenant_id == tid
@@ -38,8 +38,8 @@ functions:
 
 	// Creating a record: inject tenant_id from session, not from caller
 	integer create_project(string name, string description)
-		let tid = tenant_getId()
-		let result = Project.insert:
+		integer tid = tenant_getId()
+		integer result = Project.insert:
 			tenant_id = tid
 			name = name
 			description = description
@@ -47,7 +47,7 @@ functions:
 
 	// Fetching a single record: always verify tenant_id matches session
 	pairs get_project(integer project_id)
-		let tid = tenant_getId()
+		integer tid = tenant_getId()
 		return Project.first:
 			where:
 				id == project_id

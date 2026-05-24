@@ -1,24 +1,28 @@
 // Single user API
-// Route: GET, PUT, DELETE /api/users/:id
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
-		string odI = _req_param("id")
+endpoints:
+	[admin] GET "/api/users/:id":
+		string id = param("id")
+		string user = User.first:
+			where:
+				id = id
+		if user == "" or user == "null"
+			return notFound()
+		return jsonResponse("{\"ok\": true, \"user\": " + user + "}")
 
-		if method == "GET"
-			return "{\"id\": \"" + odI + "\"}"
+	[admin] PUT "/api/users/:id":
+		string id = param("id")
+		string body = body()
+		User.update:
+			set:
+				name = body
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"user updated\", \"id\": \"" + id + "\"}")
 
-		if method == "PUT"
-			return "{\"message\": \"user updated\", \"id\": \"" + odI + "\"}"
-
-		if method == "DELETE"
-			return "{\"message\": \"user deleted\", \"id\": \"" + odI + "\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/users/:id", 0)
-	s = _http_route("PUT", "/api/users/:id", 0)
-	s = _http_route("DELETE", "/api/users/:id", 0)
+	[admin] DELETE "/api/users/:id":
+		string id = param("id")
+		User.delete:
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"user deleted\", \"id\": \"" + id + "\"}")

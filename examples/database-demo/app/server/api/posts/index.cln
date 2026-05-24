@@ -1,15 +1,13 @@
 // Posts API
-// Route: GET /api/posts
 
-functions:
-	string __route_handler_0()
-		string data = "{\"posts\": ["
-		data = data + "{\"id\": 1, \"title\": \"Getting Started with Frame\", \"authorId\": 1, \"author\": \"Alice Johnson\", \"date\": \"2025-12-15\"},"
-		data = data + "{\"id\": 2, \"title\": \"Understanding WebAssembly\", \"authorId\": 2, \"author\": \"Bob Smith\", \"date\": \"2025-12-14\"},"
-		data = data + "{\"id\": 3, \"title\": \"Clean Language Best Practices\", \"authorId\": 3, \"author\": \"Carol White\", \"date\": \"2025-12-13\"}"
-		data = data + "]}"
-		return data
+endpoints:
+	GET "/api/posts":
+		string posts = Post.find:
+			order: date desc
+		return jsonResponse("{\"ok\": true, \"posts\": " + posts + "}")
 
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/posts", 0)
+	POST "/api/posts":
+		string body = body()
+		Post.insert:
+			title = body
+		return jsonResponse("{\"ok\": true, \"message\": \"post created\"}")

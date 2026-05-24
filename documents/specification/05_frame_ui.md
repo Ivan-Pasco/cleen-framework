@@ -23,10 +23,10 @@
 ## 2. Architecture Overview
 
 ```
-app/ui/pages/*.html      (HTML with Clean Language processing)
+app/web/pages/*.html      (HTML with Clean Language processing)
         │
         ▼ parse
-app/ui/components/*.cln      (Clean components define custom tags)
+app/web/components/*.cln      (Clean components define custom tags)
         │
         ▼ compile
 dist/app.wasm                (SSR renderer)
@@ -41,11 +41,11 @@ HTML + loader.js             (Browser receives rendered page)
 
 | Extension | Location | Purpose |
 |-----------|----------|---------|
-| `.html` | `app/ui/pages/` | All pages (both dynamic and static) — file-based routing |
-| `.cln` | `app/ui/pages/` | Companion loaders for pages (`load()`, `guard()` functions) |
-| `.cln` | `app/ui/components/` | Reusable UI components |
+| `.html` | `app/web/pages/` | All pages (both dynamic and static) — file-based routing |
+| `.cln` | `app/web/pages/` | Companion loaders for pages (`load()`, `guard()` functions) |
+| `.cln` | `app/web/components/` | Reusable UI components |
 
-**All pages go in `app/ui/pages/`**, whether they use Clean directives or not. This gives every page consistent file-based routing (e.g., `about.html` → `/about`).
+**All pages go in `app/web/pages/`**, whether they use Clean directives or not. This gives every page consistent file-based routing (e.g., `about.html` → `/about`).
 
 The `public/` folder (at the project root) is for **assets only** (CSS, images, fonts) — not for pages.
 
@@ -61,11 +61,11 @@ This allows:
 
 > **Canonical reference:** [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) — complete folder reference.
 
-Clean Framework uses automatic file discovery. Place files in the `app/` folder:
+Clean Framework uses automatic file discovery. Place files in the `src/` folder:
 
 ```
-app/
-  ui/
+src/
+  web/
     pages/                    # SSR page templates + companion loaders
       index.html              # → /
       index.cln               # Companion: load() and guard()
@@ -87,6 +87,8 @@ app/
     User.cln
   auth/                       # Auth configuration
     auth.cln
+  state/                      # Shared reactive state (multi-target)
+    dashboard.cln
 public/                       # Static assets (CSS, images, project root)
   css/
   images/
@@ -94,7 +96,7 @@ public/                       # Static assets (CSS, images, project root)
 
 **Build command:**
 ```bash
-cln compile app.cln -o app.wasm --plugins    # Compile with plugin expansion
+cln compile main.cln -o app.wasm --plugins    # Compile with plugin expansion
 cleen scan                                    # Preview discovered routes/components
 ```
 
@@ -102,12 +104,12 @@ cleen scan                                    # Preview discovered routes/compon
 
 ## 3. Page Structure (HTML)
 
-Pages are `.html` files in `app/ui/pages/`. File paths map to URL routes.
+Pages are `.html` files in `app/web/pages/`. File paths map to URL routes.
 
 ### 3.1 Basic Page
 
 ```html
-<!-- app/ui/pages/index.html → / -->
+<!-- app/web/pages/index.html → / -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -131,11 +133,11 @@ Pages are `.html` files in `app/ui/pages/`. File paths map to URL routes.
 
 | File Path | URL Route |
 |-----------|-----------|
-| `app/ui/pages/index.html` | `/` |
-| `app/ui/pages/about.html` | `/about` |
-| `app/ui/pages/blog/index.html` | `/blog` |
-| `app/ui/pages/blog/[slug].html` | `/blog/:slug` |
-| `app/ui/pages/users/[id]/posts.html` | `/users/:id/posts` |
+| `app/web/pages/index.html` | `/` |
+| `app/web/pages/about.html` | `/about` |
+| `app/web/pages/blog/index.html` | `/blog` |
+| `app/web/pages/blog/[slug].html` | `/blog/:slug` |
+| `app/web/pages/users/[id]/posts.html` | `/users/:id/posts` |
 
 ### 3.3 Page Metadata
 
@@ -194,10 +196,10 @@ Custom HTML tags are defined by Clean Language components. Tags follow the Web C
 
 ### 4.2 Component Definition (Clean)
 
-Components are defined in `app/ui/components/*.cln` using `html:` blocks for templates:
+Components are defined in `app/web/components/*.cln` using `html:` blocks for templates:
 
 ```clean
-// app/ui/components/UserCard.cln
+// app/web/components/UserCard.cln
 component: tag="user-card"
     props:
         string userId
@@ -300,7 +302,7 @@ return __html
 
 ### 4.4 Component Registry
 
-Components are auto-discovered from `app/ui/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
+Components are auto-discovered from `app/web/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
 
 **Naming convention:**
 - File: `UserCard.cln`
@@ -311,9 +313,9 @@ Components are auto-discovered from `app/ui/components/`. The tag name comes fro
 
 ```clean
 tags:
-    "app-header": "app/ui/components/Header"
-    "app-footer": "app/ui/components/Footer"
-    "user-card": "app/ui/components/UserCard"
+    "app-header": "app/web/components/Header"
+    "app-footer": "app/web/components/Footer"
+    "user-card": "app/web/components/UserCard"
 ```
 
 ---
@@ -339,13 +341,37 @@ Use curly braces for dynamic values:
 
 Pages get their server-side data from a **companion `.cln` file** paired by filename. This is the only mechanism for providing data to HTML templates. No `<script>` tags of any kind are allowed in page templates.
 
-The companion file lives alongside the `.html` file in `app/ui/pages/`:
+There are two companion patterns:
+
+**Pattern 1 — Page companion** (lives alongside the `.html` in `app/web/pages/`):
 
 ```
-app/ui/pages/
+app/web/pages/
 ├── profile.html         # Template (pure HTML + { } + cl-*)
-└── profile.cln          # Companion data loader
+└── profile.cln          # Companion: load() and guard() for this page
 ```
+
+**Pattern 2 — State companion** (lives in `app/state/` and drives the same view across multiple render targets):
+
+```
+app/state/dashboard.cln  ──→  app/web/pages/dashboard.cln (web)
+                          ──→  (future: desktop/screens/dashboard.cln)
+```
+
+The state companion uses a `state:` block with optional `computed:` properties:
+
+```clean
+// app/state/dashboard.cln
+state:
+    string userName = ""
+    boolean loading = true
+
+    computed:
+        string displayName
+            return userName ?? "Guest"
+```
+
+A web page companion in `app/web/pages/` imports a state companion to share reactive state across targets without duplicating logic.
 
 **Companion file contract:**
 
@@ -361,7 +387,7 @@ Both functions must be inside a `functions:` block. The `request` parameter give
 **Example — Profile page:**
 
 ```clean
-// app/ui/pages/profile.cln
+// app/web/pages/profile.cln
 functions:
 	any guard(Request request)
 		if not request.auth.loggedIn
@@ -375,7 +401,7 @@ functions:
 ```
 
 ```html
-<!-- app/ui/pages/profile.html -->
+<!-- app/web/pages/profile.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -569,7 +595,7 @@ Page-level `client` attribute overrides component default.
 ### 8.1 Layout Definition
 
 ```html
-<!-- app/ui/layouts/main.html -->
+<!-- app/web/layouts/main.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -592,7 +618,7 @@ Page-level `client` attribute overrides component default.
 ### 8.2 Using Layouts
 
 ```html
-<!-- app/ui/pages/about.html -->
+<!-- app/web/pages/about.html -->
 <page layout="main"></page>
 
 <h1>About Us</h1>
@@ -602,7 +628,7 @@ Page-level `client` attribute overrides component default.
 ### 8.3 Named Slots
 
 ```html
-<!-- app/ui/layouts/dashboard.html -->
+<!-- app/web/layouts/dashboard.html -->
 <div class="dashboard">
     <aside>
         <slot name="sidebar"></slot>
@@ -614,7 +640,7 @@ Page-level `client` attribute overrides component default.
 ```
 
 ```html
-<!-- app/ui/pages/dashboard.html -->
+<!-- app/web/pages/dashboard.html -->
 <page layout="dashboard"></page>
 
 <slot name="sidebar">
@@ -734,11 +760,11 @@ Add scoped styles within components:
 
 ### 10.3 CSS Variables (Theming)
 
-Define theme in `app.cln` using the `ui:` block (processed by `frame.ui`):
+Define theme in `main.cln` using the `ui:` block (processed by `frame.ui`):
 
 ```clean
-// app.cln
-plugins:
+// main.cln
+target:
     frame.ui
     frame.server
 
@@ -850,11 +876,11 @@ Forms automatically include CSRF tokens:
 
 ### 12.3 Content Security Policy
 
-Configure CSP in `app.cln` using the `server:` block (processed by `frame.server`):
+Configure CSP in `main.cln` using the `server:` block (processed by `frame.server`):
 
 ```clean
-// app.cln
-plugins:
+// main.cln
+target:
     frame.ui
     frame.server
 
@@ -871,8 +897,8 @@ server:
 ## 13. File Structure
 
 ```
-app/
-├── ui/
+src/
+├── web/
 │   ├── pages/               # HTML pages + companion loaders
 │   │   ├── index.html
 │   │   ├── index.cln        # Companion: load(), guard()
@@ -897,8 +923,10 @@ app/
 │       └── users.cln
 ├── data/                    # Data models (frame.data)
 │   └── User.cln
-└── auth/                    # Auth configuration (frame.auth)
-    └── auth.cln
+├── auth/                    # Auth configuration (frame.auth)
+│   └── auth.cln
+└── state/                   # Shared reactive state (multi-target)
+    └── dashboard.cln
 
 public/                      # Static assets (project root)
 ├── css/
@@ -991,7 +1019,7 @@ For client-server communication (HTTP, WebSocket, SSE), see [14_frame_ui_client_
 ### 15.1 Simple Page
 
 ```html
-<!-- app/ui/pages/index.html -->
+<!-- app/web/pages/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1018,7 +1046,7 @@ For client-server communication (HTTP, WebSocket, SSE), see [14_frame_ui_client_
 Blog detail page using the companion file pattern:
 
 ```clean
-// app/ui/pages/blog/[slug].cln
+// app/web/pages/blog/[slug].cln
 functions:
 	any load(Request request)
 		string slug = request.params.slug
@@ -1032,7 +1060,7 @@ functions:
 ```
 
 ```html
-<!-- app/ui/pages/blog/[slug].html -->
+<!-- app/web/pages/blog/[slug].html -->
 <page layout="main"></page>
 
 <article class="blog-post">
@@ -1062,7 +1090,7 @@ functions:
 ### 15.3 Interactive Component
 
 ```clean
-// app/ui/components/CommentForm.cln
+// app/web/components/CommentForm.cln
 component: tag="comment-form" client="on"
     props:
         string postId

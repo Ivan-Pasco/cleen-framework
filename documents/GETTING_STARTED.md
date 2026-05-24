@@ -26,7 +26,7 @@ This creates a project with automatic file discovery:
 
 ```
 my-app/
-├── app.cln                  # Project metadata + plugin configuration
+├── main.cln                  # Project metadata + plugin configuration
 ├── app/
 │   ├── server/api/          # HTTP endpoints (.cln)      → frame.server
 │   ├── data/models/         # Data model definitions     → frame.data
@@ -40,7 +40,7 @@ For the full folder reference, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md
 
 ## Your First Page
 
-Edit `app/ui/pages/index.html`:
+Edit `app/web/pages/index.html`:
 
 ```html
 <html>
@@ -60,7 +60,7 @@ Edit `app/ui/pages/index.html`:
 Pages get their data from a companion `.cln` file with the same name:
 
 ```clean
-// app/ui/pages/index.cln
+// app/web/pages/index.cln
 functions:
 	any load(Request request)
 		return { appName: "My App" }
@@ -72,7 +72,7 @@ The companion file provides data that the HTML template can access via `{express
 
 ```bash
 # Compile with plugins
-cln compile app.cln -o dist/app.wasm --plugins
+cln compile main.cln -o dist/app.wasm --plugins
 
 # Run the server
 cleen server run dist/app.wasm --port 3000
@@ -82,7 +82,7 @@ Open http://localhost:3000 in your browser.
 
 ## Add More Pages
 
-Create `app/ui/pages/about.html`:
+Create `app/web/pages/about.html`:
 
 ```html
 <html>
@@ -97,7 +97,7 @@ Rebuild and the `/about` route is automatically available.
 
 ## Dynamic Routes
 
-Create `app/ui/pages/blog/[slug].html` for dynamic URLs:
+Create `app/web/pages/blog/[slug].html` for dynamic URLs:
 
 ```html
 <html>
@@ -108,7 +108,7 @@ Create `app/ui/pages/blog/[slug].html` for dynamic URLs:
 </html>
 ```
 
-With companion loader `app/ui/pages/blog/[slug].cln`:
+With companion loader `app/web/pages/blog/[slug].cln`:
 
 ```clean
 functions:
@@ -163,24 +163,24 @@ Models are auto-discovered and available in your pages and API endpoints.
 | Command | Description |
 |---------|-------------|
 | `cleen project create <name>` | Create new project |
-| `cln compile app.cln -o app.wasm --plugins` | Build the application |
+| `cln compile main.cln -o app.wasm --plugins` | Build the application |
 | `cleen server run dist/app.wasm` | Run the application |
 
 | Folder | Purpose | Plugin |
 |--------|---------|--------|
 | `app/server/api/` | HTTP endpoints (.cln) | frame.server |
-| `app/server/services/` | Business logic (.cln) | frame.server |
+| `app/logic/` | Business logic (.cln) | frame.server |
 | `app/data/models/` | Data model definitions (.cln) | frame.data |
 | `app/data/migrations/` | Schema migrations (.cln) | frame.data |
-| `app/ui/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
-| `app/ui/components/` | Reusable components (.cln) | frame.ui |
-| `app/ui/layouts/` | Page layouts (.html) | frame.ui |
+| `app/web/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
+| `app/web/components/` | Reusable components (.cln) | frame.ui |
+| `app/web/layouts/` | Page layouts (.html) | frame.ui |
 | `app/auth/` | Auth configuration (.cln) | frame.auth |
 | `public/` | Static files (CSS, images) | (served as-is) |
 
 | File Pattern | Route |
 |--------------|-------|
-| `app/ui/pages/index.html` | `/` |
-| `app/ui/pages/about.html` | `/about` |
-| `app/ui/pages/blog/[slug].html` | `/blog/:slug` |
+| `app/web/pages/index.html` | `/` |
+| `app/web/pages/about.html` | `/about` |
+| `app/web/pages/blog/[slug].html` | `/blog/:slug` |
 | `app/server/api/users.cln` | `/api/users` |

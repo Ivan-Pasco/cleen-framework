@@ -1,0 +1,6 @@
+// Health Check Endpoint
+// Public endpoint for service health monitoring
+
+endpoints:
+	GET "/health":
+		return jsonResponse("{\"status\":\"ok\",\"service\":\"todo-api\"}")

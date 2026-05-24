@@ -1,5 +1,6 @@
 // Pattern: ssr-page-with-islands
 // Use when: building any web page — this is the foundational page structure pattern
+// Requires: frame.client plugin for client-side API calls
 // Anti-pattern: DON'T put logic or dynamic content in the HTML file itself.
 //   The HTML file is a static shell. All server-rendered data comes from the
 //   companion .cln file's load() function. All interactivity lives in component: blocks.
@@ -167,7 +168,7 @@ component: tag="add-to-cart"
 
 	handlers:
 		void add()
-			let result = http.post("/api/cart/add", {
+			any result = api.post("/api/cart/add", {
 				"product_id" to props.product_id,
 				"quantity" to state.quantity
 			})
@@ -201,7 +202,7 @@ component: tag="recently-viewed"
 
 	handlers:
 		void onMount()
-			let result = http.get("/api/recently-viewed")
+			any result = api.get("/api/recently-viewed")
 			state.items = result.items
 
 	html:

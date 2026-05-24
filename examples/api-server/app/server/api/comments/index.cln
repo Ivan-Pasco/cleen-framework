@@ -1,10 +1,16 @@
 // Comments endpoint
-// Route: POST /api/comments
 
-functions:
-	string __route_handler_0()
-		return "{\"message\": \"comment created\"}"
+endpoints:
+	GET "/api/comments":
+		string comments = Comment.find:
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"comments\": " + comments + "}")
 
-start:
-	integer s = 0
-	s = _http_route("POST", "/api/comments", 0)
+	POST "/api/comments":
+		_auth_require_auth()
+		string session = _auth_get_session()
+		string body = body()
+		Comment.insert:
+			user_id = session
+			content = body
+		return jsonResponse("{\"ok\": true, \"message\": \"comment created\"}")

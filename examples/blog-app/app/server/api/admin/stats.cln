@@ -1,10 +1,14 @@
-// Admin stats endpoint
-// Route: GET /api/admin/stats
+// Admin: site statistics endpoint
 
-functions:
-	string __route_handler_0()
-		return "{\"users\": 0, \"posts\": 0, \"comments\": 0}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/admin/stats", 0)
+endpoints:
+	[admin] GET "/api/admin/stats":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string users = User.find:
+			order: created_at desc
+		string posts = Post.find:
+			order: created_at desc
+		string comments = Comment.find:
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"users\": " + users + ", \"posts\": " + posts + ", \"comments\": " + comments + "}")

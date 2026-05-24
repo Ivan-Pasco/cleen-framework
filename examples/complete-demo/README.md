@@ -14,7 +14,7 @@ A full-stack Clean Framework application demonstrating all core plugins working 
 
 ```
 complete-demo/
-├── app.cln                    # Main application config
+├── main.cln                    # Main application config
 ├── app/
 │   ├── pages/                 # SSR HTML pages (frame.ui)
 │   │   ├── index.html         # Landing page with animation

@@ -56,7 +56,7 @@ auto_create = true
 2. For each plugin, reads `plugin.toml` from the plugin registry
 3. If `auto_create = true`, creates all folders listed in `owns`
 4. Creates starter files from plugin templates
-5. Generates `app.cln` with plugins and imports
+5. Generates `main.cln` with plugins and imports
 
 **Example Output:**
 
@@ -68,23 +68,23 @@ Creating project 'myapp'...
   Creating folders...
   [frame.data] Creating app/data/
   [frame.server] Creating app/server/
-  [frame.ui] Creating app/pages/
-  [frame.ui] Creating app/components/
-  [frame.ui] Creating app/layouts/
+  [frame.ui] Creating app/web/pages/
+  [frame.ui] Creating app/web/components/
+  [frame.ui] Creating app/web/layouts/
   [frame.auth] Creating app/auth/
   [core] Creating app/public/css/
 
   Creating files...
-  [core] Creating app.cln
+  [core] Creating main.cln
   [core] Creating project.toml
   [frame.auth] Creating app/auth/auth.cln
-  [frame.ui] Creating app/pages/index.html
+  [frame.ui] Creating app/web/pages/index.html
   [frame.server] Creating app/server/health.cln
 
 Project created successfully!
 
 myapp/
-├── app.cln                          # Main entry point
+├── main.cln                          # Main entry point
 ├── project.toml                     # Project manifest
 └── app/
     ├── pages/
@@ -124,12 +124,12 @@ $ cleen plugin add frame.data
 Adding frame.data@2.0.0...
   Creating app/data/
 
-Plugin installed. Declare frame.data in your app.cln plugins: block. Files in app/data/ can then use frame.data without individual import statements (implicit import).
+Plugin installed. Declare frame.data in your main.cln plugins: block. Files in app/data/ can then use frame.data without individual import statements (implicit import).
 ```
 
 #### Implicit Plugin Import
 
-When a plugin is declared in `app.cln`, files in its owned folders do not need their own import statement. This is controlled by `implicit_import = true` in plugin.toml:
+When a plugin is declared in `main.cln`, files in its owned folders do not need their own import statement. This is controlled by `implicit_import = true` in plugin.toml:
 
 ```toml
 # plugin.toml
@@ -140,7 +140,7 @@ implicit_import = true
 
 ```clean
 // app/data/User.cln
-// No import statement needed in this file - frame.data is declared in app.cln
+// No import statement needed in this file - frame.data is declared in main.cln
 // and implicit_import = true means files in owned folders skip individual imports
 
 data User
@@ -200,7 +200,7 @@ functions:
 ### Compile with Plugins
 
 ```bash
-cln compile app.cln -o app.wasm --plugins
+cln compile main.cln -o app.wasm --plugins
 ```
 
 ### Run with Host Bridge
@@ -212,7 +212,7 @@ cln compile app.cln -o app.wasm --plugins
 ### Production Build
 
 ```bash
-cln compile app.cln -o app.wasm --plugins -O3
+cln compile main.cln -o app.wasm --plugins -O3
 ```
 
 ---

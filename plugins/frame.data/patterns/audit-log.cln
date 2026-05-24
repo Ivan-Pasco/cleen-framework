@@ -32,7 +32,7 @@ data OrderEvent:
 functions:
 	// Transition an order's status and record the event atomically
 	integer transition_order(integer order_id, integer actor_id, string new_status)
-		let order = Order.first:
+		pairs order = Order.first:
 			where:
 				id == order_id
 
@@ -64,7 +64,7 @@ functions:
 
 	// Replay history to reconstruct state at a point in time
 	string get_status_at(integer order_id, string point_in_time)
-		let event = OrderEvent.first:
+		pairs event = OrderEvent.first:
 			where:
 				order_id == order_id
 				occurred_at <= point_in_time

@@ -1,0 +1,6 @@
+package: HtmlSimple
+	version: "1.0.0"
+
+	target: web
+		plugins: [frame.ui]
+		entry: app/web/pages/index.html

@@ -23,7 +23,7 @@ component: tag="validated-input"
 	handlers:
 		void onBlur()
 			state.touched = true
-			let val = ui.inputValue("#input-" + props.name)
+			string val = ui.inputValue("#input-" + props.name)
 			if props.validation == "required" and val.length() == 0
 				state.error = props.label + " is required"
 			else if props.validation == "email" and val.indexOf("@") == -1
@@ -47,17 +47,17 @@ component: tag="validated-input"
 // Server endpoint
 endpoints:
 	POST "/register":
-		let email = req.body_field("email")
-		let password = req.body_field("password")
-		let name = req.body_field("name")
+		string email = req.body_field("email")
+		string password = req.body_field("password")
+		string name = req.body_field("name")
 
 		if email.length() == 0 or email.indexOf("@") == -1
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "email", "message" to "Valid email required"}))
+			return badRequest(jsonResponse({"code" to "VALIDATION_ERROR", "field" to "email", "message" to "Valid email required"}))
 
 		if password.length() < 8
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "password", "message" to "Password must be at least 8 characters"}))
+			return badRequest(jsonResponse({"code" to "VALIDATION_ERROR", "field" to "password", "message" to "Password must be at least 8 characters"}))
 
 		if name.length() == 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "Name is required"}))
+			return badRequest(jsonResponse({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "Name is required"}))
 
-		return json({"message" to "Account created"})
+		return jsonResponse({"message" to "Account created"})

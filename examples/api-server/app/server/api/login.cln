@@ -1,10 +1,12 @@
 // Login endpoint
-// Route: POST /api/login
 
-functions:
-	string __route_handler_0()
-		return "{\"message\": \"login endpoint\"}"
-
-start:
-	integer s = 0
-	s = _http_route("POST", "/api/login", 0)
+endpoints:
+	POST "/api/login":
+		string body = body()
+		string user = User.first:
+			where:
+				email = body
+		if user == "" or user == "null"
+			return jsonResponse("{\"ok\": false, \"error\": \"invalid credentials\"}")
+		string token = _auth_create_session(user, "user")
+		return jsonResponse("{\"ok\": true, \"token\": \"" + token + "\"}")

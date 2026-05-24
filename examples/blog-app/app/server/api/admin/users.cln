@@ -1,10 +1,10 @@
-// Admin users endpoint
-// Route: GET /api/admin/users
+// Admin: list users endpoint
 
-functions:
-	string __route_handler_0()
-		return "{\"users\": []}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/admin/users", 0)
+endpoints:
+	[admin] GET "/api/admin/users":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string users = User.find:
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"users\": " + users + "}")

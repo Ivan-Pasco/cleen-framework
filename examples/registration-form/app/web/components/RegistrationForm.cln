@@ -1,0 +1,44 @@
+// Registration Form Component
+// Renders the account creation form with password strength indicator
+
+component RegistrationForm:
+	functions:
+		integer calculateStrength(string password)
+			integer strength = 0
+			if password.length() >= 8
+				strength = strength + 1
+			if password.length() >= 12
+				strength = strength + 1
+			return strength
+
+		string getStrengthLabel(integer strength)
+			if strength >= 3
+				return "Strong"
+			if strength >= 2
+				return "Medium"
+			if strength >= 1
+				return "Weak"
+			return ""
+
+	html:
+		<div class="page-container">
+			<div class="hero-section">
+				<span class="eyebrow">EST. 2026</span>
+				<h1 class="hero-title">Join the<br><span class="accent">Revolution</span></h1>
+				<p class="hero-subtitle">Experience the future of web development with Clean Language.</p>
+			</div>
+			<div class="form-section">
+				<div class="form-container">
+					<h2>Create Account</h2>
+					<form class="registration-form" action="/api/register" method="POST">
+						<label>Full Name</label>
+						<input type="text" name="name" placeholder="Enter your name">
+						<label>Email Address</label>
+						<input type="email" name="email" placeholder="your@email.com">
+						<label>Password</label>
+						<input type="password" name="password" placeholder="Minimum 8 characters">
+						<button type="submit">Create Account</button>
+					</form>
+				</div>
+			</div>
+		</div>

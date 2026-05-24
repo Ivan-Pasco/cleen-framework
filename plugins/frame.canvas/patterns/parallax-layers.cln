@@ -43,10 +43,10 @@ canvasScene: width=800 height=500 fps=60
 			scrollX = scrollX + playerSpeed * dt
 
 		// Each layer scrolls at its own rate — use modulo to tile seamlessly
-		let stars_x  = -(scrollX * stars_mult)  % 800.0
-		let clouds_x = -(scrollX * clouds_mult) % 800.0
-		let hills_x  = -(scrollX * hills_mult)  % 800.0
-		let ground_x = -(scrollX * ground_mult) % 800.0
+		number stars_x  = -(scrollX * stars_mult)  % 800.0
+		number clouds_x = -(scrollX * clouds_mult) % 800.0
+		number hills_x  = -(scrollX * hills_mult)  % 800.0
+		number ground_x = -(scrollX * ground_mult) % 800.0
 
 		// Draw back to front using named layers
 		on layer "stars":

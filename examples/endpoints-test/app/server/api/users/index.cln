@@ -1,17 +1,13 @@
 // Users API - List and Create
-// Route: GET /api/users - List users
-// Route: POST /api/users - Create user
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	GET "/api/users":
+		return jsonResponse("{\"users\":[]}")
 
-		if method == "POST"
-			return "user created"
+	POST "/api/users":
+		string body = body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return badRequest("Invalid JSON")
 
-		return "user list"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/users", 0)
-	s = _http_route("POST", "/api/users", 0)
+		return jsonResponse("{\"ok\":true,\"message\":\"User created\"}")

@@ -372,7 +372,7 @@ completions = [
 
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["app/canvas", "app/canvas/scenes", "app/canvas/sprites", "app/canvas/audio"]
+owns = ["app/canvas", "app/canvas/scenes", "app/canvas/components", "app/canvas/sprites", "app/canvas/audio"]
 
 # Automatically create folders when plugin is imported
 auto_create = true

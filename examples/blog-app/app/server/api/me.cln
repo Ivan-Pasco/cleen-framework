@@ -1,19 +1,20 @@
-// Current user API
-// Route: GET, PUT /api/me
+// Current user profile endpoints
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	GET "/api/me":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string session = _auth_get_session()
+		return jsonResponse("{\"ok\": true, \"user\": " + session + "}")
 
-		if method == "GET"
-			return "{\"message\": \"current user\"}"
-
-		if method == "PUT"
-			return "{\"message\": \"profile updated\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/me", 0)
-	s = _http_route("PUT", "/api/me", 0)
+	PUT "/api/me":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string body = body()
+		any data = json.tryTextToData(body)
+		if data == null
+			return badRequest("Invalid JSON")
+		string session = _auth_get_session()
+		return jsonResponse("{\"ok\": true, \"user\": " + session + "}")

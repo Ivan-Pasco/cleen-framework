@@ -1,10 +1,25 @@
 // Login endpoint
-// Route: POST /api/auth/login
 
-functions:
-	string __route_handler_0()
-		return "{\"message\": \"logged in\"}"
-
-start:
-	integer s = 0
-	s = _http_route("POST", "/api/auth/login", 0)
+endpoints:
+	POST "/api/auth/login":
+		string body = body()
+		any data = json.tryTextToData(body)
+		if data == null
+			return badRequest("Invalid JSON")
+		string email = json.get(data, "email")
+		string password = json.get(data, "password")
+		if email == "" or password == ""
+			return badRequest("Email and password are required")
+		string user = User.first:
+			where:
+				email = email
+		if user == "" or user == "null"
+			return unauthorized()
+		string storedHash = json.getField(user, "password_hash")
+		integer valid = _auth_verify_password(password, storedHash)
+		if valid != 1
+			return unauthorized()
+		string userId = json.getField(user, "id")
+		string role = json.getField(user, "role")
+		string token = _auth_create_session(userId, role)
+		return jsonResponse("{\"ok\": true, \"token\": \"" + token + "\"}")

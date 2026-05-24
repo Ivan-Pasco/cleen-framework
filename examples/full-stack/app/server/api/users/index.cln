@@ -1,19 +1,16 @@
 // Users API
-// Route: GET, POST /api/users
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	[admin] GET "/api/users":
+		string users = User.find:
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"users\": " + users + "}")
 
-		if method == "GET"
-			return "{\"users\": []}"
-
-		if method == "POST"
-			return "{\"message\": \"user created\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/users", 0)
-	s = _http_route("POST", "/api/users", 0)
+	[admin] POST "/api/users":
+		string body = body()
+		string hash = _auth_hash_password(body)
+		User.insert:
+			password_hash = hash
+			role = "user"
+			active = true
+		return jsonResponse("{\"ok\": true, \"message\": \"user created\"}")

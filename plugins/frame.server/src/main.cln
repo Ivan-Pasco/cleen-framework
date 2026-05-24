@@ -19,7 +19,7 @@ functions:
 		return ""
 
 	string get_keywords()
-		return "[\"endpoints\", \"cache\", \"handle\", \"body\", \"params\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"req\", \"render\", \"renderWith\", \"error\", \"middleware\"]"
+		return "[\"endpoints\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\"]"
 
 // ============================================================================
 // ENDPOINTS BLOCK EXPANSION
@@ -64,9 +64,17 @@ functions:
 		result = result + "\tstring httpStatus(integer code, string body)\n"
 		result = result + "\t\treturn _http_respond(code, \"application/json\", body)\n\n"
 		result = result + "\tstring render(string name)\n"
-		result = result + "\t\treturn _ui_render_page(\"app/ui/pages/\" + name + \".html\", \"{}\")\n\n"
+		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", \"{}\")\n\n"
 		result = result + "\tstring renderWith(string name, string data)\n"
-		result = result + "\t\treturn _ui_render_page(\"app/ui/pages/\" + name + \".html\", data)\n\n"
+		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", data)\n\n"
+		result = result + "\tstring param(string name)\n"
+		result = result + "\t\treturn _req_param(name)\n\n"
+		result = result + "\tstring body()\n"
+		result = result + "\t\treturn _req_body()\n\n"
+		result = result + "\tstring header(string name)\n"
+		result = result + "\t\treturn _req_header(name)\n\n"
+		result = result + "\tstring method()\n"
+		result = result + "\t\treturn _req_method()\n\n"
 
 		// Parse endpoints
 		string remaining = body

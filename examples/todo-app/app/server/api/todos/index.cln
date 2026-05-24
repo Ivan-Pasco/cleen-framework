@@ -1,17 +1,32 @@
 // Todos API - List and Create
-// Route: GET /api/todos - List all todos
-// Route: POST /api/todos - Create a todo
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	GET "/api/todos":
+		string results = Todo.find:
+			order: created_at desc
 
-		if method == "POST"
-			return "{\"message\": \"Todo created\"}"
+		return jsonResponse(results)
 
-		return "[]"
+	POST "/api/todos":
+		string body = body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return badRequest("Invalid JSON")
 
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/todos", 0)
-	s = _http_route("POST", "/api/todos", 0)
+		any titleField = bodyData.title
+		if titleField == null
+			return badRequest("Title is required")
+
+		string title = titleField.toString()
+		string desc = ""
+
+		any descField = bodyData.description
+		if descField != null
+			desc = descField.toString()
+
+		integer newId = Todo.insert:
+			title = title
+			description = desc
+			completed = 0
+
+		return jsonResponse("{\"ok\":true,\"id\":" + newId.toString() + "}")

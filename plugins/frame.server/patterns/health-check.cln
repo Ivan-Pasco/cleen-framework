@@ -13,20 +13,16 @@ endpoints:
 	// Liveness probe — is the process alive?
 	// Returns 200 immediately. If this fails, restart the container.
 	GET "/health":
-		return json({
-			"status" to "ok",
-			"service" to "api",
-			"version" to "1.0.0"
-		})
+		return jsonResponse("{\"status\": \"ok\", \"service\": \"api\", \"version\": \"1.0.0\"}")
 
 	// Readiness probe — is the service ready to handle traffic?
 	// Checks dependencies (DB, cache). If this fails, remove from load balancer.
 	GET "/health/ready":
 		// Check database connectivity
-		let db_ok = true
-		let db_error = ""
+		boolean db_ok = true
+		string db_error = ""
 
-		let result = db.query:
+		string result = db.query:
 			SELECT 1
 			[]
 
@@ -35,24 +31,11 @@ endpoints:
 			db_error = "database unreachable"
 
 		if db_ok == false
-			return status(503, json({
-				"status" to "not_ready",
-				"checks" to {
-					"database" to {"ok" to false, "error" to db_error}
-				}
-			}))
+			return httpStatus(503, "{\"status\": \"not_ready\", \"checks\": {\"database\": {\"ok\": false, \"error\": \"" + db_error + "\"}}}")
 
-		return json({
-			"status" to "ready",
-			"checks" to {
-				"database" to {"ok" to true}
-			}
-		})
+		return jsonResponse("{\"status\": \"ready\", \"checks\": {\"database\": {\"ok\": true}}}")
 
 	// Startup probe — has the service completed initialization?
 	// Used by orchestrators that support a separate startup check.
 	GET "/health/startup":
-		return json({
-			"status" to "started",
-			"uptime_seconds" to 0
-		})
+		return jsonResponse("{\"status\": \"started\", \"uptime_seconds\": 0}")

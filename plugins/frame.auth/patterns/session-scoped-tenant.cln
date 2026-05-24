@@ -18,19 +18,19 @@ auth:
 functions:
 	// Login: embed tenant_id in the session at login time
 	string login_user(string email, string password)
-		let user = User.first:
+		string user = User.first:
 			where:
 				email == email
 
 		if user == null
 			return ""
 
-		let valid = auth.verifyPassword(password, user.password_hash)
+		integer valid = auth.verifyPassword(password, user.password_hash)
 		if valid == 0
 			return ""
 
 		// tenant_id is stored in the session — never trust it from the client again
-		let session_id = auth.session.create(user.id, {
+		string session_id = auth.session.create(user.id, {
 			"role" to user.role,
 			"tenant_id" to user.tenant_id,
 			"email" to user.email
@@ -40,51 +40,51 @@ functions:
 
 endpoints:
 	POST "/auth/login":
-		let email = req.body_field("email")
-		let password = req.body_field("password")
-		let session = login_user(email, password)
+		string email = req.body_field("email")
+		string password = req.body_field("password")
+		string session = login_user(email, password)
 		if session == ""
-			return unauthorized(json({"code" to "INVALID_CREDENTIALS", "message" to "Invalid email or password"}))
-		return json({"message" to "Logged in"})
+			return unauthorized(jsonResponse("{\"code\": \"INVALID_CREDENTIALS\", \"message\": \"Invalid email or password\"}"))
+		return jsonResponse("{\"message\": \"Logged in\"}")
 
 	// All tenant-scoped routes read tenant_id from session, not from the request
 	GET "/projects":
 		guard:
 			require auth
 		// auth.tenant.getId() reads from the session — cannot be forged
-		let tid = auth.tenant.getId()
-		let projects = Project.find:
+		string tid = auth.tenant.getId()
+		string projects = Project.find:
 			where:
 				tenant_id == tid
-		return json({"projects" to projects})
+		return jsonResponse("{\"projects\": " + projects + "}")
 
 	POST "/projects":
 		guard:
 			require auth
-		let tid = auth.tenant.getId()
-		let name = req.body_field("name")
+		string tid = auth.tenant.getId()
+		string name = req.body_field("name")
 		if name.length() == 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "name", "message" to "name is required"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"name\", \"message\": \"name is required\"}"))
 
 		// tenant_id injected from session — caller cannot override it
-		let id = Project.insert:
+		string id = Project.insert:
 			tenant_id = tid
 			name = name
-		return json({"id" to id, "name" to name})
+		return jsonResponse("{\"id\": " + id + ", \"name\": \"" + name + "\"}")
 
 	GET "/projects/:id":
 		guard:
 			require auth
-		let tid = auth.tenant.getId()
-		let pid = req.params.id.toInteger()
+		string tid = auth.tenant.getId()
+		integer pid = param("id").toInteger()
 
 		// Always scope the lookup to the session tenant — prevents cross-tenant reads
-		let project = Project.first:
+		string project = Project.first:
 			where:
 				id == pid
 				tenant_id == tid
 
 		if project == null
-			return notFound(json({"code" to "NOT_FOUND", "message" to "Project not found"}))
+			return notFound(jsonResponse("{\"code\": \"NOT_FOUND\", \"message\": \"Project not found\"}"))
 
-		return json(project)
+		return jsonResponse(project)

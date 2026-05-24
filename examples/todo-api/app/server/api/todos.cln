@@ -1,0 +1,133 @@
+// Todo Endpoints
+// CRUD operations for todo items
+
+endpoints:
+	GET "/todos":
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return unauthorized()
+
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string userId = userIdField.toString()
+
+		string results = Todo.find:
+			where:
+				owner_id = userId
+			order: created_at desc
+
+		return jsonResponse("{\"ok\":true,\"data\":" + results + "}")
+
+	GET "/todos/:id":
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return unauthorized()
+
+		string todoId = param("id")
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string userId = userIdField.toString()
+
+		string todo = Todo.first:
+			where:
+				id = todoId
+				owner_id = userId
+
+		if todo == null
+			return notFound()
+
+		return jsonResponse("{\"ok\":true,\"data\":" + todo + "}")
+
+	POST "/todos":
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return unauthorized()
+
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string userId = userIdField.toString()
+
+		string body = body()
+		any bodyData = json.tryTextToData(body)
+		if bodyData == null
+			return badRequest("Invalid JSON")
+
+		any titleField = bodyData.title
+		if titleField == null
+			return badRequest("Title is required")
+
+		string title = titleField.toString()
+		string desc = ""
+		integer priority = 0
+
+		any descField = bodyData.description
+		if descField != null
+			desc = descField.toString()
+
+		any prioField = bodyData.priority
+		if prioField != null
+			priority = prioField.toInteger()
+
+		integer newId = Todo.insert:
+			title = title
+			description = desc
+			priority = priority
+			owner_id = userId
+
+		return jsonResponse("{\"ok\":true,\"id\":" + newId.toString() + "}")
+
+	DELETE "/todos/:id":
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return unauthorized()
+
+		string todoId = param("id")
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string userId = userIdField.toString()
+
+		Todo.delete:
+			where:
+				id = todoId
+				owner_id = userId
+
+		return jsonResponse("{\"ok\":true}")
+
+	PATCH "/todos/:id/toggle":
+		integer isAuth = _auth_require_auth()
+		if isAuth == 0
+			return unauthorized()
+
+		string todoId = param("id")
+		string session = _auth_get_session()
+		any sessionData = json.tryTextToData(session)
+		any userIdField = sessionData.userId
+		string userId = userIdField.toString()
+
+		string todo = Todo.first:
+			where:
+				id = todoId
+				owner_id = userId
+
+		if todo == null
+			return notFound()
+
+		any todoData = json.tryTextToData(todo)
+		any completedField = todoData.completed
+		integer currentCompleted = completedField.toInteger()
+		integer newCompleted = 1
+		if currentCompleted == 1
+			newCompleted = 0
+
+		Todo.update:
+			set:
+				completed = newCompleted
+			where:
+				id = todoId
+				owner_id = userId
+
+		return jsonResponse("{\"ok\":true}")

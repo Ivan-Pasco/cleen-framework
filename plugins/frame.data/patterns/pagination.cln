@@ -20,11 +20,11 @@ functions:
 	// CURSOR PAGINATION — use this for lists that can grow beyond a few pages
 	// cursor: the last id seen by the client (0 or null for first page)
 	pairs list_posts_cursor(integer cursor, integer page_size)
-		let effective_cursor = cursor
+		integer effective_cursor = cursor
 		if effective_cursor == 0
 			effective_cursor = 0
 
-		let rows = Post.find:
+		list<pairs> rows = Post.find:
 			where:
 				id > effective_cursor
 				published_at != null
@@ -33,12 +33,12 @@ functions:
 			limit:
 				page_size + 1           // fetch one extra to detect hasMore
 
-		let has_more = rows.length() > page_size
-		let items = rows
+		boolean has_more = rows.length() > page_size
+		list<pairs> items = rows
 		if has_more
 			items = rows.slice(0, page_size)
 
-		let next_cursor = 0
+		integer next_cursor = 0
 		if has_more
 			next_cursor = items.last().id
 
@@ -51,8 +51,8 @@ functions:
 	// OFFSET PAGINATION — only acceptable for small, slow-growing datasets
 	// (admin panels, reports) where total rows stay under ~1000
 	pairs list_posts_offset(integer page, integer page_size)
-		let skip = page * page_size
-		let rows = Post.find:
+		integer skip = page * page_size
+		list<pairs> rows = Post.find:
 			where:
 				published_at != null
 			order:
@@ -62,7 +62,7 @@ functions:
 			offset:
 				skip
 
-		let total = Post.count:
+		integer total = Post.count:
 			where:
 				published_at != null
 

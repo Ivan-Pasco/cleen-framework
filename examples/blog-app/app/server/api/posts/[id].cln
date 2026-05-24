@@ -1,24 +1,50 @@
-// Single post API
-// Route: GET, PUT, DELETE /api/posts/:id
+// Single post endpoints
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
-		string odI = _req_param("id")
+endpoints:
+	GET "/api/posts/:id":
+		string id = param("id")
+		string post = Post.first:
+			where:
+				id = id
+		if post == "" or post == "null"
+			return notFound()
+		return jsonResponse("{\"ok\": true, \"post\": " + post + "}")
 
-		if method == "GET"
-			return "{\"id\": \"" + odI + "\"}"
+	[user, admin, editor] PUT "/api/posts/:id":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string id = param("id")
+		string post = Post.first:
+			where:
+				id = id
+		if post == "" or post == "null"
+			return notFound()
+		string body = body()
+		any data = json.tryTextToData(body)
+		if data == null
+			return badRequest("Invalid JSON")
+		string title = json.get(data, "title")
+		string content = json.get(data, "content")
+		Post.update:
+			set:
+				title = title
+				content = content
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true}")
 
-		if method == "PUT"
-			return "{\"message\": \"post updated\", \"id\": \"" + odI + "\"}"
-
-		if method == "DELETE"
-			return "{\"message\": \"post deleted\", \"id\": \"" + odI + "\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/posts/:id", 0)
-	s = _http_route("PUT", "/api/posts/:id", 0)
-	s = _http_route("DELETE", "/api/posts/:id", 0)
+	[user, admin, editor] DELETE "/api/posts/:id":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string id = param("id")
+		string post = Post.first:
+			where:
+				id = id
+		if post == "" or post == "null"
+			return notFound()
+		Post.delete:
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true}")

@@ -1,0 +1,6 @@
+package: BlogApp
+	version: "1.0.0"
+
+	target: web
+		plugins: [frame.ui, frame.server, frame.data, frame.auth]
+		entry: app/web/pages/index.html

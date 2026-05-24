@@ -14,9 +14,9 @@ endpoints:
 	GET "/settings":
 		guard:
 			require auth
-		let csrf_token = auth.csrf.generate()
+		string csrf_token = auth.csrf.generate()
 		// Embed csrf_token as a hidden input in the rendered HTML form
-		return html("
+		return htmlResponse("
 			<form method='POST' action='/settings'>
 				<input type='hidden' name='_csrf' value='" + csrf_token + "'>
 				<input type='text' name='display_name' placeholder='Display name'>
@@ -28,35 +28,35 @@ endpoints:
 	POST "/settings":
 		guard:
 			require auth
-		let csrf_token = req.body_field("_csrf")
+		string csrf_token = req.body_field("_csrf")
 
 		// Reject immediately if token is missing or invalid
 		if csrf_token.length() == 0
-			return badRequest(json({"code" to "CSRF_MISSING", "message" to "CSRF token missing"}))
+			return badRequest(jsonResponse("{\"code\": \"CSRF_MISSING\", \"message\": \"CSRF token missing\"}"))
 
-		let valid = auth.csrf.validate(csrf_token)
+		integer valid = auth.csrf.validate(csrf_token)
 		if valid == 0
-			return status(403, json({"code" to "CSRF_INVALID", "message" to "Invalid or expired CSRF token"}))
+			return status(403, jsonResponse("{\"code\": \"CSRF_INVALID\", \"message\": \"Invalid or expired CSRF token\"}"))
 
 		// Safe to process the mutation
-		let display_name = req.body_field("display_name")
+		string display_name = req.body_field("display_name")
 		if display_name.length() == 0
-			return badRequest(json({"code" to "VALIDATION_ERROR", "field" to "display_name", "message" to "display_name is required"}))
+			return badRequest(jsonResponse("{\"code\": \"VALIDATION_ERROR\", \"field\": \"display_name\", \"message\": \"display_name is required\"}"))
 
-		return json({"message" to "Settings saved", "display_name" to display_name})
+		return jsonResponse("{\"message\": \"Settings saved\", \"display_name\": \"" + display_name + "\"}")
 
 	// DELETE with CSRF — token passed as a header for JS-initiated requests
 	DELETE "/account":
 		guard:
 			require auth
 		// For JS fetch requests, send CSRF token in X-CSRF-Token header
-		let csrf_token = req.header("X-CSRF-Token")
+		string csrf_token = req.header("X-CSRF-Token")
 		if csrf_token.length() == 0
-			return badRequest(json({"code" to "CSRF_MISSING", "message" to "X-CSRF-Token header required"}))
+			return badRequest(jsonResponse("{\"code\": \"CSRF_MISSING\", \"message\": \"X-CSRF-Token header required\"}"))
 
-		let valid = auth.csrf.validate(csrf_token)
+		integer valid = auth.csrf.validate(csrf_token)
 		if valid == 0
-			return status(403, json({"code" to "CSRF_INVALID", "message" to "Invalid CSRF token"}))
+			return status(403, jsonResponse("{\"code\": \"CSRF_INVALID\", \"message\": \"Invalid CSRF token\"}"))
 
 		// Proceed with destructive action
-		return json({"message" to "Account deleted"})
+		return jsonResponse("{\"message\": \"Account deleted\"}")

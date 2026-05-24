@@ -1,17 +1,47 @@
-// Tasks API endpoint
-// Route: GET /api/tasks
-// Returns JSON array of tasks
+// Tasks API
 
-functions:
-	string __route_handler_0()
-		string json = "["
-		json = json + "{\"id\": 1, \"title\": \"Design mockups\", \"status\": \"in_progress\", \"project_id\": 1},"
-		json = json + "{\"id\": 2, \"title\": \"Setup database\", \"status\": \"done\", \"project_id\": 1},"
-		json = json + "{\"id\": 3, \"title\": \"Write API docs\", \"status\": \"todo\", \"project_id\": 2},"
-		json = json + "{\"id\": 4, \"title\": \"Deploy staging\", \"status\": \"todo\", \"project_id\": 2}"
-		json = json + "]"
-		return json
+endpoints:
+	GET "/api/tasks":
+		_auth_require_auth()
+		string tasks = Task.find:
+			order: status asc
+		return jsonResponse("{\"ok\": true, \"tasks\": " + tasks + "}")
 
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/tasks", 0)
+	POST "/api/tasks":
+		_auth_require_auth()
+		string session = _auth_get_session()
+		string body = body()
+		Task.insert:
+			status = "pending"
+			assignee_id = session
+			title = body
+		return jsonResponse("{\"ok\": true, \"message\": \"task created\"}")
+
+	GET "/api/tasks/:id":
+		_auth_require_auth()
+		string id = param("id")
+		string task = Task.first:
+			where:
+				id = id
+		if task == "" or task == "null"
+			return notFound()
+		return jsonResponse("{\"ok\": true, \"task\": " + task + "}")
+
+	PUT "/api/tasks/:id":
+		_auth_require_auth()
+		string id = param("id")
+		string body = body()
+		Task.update:
+			set:
+				status = body
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"task updated\", \"id\": \"" + id + "\"}")
+
+	DELETE "/api/tasks/:id":
+		_auth_require_auth()
+		string id = param("id")
+		Task.delete:
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"task deleted\", \"id\": \"" + id + "\"}")

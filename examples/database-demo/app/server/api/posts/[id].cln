@@ -1,11 +1,28 @@
 // Single post API
-// Route: GET /api/posts/:id
 
-functions:
-	string __route_handler_0()
-		string odI = _req_param("id")
-		return "{\"id\": " + odI + ", \"title\": \"Getting Started with Frame\", \"authorId\": 1, \"author\": \"Alice Johnson\", \"date\": \"2025-12-15\"}"
+endpoints:
+	GET "/api/posts/:id":
+		string id = param("id")
+		string post = Post.first:
+			where:
+				id = id
+		if post == "" or post == "null"
+			return notFound()
+		return jsonResponse("{\"ok\": true, \"post\": " + post + "}")
 
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/posts/:id", 0)
+	PUT "/api/posts/:id":
+		string id = param("id")
+		string body = body()
+		Post.update:
+			set:
+				title = body
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"post updated\", \"id\": \"" + id + "\"}")
+
+	DELETE "/api/posts/:id":
+		string id = param("id")
+		Post.delete:
+			where:
+				id = id
+		return jsonResponse("{\"ok\": true, \"message\": \"post deleted\", \"id\": \"" + id + "\"}")

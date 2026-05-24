@@ -1,19 +1,33 @@
-// Posts API
-// Route: GET, POST /api/posts
+// Posts collection endpoints
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	GET "/api/posts":
+		string posts = Post.find:
+			where:
+				published = true
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"posts\": " + posts + "}")
 
-		if method == "GET"
-			return "{\"posts\": []}"
-
-		if method == "POST"
-			return "{\"message\": \"post created\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/posts", 0)
-	s = _http_route("POST", "/api/posts", 0)
+	[user, admin, editor] POST "/api/posts":
+		integer authed = _auth_require_auth()
+		if authed != 1
+			return unauthorized()
+		string body = body()
+		any data = json.tryTextToData(body)
+		if data == null
+			return badRequest("Invalid JSON")
+		string title = json.get(data, "title")
+		string content = json.get(data, "content")
+		string slug = json.get(data, "slug")
+		if title == "" or content == "" or slug == ""
+			return badRequest("Title, content, and slug are required")
+		string session = _auth_get_session()
+		string authorId = json.getField(session, "id")
+		Post.insert:
+			author_id = authorId
+			title = title
+			content = content
+			slug = slug
+			published = false
+			views = 0
+		return jsonResponse("{\"ok\": true}")

@@ -111,7 +111,7 @@ functions = [
 
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/server", "app/server/api", "app/server/services", "app/server/middleware"]
+owns = ["app/server", "app/server/api", "app/server/middleware"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -160,10 +160,10 @@ functions:
 
 Plugins are loaded through two mechanisms:
 
-**Explicit via `plugins:` block in `app.cln`** (parsed by `app_config.rs` in the compiler):
+**Explicit via `plugins:` block in `main.cln`** (parsed by `app_config.rs` in the compiler):
 
 ```clean
-// app.cln
+// main.cln
 plugins:
     frame.server
     frame.data
@@ -173,7 +173,7 @@ plugins:
 
 ```clean
 // app/server/api/users.cln
-// No explicit import statement needed — frame.server is declared in app.cln
+// No explicit import statement needed — frame.server is declared in main.cln
 // and processes this file because app/server/api/ is in its owned folders
 
 endpoints:
@@ -188,7 +188,7 @@ This tells the compiler to load `frame.server` and `frame.data` plugins.
 ### Step 2: Plugin Loading
 
 ```
-1. For each plugin name (from plugins: block in app.cln):
+1. For each plugin name (from plugins: block in main.cln):
    a. Look in ~/.cleen/plugins/<name>/
    b. Find latest compatible version
    c. Load plugin.toml manifest
@@ -573,7 +573,7 @@ Plugins can define folder ownership through the `[paths]` section in `plugin.tom
 ```toml
 [paths]
 # Folders owned by this plugin - auto-created by CLI
-owns = ["app/server", "app/server/api", "app/server/services", "app/server/middleware"]
+owns = ["app/server", "app/server/api", "app/server/middleware"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -596,9 +596,9 @@ implicit_import = true
 
 | Plugin | Owned Folders |
 |--------|---------------|
-| `frame.ui` | `app/pages/`, `app/components/`, `app/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` |
-| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
 
@@ -616,27 +616,27 @@ $ cleen project create myapp --plugins=frame.data,frame.server,frame.ui
 Creating project 'myapp'...
   [frame.data] Creating app/data/
   [frame.data] Creating app/data/models/
-  [frame.data] Creating app/data/queries/
+  [frame.data] Creating app/data/
   [frame.data] Creating app/data/migrations/
-  [frame.data] Creating app/data/repositories/
+  [frame.data] Creating app/data/
   [frame.server] Creating app/server/
   [frame.server] Creating app/server/api/
-  [frame.server] Creating app/server/services/
+  [frame.server] Creating app/logic/
   [frame.server] Creating app/server/middleware/
-  [frame.ui] Creating app/pages/
-  [frame.ui] Creating app/components/
-  [frame.ui] Creating app/layouts/
+  [frame.ui] Creating app/web/pages/
+  [frame.ui] Creating app/web/components/
+  [frame.ui] Creating app/web/layouts/
 
 Project created successfully!
 ```
 
 ### 7.4 Implicit Imports
 
-When `implicit_import = true`, files in owned folders don't need explicit `import` statements — the plugin declared in `app.cln` processes them automatically based on folder ownership:
+When `implicit_import = true`, files in owned folders don't need explicit `import` statements — the plugin declared in `main.cln` processes them automatically based on folder ownership:
 
 ```clean
 // app/data/models/User.cln
-// No explicit import statement needed — frame.data is declared in app.cln
+// No explicit import statement needed — frame.data is declared in main.cln
 // and processes this file because app/data/models/ is in its owned folders
 
 data User
@@ -718,7 +718,7 @@ diagnostics = [
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  1. DETECT PROJECT                                                       │
 │     - Read project.toml → get plugins list                              │
-│     - OR scan app.cln → parse plugins: block                            │
+│     - OR scan main.cln → parse plugins: block                            │
 │     - Check file path against declared plugins' owned folders           │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -765,7 +765,7 @@ The language server detects active plugins using these methods (in order):
    frame.ui = "2.1.0"
    ```
 
-2. **app.cln plugins: block**
+2. **main.cln plugins: block**
    ```clean
    plugins:
        frame.data
@@ -773,11 +773,11 @@ The language server detects active plugins using these methods (in order):
    ```
 
 3. **Folder ownership** (for per-file plugin routing)
-   - File in `app/data/` → routed to frame.data (must be declared in app.cln or project.toml)
+   - File in `app/data/` → routed to frame.data (must be declared in main.cln or project.toml)
    - File in `app/server/` → routed to frame.server (must be declared)
    - File in `app/auth/` → routed to frame.auth (must be declared)
    - File in `app/canvas/` → routed to frame.canvas (must be declared)
-   - File in `app/pages/` or `app/components/` → routed to frame.ui (must be declared)
+   - File in `app/web/pages/` or `app/web/components/` → routed to frame.ui (must be declared)
 
 ### 8.5 Caching Strategy
 
@@ -791,7 +791,7 @@ The language server detects active plugins using these methods (in order):
 
 The cache is invalidated when:
 - project.toml changes
-- app.cln plugins: block changes
+- main.cln plugins: block changes
 - A plugin is installed/updated/removed
 
 ---
@@ -850,13 +850,13 @@ echo "Built $(basename $(pwd)) plugin → plugin.wasm"
 
 ### frame.server
 
-Handles HTTP server DSL blocks. Must be declared in `app.cln`. Files in `app/server/`, `app/server/api/`, `app/server/services/`, and `app/server/middleware/` are processed by this plugin without needing per-file import statements.
+Handles HTTP server DSL blocks. Must be declared in `main.cln`. Files in `app/server/`, `app/server/api/`, `app/logic/`, and `app/server/middleware/` are processed by this plugin without needing per-file import statements.
 
 **Blocks:** `server`, `endpoints`
 
-**Declaration (required in app.cln):**
+**Declaration (required in main.cln):**
 ```clean
-// app.cln
+// main.cln
 plugins:
     frame.server
 ```
@@ -864,7 +864,7 @@ plugins:
 **Usage (no import statement needed — file is in app/server/api/):**
 ```clean
 // app/server/api/users.cln
-// frame.server is declared in app.cln and owns this folder
+// frame.server is declared in main.cln and owns this folder
 
 endpoints:
     GET "/users":
@@ -877,14 +877,14 @@ endpoints:
 
 ### frame.data
 
-Handles database/ORM DSL blocks. Must be declared in `app.cln`. Files in `app/data/` and its subdirectories are processed by this plugin without needing per-file import statements.
+Handles database/ORM DSL blocks. Must be declared in `main.cln`. Files in `app/data/` and its subdirectories are processed by this plugin without needing per-file import statements.
 
 **Blocks:** `data`
 
 **Usage (no import statement needed — file is in app/data/models/):**
 ```clean
 // app/data/models/User.cln
-// frame.data is declared in app.cln and owns this folder
+// frame.data is declared in main.cln and owns this folder
 
 data User
     integer id : pk, auto
@@ -895,14 +895,14 @@ data User
 
 ### frame.auth
 
-Handles authentication DSL blocks. Must be declared in `app.cln`. Files in `app/auth/` are processed by this plugin without needing per-file import statements.
+Handles authentication DSL blocks. Must be declared in `main.cln`. Files in `app/auth/` are processed by this plugin without needing per-file import statements.
 
 **Blocks:** `auth`, `protected`, `login`, `roles`
 
 **Usage (no import statement needed — file is in app/auth/):**
 ```clean
 // app/auth/auth.cln
-// frame.auth is declared in app.cln and owns this folder
+// frame.auth is declared in main.cln and owns this folder
 
 auth:
     strategy: jwt
@@ -916,14 +916,14 @@ roles:
 
 ### frame.ui
 
-Handles UI component DSL blocks. Must be declared in `app.cln`. Files in `app/pages/`, `app/components/`, and `app/layouts/` are processed by this plugin without needing per-file import statements.
+Handles UI component DSL blocks. Must be declared in `main.cln`. Files in `app/web/pages/`, `app/web/components/`, and `app/web/layouts/` are processed by this plugin without needing per-file import statements.
 
 **Blocks:** `component`, `screen`, `page`, `html`
 
-**Usage (no import statement needed — file is in app/components/):**
+**Usage (no import statement needed — file is in app/web/components/):**
 ```clean
-// app/components/Button.cln
-// frame.ui is declared in app.cln and owns this folder
+// app/web/components/Button.cln
+// frame.ui is declared in main.cln and owns this folder
 
 component Button
     props:
@@ -964,11 +964,11 @@ component Button
 ### Compiler Flags
 
 ```bash
-# Enable plugin loading (reads plugins: block from app.cln)
-cln compile app.cln -o app.wasm --plugins
+# Enable plugin loading (reads plugins: block from main.cln)
+cln compile main.cln -o app.wasm --plugins
 
 # Specify custom plugin directory
-cln compile app.cln -o app.wasm --plugins --plugin-dir ./local-plugins/
+cln compile main.cln -o app.wasm --plugins --plugin-dir ./local-plugins/
 ```
 
 ### Plugin Management (via cleen)

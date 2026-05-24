@@ -1,10 +1,5 @@
-// Post publish - requires post.publish permission
-// Route: GET /api/posts/publish
+// Post publish - requires editor or admin role
 
-functions:
-	string __route_handler_0()
-		return "{\"message\": \"Post published\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/posts/publish", 0)
+endpoints:
+	[editor, admin] POST "/api/posts/publish":
+		return jsonResponse("{\"message\": \"Post published\"}")

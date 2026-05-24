@@ -1,19 +1,19 @@
-// Posts list and create endpoint
-// Route: GET, POST /api/posts
+// Posts list and create endpoints
 
-functions:
-	string __route_handler_0()
-		string method = _req_method()
+endpoints:
+	GET "/api/posts":
+		string posts = Post.find:
+			where:
+				published = true
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"posts\": " + posts + "}")
 
-		if method == "GET"
-			return "{\"posts\": []}"
-
-		if method == "POST"
-			return "{\"message\": \"post created\"}"
-
-		return "{\"error\": \"method not allowed\"}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/posts", 0)
-	s = _http_route("POST", "/api/posts", 0)
+	POST "/api/posts":
+		_auth_require_auth()
+		string session = _auth_get_session()
+		string body = body()
+		Post.insert:
+			user_id = session
+			content = body
+			published = false
+		return jsonResponse("{\"ok\": true, \"message\": \"post created\"}")

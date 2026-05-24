@@ -39,7 +39,7 @@ Frame is divided into three main components:
 │                         (cln binary)                                │
 │                                                                     │
 │   - Parses .cln source files                                       │
-│   - Loads plugins declared in the plugins: block in app.cln        │
+│   - Loads plugins declared in the plugins: block in main.cln        │
 │   - Expands framework blocks via plugin WASM                       │
 │   - Compiles to WebAssembly                                        │
 └────────────────────────────────────────────────────────────────────┘
@@ -94,17 +94,17 @@ Frame is divided into three main components:
 
 ### How Plugins Work
 
-1. Developer declares plugins in `app.cln` and writes Clean code with framework blocks in the appropriate folder:
+1. Developer declares plugins in `main.cln` and writes Clean code with framework blocks in the appropriate folder:
    ```clean
    // app/server/api/hello.cln
-   // No import needed — frame.server is declared in app.cln and owns this folder
+   // No import needed — frame.server is declared in main.cln and owns this folder
 
    endpoints:
        GET "/hello":
            return json({"message": "Hello World"})
    ```
 
-2. Compiler reads the `plugins:` block in `app.cln`, loads `frame.server`, and uses folder ownership to determine which files that plugin processes
+2. Compiler reads the `plugins:` block in `main.cln`, loads `frame.server`, and uses folder ownership to determine which files that plugin processes
 
 3. Plugin's `expand_block` function transforms each block:
    ```
@@ -203,7 +203,7 @@ Frame uses a clean architecture-based folder structure with clear separation of 
 
 ```
 myapp/
-├── app.cln                 # Project metadata + plugins: block
+├── main.cln                 # Project metadata + plugins: block
 │
 └── app/
     ├── ui/
@@ -254,22 +254,22 @@ dist/                       # Compiled WASM output
 
 ### Folder Ownership by Plugin
 
-Each plugin declares the folders it owns in its `plugin.toml` file. When a plugin is declared in `app.cln`, the compiler uses folder ownership to determine which files that plugin processes. Files in owned folders do not need an explicit `import` statement for the plugin (`implicit_import = true` controls this).
+Each plugin declares the folders it owns in its `plugin.toml` file. When a plugin is declared in `main.cln`, the compiler uses folder ownership to determine which files that plugin processes. Files in owned folders do not need an explicit `import` statement for the plugin (`implicit_import = true` controls this).
 
 | Plugin | Owned Folders |
 |--------|---------------|
-| `frame.ui` | `app/ui/pages/`, `app/ui/components/`, `app/ui/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/server/services/`, `app/server/middleware/` |
-| `frame.data` | `app/data/`, `app/data/models/`, `app/data/queries/`, `app/data/migrations/`, `app/data/repositories/` |
+| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
 
 ### Plugin Loading
 
-Plugins **must** be declared in `app.cln` via the `plugins:` block:
+Plugins **must** be declared in `main.cln` via the `plugins:` block:
 
 ```clean
-// app.cln
+// main.cln
 plugins:
 	frame.server
 	frame.data
@@ -281,14 +281,14 @@ Once a plugin is declared, `implicit_import = true` in the plugin's `plugin.toml
 
 | File Location | Plugin that processes it | Import needed? |
 |---------------|--------------------------|----------------|
-| `app/server/api/users.cln` | `frame.server` (declared in app.cln) | No |
-| `app/data/models/User.cln` | `frame.data` (declared in app.cln) | No |
-| `app/auth/auth.cln` | `frame.auth` (declared in app.cln) | No |
-| `app/ui/pages/index.cln` | `frame.ui` (declared in app.cln) | No |
-| `app/ui/components/Header.cln` | `frame.ui` (declared in app.cln) | No |
-| `app/canvas/scenes/main.cln` | `frame.canvas` (declared in app.cln) | No |
+| `app/server/api/users.cln` | `frame.server` (declared in main.cln) | No |
+| `app/data/models/User.cln` | `frame.data` (declared in main.cln) | No |
+| `app/auth/auth.cln` | `frame.auth` (declared in main.cln) | No |
+| `app/web/pages/index.cln` | `frame.ui` (declared in main.cln) | No |
+| `app/web/components/Header.cln` | `frame.ui` (declared in main.cln) | No |
+| `app/canvas/scenes/main.cln` | `frame.canvas` (declared in main.cln) | No |
 
-This means a file at `app/server/api/users.cln` does not need to import `frame.server` explicitly — but the plugin must still be declared in `app.cln`.
+This means a file at `app/server/api/users.cln` does not need to import `frame.server` explicitly — but the plugin must still be declared in `main.cln`.
 
 ### Folder Creation
 
@@ -334,7 +334,7 @@ Host Bridge functions are prefixed with `_` to indicate they are runtime imports
 
 ### Example Usage
 
-**`app.cln`** — project entry point:
+**`main.cln`** — project entry point:
 ```clean
 plugins:
 	frame.server
@@ -343,7 +343,7 @@ plugins:
 	frame.ui
 ```
 
-**`app/data/models/User.cln`** — data model (processed by `frame.data`, declared in app.cln):
+**`app/data/models/User.cln`** — data model (processed by `frame.data`, declared in main.cln):
 ```clean
 data User
 	integer id : pk, auto
@@ -353,7 +353,7 @@ data User
 	datetime createdAt : default=now
 ```
 
-**`app/auth/auth.cln`** — auth configuration (processed by `frame.auth`, declared in app.cln):
+**`app/auth/auth.cln`** — auth configuration (processed by `frame.auth`, declared in main.cln):
 ```clean
 auth:
 	session:
@@ -364,7 +364,7 @@ auth:
 		ttlMinutes: 60
 ```
 
-**`app/server/api/users.cln`** — API endpoints (processed by `frame.server`, declared in app.cln):
+**`app/server/api/users.cln`** — API endpoints (processed by `frame.server`, declared in main.cln):
 ```clean
 endpoints:
 	POST "/login" :
@@ -393,7 +393,7 @@ endpoints:
 cleen plugin add frame.server frame.data frame.auth frame.ui
 
 # Compile with plugins
-cln compile app.cln -o app.wasm --plugins
+cln compile main.cln -o app.wasm --plugins
 
 # Run with host runtime
 ./host-bridge run app.wasm
@@ -403,7 +403,7 @@ cln compile app.cln -o app.wasm --plugins
 
 ```bash
 # Build optimized
-cln compile app.cln -o app.wasm --plugins -O3
+cln compile main.cln -o app.wasm --plugins -O3
 
 # Deploy to any WASI host
 ```

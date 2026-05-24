@@ -138,7 +138,7 @@ completions = [
 
 [paths]
 # Folders owned by this plugin - auto-created on plugin import
-owns = ["app/data", "app/data/models", "app/data/queries", "app/data/migrations", "app/data/repositories"]
+owns = ["app/data", "app/data/models", "app/data/queries", "app/data/migrations", "app/data/repositories", "app/data/seeds"]
 
 # Automatically create folders when plugin is imported
 auto_create = true

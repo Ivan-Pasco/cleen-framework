@@ -1,18 +1,10 @@
-// Dashboard API endpoint
-// Route: GET /api/dashboard
-// Returns dashboard statistics
+// Dashboard statistics API
 
-functions:
-	string __route_handler_0()
-		string json = "{"
-		json = json + "\"total_tasks\": 25,"
-		json = json + "\"completed_tasks\": 12,"
-		json = json + "\"in_progress\": 8,"
-		json = json + "\"pending\": 5,"
-		json = json + "\"total_projects\": 3"
-		json = json + "}"
-		return json
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/dashboard", 0)
+endpoints:
+	GET "/api/dashboard":
+		_auth_require_auth()
+		string tasks = Task.find:
+			order: status asc
+		string projects = Project.find:
+			order: name asc
+		return jsonResponse("{\"ok\": true, \"tasks\": " + tasks + ", \"projects\": " + projects + "}")

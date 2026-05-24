@@ -1,11 +1,7 @@
 // Admin posts list endpoint
-// Route: GET /api/admin/posts
-// Requires: admin role
 
-functions:
-	string __route_handler_0()
-		return "{\"posts\": []}"
-
-start:
-	integer s = 0
-	s = _http_route("GET", "/api/admin/posts", 0)
+endpoints:
+	[admin] GET "/api/admin/posts":
+		string posts = Post.find:
+			order: created_at desc
+		return jsonResponse("{\"ok\": true, \"posts\": " + posts + "}")

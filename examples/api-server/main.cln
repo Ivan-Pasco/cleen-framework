@@ -1,0 +1,13 @@
+package: ApiServer
+	version: "1.0.0"
+	description: "REST API server with authentication"
+
+	target: server
+		plugins: [frame.server, frame.data, frame.auth]
+
+	server:
+		port: 3000
+
+	auth:
+		strategy: jwt
+		secret: env("JWT_SECRET")

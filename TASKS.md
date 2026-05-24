@@ -530,4 +530,87 @@ declared in `frame.auth/plugin.toml` and implemented in `clean-server`.
 
 ---
 
+## Multi-Platform Architecture
+
+Reference: [system-documents/MULTI_PLATFORM_ARCHITECTURE.md](system-documents/MULTI_PLATFORM_ARCHITECTURE.md)
+
+---
+
+### Phase 1 — Structural Reorganization (Web Only) 🔴 CRITICAL
+
+*No new features, no new plugins, full backwards compatibility.*
+
+- ⬜ Support `main.cln` as package declaration entry point (`package:` block, declarative only)
+- ⬜ Auto-routing from `src/web/pages/` by file path (e.g. `profile/[id].cln` → `/profile/:id`)
+- ⬜ `routes.cln` for guards, redirects, rewrites, and error pages
+- ⬜ Migrate existing `app/` folder convention to `src/` structure
+- ⬜ `state/` as first-class folder alongside `logic/`, `data/`, `server/`
+- ⬜ `server/api/` for explicit API endpoints only (page routing is automatic)
+
+---
+
+### Phase 2 — Abstract Component Layer (frame.ui) 🟡 MEDIUM-HIGH
+
+*frame.ui evolves from HTML-specific to platform-agnostic.*
+
+**Must be fully specced in `foundation/spec/` and approved before any code is written.**
+
+- ⬜ Define primitive component set in spec: `Box`, `Text`, `Image`, `Button`, `Row`, `Column`, `Input`, `Scroll`
+- ⬜ Define `layout:` block syntax for composing primitives
+- ⬜ Define component lifecycle protocol: mount, update, unmount
+- ⬜ Define reconciliation protocol — how renderers detect and apply changes
+- ⬜ Define `nav:` block for cross-platform navigation
+- ⬜ Each renderer plugin declares which primitives it implements
+- ⬜ Refactor frame.ui plugin to implement the abstract protocol (web renderer)
+
+---
+
+### Phase 3 — Canvas as Universal Renderer (frame.canvas) 🟡 MEDIUM-HIGH
+
+*frame.canvas becomes embeddable inside any target.*
+
+- ⬜ Scene embedding in HTML via `cln-scene` directive on `<canvas>` element
+- ⬜ Scene embedding in desktop/mobile screens via `layout:` canvas component
+- ⬜ Add immediate mode (`onFrame:` loop) for games and audio alongside existing retained mode
+- ⬜ `canvas/components/` for canvas-specific UI elements (HUD, sprites, overlays)
+
+---
+
+### Phase 4 — frame.term (Terminal/TUI) 🟢 LOW
+
+*Simplest new target. Validates frame.ui abstract protocol before desktop/mobile.*
+
+- ⬜ Select Rust TUI backend (crossterm or ratatui)
+- ⬜ Implement host bridge for terminal I/O
+- ⬜ Map frame.ui primitives to ANSI/box-drawing output
+- ⬜ Keyboard and mouse input through host bridge
+- ⬜ `term/views/` auto-discovery
+
+---
+
+### Phase 5 — frame.desktop (Native Desktop) 🟢 LOW
+
+*Tauri as the host — Rust-based, aligns with the compiler.*
+
+- ⬜ Tauri host bridge: window, file system, system tray, native dialogs
+- ⬜ Window lifecycle: open, close, minimize, resize
+- ⬜ Menu bar and context menus
+- ⬜ OS integration: notifications, file picker, clipboard
+- ⬜ WebView rendering strategy first (frame.ui as HTML inside Tauri WebView)
+- ⬜ Canvas rendering strategy later (frame.canvas inside Tauri — pixel-perfect)
+- ⬜ `desktop/screens/` auto-discovery
+
+---
+
+### Phase 6 — frame.mobile (Native Mobile) 🟢 LOW
+
+*Most complex target. Capacitor approach first, custom native bridge later.*
+
+- ⬜ Capacitor shell: wrap web output in native iOS/Android shell
+- ⬜ Capacitor plugin bridge: camera, GPS, push notifications, biometrics
+- ⬜ `mobile/screens/` auto-discovery
+- ⬜ Custom native bridge (future): WASM ↔ iOS UIKit / Android Views directly
+
+---
+
 **Last Updated**: 2026-05-20
