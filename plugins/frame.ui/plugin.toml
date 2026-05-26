@@ -130,6 +130,10 @@ functions = [
   # Theming
   { name = "_ui_inject_head_css", params = ["string"], returns = "integer", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true },
 
+  # File I/O (for co-located CSS loading)
+  { name = "file_read", params = ["string"], returns = "string", description = "Read file contents by path", expand_strings = true },
+  { name = "file_exists", params = ["string"], returns = "integer", description = "Check if file exists at path (0/1)", expand_strings = true },
+
   # Form Helpers
   { name = "_ui_input_value", params = ["string"], returns = "string", description = "Get value of input/textarea/select matching selector", expand_strings = true },
   { name = "_ui_form_json", params = ["string"], returns = "string", description = "Collect all named inputs in form as JSON object string", expand_strings = true },

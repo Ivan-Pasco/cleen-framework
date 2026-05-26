@@ -1649,19 +1649,31 @@ functions:
 			string norm_body = normalize_handlers(body)
 			result = result + "\t" + norm_body.replace("\n", "\n\t") + "\n"
 
+		// Build renderSSR body — injects co-located CSS if a matching .css file exists
+		string ssr_body = ""
+		if tag != ""
+			string css_path = "app/web/components/" + tag + ".css"
+			ssr_body = "\t\t\tstring __html = this.render()\n"
+			ssr_body = ssr_body + "\t\t\tstring __css = file_read(\"" + css_path + "\")\n"
+			ssr_body = ssr_body + "\t\t\tif __css.length() > 0\n"
+			ssr_body = ssr_body + "\t\t\t\tinteger __css_r = _ui_injectHeadCss(__css)\n"
+			ssr_body = ssr_body + "\t\t\treturn __html\n"
+		else
+			ssr_body = "\t\t\treturn this.render()\n"
+
 		// Add slot setter and SSR wrapper
 		if html_content != "" and after_html.trim().startsWith("functions:")
 			// Functions block already exists, just append
 			result = result + "\n\t\tvoid setSlot(string content)\n"
 			result = result + "\t\t\t_slot_content = content\n"
 			result = result + "\n\t\tstring renderSSR()\n"
-			result = result + "\t\t\treturn this.render()\n"
+			result = result + ssr_body
 		else
 			result = result + "\n\tfunctions:\n"
 			result = result + "\t\tvoid setSlot(string content)\n"
 			result = result + "\t\t\t_slot_content = content\n"
 			result = result + "\n\t\tstring renderSSR()\n"
-			result = result + "\t\t\treturn this.render()\n"
+			result = result + ssr_body
 
 		return result
 
