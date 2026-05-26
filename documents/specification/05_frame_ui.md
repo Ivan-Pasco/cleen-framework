@@ -785,19 +785,42 @@ Use standard CSS files in `public/css/` (project root):
 </head>
 ```
 
-### 10.2 Scoped Styles
+### 10.2 Scoped Styles — Co-located CSS Files
 
-Add scoped styles within components:
+Each component can have a matching `.css` file in the same folder. The framework finds it automatically by filename and scopes all its rules to that component — no configuration needed.
 
-```html
-<!-- In component definition or page -->
-<style scoped>
-    .user-card {
-        padding: 1rem;
-        border: 1px solid #e5e7eb;
-    }
-</style>
 ```
+app/web/components/
+    UserCard.cln
+    UserCard.css
+```
+
+`UserCard.css` is plain CSS:
+
+```css
+.user-card {
+    padding: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+}
+```
+
+`UserCard.cln` has no style block:
+
+```clean
+component: tag="user-card"
+    inputs:
+        string name
+        string avatar
+
+    html:
+        <div class="user-card">
+            <img src="{inputs.avatar}" alt="{inputs.name}" />
+            <span>{inputs.name}</span>
+        </div>
+```
+
+CSS files in `app/web/components/` are scoped automatically. CSS in `public/css/` is global.
 
 ### 10.3 CSS Variables (Theming)
 

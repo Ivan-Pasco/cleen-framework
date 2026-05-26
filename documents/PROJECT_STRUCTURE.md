@@ -304,6 +304,14 @@ Web-specific reusable components. PascalCase filename becomes a kebab-case tag. 
 | `Footer.cln` | `<app-footer>` |
 | `UserCard.cln` | `<user-card>` |
 
+A `.css` file with the same name as a `.cln` component file is automatically found by the framework and scoped to that component. No configuration is needed — filename match is enough.
+
+```
+app/web/components/
+    UserCard.cln     ← component definition (no styles block)
+    UserCard.css     ← co-located CSS, auto-scoped to this component
+```
+
 **Example component:**
 ```clean
 // app/web/components/UserCard.cln
@@ -313,8 +321,18 @@ component: tag="user-card"
 
 	html:
 		<div class="user-card">
-			<h3>{this.userId}</h3>
+			<h3>{inputs.userId}</h3>
 		</div>
+```
+
+**Co-located CSS file:**
+```css
+/* app/web/components/UserCard.css */
+.user-card {
+	padding: 1rem;
+	border: 1px solid #e5e7eb;
+	border-radius: 6px;
+}
 ```
 
 **Going multi-platform?** When you add a second target (mobile, desktop), create `app/ui/` for components that work on all platforms. For web-only projects, keep everything in `app/web/components/` — adding `app/ui/` before you need it just creates an extra folder with nothing in it.
