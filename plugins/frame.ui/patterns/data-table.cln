@@ -48,7 +48,7 @@ endpoints:
 
 // UI component: data table with sort headers and pagination
 component: tag="data-table"
-	props:
+	inputs:
 		string api_url = "/users"
 
 	state:
@@ -58,9 +58,9 @@ component: tag="data-table"
 		list rows = []
 		integer total_pages = 1
 
-	handlers:
+	events:
 		void load()
-			string url = props.api_url + "?page=" + state.page + "&sort=" + state.sort + "&order=" + state.order
+			string url = inputs.api_url + "?page=" + state.page + "&sort=" + state.sort + "&order=" + state.order
 			any result = api.get(url)
 			state.rows = result.users
 			state.total_pages = result.total_pages

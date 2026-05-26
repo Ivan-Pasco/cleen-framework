@@ -10,7 +10,7 @@ plugins:
 
 // Component: reusable validated text input
 component: tag="validated-input"
-	props:
+	inputs:
 		string name
 		string label
 		string type = "text"
@@ -20,26 +20,26 @@ component: tag="validated-input"
 		string error = ""
 		boolean touched = false
 
-	handlers:
+	events:
 		void onBlur()
 			state.touched = true
-			string val = ui.inputValue("#input-" + props.name)
-			if props.validation == "required" and val.length() == 0
-				state.error = props.label + " is required"
-			else if props.validation == "email" and val.indexOf("@") == -1
+			string val = ui.inputValue("#input-" + inputs.name)
+			if inputs.validation == "required" and val.length() == 0
+				state.error = inputs.label + " is required"
+			else if inputs.validation == "email" and val.indexOf("@") == -1
 				state.error = "Enter a valid email address"
 			else
 				state.error = ""
 
 	html:
 		<div class="field">
-			<label>{props.label}</label>
+			<label>{inputs.label}</label>
 			<input
-				id="input-{props.name}"
-				name="{props.name}"
-				type="{props.type}"
+				id="input-{inputs.name}"
+				name="{inputs.name}"
+				type="{inputs.type}"
 				onblur="onBlur"
-				cl-validate="props.validation"
+				cl-validate="inputs.validation"
 			>
 			<span class="error" cl-show="state.error.length() > 0">{state.error}</span>
 		</div>

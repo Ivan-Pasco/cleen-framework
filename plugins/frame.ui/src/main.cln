@@ -108,7 +108,7 @@ functions:
 
 	// Get keywords for IDE support
 	string get_keywords()
-		return "[\"component\", \"props\", \"state\", \"render\", \"tag\", \"client\", \"if\", \"else\", \"each\", \"bind\", \"slot\", \"html\", \"ui\", \"theme\", \"colors\", \"spacing\"]"
+		return "[\"component\", \"inputs\", \"state\", \"render\", \"tag\", \"client\", \"if\", \"else\", \"each\", \"bind\", \"slot\", \"html\", \"ui\", \"theme\", \"colors\", \"spacing\"]"
 
 // ============================================================================
 // STRING HELPER FUNCTIONS (workaround for buggy trim())
@@ -1348,7 +1348,7 @@ functions:
 
 		// Find end of html: block by scanning for next section header at same or lower indent
 		integer html_end = body.length()
-		string sections = ",props:,state:,functions:,computed:,handlers:,"
+		string sections = ",inputs:,state:,functions:,computed:,events:,"
 		string search_remaining = body.substring(content_start, body.length())
 		integer line_start = 0
 
@@ -1613,7 +1613,7 @@ functions:
 		if html_content != ""
 			// html: block found - generate render() from it
 
-			// Add sections before html: (typically props:, state:, handlers:)
+			// Add sections before html: (typically inputs:, state:, events:)
 			if before_html.trim().length() > 0
 				string norm_before = normalize_handlers(before_html)
 				result = result + "\t" + norm_before.replace("\n", "\n\t") + "\n"
@@ -1686,11 +1686,11 @@ functions:
 
 		return attrs.substring(quote_start + 1, quote_end)
 
-	// Normalize component handlers: block content to valid Clean Language class syntax.
-	// Translates handlers: → functions:, removes void prefix, strips trailing : from function names (onMount(): → onMount()).
+	// Normalize component events: block content to valid Clean Language class syntax.
+	// Translates events: → functions:, removes void prefix, strips trailing : from function names (onMount(): → onMount()).
 	string normalize_handlers(string content)
 		string result = content
-		result = result.replace("handlers:", "functions:")
+		result = result.replace("events:", "functions:")
 		result = result.replace("\tvoid ", "\t")
 		result = result.replace("):\n", ")\n")
 		if result.endsWith("):")

@@ -27,7 +27,7 @@ endpoints:
 		return jsonResponse("{\"results\": " + results + "}")
 
 component: tag="live-search"
-	props:
+	inputs:
 		string placeholder = "Search..."
 		string api_url = "/api/search/users"
 
@@ -37,7 +37,7 @@ component: tag="live-search"
 		string query = ""
 		integer debounce_timer = 0
 
-	handlers:
+	events:
 		// Debounce: cancel previous timer, start a new 300ms countdown
 		void onInput()
 			state.query = ui.inputValue(".search-input")
@@ -57,7 +57,7 @@ component: tag="live-search"
 				state.loading = false
 				return
 
-			string url = props.api_url + "?q=" + state.query
+			string url = inputs.api_url + "?q=" + state.query
 			any data = api.get(url)
 			state.results = data.results
 			state.loading = false
@@ -67,7 +67,7 @@ component: tag="live-search"
 			<input
 				class="search-input"
 				type="search"
-				placeholder="{props.placeholder}"
+				placeholder="{inputs.placeholder}"
 				oninput="onInput"
 			>
 

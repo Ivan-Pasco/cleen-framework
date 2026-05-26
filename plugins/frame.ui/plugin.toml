@@ -145,9 +145,9 @@ blocks = ["component", "screen", "page", "styles", "html", "ui"]
 # Keywords used within plugin context
 keywords = [
   { name = "state", description = "Component state declaration", context = "block" },
-  { name = "props", description = "Component props declaration", context = "block" },
+  { name = "inputs", description = "Component inputs declaration", context = "block" },
   { name = "render", description = "Component render function", context = "block" },
-  { name = "handlers", description = "Event handlers block", context = "block" },
+  { name = "events", description = "Event handlers block", context = "block" },
   { name = "computed", description = "Computed properties", context = "block" },
   { name = "variables", description = "CSS variables declaration", context = "block" },
   { name = "global", description = "Global CSS styles", context = "block" },
@@ -172,7 +172,7 @@ keywords = [
 # Custom types provided by the plugin
 types = [
   { name = "Component", description = "UI component type" },
-  { name = "Props", description = "Component properties type" },
+  { name = "Inputs", description = "Component inputs type" },
   { name = "State", description = "Component state type" },
 ]
 
@@ -213,7 +213,7 @@ functions = [
 
 # Auto-completion suggestions
 completions = [
-  { trigger = "component ", insert = "component: tag=\"${1:my-tag}\"\n\tprops:\n\t\t${2:string} ${3:name}\n\n\thtml:\n\t\t<div>\n\t\t\t${4:content}\n\t\t</div>" },
+  { trigger = "component ", insert = "component: tag=\"${1:my-tag}\"\n\tinputs:\n\t\t${2:string} ${3:name}\n\n\thtml:\n\t\t<div>\n\t\t\t${4:content}\n\t\t</div>" },
   { trigger = "styles ", insert = "styles ${1:Name}:\n\tvariables:\n\t\t${2:color-primary}: \"${3:#3b82f6}\"" },
   { trigger = "state:", insert = "state:\n\t${1:field}: ${2:value}" },
   { trigger = "render:", insert = "render:\n\t${1:// template}" },

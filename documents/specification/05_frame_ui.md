@@ -203,7 +203,7 @@ Components are defined in `app/web/components/*.cln` using `html:` blocks for te
 ```clean
 // app/web/components/UserCard.cln
 component: tag="user-card"
-    props:
+    inputs:
         string userId
         boolean showAvatar = true
 
@@ -1147,7 +1147,7 @@ functions:
 ```clean
 // app/web/components/CommentForm.cln
 component: tag="comment-form" client="on"
-    props:
+    inputs:
         string postId
 
     state:

@@ -12,7 +12,7 @@ plugins:
 
 // Reusable confirm modal component
 component: tag="confirm-modal"
-	props:
+	inputs:
 		string title = "Are you sure?"
 		string message = "This action cannot be undone."
 		string confirm_label = "Delete"
@@ -24,7 +24,7 @@ component: tag="confirm-modal"
 		string target_id = ""
 		string target_name = ""
 
-	handlers:
+	events:
 		// Call this from the page to open the modal
 		void open(string id, string name)
 			state.target_id = id
@@ -44,14 +44,14 @@ component: tag="confirm-modal"
 	html:
 		<div class="modal-overlay" cl-show="state.visible" onclick="cancel">
 			<div class="modal-dialog" onclick.stop="">
-				<h2>{props.title}</h2>
-				<p>{props.message}</p>
+				<h2>{inputs.title}</h2>
+				<p>{inputs.message}</p>
 				<p cl-show="state.target_name.length() > 0">
 					You are about to delete <strong>{state.target_name}</strong>.
 				</p>
 				<div class="modal-actions">
-					<button class="btn-secondary" onclick="cancel">{props.cancel_label}</button>
-					<button class="{props.confirm_class}" onclick="confirm">{props.confirm_label}</button>
+					<button class="btn-secondary" onclick="cancel">{inputs.cancel_label}</button>
+					<button class="{inputs.confirm_class}" onclick="confirm">{inputs.confirm_label}</button>
 				</div>
 			</div>
 		</div>

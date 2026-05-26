@@ -191,7 +191,7 @@ implements them for its platform.
 ```clean
 // ui/button.ui — defined once
 component: Button
-    props: label string, onClick fn
+    inputs: label string, onClick fn
     layout:
         Box
             padding: 12
@@ -217,8 +217,8 @@ are always available when the abstract layer is not needed.
 component: Avatar
     html:
         <div class="avatar">
-            <img src="{props.user.avatar}" />
-            <span>{props.user.name}</span>
+            <img src="{inputs.user.avatar}" />
+            <span>{inputs.user.name}</span>
         </div>
 ```
 
@@ -226,15 +226,15 @@ component: Avatar
 ```clean
 // ui/avatar.ui
 component: Avatar
-    props: user User
+    inputs: user User
     layout:
         Row
             gap: 12
             Image
-                src: props.user.avatar
+                src: inputs.user.avatar
                 size: 48
             Text
-                content: props.user.name
+                content: inputs.user.name
 ```
 
 ### 7. Canvas as Embeddable Component

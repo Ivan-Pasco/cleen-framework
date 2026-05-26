@@ -308,7 +308,7 @@ Web-specific reusable components. PascalCase filename becomes a kebab-case tag. 
 ```clean
 // app/web/components/UserCard.cln
 component: tag="user-card"
-	props:
+	inputs:
 		string userId
 
 	html:

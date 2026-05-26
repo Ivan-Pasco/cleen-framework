@@ -29,8 +29,8 @@ functions:
 
 	// Test props to state
 	boolean testPropsToState()
-		string mapping = "state:\n\tstring value = props.initialValue"
-		return mapping.contains("props.")
+		string mapping = "state:\n\tstring value = inputs.initialValue"
+		return mapping.contains("inputs.")
 
 	// Test state reset
 	boolean testStateReset()

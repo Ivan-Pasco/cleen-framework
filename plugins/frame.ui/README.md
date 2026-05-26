@@ -23,7 +23,7 @@ import:
     frame.ui
 
 component: name="Counter" client="on"
-    props:
+    inputs:
         integer initialValue = 0
 
     state:

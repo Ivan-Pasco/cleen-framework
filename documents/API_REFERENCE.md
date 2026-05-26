@@ -837,7 +837,7 @@ plugins:
 
 ```clean
 component ComponentName
-    props:
+    inputs:
         prop1: Type
         prop2?: Type = defaultValue
 
@@ -857,7 +857,7 @@ component ComponentName
 **Example component** (`app/web/components/UserCard.cln`):
 ```clean
 component UserCard
-    props:
+    inputs:
         user: User
         showEmail?: boolean = false
 
@@ -1012,7 +1012,7 @@ Layouts wrap pages with shared structure (`app/web/layouts/`):
 
 ```clean
 component MainLayout
-    props:
+    inputs:
         title: string
         content: Widget
 

@@ -931,7 +931,7 @@ Handles UI component DSL blocks. Must be declared in `main.cln`. Files in `app/w
 // frame.ui is declared in main.cln and owns this folder
 
 component Button
-    props:
+    inputs:
         string label
         string variant = "primary"
 

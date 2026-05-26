@@ -158,7 +158,7 @@ component: tag="site-header"
 // Use for widgets that need to respond to user input immediately.
 
 component: tag="add-to-cart"
-	props:
+	inputs:
 		string product_id
 		string product_name
 
@@ -166,10 +166,10 @@ component: tag="add-to-cart"
 		boolean added = false
 		integer quantity = 1
 
-	handlers:
+	events:
 		void add()
 			any result = api.post("/api/cart/add", {
-				"product_id" to props.product_id,
+				"product_id" to inputs.product_id,
 				"quantity" to state.quantity
 			})
 			state.added = true
@@ -200,7 +200,7 @@ component: tag="recently-viewed"
 	state:
 		list items = []
 
-	handlers:
+	events:
 		void onMount()
 			any result = api.get("/api/recently-viewed")
 			state.items = result.items
