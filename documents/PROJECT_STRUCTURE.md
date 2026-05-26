@@ -304,12 +304,14 @@ Web-specific reusable components. PascalCase filename becomes a kebab-case tag. 
 | `Footer.cln` | `<app-footer>` |
 | `UserCard.cln` | `<user-card>` |
 
-A `.css` file with the same name as a `.cln` component file is automatically found by the framework and scoped to that component. No configuration is needed — filename match is enough.
+Each component automatically links a CSS file from `public/css/components/` matching its tag name. The framework injects `<link rel="stylesheet" href="/css/components/{tag}.css">` into the page `<head>` when the component renders — deduplicated, so one link tag per tag name per page. Override with the `css=` attribute.
 
 ```
 app/web/components/
     UserCard.cln     ← component definition (no styles block)
-    UserCard.css     ← co-located CSS, auto-scoped to this component
+
+public/css/components/
+    user-card.css    ← linked automatically for tag="user-card"
 ```
 
 **Example component:**
@@ -325,14 +327,18 @@ component: tag="user-card"
 		</div>
 ```
 
-**Co-located CSS file:**
+**CSS file (public/css/components/user-card.css):**
 ```css
-/* app/web/components/UserCard.css */
 .user-card {
 	padding: 1rem;
 	border: 1px solid #e5e7eb;
 	border-radius: 6px;
 }
+```
+
+**Custom CSS path (optional):**
+```clean
+component: tag="user-card" css="/css/shared/cards.css"
 ```
 
 **Going multi-platform?** When you add a second target (mobile, desktop), create `app/ui/` for components that work on all platforms. For web-only projects, keep everything in `app/web/components/` — adding `app/ui/` before you need it just creates an extra folder with nothing in it.

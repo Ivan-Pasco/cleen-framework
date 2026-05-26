@@ -785,17 +785,16 @@ Use standard CSS files in `public/css/` (project root):
 </head>
 ```
 
-### 10.2 Scoped Styles — Co-located CSS Files
+### 10.2 Component CSS — Convention and Override
 
-Each component can have a matching `.css` file in the same folder. The framework finds it automatically by filename and scopes all its rules to that component — no configuration needed.
+Each component automatically links a CSS file from `public/css/components/` matching its tag name. No configuration needed — the framework injects a `<link>` tag into the page `<head>` when the component renders.
 
 ```
-app/web/components/
-    UserCard.cln
-    UserCard.css
+public/css/components/
+    user-card.css    ← linked automatically for tag="user-card"
 ```
 
-`UserCard.css` is plain CSS:
+`user-card.css` is plain CSS:
 
 ```css
 .user-card {
@@ -805,7 +804,7 @@ app/web/components/
 }
 ```
 
-`UserCard.cln` has no style block:
+`UserCard.cln` has no style block — CSS belongs in the CSS file:
 
 ```clean
 component: tag="user-card"
@@ -820,7 +819,16 @@ component: tag="user-card"
         </div>
 ```
 
-CSS files in `app/web/components/` are scoped automatically. CSS in `public/css/` is global.
+The framework injects `<link rel="stylesheet" href="/css/components/user-card.css">` into the `<head>` automatically. The same href used by multiple instances of the same component on one page produces exactly one `<link>` tag.
+
+To use a different CSS path, set the `css=` attribute on the component:
+
+```clean
+component: tag="user-card" css="/css/shared/cards.css"
+    ...
+```
+
+CSS in `public/css/` is served directly by the HTTP server with no processing.
 
 ### 10.3 CSS Variables (Theming)
 
