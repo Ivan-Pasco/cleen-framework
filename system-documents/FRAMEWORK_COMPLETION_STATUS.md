@@ -239,7 +239,7 @@ All 8 bridges fully implemented with comprehensive test coverage:
 - ✅ Nested transaction support
 - ✅ Transaction isolation via Host Bridge
 - ✅ Error handling and rollback on failure
-- ✅ `Data.tx()` block-based API
+- ✅ `transaction:` block-based API
 
 **Files:**
 - `frame-data/src/transaction.rs` - Transaction implementation

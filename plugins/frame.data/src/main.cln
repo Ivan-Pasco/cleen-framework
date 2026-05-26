@@ -35,8 +35,8 @@ functions:
 		if block_name == "migrate"
 			return expand_migrate_block(attributes, body)
 
-		// Handle Data.tx: transaction blocks
-		if block_name == "Data.tx"
+		// Handle transaction: blocks
+		if block_name == "transaction"
 			return expand_transaction(body)
 
 		// Handle db.query: raw queries
@@ -59,7 +59,7 @@ functions:
 
 	// Keywords for IDE support
 	string get_keywords()
-		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"Data.tx\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\"]"
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\"]"
 
 // ============================================================================
 // DATA MODEL EXPANSION
@@ -941,7 +941,7 @@ functions:
 // ============================================================================
 
 functions:
-	// Expand Data.tx: block
+	// Expand transaction: block
 	string expand_transaction(string body)
 		string result = "string __tx_id = _db_begin()\n"
 		result = result + "boolean __tx_success = true\n"

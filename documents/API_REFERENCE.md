@@ -535,9 +535,9 @@ order:
 
 ### Transactions
 
-**`Data.tx:`** - Execute transaction
+**`transaction:`** - Execute transaction
 ```clean
-Data.tx:
+transaction:
     User user = User.insert:
         name = "Alice"
         email = "alice@example.com"
@@ -548,7 +548,7 @@ Data.tx:
         published = true
 ```
 
-All operations inside `Data.tx:` run atomically. If any operation fails, the entire transaction is rolled back.
+All operations inside `transaction:` run atomically. If any operation fails, the entire transaction is rolled back.
 
 ### Relationships
 
@@ -620,7 +620,7 @@ cleen db:rollback  # Roll back last migration
 ## Frame Server
 
 **Plugin:** `frame.server`
-**Owned folders:** `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/`
+**Owned folders:** `app/server/`, `app/server/api/`, `app/server/middleware/`
 **Handled blocks:** `server`, `endpoints`
 **Spec:** [03_frame_server.md](specification/03_frame_server.md)
 

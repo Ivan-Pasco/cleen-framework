@@ -66,7 +66,7 @@ functions:
 		return { appName: "My App" }
 ```
 
-The companion file provides data that the HTML template can access via `{expression}` interpolation.
+The companion file provides data that the HTML template can access via `{expression}` interpolation. This is a simple value — no database query, no shared logic — so it lives directly in the companion. No `app/logic/` needed here.
 
 ## Build and Run
 
@@ -108,7 +108,7 @@ Create `app/web/pages/blog/[slug].html` for dynamic URLs:
 </html>
 ```
 
-Put the query in `app/logic/posts.cln` so it can be reused by other pages and API endpoints:
+The blog post query goes in `app/logic/posts.cln` because both this page and the `/api/posts/:slug` endpoint need the same data. That duplication is the signal to move it here — write it once, use it everywhere:
 
 ```clean
 // app/logic/posts.cln
@@ -180,7 +180,7 @@ Models are auto-discovered and available in your pages and API endpoints.
 | Folder | Purpose | Plugin |
 |--------|---------|--------|
 | `app/server/api/` | HTTP endpoints (.cln) | frame.server |
-| `app/logic/` | Business logic (.cln) | frame.server |
+| `app/logic/` | Business logic (.cln) | — (always compiled) |
 | `app/data/models/` | Data model definitions (.cln) | frame.data |
 | `app/data/migrations/` | Schema migrations (.cln) | frame.data |
 | `app/web/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |

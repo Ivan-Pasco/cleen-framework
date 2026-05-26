@@ -51,7 +51,7 @@ For the canonical folder layout, see [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE
 | Plugin | Owned paths |
 |--------|-------------|
 | `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
@@ -82,7 +82,7 @@ For the canonical folder layout, see [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE
 
 - One model per file; place field constraints (`min`, `max`, `unique`, `default`) next to the field.
 - Use relation fields instead of manual foreign keys.
-- Wrap multi-step writes in `Data.tx:` blocks.
+- Wrap multi-step writes in `transaction:` blocks.
 - Keep migrations clean; review the diff before committing.
 
 ---

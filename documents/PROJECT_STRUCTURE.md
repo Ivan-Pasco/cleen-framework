@@ -14,16 +14,13 @@ my-app/
 │   │   ├── migrations/          # Schema migration files (.cln)
 │   │   └── seeds/               # Seed data (.cln)
 │   │
-│   ├── logic/                   # Shared data-fetching & business logic, reusable across all targets
+│   ├── logic/                   # Shared business logic                → (core compiler, no plugin)
 │   │
 │   ├── state/                   # Reactive client-side state, drives multiple render targets
 │   │
 │   ├── server/                  # HTTP API layer                    → frame.server
 │   │   ├── api/                 # Endpoint handlers (endpoints: blocks)
 │   │   └── middleware/          # Request filters (.cln)
-│   │
-│   ├── ui/                      # Abstract component library        → frame.ui
-│   │   └── (cross-platform components — any target)
 │   │
 │   └── web/                     # Web rendering layer               → frame.ui (web)
 │       ├── pages/               # Auto-routed page files
@@ -51,12 +48,16 @@ The `main.cln` file is the project manifest. It declares metadata and which plug
 package: MyApp
     version: "1.0.0"
 
+    shared: [app/logic/, app/data/, app/state/]
+
     target: web
-        plugins: [frame.ui, frame.server, frame.data, frame.auth]
+        plugins: [frame.ui, frame.server, frame.auth]
         entry: app/web/pages/home.cln
 ```
 
-Multiple targets share the same `app/data/`, `app/logic/`, and `app/state/` folders — logic is written once and runs on every target. The `public/` folder at the project root is served directly by the HTTP server without compilation.
+The `shared:` block lists folders that compile for every target — web, mobile, desktop. You write the logic once and it just works everywhere. The `target:` blocks then add the platform-specific plugins on top.
+
+The `public/` folder at the project root is served directly by the HTTP server without compilation.
 
 ## Naming Rule
 
@@ -69,9 +70,10 @@ Plugins must be declared in `main.cln` via the `target:` block. Once declared, f
 | Path Pattern | Owning Plugin |
 |---|---|
 | `app/server/`, `app/server/api/`, `app/server/middleware/` | `frame.server` |
+| `app/logic/` | — (core compiler, always compiled) |
 | `app/data/`, `app/data/models/`, `app/data/migrations/`, `app/data/seeds/` | `frame.data` |
 | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` | `frame.ui` |
-| `app/ui/` | `frame.ui` |
+| `app/ui/` | `frame.ui` — only needed for multi-platform projects |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/` | `frame.canvas` |
 
@@ -85,7 +87,7 @@ Each layer depends only on layers above it:
 | `app/logic/` | — | data/ |
 | `app/state/` | — | logic/, data/ |
 | `app/server/` | frame.server | logic/, data/ |
-| `app/ui/` | frame.ui | nothing |
+| `app/ui/` | frame.ui | nothing — only needed for multi-platform projects |
 | `app/web/` | frame.ui | logic/, state/, ui/ |
 | `app/canvas/` | frame.canvas | logic/, state/ |
 
@@ -142,7 +144,15 @@ data User
 
 ### `app/logic/`
 
-Shared data-fetching and business logic. Functions here are reusable across all targets (web, mobile, desktop) — they never receive an HTTP `Request` and have no knowledge of web-specific concepts.
+Think of `app/logic/` as the brain of your app — the actual work of fetching and transforming data. It has no idea whether it's serving a web page, a mobile screen, or a desktop window. That's the point. You write it once and every platform uses it.
+
+**The rule is simple: if you find yourself writing the same query in two different places, move it here.**
+
+**When should something live here?** Simple rule: if you find the same database query in more than one file, move it to `app/logic/`. If it's only used in one place, it's fine to keep it in the companion or endpoint for now.
+
+The most common trigger is when both a page companion and an API endpoint need the same data. That duplication is the signal to extract it here.
+
+Functions here never receive an HTTP `Request` and have no knowledge of web-specific concepts. The compiler always processes `app/logic/` regardless of which plugins are active — no plugin declaration is needed.
 
 **Example:**
 ```clean
@@ -232,6 +242,36 @@ routes:
 
 **Rule:** if a page maps cleanly to a URL, use `pages/`. Only use `routes.cln` for behavior that cannot be expressed as a file name.
 
+**Two-tier access control:**
+
+Think of it like a building. The front door checks if you're allowed in at all. Individual office doors check if you belong in that specific room.
+
+- **Front door** (`routes.cln` guards) — "are you logged in?", "do you have the admin role?" — declared once, applies to all matching routes automatically.
+- **Room door** (companion `guard()`) — "does this post actually belong to you?" — page-specific checks only.
+
+```clean
+// routes.cln — front door, handles all /dashboard/* pages at once
+routes:
+    guard: "/dashboard/*" [user]
+    guard: "/admin/*" [admin]
+```
+
+```clean
+// app/web/pages/posts/[id].cln — room door, resource ownership only
+import "app/logic/posts"
+
+functions:
+    any guard(Request request)
+        Post post = posts.getById(request.params.id)
+        if post.authorId != request.auth.userId
+            return redirect("/403")
+        return null
+
+    any load(Request request)
+        Post post = posts.getById(request.params.id)
+        return { post: post }
+```
+
 ### `app/state/`
 
 Reactive client-side state. Each file drives the same view across multiple render targets — web, mobile, desktop — without duplicating logic.
@@ -276,6 +316,8 @@ component: tag="user-card"
 			<h3>{this.userId}</h3>
 		</div>
 ```
+
+**Going multi-platform?** When you add a second target (mobile, desktop), create `app/ui/` for components that work on all platforms. For web-only projects, keep everything in `app/web/components/` — adding `app/ui/` before you need it just creates an extra folder with nothing in it.
 
 ### `app/web/layouts/`
 

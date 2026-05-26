@@ -183,10 +183,10 @@ list<Post> posts = Post.find:
 
 ## 4. Transactions
 
-Use `Data.tx:` to perform atomic operations.
+Use `transaction:` to perform atomic operations.
 
 ```clean
-Data.tx:
+transaction:
     User u = User.insert:
         name = "Ana"
         email = "ana@example.com"
@@ -393,7 +393,7 @@ list<map<string, any>> counts = db.query:
 ### 9.5 Using Transactions
 
 ```clean
-Data.tx:
+transaction:
     User u = User.insert:
         name  = "Alice"
         email = "alice@x.com"
@@ -460,7 +460,7 @@ cleen db:seed
 | Bridge | Function | Description |
 |---------|-----------|-------------|
 | `host:db.query` | Executes SQL and returns rows | Primary query interface |
-| `host:db.tx` | Runs multiple queries transactionally | Used by `Data.tx` |
+| `host:db.tx` | Runs multiple queries transactionally | Used by `transaction:` |
 | `host:db.prepare` | Prepare SQL statement (optional) | Precompiled queries |
 | `host:env.get` | Read database URL or secrets | Configuration |
 | `host:log.info` | ORM operations log | Migration/debug logs |
@@ -471,7 +471,7 @@ cleen db:seed
 
 - Always use **block syntax** for queries.
 - Keep **data model files small** (one per entity).
-- Prefer **atomic transactions** (`Data.tx:`) for multi-write logic.
+- Prefer **atomic transactions** (`transaction:`) for multi-write logic.
 - Avoid embedding business logic in models — use services.
 - Migrations should be committed with related code.
 
@@ -494,7 +494,7 @@ list<User> admins = User.find:
     order:
         createdAt desc
 
-Data.tx:
+transaction:
     User u = User.first:
         where:
             email == "alice@x.com"
@@ -525,11 +525,11 @@ It turns database interaction into clean, declarative statements — readable fo
 
 ### 16.2 Transaction Limits
 
-- Nested `Data.tx:` blocks are NOT supported — transactions are flat
+- Nested `transaction:` blocks are NOT supported — transactions are flat
 - If a transaction block throws, the entire transaction is rolled back automatically
 - Long-running transactions may time out depending on the database driver configuration
 
-> **Constraint — no nested transactions:** A `Data.tx:` block cannot be started inside another `Data.tx:` block. Attempting to nest transactions is a compile-time error. The outer transaction must complete (commit or roll back) before a new one can be started. Service functions that each use `Data.tx:` internally must not be composed inside a single outer `Data.tx:` — extract the composed logic into a single flat transaction block.
+> **Constraint — no nested transactions:** A `transaction:` block cannot be started inside another `transaction:` block. Attempting to nest transactions is a compile-time error. The outer transaction must complete (commit or roll back) before a new one can be started. Service functions that each use `transaction:` internally must not be composed inside a single outer `transaction:` — extract the composed logic into a single flat transaction block.
 
 ### 16.3 Tenant Isolation
 

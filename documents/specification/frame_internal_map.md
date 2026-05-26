@@ -80,7 +80,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 /app/web/layouts/*.html            → Page layout wrappers                                      [frame.ui]
 /app/server/*.cln             → Server entry points                                       [frame.server]
 /app/server/api/*.cln         → HTTP API endpoints                                        [frame.server]
-/app/logic/*.cln    → Business logic services                                   [frame.server]
+/app/logic/*.cln    → Business logic services                                   [core compiler — no plugin]
 /app/server/middleware/*.cln  → Request middleware                                        [frame.server]
 /app/data/*.cln                → Data models / ORM                                         [frame.data]
 /app/data/models/*.cln         → Model definitions                                         [frame.data]
@@ -103,7 +103,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 | Plugin | Owned Paths |
 |--------|-------------|
 | `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |

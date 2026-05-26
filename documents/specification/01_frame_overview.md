@@ -259,7 +259,7 @@ Each plugin declares the folders it owns in its `plugin.toml` file. When a plugi
 | Plugin | Owned Folders |
 |--------|---------------|
 | `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |

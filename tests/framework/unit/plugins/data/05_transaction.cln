@@ -4,8 +4,8 @@
 functions:
 	// Test transaction block syntax
 	boolean testTransactionBlockSyntax()
-		string txBlock = "Data.tx:\n\tuser.save()\n\tprofile.save()"
-		return txBlock.contains("Data.tx:")
+		string txBlock = "transaction:\n\tuser.save()\n\tprofile.save()"
+		return txBlock.contains("transaction:")
 
 	// Test transaction commit
 	boolean testTransactionCommit()
@@ -19,7 +19,7 @@ functions:
 
 	// Test nested operations in transaction
 	boolean testNestedOperations()
-		string tx = "Data.tx:\n\tuser = User.create(data)\n\tprofile = Profile.create(profileData)\n\tprofile.userId = user.id\n\tprofile.save()"
+		string tx = "transaction:\n\tuser = User.create(data)\n\tprofile = Profile.create(profileData)\n\tprofile.userId = user.id\n\tprofile.save()"
 		boolean hasCreate = tx.contains("create(")
 		boolean hasSave = tx.contains("save()")
 		return hasCreate and hasSave
@@ -31,7 +31,7 @@ functions:
 
 	// Test transaction isolation level
 	boolean testTransactionIsolation()
-		string isoLevel = "Data.tx(isolation=\"serializable\"):"
+		string isoLevel = "transaction(isolation=\"serializable\"):"
 		return isoLevel.contains("isolation=")
 
 start:

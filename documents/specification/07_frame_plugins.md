@@ -293,7 +293,7 @@ Plugins are loaded via the `plugins:` block in `main.cln`. This declaration is a
 
 **Source:** `plugins/frame.server/src/main.cln`
 
-**Owned Folders:** `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/`
+**Owned Folders:** `app/server/`, `app/server/api/`, `app/server/middleware/`
 
 ```clean
 // frame.server plugin - HTTP server and routing DSL
@@ -539,7 +539,8 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 |--------|---------------|------------|---------|
 | `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` | `.html`, `.cln` | Pages, components, layouts |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` | `.cln` | Data models, ORM, queries, migrations |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` | `.cln` | HTTP server, API routes, endpoints |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` | `.cln` | HTTP server, API routes, endpoints |
+| *(core compiler)* | `app/logic/` | `.cln` | Shared business logic — always compiled, no plugin needed |
 | `frame.auth` | `app/auth/` | `.cln` | Auth configuration |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `.cln` | Canvas rendering, animation, sprites, audio |
 
@@ -619,7 +620,8 @@ The Clean Language compiler resolves which plugin processes each source file by 
 
 | File Path Pattern | Owning Plugin (when declared in main.cln) |
 |-------------------|------------------------------------------|
-| `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` | `frame.server` |
+| `app/server/`, `app/server/api/`, `app/server/middleware/` | `frame.server` |
+| `app/logic/` | *(core compiler — always compiled, no plugin required)* |
 | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` | `frame.data` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |

@@ -61,10 +61,10 @@ This allows:
 
 > **Canonical reference:** [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE.md) — complete folder reference.
 
-Clean Framework uses automatic file discovery. Place files in the `src/` folder:
+Clean Framework uses automatic file discovery. Place files in the `app/` folder:
 
 ```
-src/
+app/
   web/
     pages/                    # SSR page templates + companion loaders
       index.html              # → /
@@ -85,6 +85,8 @@ src/
       users.cln
   data/                       # Data models / ORM
     User.cln
+  logic/                      # Shared business logic (no plugin required)
+    posts.cln
   auth/                       # Auth configuration
     auth.cln
   state/                      # Shared reactive state (multi-target)
@@ -393,7 +395,16 @@ The companion `.cln` file may export two functions:
 
 Both functions must be inside a `functions:` block. The `request` parameter gives access to path params, query strings, headers, and auth state.
 
-**Example — Profile page:**
+**Two-tier access control:**
+
+Think of it like a building. The front door checks if you're allowed in at all. Individual office doors check if you belong in that specific room.
+
+- **Front door** (`routes.cln` guards) — "are you logged in?", "do you have the admin role?" — declared once, applies to all matching routes automatically.
+- **Room door** (companion `guard()`) — "does this post actually belong to you?" — page-specific checks only.
+
+Use `routes.cln` for authentication and broad role checks. Use the companion `guard()` only for resource-ownership checks that require loading data first.
+
+**Example — Profile page (front door: routes.cln handles auth; room door: companion checks ownership):**
 
 ```clean
 // app/logic/users.cln
@@ -405,13 +416,22 @@ functions:
 ```
 
 ```clean
-// app/web/pages/profile.cln
+// app/web/routes.cln — front door, handles all /dashboard/* pages at once
+routes:
+    guard: "/dashboard/*" [user]
+    guard: "/admin/*" [admin]
+```
+
+```clean
+// app/web/pages/profile.cln — room door, resource ownership only
 import "app/logic/users"
 
 functions:
 	any guard(Request request)
-		if not request.auth.loggedIn
-			return redirect("/login")
+		integer id = request.params.id
+		User user = users.getById(id)
+		if user.ownerId != request.auth.userId
+			return redirect("/403")
 		return null
 
 	any load(Request request)
@@ -918,7 +938,7 @@ server:
 ## 13. File Structure
 
 ```
-src/
+app/
 ├── web/
 │   ├── pages/               # HTML pages + companion loaders
 │   │   ├── index.html
@@ -942,6 +962,8 @@ src/
 ├── server/                  # Backend modules (frame.server)
 │   └── api/                 # API endpoint modules
 │       └── users.cln
+├── logic/                   # Shared business logic (no plugin required)
+│   └── posts.cln
 ├── data/                    # Data models (frame.data)
 │   └── User.cln
 ├── auth/                    # Auth configuration (frame.auth)

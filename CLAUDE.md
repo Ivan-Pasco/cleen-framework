@@ -211,7 +211,7 @@ Reference: [04_frame_data.md](documents/specification/04_frame_data.md)
 - Support block-based queries: `find:`, `where:`, `order:`, `limit:`
 - Implement many-to-many via explicit junction tables
 - Auto-generate migrations from schema diffs
-- Support transactions with `Data.tx:` blocks
+- Support transactions with `transaction:` blocks
 
 #### Frame UI (`frame-ui/`)
 Reference: [05_frame_ui.md](documents/specification/05_frame_ui.md)

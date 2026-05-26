@@ -155,7 +155,7 @@ Reference: [04_frame_data.md](documents/specification/04_frame_data.md)
 
 ### 4.5 Transactions [plugin] ✅
 
-- ✅ Implement `Data.tx:` for transactions
+- ✅ Implement `transaction:` for transactions
 - ✅ Add automatic rollback on error (try/catch with _db_rollback)
 - ✅ Write tests for transactions
 

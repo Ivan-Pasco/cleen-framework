@@ -351,10 +351,10 @@ integer total = User.count:
 
 ### 6.1 Block-Based Transactions
 
-Use `Data.tx:` for atomic operations that automatically commit on success or rollback on failure:
+Use `transaction:` for atomic operations that automatically commit on success or rollback on failure:
 
 ```clean
-Data.tx:
+transaction:
     User u = User.insert:
         name = "Ana"
         email = "ana@example.com"
@@ -369,7 +369,7 @@ Data.tx:
 
 - **Auto-commit**: If all operations succeed, changes are committed
 - **Auto-rollback**: If any operation fails, all changes are rolled back
-- **Nested blocks**: All operations within `Data.tx:` are part of the same transaction
+- **Nested blocks**: All operations within `transaction:` are part of the same transaction
 
 ### 6.3 Manual Transaction Control
 
@@ -384,7 +384,7 @@ db.commit(txId)
 onError db.rollback(txId)
 ```
 
-**Note:** The block-based `Data.tx:` syntax is strongly recommended as it handles commit/rollback automatically.
+**Note:** The block-based `transaction:` syntax is strongly recommended as it handles commit/rollback automatically.
 
 ---
 
@@ -777,7 +777,7 @@ onError print("Database error: " + error.message) +
 ### 13.4 Transaction Guidelines
 
 - Keep transactions **short** to avoid lock contention
-- Use `Data.tx:` blocks for **related operations**
+- Use `transaction:` blocks for **related operations**
 - Handle **errors properly** - don't leave orphaned transactions
 
 ### 13.5 Migration Guidelines
@@ -867,7 +867,7 @@ Error: Migration 001_init.sql has been modified
 | Mistake | Solution |
 |---------|----------|
 | String concatenation in SQL | Use parameterized queries |
-| Missing transactions for related updates | Wrap in `Data.tx:` block |
+| Missing transactions for related updates | Wrap in `transaction:` block |
 | Large unbounded queries | Always use `limit:` |
 | Storing passwords in plaintext | Use `crypto.hashPassword()` |
 | Not handling null results | Check for `null` on `first:` queries |
@@ -926,7 +926,7 @@ start()
     Post.migrate()
 
     // Create user in transaction
-    Data.tx:
+    transaction:
         User admin = User.insert:
             name     = "Admin"
             email    = "admin@example.com"

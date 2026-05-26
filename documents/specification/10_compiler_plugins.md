@@ -111,6 +111,8 @@ functions = [
 
 [paths]
 # Folders owned by this plugin - auto-created by CLI
+# Note: app/logic/ is NOT listed here — it belongs to no plugin.
+# The core compiler always processes app/logic/ regardless of which plugins are active.
 owns = ["app/server", "app/server/api", "app/server/middleware"]
 
 # Automatically create folders when plugin is imported
@@ -573,6 +575,8 @@ Plugins can define folder ownership through the `[paths]` section in `plugin.tom
 ```toml
 [paths]
 # Folders owned by this plugin - auto-created by CLI
+# Note: app/logic/ is NOT listed here — it belongs to no plugin.
+# The core compiler always processes app/logic/ regardless of which plugins are active.
 owns = ["app/server", "app/server/api", "app/server/middleware"]
 
 # Automatically create folders when plugin is imported
@@ -597,7 +601,8 @@ implicit_import = true
 | Plugin | Owned Folders |
 |--------|---------------|
 | `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
-| `frame.server` | `app/server/`, `app/server/api/`, `app/logic/`, `app/server/middleware/` |
+| `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
+| *(core compiler)* | `app/logic/` — always compiled, no plugin required |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
@@ -621,8 +626,8 @@ Creating project 'myapp'...
   [frame.data] Creating app/data/
   [frame.server] Creating app/server/
   [frame.server] Creating app/server/api/
-  [frame.server] Creating app/logic/
   [frame.server] Creating app/server/middleware/
+  [compiler] Creating app/logic/
   [frame.ui] Creating app/web/pages/
   [frame.ui] Creating app/web/components/
   [frame.ui] Creating app/web/layouts/
