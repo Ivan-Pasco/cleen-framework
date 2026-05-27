@@ -1,7 +1,7 @@
 # Frame Client Communication Specification (14)
 
 **Project:** Frame -- Full-Stack Framework for Clean Language
-**Version:** 2.0
+**Version:** 2.1
 **Status:** Specification
 **Location:** `/documents/specification/14_frame_ui_client_communication.md`
 
@@ -39,7 +39,7 @@ frame.canvas  → What you DRAW      (graphics, animation, sprites)
 | Principle | Decision |
 |-----------|----------|
 | Plugin name = what it does | `client` = "I'm the client talking to the server" |
-| No namespace collision | Server uses `http.*` (sync). Client uses `api.*` (async). No overlap. |
+| No namespace collision | Server uses `http.*` (sync outgoing). Client uses `api.*` (async browser). No overlap. |
 | One import, three protocols | `import frame.client` gives you `api.*`, `live.*`, `feed.*` |
 | Names a beginner understands | "API", "live connection", "feed" -- zero jargon |
 
@@ -57,8 +57,10 @@ frame.canvas  → What you DRAW      (graphics, animation, sprites)
 // Server-side (frame.server): synchronous, returns directly
 string data = http.get("https://external-api.com/data")
 
-// Client-side (frame.client): asynchronous, dispatches to handler by name
-integer s = api.get("/api/users", "onUsersLoaded")
+// Client-side (frame.client): async, use later to suspend until response arrives
+later result = api.get("/api/users")
+if result.ok
+    string name = result.json("name")
 ```
 
 Different plugins. Different namespaces. Different calling conventions. Clear.
@@ -69,52 +71,59 @@ Developer-facing syntax for `frame.server` is unchanged: `endpoints:`, `req.*`, 
 
 ---
 
-## 3. Async Model: Named Handlers
+## 3. Async Model: `later` + Result Object
 
-All client communication dispatches to a **named handler function** passed as a string:
+All `api.*` request functions return a `Future<ApiResponse>`. Use the `later` keyword to suspend the current handler until the response arrives, then read the result directly:
 
 ```clean
-start:
-    integer s = ui.onEvent("#btn", "click", "loadUsers")
-
-functions:
-    loadUsers()
-        integer s = api.get("/api/users", "onUsersLoaded")
-
-    onUsersLoaded()
-        string name = api.json("name")
-        integer s = ui.updateElement("#user-name", name)
+events:
+    onLoadUsers:
+        later result = api.get("/api/users")
+        if result.ok
+            state.users = result.json("data")
+        else
+            state.error = "Failed to load users"
 ```
 
-1. A function initiates an async operation with a **handler function name** (string literal) as parameter
-2. When the operation completes, the runtime calls `instance.exports[handlerName]`
-3. Context functions provide data inside the handler (`api.json()`, `live.message()`, etc.)
+`later` is a native Clean Language keyword that suspends the current coroutine until the expression resolves. The component re-renders automatically when state changes after the `later` line resumes.
 
-### 3.1 Handler Parameters — String Names
+### 3.1 ApiResponse Object
 
-Plugin bridge functions declare handler parameters as `"string"` with `expand_strings = true`:
+Every `api.*` request returns an `ApiResponse` with these properties and methods:
 
-```toml
-{ name = "_api_get", params = ["string", "string"], returns = "integer", expand_strings = true, ... }
-```
+| Access | Type | Description |
+|--------|------|-------------|
+| `result.ok` | `boolean` | True if HTTP status is 200-299 |
+| `result.status` | `integer` | HTTP status code (0 = network error) |
+| `result.body` | `string` | Response body as a raw string |
+| `result.json("path")` | `string` | Extract a value from the JSON body via dot-notation path |
+| `result.header("name")` | `string` | Get a response header value |
 
-The runtime:
-1. Reads the handler-name string from WASM memory (pointer + length pair)
-2. Looks up `instance.exports[handlerName]` on the active module
-3. Calls it with no arguments (context is read via `api.*`, `live.*`, `feed.*` accessors)
-4. Logs `console.error` to the browser console if the name has no matching export — mistyped names surface immediately instead of being silently dropped
+### 3.2 Why `later` and Not True Synchronous
 
-Because top-level Clean functions are exported by default, any function declared in the module's `functions:` block is a valid handler. Handlers must be **top-level** functions — methods on classes are not callable through the export table.
+WASM in the browser cannot block the main thread. `later` uses coroutine suspension -- the component's event handler is paused at the `later` line and the browser remains responsive. When the HTTP response arrives, the handler resumes from that exact point with the result populated.
 
-This replaces an earlier design that attempted to pass function references as indices into a WASM indirect function table. That design depended on compiler support for function pointers (`COMPILER_FN_POINTERS_UNIMPL`) and silently dropped every registration when the table was absent. The current design works with the compiler as shipped today.
-
-### 3.2 Why Not Synchronous
-
-SharedArrayBuffer + Atomics could block WASM on async. Rejected because:
+SharedArrayBuffer + Atomics could block WASM synchronously but was rejected:
 - Requires COOP/COEP headers (breaks iframes, CDNs, embeds)
 - Needs a Web Worker (bundle size, complexity)
-- Hidden blocking is surprising
 - Incompatible with some mobile/WebView environments
+
+`later` gives the same readable linear code without any of those constraints.
+
+### 3.3 `live.*` and `feed.*` Still Use Named Handlers
+
+`later` is only for `api.*` (one request, one response). WebSocket and SSE connections receive an indefinite stream of events, so they continue to use named handler functions:
+
+```clean
+// api.* — one shot, use later
+later result = api.get("/api/data")
+
+// live.* — persistent stream, use named handlers
+integer conn = live.open("wss://example.com/ws", "onMessage", "onClose", "onError")
+
+// feed.* — persistent stream, use named handlers
+integer conn = feed.open("/api/events", "onEvent", "onError")
+```
 
 ---
 
@@ -187,73 +196,88 @@ _ui_setInput: (selectorPtr, selectorLen, valPtr, valLen) => {
 
 ### 5.1 Request Functions
 
+All request functions return `Future<ApiResponse>`. Use `later result = api.get(url)` to suspend until the response arrives.
+
 | Clean Syntax | Bridge Name | Params | Returns | Description |
 |-------------|-------------|--------|---------|-------------|
-| `api.get(url, handlerName)` | `_api_get` | `string, string` | `integer` | GET request |
-| `api.post(url, body, handlerName)` | `_api_post` | `string, string, string` | `integer` | POST request |
-| `api.put(url, body, handlerName)` | `_api_put` | `string, string, string` | `integer` | PUT request |
-| `api.patch(url, body, handlerName)` | `_api_patch` | `string, string, string` | `integer` | PATCH request |
-| `api.delete(url, handlerName)` | `_api_delete` | `string, string` | `integer` | DELETE request |
+| `api.get(url)` | `_api_get` | `string` | `Future<ApiResponse>` | GET request |
+| `api.post(url, body)` | `_api_post` | `string, string` | `Future<ApiResponse>` | POST with JSON body |
+| `api.put(url, body)` | `_api_put` | `string, string` | `Future<ApiResponse>` | PUT with JSON body |
+| `api.patch(url, body)` | `_api_patch` | `string, string` | `Future<ApiResponse>` | PATCH with JSON body |
+| `api.delete(url)` | `_api_delete` | `string` | `Future<ApiResponse>` | DELETE request |
+| `api.submit(formSelector, url, method)` | `_api_submit` | `string, string, string` | `Future<ApiResponse>` | Collect form JSON + send |
+
+### 5.2 Request Configuration
+
+These are called before the request to set headers, auth, or timeout. They take effect for the next request only (except `api.auth` which persists).
+
+| Clean Syntax | Bridge Name | Params | Returns | Description |
+|-------------|-------------|--------|---------|-------------|
 | `api.header(name, value)` | `_api_header` | `string, string` | `integer` | Set header for next request |
 | `api.timeout(ms)` | `_api_timeout` | `integer` | `integer` | Set timeout for next request |
 | `api.auth(scheme, credential)` | `_api_auth` | `string, string` | `integer` | Set auth for all requests |
 | `api.clearAuth()` | `_api_clearAuth` | none | `integer` | Clear stored auth |
-| `api.submit(formSelector, url, method, handlerName)` | `_api_submit` | `string, string, string, string` | `integer` | Collect form JSON + send |
 
-### 5.2 Response Context (inside handler)
+### 5.3 ApiResponse Properties and Methods
 
-| Clean Syntax | Bridge Name | Params | Returns | Description |
-|-------------|-------------|--------|---------|-------------|
-| `api.status()` | `_api_status` | none | `integer` | HTTP status code (0 = network error) |
-| `api.body()` | `_api_body` | none | `string` | Response body as string |
-| `api.ok()` | `_api_ok` | none | `integer` | 1 if status 200-299, 0 otherwise |
-| `api.json(path)` | `_api_json` | `string` | `string` | Extract value from JSON via dot-notation |
-| `api.responseHeader(name)` | `_api_responseHeader` | `string` | `string` | Get response header value |
+Read these on the result after `later` resolves:
 
-### 5.3 Error Handling
+| Access | Type | Description |
+|--------|------|-------------|
+| `result.ok` | `boolean` | True if HTTP status 200-299 |
+| `result.status` | `integer` | HTTP status code (0 = network error) |
+| `result.body` | `string` | Response body as string |
+| `result.json("path")` | `string` | Extract value from JSON body via dot-notation |
+| `result.header("name")` | `string` | Get response header value |
 
-| Scenario | `api.status()` | `api.ok()` | `api.body()` |
-|----------|----------------|------------|--------------|
-| Success (200) | `200` | `1` | Response body |
-| Not found (404) | `404` | `0` | Error body from server |
-| Server error (500) | `500` | `0` | Error body from server |
-| Network failure | `0` | `0` | `{"error": "Failed to fetch"}` |
-| Timeout | `0` | `0` | `{"error": "The operation was aborted."}` |
-| CORS blocked | `0` | `0` | `{"error": "...CORS..."}` |
+### 5.4 Error Handling
 
-The response handler is ALWAYS called. No separate error handler. Check `api.ok()` or `api.status()`.
+| Scenario | `result.ok` | `result.status` | `result.body` |
+|----------|-------------|-----------------|---------------|
+| Success (200) | `true` | `200` | Response body |
+| Not found (404) | `false` | `404` | Error body from server |
+| Server error (500) | `false` | `500` | Error body from server |
+| Network failure | `false` | `0` | `{"error": "Failed to fetch"}` |
+| Timeout | `false` | `0` | `{"error": "The operation was aborted."}` |
+| CORS blocked | `false` | `0` | `{"error": "...CORS..."}` |
 
-### 5.4 Auth Persistence
+### 5.5 Auth Persistence
 
 ```clean
 // Set once -- applies to all subsequent api.* calls
 api.auth("bearer", token)
 
 // These all include Authorization header automatically:
-api.get("/protected/data", "onData")
-api.post("/protected/create", body, "onCreated")
-api.submit("#form", "/protected/save", "POST", "onSaved")
+later r1 = api.get("/protected/data")
+later r2 = api.post("/protected/create", body)
+later r3 = api.submit("#form", "/protected/save", "POST")
 
 // Clear when done
 api.clearAuth()
 ```
 
-Manual override for one request: `api.header("Authorization", "Bearer " + token)`.
+Manual override for one request: call `api.header("Authorization", "Bearer " + token)` before the request.
 
-### 5.5 `api.submit()` -- Convenience
+### 5.6 `api.submit()` -- Convenience
 
-Collects form fields as JSON, sets Content-Type, sends, and dispatches response:
+Collects form fields as JSON, sets Content-Type, and sends. Returns the same `Future<ApiResponse>`:
 
 ```clean
 // Long way:
-createUser()
-    string body = ui.formJson("#create-form")
-    integer s = api.header("Content-Type", "application/json")
-    s = api.post("/api/users", body, "onCreated")
+events:
+    onCreateUser:
+        string body = ui.formJson("#create-form")
+        integer s = api.header("Content-Type", "application/json")
+        later result = api.post("/api/users", body)
+        if result.ok
+            state.created = true
 
 // Short way:
-createUser()
-    integer s = api.submit("#create-form", "/api/users", "POST", "onCreated")
+events:
+    onCreateUser:
+        later result = api.submit("#create-form", "/api/users", "POST")
+        if result.ok
+            state.created = true
 ```
 
 ---
@@ -342,315 +366,261 @@ The browser's EventSource auto-reconnects on connection loss. The onError handle
 ### 8.1 Simple API Call
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="user-profile"
+    inputs:
+        integer userId
 
-start:
-    integer s = ui.onEvent("#load-btn", "click", "loadUser")
+    state:
+        string name = ""
+        string error = ""
 
-functions:
-    loadUser()
-        integer s = api.get("/api/users", "onUserLoaded")
+    events:
+        onLoad:
+            later result = api.get("/api/users/" + inputs.userId.toString())
+            if result.ok
+                state.name = result.json("name")
+            else
+                state.error = "Failed to load user"
 
-    onUserLoaded()
-        if api.ok() == 1
-            string name = api.json("name")
-            integer s = ui.updateElement("#user-name", name)
-        else
-            integer s = ui.updateElement("#error", "Failed to load")
+    html:
+        <div cl-if="state.error != ''" class="error">{state.error}</div>
+        <div cl-if="state.name != ''">{state.name}</div>
 ```
 
 ### 8.2 Authenticated CRUD
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="user-list"
+    state:
+        list<any> users = []
+        string error = ""
 
-start:
-    string token = ui.locationQuery("token")
-    integer s = api.auth("bearer", token)
-    s = api.get("/api/users", "onUsersLoaded")
-    s = ui.onEvent(".delete-btn", "click", "deleteUser")
-    s = ui.onEvent("#create-form", "submit", "createUser")
+    events:
+        onLoad:
+            api.auth("bearer", state.token)
+            later result = api.get("/api/users")
+            if result.ok
+                state.users = result.json("data")
 
-functions:
-    onUsersLoaded()
-        if api.ok() == 1
-            string html = api.body()
-            integer s = ui.updateElement("#users-list", html)
+        onDeleteUser:
+            string id = ui.eventAttr("data-id")
+            later result = api.delete("/api/users/" + id)
+            if result.ok
+                later reload = api.get("/api/users")
+                if reload.ok
+                    state.users = reload.json("data")
 
-    deleteUser()
-        string id = ui.eventAttr("data-id")
-        integer s = api.delete("/api/users/" + id, "onDeleted")
+        onCreateUser:
+            later result = api.submit("#create-form", "/api/users", "POST")
+            if result.status == 201
+                later reload = api.get("/api/users")
+                if reload.ok
+                    state.users = reload.json("data")
+            else
+                state.error = result.json("message")
 
-    onDeleted()
-        if api.ok() == 1
-            integer s = api.get("/api/users", "onUsersLoaded")
-
-    createUser()
-        integer s = api.submit("#create-form", "/api/users", "POST", "onCreated")
-
-    onCreated()
-        if api.status() == 201
-            integer s = api.get("/api/users", "onUsersLoaded")
-            s = ui.setInput("#name", "")
-            s = ui.setInput("#email", "")
-        else
-            string err = api.json("message")
-            integer s = ui.updateElement("#form-error", err)
+    html:
+        <div cl-iterate="user in state.users">
+            <span>{user.name}</span>
+            <button data-id="{user.id}" cl-on:click="onDeleteUser">Delete</button>
+        </div>
+        <form id="create-form">
+            <input name="name" />
+            <input name="email" />
+            <button type="button" cl-on:click="onCreateUser">Create</button>
+        </form>
 ```
 
 ### 8.3 Custom Headers
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="legacy-client"
+    state:
+        string result = ""
 
-start:
-    integer s = ui.onEvent("#send-btn", "click", "sendLegacy")
+    events:
+        onSend:
+            integer s = api.header("X-Api-Key", "secret-123")
+            s = api.header("Content-Type", "text/xml")
+            s = api.timeout(5000)
+            later r = api.post("/api/legacy", "<xml>data</xml>")
+            state.result = r.body
 
-functions:
-    sendLegacy()
-        integer s = api.header("X-Api-Key", "secret-123")
-        s = api.header("Content-Type", "text/xml")
-        s = api.timeout(5000)
-        s = api.post("/api/legacy", "<xml>data</xml>", "onLegacyResponse")
-
-    onLegacyResponse()
-        integer status = api.status()
-        string ct = api.responseHeader("content-type")
-        string body = api.body()
-        integer s = ui.updateElement("#result", body)
+    html:
+        <button cl-on:click="onSend">Send</button>
+        <pre>{state.result}</pre>
 ```
 
 ### 8.4 Live Chat
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="chat-room"
+    state:
+        string messages = ""
+        integer connId = 0
 
-start:
-    integer conn = live.open("wss://chat.example.com/room", "onChatMessage", "onChatClosed", "onChatError")
-    integer s = ui.setState("conn", conn.toString())
-    s = ui.onEvent("#send-btn", "click", "sendMessage")
+    events:
+        onLoad:
+            integer conn = live.open("wss://chat.example.com/room", "onChatMessage", "onChatClosed", "onChatError")
+            state.connId = conn
 
-functions:
-    onChatMessage()
-        string data = live.message()
-        string user = _json_get(data, "user")
-        string msg = _json_get(data, "message")
-        string current = ui.getText("#messages")
-        integer s = ui.updateElement("#messages", current + "<div><b>" + user + ":</b> " + msg + "</div>")
+        onSend:
+            string msg = ui.inputValue("#msg-input")
+            integer s = live.send(state.connId, msg)
+            s = ui.setInput("#msg-input", "")
 
-    onChatClosed()
-        integer code = live.closeCode()
-        integer s = ui.addClass("#status", "offline")
-        s = ui.updateElement("#status", "Disconnected")
-        s = ui.setTimeout("reconnectChat", 5000)
+        onChatMessage:
+            string data = live.message()
+            string user = _json_get(data, "user")
+            string msg = _json_get(data, "message")
+            state.messages = state.messages + "<div><b>" + user + ":</b> " + msg + "</div>"
 
-    onChatError()
-        string err = live.error()
-        integer s = ui.updateElement("#status", "Error: " + err)
+        onChatClosed:
+            integer code = live.closeCode()
+            state.messages = state.messages + "<div class='system'>Disconnected</div>"
 
-    reconnectChat()
-        integer conn = live.open("wss://chat.example.com/room", "onChatMessage", "onChatClosed", "onChatError")
-        integer s = ui.setState("conn", conn.toString())
+        onChatError:
+            string err = live.error()
+            state.messages = state.messages + "<div class='error'>Error: " + err + "</div>"
 
-    sendMessage()
-        string msg = ui.inputValue("#msg-input")
-        string connStr = ui.getState("conn")
-        integer conn = connStr.toInteger()
-        integer s = live.send(conn, msg)
-        s = ui.setInput("#msg-input", "")
+    html:
+        <div id="messages">{!state.messages}</div>
+        <input id="msg-input" />
+        <button cl-on:click="onSend">Send</button>
 ```
 
 ### 8.5 Live Data Dashboard
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="metrics-dashboard"
+    state:
+        string cpu = "0"
+        string mem = "0"
+        string reqs = "0"
+        boolean offline = false
 
-start:
-    integer conn = live.open("wss://api.example.com/metrics", "onMetrics", "onMetricsLost", "onMetricsError")
+    events:
+        onLoad:
+            integer conn = live.open("wss://api.example.com/metrics", "onMetrics", "onMetricsLost", "onMetricsError")
 
-functions:
-    onMetrics()
-        string data = live.message()
-        string cpu = _json_get(data, "cpu")
-        string mem = _json_get(data, "memory")
-        string reqs = _json_get(data, "requestsPerSec")
-        integer s = ui.updateElement("#cpu", cpu + "%")
-        s = ui.updateElement("#mem", mem + "%")
-        s = ui.updateElement("#reqs", reqs + "/s")
-        s = ui.updateAttr("#cpu-bar", "style", "width:" + cpu + "%")
-        s = ui.updateAttr("#mem-bar", "style", "width:" + mem + "%")
+        onMetrics:
+            string data = live.message()
+            state.cpu = _json_get(data, "cpu")
+            state.mem = _json_get(data, "memory")
+            state.reqs = _json_get(data, "requestsPerSec")
+            state.offline = false
 
-    onMetricsLost()
-        integer s = ui.addClass("#dashboard", "offline")
-        s = ui.setTimeout("reconnectMetrics", 3000)
+        onMetricsLost:
+            state.offline = true
 
-    onMetricsError()
-        integer s = ui.addClass("#dashboard", "error")
+        onMetricsError:
+            state.offline = true
 
-    reconnectMetrics()
-        integer conn = live.open("wss://api.example.com/metrics", "onMetrics", "onMetricsLost", "onMetricsError")
-        integer s = ui.removeClass("#dashboard", "offline")
+    html:
+        <div cl-if="state.offline" class="offline-banner">Reconnecting...</div>
+        <div>CPU: {state.cpu}%</div>
+        <div>Memory: {state.mem}%</div>
+        <div>Requests/s: {state.reqs}</div>
 ```
 
 ### 8.6 Progress Streaming with Feed
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="build-progress"
+    state:
+        string log = ""
+        integer percent = 0
+        boolean complete = false
+        boolean failed = false
 
-start:
-    integer conn = feed.open("/api/build/stream", "onBuildLog", "onBuildFeedError")
-    integer s = feed.on(conn, "progress", "onBuildProgress")
-    s = feed.on(conn, "complete", "onBuildComplete")
-    s = feed.on(conn, "error", "onBuildFailed")
-    s = ui.setState("feed-conn", conn.toString())
+    events:
+        onLoad:
+            integer conn = feed.open("/api/build/stream", "onBuildLog", "onBuildFeedError")
+            integer s = feed.on(conn, "progress", "onBuildProgress")
+            s = feed.on(conn, "complete", "onBuildComplete")
+            s = feed.on(conn, "error", "onBuildFailed")
 
-functions:
-    onBuildLog()
-        string data = feed.data()
-        integer s = ui.updateElement("#log", data)
+        onBuildLog:
+            state.log = state.log + feed.data() + "\n"
 
-    onBuildFeedError()
-        integer s = ui.addClass("#feed-icon", "reconnecting")
+        onBuildProgress:
+            string data = feed.data()
+            state.percent = _json_get(data, "percent").toInteger()
 
-    onBuildProgress()
-        string data = feed.data()
-        string pct = _json_get(data, "percent")
-        integer s = ui.updateAttr("#progress", "style", "width:" + pct + "%")
-        s = ui.updateElement("#pct-text", pct + "%")
+        onBuildComplete:
+            state.complete = true
+            state.percent = 100
 
-    onBuildComplete()
-        string connStr = ui.getState("feed-conn")
-        integer conn = connStr.toInteger()
-        integer s = feed.close(conn)
-        s = ui.addClass("#progress", "complete")
-        s = ui.updateElement("#pct-text", "Done!")
+        onBuildFailed:
+            state.failed = true
 
-    onBuildFailed()
-        string data = feed.data()
-        string msg = _json_get(data, "message")
-        integer s = ui.addClass("#progress", "failed")
-        s = ui.updateElement("#pct-text", "Failed: " + msg)
+        onBuildFeedError:
+            state.log = state.log + "[connection lost, reconnecting...]\n"
+
+    html:
+        <div class="progress-bar" style="width:{state.percent}%"></div>
+        <pre>{state.log}</pre>
 ```
 
-### 8.7 Live Notifications
+### 8.7 Polling Pattern
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="stats-counter"
+    state:
+        string activeUsers = "0"
 
-start:
-    integer conn = feed.open("/api/notifications", "onNotification", "onNotificationError")
-    integer s = feed.on(conn, "info", "onInfoNotification")
-    s = feed.on(conn, "warning", "onWarningNotification")
-    s = feed.on(conn, "error", "onErrorNotification")
+    events:
+        onLoad:
+            later result = api.get("/api/stats")
+            if result.ok
+                state.activeUsers = result.json("activeUsers")
+            integer s = ui.setTimeout("onLoad", 30000)
 
-functions:
-    onNotification()
-        string msg = feed.data()
-        integer s = ui.updateElement("#toast", msg)
-        s = ui.addClass("#toast", "visible")
-        s = ui.setTimeout("hideToast", 3000)
-
-    onNotificationError()
-        integer s = ui.addClass("#feed-status", "reconnecting")
-
-    onInfoNotification()
-        string data = feed.data()
-        string msg = _json_get(data, "message")
-        integer s = ui.updateElement("#toast", msg)
-        s = ui.addClass("#toast", "visible")
-        s = ui.addClass("#toast", "toast-info")
-        s = ui.setTimeout("hideToast", 3000)
-
-    onWarningNotification()
-        string data = feed.data()
-        string msg = _json_get(data, "message")
-        integer s = ui.updateElement("#toast", msg)
-        s = ui.addClass("#toast", "visible")
-        s = ui.addClass("#toast", "toast-warning")
-        s = ui.setTimeout("hideToast", 5000)
-
-    onErrorNotification()
-        string data = feed.data()
-        string msg = _json_get(data, "message")
-        integer s = ui.updateElement("#toast", msg)
-        s = ui.addClass("#toast", "visible")
-        s = ui.addClass("#toast", "toast-error")
-        s = ui.setTimeout("hideToast", 8000)
-
-    hideToast()
-        integer s = ui.removeClass("#toast", "visible")
-        s = ui.removeClass("#toast", "toast-info")
-        s = ui.removeClass("#toast", "toast-warning")
-        s = ui.removeClass("#toast", "toast-error")
+    html:
+        <span>{state.activeUsers} active users</span>
 ```
 
-### 8.8 Polling Pattern
+### 8.8 Mixed: API + Live + Feed
 
 ```clean
-import frame.ui
-import frame.client
+component: tag="dashboard"
+    state:
+        string totalUsers = "0"
+        string alertMsg = ""
+        string lastActivity = ""
 
-start:
-    integer s = api.get("/api/stats", "onStats")
+    events:
+        onLoad:
+            api.auth("bearer", state.token)
+            later result = api.get("/api/dashboard")
+            if result.ok
+                state.totalUsers = result.json("stats.totalUsers")
+            integer ws = live.open("wss://api.example.com/alerts", "onAlert", "onAlertLost", "onAlertError")
+            integer sse = feed.open("/api/activity", "onActivity", "onActivityError")
 
-functions:
-    onStats()
-        if api.ok() == 1
-            string users = api.json("activeUsers")
-            integer s = ui.updateElement("#active", users)
-        integer s = ui.setTimeout("pollStats", 30000)
+        onAlert:
+            string data = live.message()
+            state.alertMsg = _json_get(data, "message")
 
-    pollStats()
-        integer s = api.get("/api/stats", "onStats")
-```
+        onAlertLost:
+            state.alertMsg = "Alert connection lost"
 
-### 8.9 Mixed: API + Live + Feed
+        onAlertError:
+            state.alertMsg = "Alert connection error"
 
-```clean
-import frame.ui
-import frame.client
+        onActivity:
+            string data = feed.data()
+            string action = _json_get(data, "action")
+            string user = _json_get(data, "user")
+            state.lastActivity = user + " " + action
 
-start:
-    integer s = api.auth("bearer", "my-token")
-    s = api.get("/api/dashboard", "onDashboard")
-    integer ws = live.open("wss://api.example.com/alerts", "onAlert", "onAlertLost", "onAlertError")
-    integer sse = feed.open("/api/activity", "onActivity", "onActivityError")
+        onActivityError:
+            state.lastActivity = "Activity feed reconnecting..."
 
-functions:
-    onDashboard()
-        if api.ok() == 1
-            string total = api.json("stats.totalUsers")
-            integer s = ui.updateElement("#total-users", total)
-
-    onAlert()
-        string data = live.message()
-        string level = _json_get(data, "level")
-        string msg = _json_get(data, "message")
-        integer s = ui.updateElement("#alert", msg)
-        s = ui.addClass("#alert", "alert-" + level)
-
-    onAlertLost()
-        integer s = ui.addClass("#ws-indicator", "offline")
-
-    onAlertError()
-        integer s = ui.updateElement("#alert", "Connection error")
-
-    onActivity()
-        string data = feed.data()
-        string action = _json_get(data, "action")
-        string user = _json_get(data, "user")
-        string current = ui.getText("#activity-log")
-        integer s = ui.updateElement("#activity-log", "<div>" + user + " " + action + "</div>" + current)
-
-    onActivityError()
-        integer s = ui.addClass("#sse-indicator", "reconnecting")
+    html:
+        <div>Total users: {state.totalUsers}</div>
+        <div cl-if="state.alertMsg != ''">{state.alertMsg}</div>
+        <div>{state.lastActivity}</div>
 ```
 
 ---
@@ -673,16 +643,14 @@ Server-side origin validation is the developer's responsibility.
 
 ## 10. Context Isolation
 
-Each protocol has its own context. No ambiguity:
-
-| Context Function | Available When |
-|-----------------|----------------|
-| `ui.eventValue()`, `ui.eventAttr()` | Inside DOM event handler |
-| `api.status()`, `api.body()`, `api.json()` | Inside API response handler |
-| `live.message()`, `live.connId()` | Inside live message handler |
-| `live.closeCode()`, `live.closeReason()` | Inside live close handler |
-| `live.error()` | Inside live error handler |
-| `feed.data()`, `feed.eventType()` | Inside feed event handler |
+| Context | Available When |
+|---------|----------------|
+| `ui.eventValue()`, `ui.eventAttr()` | Inside a DOM event handler |
+| `result.ok`, `result.status`, `result.body`, `result.json()` | On an `ApiResponse` after `later` resolves |
+| `live.message()`, `live.connId()` | Inside a live message handler |
+| `live.closeCode()`, `live.closeReason()` | Inside a live close handler |
+| `live.error()` | Inside a live error handler |
+| `feed.data()`, `feed.eventType()` | Inside a feed event handler |
 
 ---
 
@@ -698,19 +666,25 @@ Each protocol has its own context. No ambiguity:
 | `ui.checked(selector)` | Checkbox state |
 | `ui.setInput(selector, value)` | Set input value |
 
-### frame.client: 30 functions
+### frame.client: 27 functions
 
 | Namespace | Count | Functions |
 |-----------|-------|-----------|
-| `api.*` | 15 | get, post, put, patch, delete, header, timeout, auth, clearAuth, submit, status, body, ok, json, responseHeader |
+| `api.*` requests | 5 | get, post, put, patch, delete |
+| `api.*` config | 4 | header, timeout, auth, clearAuth |
+| `api.*` convenience | 1 | submit |
 | `live.*` | 9 | open, send, close, state, message, connId, closeCode, closeReason, error |
 | `feed.*` | 7 | open, on, close, data, eventType, lastId, connId |
 
-**Total new functions: 35**
+**ApiResponse** — returned by all `api.*` request functions, read via `later result = api.*`:
 
-### Handler Type
-
-All functions accepting callbacks use a `string` parameter naming a top-level exported function. The runtime dispatches via `instance.exports[handlerName]`. The developer writes named functions in the `functions:` block — no indices or pointers required.
+| Property/Method | Description |
+|-----------------|-------------|
+| `result.ok` | True if 200-299 |
+| `result.status` | HTTP status code |
+| `result.body` | Raw response string |
+| `result.json("path")` | JSON value extraction |
+| `result.header("name")` | Response header value |
 
 ---
 
@@ -718,7 +692,7 @@ All functions accepting callbacks use a `string` parameter naming a top-level ex
 
 | Phase | What | Count | Rationale |
 |-------|------|-------|-----------|
-| **Phase 1** | Form helpers (frame.ui) + API (frame.client) | 20 | Unblocks 80% of use cases |
+| **Phase 1** | Form helpers (frame.ui) + API (frame.client) | 15 | Unblocks 80% of use cases |
 | **Phase 2** | Live / WebSocket | 9 | Real-time communication |
 | **Phase 3** | Feed / SSE | 7 | Server push |
 
@@ -738,7 +712,7 @@ All functions accepting callbacks use a `string` parameter naming a top-level ex
 | Component | Change |
 |-----------|--------|
 | Build system | Merge plugin runtimes into unified loader.js |
-| Compiler | Verify multi-namespace plugin support (should work with `expand_strings`) |
+| Compiler | `later` keyword support for `Future<T>` return values from bridge functions |
 
 ---
 
