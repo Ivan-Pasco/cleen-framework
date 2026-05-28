@@ -1,5 +1,6 @@
 // Tests for frame.data plugin
 // Fixed: block name is "data" (not "model"); assertions updated to match actual generated code
+// Fixed: added type declarations for local variables; added void return types to test functions
 
 start:
 	test_model_expansion()
@@ -14,51 +15,52 @@ start:
 	test_unknown_block_passthrough()
 
 functions:
-	test_model_expansion()
-		result = expand_block("data", "User", "string email\nstring name")
+	void test_model_expansion()
+		string result = expand_block("data", "User", "string email\nstring name")
 		assert(result.contains("class User"))
 		assert(result.contains("_db_query"))
 		assert(result.contains("_db_execute"))
 		assert(result.contains("boolean save()"))
 
-	test_model_generates_find_method()
-		result = expand_block("data", "Post", "string title")
-		assert(result.contains("string find("))
+	void test_model_generates_find_method()
+		string result = expand_block("data", "Post", "string title")
+		// Fixed: find() now returns list<Post> per spec (04_frame_data.md §3.2), not string
+		assert(result.contains("list<Post> find("))
 		assert(result.contains("_db_query"))
 
-	test_model_generates_first_method()
-		result = expand_block("data", "Comment", "string content")
+	void test_model_generates_first_method()
+		string result = expand_block("data", "Comment", "string content")
 		assert(result.contains("string first("))
 
-	test_model_generates_save_method()
-		result = expand_block("data", "Tag", "string name")
+	void test_model_generates_save_method()
+		string result = expand_block("data", "Tag", "string name")
 		assert(result.contains("boolean save()"))
 		assert(result.contains("_db_execute"))
 
-	test_model_name_extracted_from_json()
+	void test_model_name_extracted_from_json()
 		// Compiler passes attributes as JSON {"ModelName":true}; extract_model_name must handle it
-		result = expand_block("data", "{\"Item\":true}", "string label")
+		string result = expand_block("data", "{\"Item\":true}", "string label")
 		assert(result.contains("class Item"))
 		assert(not result.contains("class {"))
 
-	test_transaction_expansion()
-		result = expand_block("transaction", "", "user.save()")
+	void test_transaction_expansion()
+		string result = expand_block("transaction", "", "user.save()")
 		assert(result.contains("_db_begin()"))
 		assert(result.contains("_db_commit"))
 		assert(result.contains("_db_rollback"))
 
-	test_query_expansion()
-		result = expand_block("db.query", "", "sql:\n\tSELECT * FROM users")
+	void test_query_expansion()
+		string result = expand_block("db.query", "", "sql:\n\tSELECT * FROM users")
 		assert(result.contains("_db_query"))
 
-	test_model_validation_missing_name()
-		result = validate_block("data", "", "string field")
+	void test_model_validation_missing_name()
+		string result = validate_block("data", "", "string field")
 		assert(result.contains("model name is required"))
 
-	test_model_validation_missing_fields()
-		result = validate_block("data", "User", "")
+	void test_model_validation_missing_fields()
+		string result = validate_block("data", "User", "")
 		assert(result.contains("at least one field is required"))
 
-	test_unknown_block_passthrough()
-		result = expand_block("unknown", "", "original body")
+	void test_unknown_block_passthrough()
+		string result = expand_block("unknown", "", "original body")
 		assert(result == "original body")

@@ -87,6 +87,7 @@ functions:
 		// Generate the class with static ORM methods
 		string result = "class " + model_name + "\n"
 		result = result + fields_code
+		result = result + generate_constructor(field_names, field_types)
 		result = result + "\n\tfunctions:\n"
 
 		// Generate save() method
@@ -133,6 +134,10 @@ functions:
 
 		// Close the class definition
 		result = result + "\n"
+
+		// Generate the top-level typed parser function for this model
+		result = result + "\nfunctions:\n"
+		result = result + generate_parse_as_function(model_name, field_names, field_types)
 
 		return result
 
@@ -340,8 +345,8 @@ functions:
 	string generate_static_methods(string model_name, string table_name, boolean has_tenant)
 		string result = "\n"
 
-		// Static find method - returns JSON array of matching records
-		result = result + "\n\t\tstring find(string where_clause, string order_clause, string limit_clause)\n"
+		// Static find method - returns typed list of matching model instances
+		result = result + "\n\t\tlist<" + model_name + "> find(string where_clause, string order_clause, string limit_clause)\n"
 		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
 		if has_tenant
 			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
@@ -357,7 +362,7 @@ functions:
 		result = result + "\t\t\t\tsql = sql + \" ORDER BY \" + order_clause\n"
 		result = result + "\t\t\tif limit_clause.length() > 0\n"
 		result = result + "\t\t\t\tsql = sql + \" LIMIT \" + limit_clause\n"
-		result = result + "\t\t\treturn _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\treturn __parse_as_" + model_name + "(_db_query(sql, \"[]\"))\n"
 
 		// Static first method - returns first matching record
 		result = result + "\n\t\tstring first(string where_clause)\n"
@@ -765,7 +770,7 @@ functions:
 			string __tf_offset = extract_subblock(body, "offset:")
 			if __tf_offset.length() > 0
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" OFFSET " + __tf_offset.trim() + "\"\n"
-			__tf_result = __tf_result + "_db_query(__tf_sql, \"[]\")"
+			__tf_result = __tf_result + "__parse_as_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
 			return __tf_result
 
 		// Handle where clause (non-tenant path)
@@ -785,7 +790,7 @@ functions:
 		if offset_clause.length() > 0
 			sql = sql + " OFFSET " + offset_clause.trim()
 
-		return "_db_query(\"" + sql + "\", \"[]\")"
+		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
 
 	// Expand Model.first: block
 	string expand_first(string model_name, string body)
@@ -1525,3 +1530,82 @@ functions:
 			return "data " + model_name + ": at least one field is required"
 
 		return ""
+
+// ============================================================================
+// MODEL INSTANCE GENERATION HELPERS
+// ============================================================================
+
+functions:
+	// Generate a no-arg constructor that zero-initialises all declared fields.
+	// This allows ModelName() to be called without arguments when building
+	// typed list results from ORM queries.
+	string generate_constructor(string field_names, string field_types)
+		string result = "\n\tconstructor()\n"
+		string fields = field_names
+		string types = field_types
+		integer fpos = 0
+		integer tpos = 0
+		while fpos < fields.length()
+			integer comma = fields.indexOf(",", fpos)
+			if comma == -1
+				comma = fields.length()
+			integer tcomma = types.indexOf(",", tpos)
+			if tcomma == -1
+				tcomma = types.length()
+			string field = fields.substring(fpos, comma).trim()
+			string ftype = types.substring(tpos, tcomma).trim()
+			string zero_val = "\"\""
+			if ftype == "integer"
+				zero_val = "0"
+			else if ftype == "number"
+				zero_val = "0.0"
+			else if ftype == "boolean"
+				zero_val = "false"
+			result = result + "\t\t" + field + " = " + zero_val + "\n"
+			fpos = comma + 1
+			tpos = tcomma + 1
+		return result
+
+	// Generate the top-level __parse_as_ModelName function body (single tab indent
+	// for use inside a top-level functions: block).
+	// Iterates the JSON array returned by _db_query and populates typed instances.
+	// Sentinel: json.get(json, "N.id") — id is always present in DB SELECT * results.
+	string generate_parse_as_function(string model_name, string field_names, string field_types)
+		string result = "\tlist<" + model_name + "> __parse_as_" + model_name + "(string __json)\n"
+		result = result + "\t\tlist<" + model_name + "> __result = []\n"
+		result = result + "\t\tinteger __i = 0\n"
+		result = result + "\t\tstring __check = json.get(__json, \"0.id\")\n"
+		result = result + "\t\twhile __check != \"\"\n"
+		result = result + "\t\t\t" + model_name + " __row = " + model_name + "()\n"
+
+		string fields = field_names
+		string types = field_types
+		integer fpos = 0
+		integer tpos = 0
+		while fpos < fields.length()
+			integer comma = fields.indexOf(",", fpos)
+			if comma == -1
+				comma = fields.length()
+			integer tcomma = types.indexOf(",", tpos)
+			if tcomma == -1
+				tcomma = types.length()
+			string field = fields.substring(fpos, comma).trim()
+			string ftype = types.substring(tpos, tcomma).trim()
+			if is_primitive_type(ftype)
+				string base = "\t\t\t__row." + field + " = json.get(__json, __i.toString() + \"." + field + "\")"
+				if ftype == "integer"
+					result = result + base + ".toInteger()\n"
+				else if ftype == "number"
+					result = result + base + ".toNumber()\n"
+				else if ftype == "boolean"
+					result = result + base + " == \"true\"\n"
+				else
+					result = result + base + "\n"
+			fpos = comma + 1
+			tpos = tcomma + 1
+
+		result = result + "\t\t\t__result.add(__row)\n"
+		result = result + "\t\t\t__i = __i + 1\n"
+		result = result + "\t\t\t__check = json.get(__json, __i.toString() + \".id\")\n"
+		result = result + "\t\treturn __result\n"
+		return result
