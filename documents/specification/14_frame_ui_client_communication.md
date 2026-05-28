@@ -96,7 +96,7 @@ Every `api.*` request returns an `ApiResponse` with these properties and methods
 | `result.ok` | `boolean` | True if HTTP status is 200-299 |
 | `result.status` | `integer` | HTTP status code (0 = network error) |
 | `result.body` | `string` | Response body as a raw string |
-| `result.json("path")` | `string` | Extract a value from the JSON body via dot-notation path |
+| `result.json("path")` | `any` | Extract a value from the JSON body via dot-notation path |
 | `result.header("name")` | `string` | Get a response header value |
 
 ### 3.2 Why `later` and Not True Synchronous
@@ -227,7 +227,7 @@ Read these on the result after `later` resolves:
 | `result.ok` | `boolean` | True if HTTP status 200-299 |
 | `result.status` | `integer` | HTTP status code (0 = network error) |
 | `result.body` | `string` | Response body as string |
-| `result.json("path")` | `string` | Extract value from JSON body via dot-notation |
+| `result.json("path")` | `any` | Extract value from JSON body via dot-notation |
 | `result.header("name")` | `string` | Get response header value |
 
 ### 5.4 Error Handling
