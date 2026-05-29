@@ -51,6 +51,7 @@ jobs:
             - **frame.canvas** - Canvas rendering and game development
             - **frame.client** - Client-side communication (HTTP, WebSocket, SSE)
             - **frame.data** - ORM and database operations
+            - **frame.mcp** - MCP server (tools, resources, prompts for AI agents)
             - **frame.server** - HTTP server runtime
             - **frame.ui** - UI components and rendering
 
@@ -75,6 +76,7 @@ jobs:
           cp -r plugins/frame.canvas frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.client frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.data frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.mcp frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.server frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.ui frame-plugins-${{ needs.create-release.outputs.version }}/
 
@@ -92,6 +94,7 @@ jobs:
           - frame.canvas - Canvas rendering and game development
           - frame.client - Client-side communication (HTTP, WebSocket, SSE)
           - frame.data - ORM and database operations
+          - frame.mcp - MCP server (tools, resources, prompts for AI agents)
           - frame.server - HTTP server runtime
           - frame.ui - UI components and rendering
 
@@ -145,6 +148,7 @@ jobs:
               "frame.canvas": "included",
               "frame.client": "included",
               "frame.data": "included",
+              "frame.mcp": "included",
               "frame.server": "included",
               "frame.ui": "included"
             },
