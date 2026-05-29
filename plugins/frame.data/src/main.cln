@@ -1006,16 +1006,10 @@ functions:
 	//     down:
 	//       DROP TABLE users
 	string expand_migrate_block(string attrs, string body)
-		// Resolve the migration name from the attribute string
-		string migration_name = attrs.trim()
-
-		// Strip surrounding double-quotes when present
-		if migration_name.startsWith("\"")
-			migration_name = migration_name.substring(1, migration_name.length())
-		if migration_name.endsWith("\"")
-			migration_name = migration_name.substring(0, migration_name.length() - 1)
-
-		migration_name = migration_name.trim()
+		// Resolve the migration name from the attribute string.
+		// attrs may arrive as a plain identifier ("AddUsers") or as compiler-formatted
+		// JSON ({"AddUsers":true}); extract_model_name handles both formats.
+		string migration_name = extract_model_name(attrs)
 
 		// Derive a clean identifier suitable for use in function names
 		string func_name = migration_name.replace("-", "_").replace(".", "_").replace(" ", "_").replace("/", "_")
