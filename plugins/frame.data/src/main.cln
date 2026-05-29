@@ -47,6 +47,74 @@ functions:
 		if block_name.startsWith("db.queryAs")
 			return expand_typed_query(block_name, body)
 
+		// Handle CRUD expression blocks.
+		// The compiler calls expand_block with two possible conventions:
+		//   Convention A: block_name="find",  attributes="User"  (from *.find: pattern)
+		//   Convention B: block_name="User.find", attributes=""  (dot-notation)
+		// Both are handled below by extracting the model name from whichever slot is populated.
+		string __bname = block_name
+		string __battr = attributes
+
+		// find: → expand_find
+		if __bname == "find" or __bname.endsWith(".find")
+			string __m = ""
+			if __bname == "find"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 5)
+			if __m.length() > 0
+				return expand_find(__m, body)
+
+		// first: → expand_first
+		if __bname == "first" or __bname.endsWith(".first")
+			string __m = ""
+			if __bname == "first"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 6)
+			if __m.length() > 0
+				return expand_first(__m, body)
+
+		// count: → expand_count
+		if __bname == "count" or __bname.endsWith(".count")
+			string __m = ""
+			if __bname == "count"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 6)
+			if __m.length() > 0
+				return expand_count(__m, body)
+
+		// insert: → expand_insert
+		if __bname == "insert" or __bname.endsWith(".insert")
+			string __m = ""
+			if __bname == "insert"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 7)
+			if __m.length() > 0
+				return expand_insert(__m, body)
+
+		// update: → expand_update
+		if __bname == "update" or __bname.endsWith(".update")
+			string __m = ""
+			if __bname == "update"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 7)
+			if __m.length() > 0
+				return expand_update(__m, body)
+
+		// delete: → expand_delete
+		if __bname == "delete" or __bname.endsWith(".delete")
+			string __m = ""
+			if __bname == "delete"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 7)
+			if __m.length() > 0
+				return expand_delete(__m, body)
+
 		return body
 
 	// Validation entry point
@@ -1161,6 +1229,38 @@ functions:
 		result = result.replace(" != ", " <> ")
 		result = result.replace(" and ", " AND ")
 		result = result.replace(" or ", " OR ")
+		// Convert "value" → 'value' so the value doesn't break the generated string literal
+		result = sql_quote_strings(result)
+		return result
+
+	// Replace double-quoted string literals with single-quoted SQL strings.
+	// e.g. name = "test" → name = 'test'
+	// Single quotes are the SQL standard and don't conflict with the Clean string delimiters
+	// used in generated code (which wraps the SQL in double-quoted string literals).
+	string sql_quote_strings(string s)
+		string result = ""
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch == "\""
+				// Collect inner characters until the matching closing quote
+				integer j = i + 1
+				string inner = ""
+				while j < s.length()
+					string c = s.substring(j, j + 1)
+					if c == "\""
+						break
+					inner = inner + c
+					j = j + 1
+				result = result + "'" + inner + "'"
+				// Advance past the closing quote (j points to it, or past end if unclosed)
+				if j < s.length()
+					i = j + 1
+				else
+					i = j
+			else
+				result = result + ch
+				i = i + 1
 		return result
 
 	// Parse order: clause into SQL
