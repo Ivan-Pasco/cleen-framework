@@ -9,9 +9,6 @@ endpoints:
 		return jsonResponse("{\"ok\": true, \"posts\": " + posts + "}")
 
 	[user, admin, editor] POST "/api/posts":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
 		string body = body()
 		any data = json.tryTextToData(body)
 		if data == null
@@ -21,7 +18,7 @@ endpoints:
 		string slug = json.get(data, "slug")
 		if title == "" or content == "" or slug == ""
 			return badRequest("Title, content, and slug are required")
-		string session = _auth_get_session()
+		string session = auth.getCurrentUser()
 		string authorId = json.getField(session, "id")
 		Post.insert:
 			author_id = authorId

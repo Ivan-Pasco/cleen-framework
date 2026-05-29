@@ -1,8 +1,7 @@
 // Dashboard statistics API
 
 endpoints:
-	GET "/api/dashboard":
-		_auth_require_auth()
+	[user, admin] GET "/api/dashboard":
 		string tasks = Task.find:
 			order: status asc
 		string projects = Project.find:

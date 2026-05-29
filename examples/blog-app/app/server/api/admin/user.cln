@@ -2,9 +2,6 @@
 
 endpoints:
 	[admin] DELETE "/api/admin/user":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
 		string body = body()
 		any data = json.tryTextToData(body)
 		if data == null

@@ -8,5 +8,5 @@ endpoints:
 				email = body
 		if user == "" or user == "null"
 			return jsonResponse("{\"ok\": false, \"error\": \"invalid credentials\"}")
-		string token = _auth_create_session(user, "user")
+		string token = auth.session.create(user, "user")
 		return jsonResponse("{\"ok\": true, \"token\": \"" + token + "\"}")

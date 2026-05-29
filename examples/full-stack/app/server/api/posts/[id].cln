@@ -10,8 +10,7 @@ endpoints:
 			return notFound()
 		return jsonResponse("{\"ok\": true, \"post\": " + post + "}")
 
-	PUT "/api/posts/:id":
-		_auth_require_auth()
+	[user, admin] PUT "/api/posts/:id":
 		string id = param("id")
 		string body = body()
 		Post.update:
@@ -22,8 +21,7 @@ endpoints:
 				id = id
 		return jsonResponse("{\"ok\": true, \"message\": \"post updated\", \"id\": \"" + id + "\"}")
 
-	DELETE "/api/posts/:id":
-		_auth_require_auth()
+	[user, admin] DELETE "/api/posts/:id":
 		string id = param("id")
 		Post.delete:
 			where:

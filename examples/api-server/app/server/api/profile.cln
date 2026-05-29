@@ -1,9 +1,8 @@
 // User profile endpoints
 
 endpoints:
-	GET "/api/profile":
-		_auth_require_auth()
-		string session = _auth_get_session()
+	[user] GET "/api/profile":
+		string session = auth.getCurrentUser()
 		string user = User.first:
 			where:
 				id = session
@@ -11,9 +10,8 @@ endpoints:
 			return notFound()
 		return jsonResponse("{\"ok\": true, \"user\": " + user + "}")
 
-	PUT "/api/profile":
-		_auth_require_auth()
-		string session = _auth_get_session()
+	[user] PUT "/api/profile":
+		string session = auth.getCurrentUser()
 		string body = body()
 		User.update:
 			set:

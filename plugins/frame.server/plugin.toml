@@ -145,21 +145,46 @@ keywords = [
 
 # Custom types provided by the plugin
 types = [
-  { name = "Request", description = "HTTP request context" },
+  {
+    name = "RequestAuth",
+    description = "Authentication context attached to a Request",
+    fields = [
+      { name = "loggedIn",  type = "boolean", description = "True when a valid session or JWT is present" },
+      { name = "userId",    type = "string",  description = "Authenticated user ID (empty when not logged in)" },
+      { name = "role",      type = "string",  description = "Primary role of the authenticated user" },
+      { name = "roles",     type = "string",  description = "JSON array of all roles held by the user" },
+    ]
+  },
+  {
+    name = "Request",
+    description = "HTTP request context — available as a parameter in guard/load functions and endpoint handlers",
+    fields = [
+      { name = "auth",    type = "RequestAuth", description = "Authentication context (loggedIn, userId, role, roles)" },
+      { name = "query",   type = "any",         description = "Query-string parameters object" },
+      { name = "body",    type = "any",         description = "Parsed request body (JSON object or raw string)" },
+      { name = "params",  type = "any",         description = "URL path parameters object" },
+      { name = "headers", type = "any",         description = "Request headers object" },
+      { name = "method",  type = "string",      description = "HTTP method (GET, POST, …)" },
+      { name = "path",    type = "string",      description = "Request URL path" },
+      { name = "ip",      type = "string",      description = "Client IP address" },
+    ]
+  },
   { name = "Response", description = "HTTP response object" },
 ]
 
 # Built-in functions/expressions
 functions = [
-  # Response helpers
+  # Response helpers — generated as Clean Language wrapper functions via preamble injection.
+  # maps_to entries allow the compiler to register them as externals for type-checking
+  # when they are referenced before the preamble is expanded (e.g. in functions: blocks).
   { name = "render", signature = "render(name)", description = "Render HTML page from app/web/pages/<name>.html and return as 200 text/html response" },
   { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page from app/web/pages/<name>.html with JSON data string for {{ key }} template substitution" },
-  { name = "json", signature = "json(data)", description = "Return JSON response with Content-Type: application/json" },
+  { name = "json", signature = "json(data)", description = "Return JSON response with Content-Type: application/json", maps_to = "_res_json" },
   { name = "html", signature = "html(content)", description = "Return HTML response" },
-  { name = "redirect", signature = "redirect(url, status?)", description = "Redirect to URL (default 302)" },
+  { name = "redirect", signature = "redirect(url, status)", description = "Redirect to URL (default 302)", maps_to = "_res_redirect" },
   { name = "notFound", signature = "notFound(message?)", description = "Return 404 Not Found response" },
   { name = "badRequest", signature = "badRequest(message?)", description = "Return 400 Bad Request response" },
-  { name = "unauthorized", signature = "unauthorized(message?)", description = "Return 401 Unauthorized response" },
+  { name = "unauthorized", signature = "unauthorized()", description = "Return 401 Unauthorized response" },
   { name = "error", signature = "error(status, message)", description = "Return error response with given HTTP status" },
   { name = "status", signature = "status(code, body)", description = "Return response with specific HTTP status code" },
   # Request accessors

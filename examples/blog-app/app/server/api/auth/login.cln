@@ -16,10 +16,9 @@ endpoints:
 		if user == "" or user == "null"
 			return unauthorized()
 		string storedHash = json.getField(user, "password_hash")
-		integer valid = _auth_verify_password(password, storedHash)
-		if valid != 1
+		if auth.password.verify(password, storedHash) != 1
 			return unauthorized()
 		string userId = json.getField(user, "id")
 		string role = json.getField(user, "role")
-		string token = _auth_create_session(userId, role)
+		string token = auth.session.create(userId, role)
 		return jsonResponse("{\"ok\": true, \"token\": \"" + token + "\"}")

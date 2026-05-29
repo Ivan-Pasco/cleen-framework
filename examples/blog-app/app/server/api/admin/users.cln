@@ -2,9 +2,6 @@
 
 endpoints:
 	[admin] GET "/api/admin/users":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
 		string users = User.find:
 			order: created_at desc
 		return jsonResponse("{\"ok\": true, \"users\": " + users + "}")

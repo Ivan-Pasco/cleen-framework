@@ -11,9 +11,6 @@ endpoints:
 		return jsonResponse("{\"ok\": true, \"post\": " + post + "}")
 
 	[user, admin, editor] PUT "/api/posts/:id":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
 		string id = param("id")
 		string post = Post.first:
 			where:
@@ -35,9 +32,6 @@ endpoints:
 		return jsonResponse("{\"ok\": true}")
 
 	[user, admin, editor] DELETE "/api/posts/:id":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
 		string id = param("id")
 		string post = Post.first:
 			where:

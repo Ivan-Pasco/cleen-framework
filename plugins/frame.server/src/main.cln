@@ -11,6 +11,10 @@ functions:
 	string expand_block(string block_name, string attributes, string body)
 		if block_name == "endpoints"
 			return expand_endpoints(body)
+		// Preamble: emit response helpers unconditionally so they are available
+		// in functions: blocks even when no endpoints: block is present.
+		if block_name == "__preamble"
+			return emit_response_helpers()
 		return body
 
 	string validate_block(string block_name, string attributes, string body)
@@ -22,15 +26,15 @@ functions:
 		return "[\"endpoints\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\"]"
 
 // ============================================================================
-// ENDPOINTS BLOCK EXPANSION
+// RESPONSE HELPERS — emitted for every file that loads frame.server
 // ============================================================================
 
 functions:
-	string expand_endpoints(string body)
-		string result = ""
-
-		// Add response helpers
-		result = result + "functions:\n"
+	// Generates the response helper functions block.
+	// Called both from expand_endpoints (for endpoints: files) and from the
+	// __preamble path (for functions:-only files such as guard/load handlers).
+	string emit_response_helpers()
+		string result = "functions:\n"
 		result = result + "\tstring jsonResponse(string data)\n"
 		result = result + "\t\treturn _http_respond(200, \"application/json\", data)\n\n"
 		result = result + "\tstring jsonResponseStatus(string data, integer status_code)\n"
@@ -75,6 +79,18 @@ functions:
 		result = result + "\t\treturn _req_header(name)\n\n"
 		result = result + "\tstring method()\n"
 		result = result + "\t\treturn _req_method()\n\n"
+		return result
+
+// ============================================================================
+// ENDPOINTS BLOCK EXPANSION
+// ============================================================================
+
+functions:
+	string expand_endpoints(string body)
+		string result = ""
+
+		// Add response helpers (shared with __preamble path)
+		result = result + emit_response_helpers()
 
 		// Parse endpoints
 		string remaining = body

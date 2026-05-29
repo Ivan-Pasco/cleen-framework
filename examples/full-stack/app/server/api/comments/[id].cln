@@ -1,8 +1,7 @@
 // Single comment API
 
 endpoints:
-	DELETE "/api/comments/:id":
-		_auth_require_auth()
+	[user, admin] DELETE "/api/comments/:id":
 		string id = param("id")
 		Comment.delete:
 			where:

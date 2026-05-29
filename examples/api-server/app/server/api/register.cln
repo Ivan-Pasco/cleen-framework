@@ -3,7 +3,7 @@
 endpoints:
 	POST "/api/register":
 		string body = body()
-		string hash = _auth_hash_password(body)
+		string hash = auth.password.hash(body)
 		User.insert:
 			password_hash = hash
 			role = "user"

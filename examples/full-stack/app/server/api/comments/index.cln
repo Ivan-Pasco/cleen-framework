@@ -6,9 +6,8 @@ endpoints:
 			order: created_at desc
 		return jsonResponse("{\"ok\": true, \"comments\": " + comments + "}")
 
-	POST "/api/comments":
-		_auth_require_auth()
-		string session = _auth_get_session()
+	[user, admin] POST "/api/comments":
+		string session = auth.getCurrentUser()
 		string body = body()
 		Comment.insert:
 			user_id = session

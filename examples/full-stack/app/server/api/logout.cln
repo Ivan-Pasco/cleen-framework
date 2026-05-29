@@ -2,5 +2,5 @@
 
 endpoints:
 	POST "/api/logout":
-		_auth_logout()
+		auth.session.destroy()
 		return jsonResponse("{\"ok\": true, \"message\": \"logged out\"}")

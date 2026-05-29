@@ -2,12 +2,8 @@
 // CRUD operations for todo items
 
 endpoints:
-	GET "/todos":
-		integer isAuth = _auth_require_auth()
-		if isAuth == 0
-			return unauthorized()
-
-		string session = _auth_get_session()
+	[user, admin] GET "/todos":
+		string session = auth.getCurrentUser()
 		any sessionData = json.tryTextToData(session)
 		any userIdField = sessionData.userId
 		string userId = userIdField.toString()
@@ -19,13 +15,9 @@ endpoints:
 
 		return jsonResponse("{\"ok\":true,\"data\":" + results + "}")
 
-	GET "/todos/:id":
-		integer isAuth = _auth_require_auth()
-		if isAuth == 0
-			return unauthorized()
-
+	[user, admin] GET "/todos/:id":
 		string todoId = param("id")
-		string session = _auth_get_session()
+		string session = auth.getCurrentUser()
 		any sessionData = json.tryTextToData(session)
 		any userIdField = sessionData.userId
 		string userId = userIdField.toString()
@@ -40,12 +32,8 @@ endpoints:
 
 		return jsonResponse("{\"ok\":true,\"data\":" + todo + "}")
 
-	POST "/todos":
-		integer isAuth = _auth_require_auth()
-		if isAuth == 0
-			return unauthorized()
-
-		string session = _auth_get_session()
+	[user, admin] POST "/todos":
+		string session = auth.getCurrentUser()
 		any sessionData = json.tryTextToData(session)
 		any userIdField = sessionData.userId
 		string userId = userIdField.toString()
@@ -79,13 +67,9 @@ endpoints:
 
 		return jsonResponse("{\"ok\":true,\"id\":" + newId.toString() + "}")
 
-	DELETE "/todos/:id":
-		integer isAuth = _auth_require_auth()
-		if isAuth == 0
-			return unauthorized()
-
+	[user, admin] DELETE "/todos/:id":
 		string todoId = param("id")
-		string session = _auth_get_session()
+		string session = auth.getCurrentUser()
 		any sessionData = json.tryTextToData(session)
 		any userIdField = sessionData.userId
 		string userId = userIdField.toString()
@@ -97,13 +81,9 @@ endpoints:
 
 		return jsonResponse("{\"ok\":true}")
 
-	PATCH "/todos/:id/toggle":
-		integer isAuth = _auth_require_auth()
-		if isAuth == 0
-			return unauthorized()
-
+	[user, admin] PATCH "/todos/:id/toggle":
 		string todoId = param("id")
-		string session = _auth_get_session()
+		string session = auth.getCurrentUser()
 		any sessionData = json.tryTextToData(session)
 		any userIdField = sessionData.userId
 		string userId = userIdField.toString()

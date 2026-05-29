@@ -8,9 +8,8 @@ endpoints:
 			order: created_at desc
 		return jsonResponse("{\"ok\": true, \"posts\": " + posts + "}")
 
-	POST "/api/posts":
-		_auth_require_auth()
-		string session = _auth_get_session()
+	[user, admin] POST "/api/posts":
+		string session = auth.getCurrentUser()
 		string body = body()
 		Post.insert:
 			user_id = session

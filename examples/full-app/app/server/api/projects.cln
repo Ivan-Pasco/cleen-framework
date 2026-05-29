@@ -1,21 +1,18 @@
 // Projects API
 
 endpoints:
-	GET "/api/projects":
-		_auth_require_auth()
+	[user, admin] GET "/api/projects":
 		string projects = Project.find:
 			order: name asc
 		return jsonResponse("{\"ok\": true, \"projects\": " + projects + "}")
 
-	POST "/api/projects":
-		_auth_require_auth()
+	[user, admin] POST "/api/projects":
 		string body = body()
 		Project.insert:
 			name = body
 		return jsonResponse("{\"ok\": true, \"message\": \"project created\"}")
 
-	GET "/api/projects/:id":
-		_auth_require_auth()
+	[user, admin] GET "/api/projects/:id":
 		string id = param("id")
 		string project = Project.first:
 			where:
@@ -24,8 +21,7 @@ endpoints:
 			return notFound()
 		return jsonResponse("{\"ok\": true, \"project\": " + project + "}")
 
-	PUT "/api/projects/:id":
-		_auth_require_auth()
+	[user, admin] PUT "/api/projects/:id":
 		string id = param("id")
 		string body = body()
 		Project.update:
@@ -35,8 +31,7 @@ endpoints:
 				id = id
 		return jsonResponse("{\"ok\": true, \"message\": \"project updated\", \"id\": \"" + id + "\"}")
 
-	DELETE "/api/projects/:id":
-		_auth_require_auth()
+	[user, admin] DELETE "/api/projects/:id":
 		string id = param("id")
 		Project.delete:
 			where:

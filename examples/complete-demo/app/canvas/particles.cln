@@ -1,41 +1,29 @@
 // Particle animation - frame.canvas plugin
-// Location: app/canvas/ tells the compiler this is a canvas application
+// Location: app/canvas/ — processed automatically by frame.canvas
 
-state:
-	integer canvasId = 0
-	number mouseX = 400.0
-	number mouseY = 200.0
-	integer frameCount = 0
+canvasScene: width=800 height=400 fps=60 background="#0d1117"
 
-functions:
-	void _frame_callback(integer cId)
-		// Clear with dark background
-		_canvas_clear_color(cId, "#0d1117")
+	state:
+		number frameCount = 0.0
 
-		// Simple particle effect - draw circles at semi-random positions
-		frameCount = frameCount + 1
+	onFrame: param="dt"
+		frameCount = frameCount + dt * 60.0
 
-		// Draw multiple particles
-		integer i = 0
-		while i < 50
-			number angle = i.toNumber() * 0.12 + frameCount.toNumber() * 0.02
-			number radius = 100.0 + i.toNumber() * 2.0
-			number x = 400.0 + math.cos(angle) * radius
-			number y = 200.0 + math.sin(angle) * radius
+		on layer "particles":
+			// Center glow
+			canvas.circle x=400 y=200 radius=20 color="#ffffff30"
+			canvas.circle x=400 y=200 radius=10 color="#ffffff"
 
-			// Particle with glow effect
-			number size = 3.0 + math.sin(angle * 2.0) * 2.0
-			_canvas_circle_filled(cId, x, y, size, "#4ecdc4")
-			_canvas_circle_filled(cId, x, y, size * 2.0, "#4ecdc450")
+			// Orbital particles
+			integer i = 0
+			while i < 50
+				number angle = i.toNumber() * 0.12 + frameCount * 0.02
+				number radius = 100.0 + i.toNumber() * 2.0
+				number x = 400.0 + math.cos(angle) * radius
+				number y = 200.0 + math.sin(angle) * radius
+				number size = 3.0 + math.sin(angle * 2.0) * 2.0
 
-			i = i + 1
+				canvas.circle x=x y=y radius=size color="#4ecdc4"
+				canvas.circle x=x y=y radius=size * 2.0 color="#4ecdc450"
 
-		// Draw center glow
-		_canvas_circle_filled(canvasId, 400.0, 200.0, 20.0, "#ffffff30")
-		_canvas_circle_filled(canvasId, 400.0, 200.0, 10.0, "#ffffff")
-
-start:
-	printl("Initializing particle canvas...")
-	canvasId = _canvas_init(800, 400)
-	_canvas_request_frame(canvasId)
-	printl("Particle animation started")
+				i = i + 1

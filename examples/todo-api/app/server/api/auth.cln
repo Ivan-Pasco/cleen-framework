@@ -23,7 +23,7 @@ endpoints:
 		if nameField != null
 			name = nameField.toString()
 
-		string hashedPassword = _auth_hash_password(password)
+		string hashedPassword = auth.password.hash(password)
 
 		integer newId = User.insert:
 			email = email
@@ -63,33 +63,22 @@ endpoints:
 
 		any hashField = userData.password_hash
 		string storedHash = hashField.toString()
-		integer verified = _auth_verify_password(password, storedHash)
-		if verified == 0
+		if auth.password.verify(password, storedHash) == 0
 			return unauthorized()
 
 		any idField = userData.id
-		any nameField = userData.name
 		any roleField = userData.role
 		string userId = idField.toString()
-		string userName = nameField.toString()
 		string userRole = roleField.toString()
 
-		string sessionPayload = "{\"userId\":" + userId + ",\"name\":\"" + userName + "\",\"role\":\"" + userRole + "\"}"
-		integer sessionResult = _auth_create_session(sessionPayload)
+		auth.session.create(userId, userRole)
 
 		return jsonResponse("{\"ok\":true,\"user\":" + userJson + "}")
 
-	POST "/auth/logout":
-		integer isAuth = _auth_require_auth()
-		if isAuth == 0
-			return unauthorized()
-
+	[user, admin] POST "/auth/logout":
+		auth.session.destroy()
 		return jsonResponse("{\"ok\":true,\"message\":\"Logged out\"}")
 
-	GET "/auth/me":
-		integer isAuth = _auth_require_auth()
-		if isAuth == 0
-			return unauthorized()
-
-		string session = _auth_get_session()
+	[user, admin] GET "/auth/me":
+		string session = auth.getCurrentUser()
 		return jsonResponse("{\"ok\":true,\"user\":" + session + "}")

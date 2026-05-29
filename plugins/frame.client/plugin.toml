@@ -72,22 +72,24 @@ keywords = [
 types = []
 
 functions = [
-  # API
-  { name = "api.get", signature = "api.get(url, handlerName)", description = "Send GET request, dispatch response to handler (exported function name)" },
-  { name = "api.post", signature = "api.post(url, body, handlerName)", description = "Send POST request with body (handler is exported function name)" },
-  { name = "api.put", signature = "api.put(url, body, handlerName)", description = "Send PUT request with body (handler is exported function name)" },
-  { name = "api.patch", signature = "api.patch(url, body, handlerName)", description = "Send PATCH request with body (handler is exported function name)" },
-  { name = "api.delete", signature = "api.delete(url, handlerName)", description = "Send DELETE request (handler is exported function name)" },
-  { name = "api.header", signature = "api.header(name, value)", description = "Set header for next request" },
+  # API request functions — use 'later result = api.get(url)' to suspend until response arrives
+  { name = "api.get", signature = "later result = api.get(url)", description = "GET request. Suspends until response arrives. Returns ApiResponse." },
+  { name = "api.post", signature = "later result = api.post(url, body)", description = "POST with JSON body. Returns ApiResponse." },
+  { name = "api.put", signature = "later result = api.put(url, body)", description = "PUT with JSON body. Returns ApiResponse." },
+  { name = "api.patch", signature = "later result = api.patch(url, body)", description = "PATCH with JSON body. Returns ApiResponse." },
+  { name = "api.delete", signature = "later result = api.delete(url)", description = "DELETE request. Returns ApiResponse." },
+  { name = "api.submit", signature = "later result = api.submit(formSelector, url, method)", description = "Collect form fields as JSON and send. Returns ApiResponse." },
+  # Request configuration (call before the request)
+  { name = "api.header", signature = "api.header(name, value)", description = "Set header for next request only" },
   { name = "api.timeout", signature = "api.timeout(ms)", description = "Set timeout for next request in ms" },
-  { name = "api.auth", signature = "api.auth(scheme, credential)", description = "Set auth for all requests (bearer or basic)" },
-  { name = "api.clearAuth", signature = "api.clearAuth()", description = "Clear stored auth" },
-  { name = "api.submit", signature = "api.submit(formSelector, url, method, handlerName)", description = "Collect form data as JSON, send to URL (handler is exported function name)" },
-  { name = "api.status", signature = "api.status()", description = "Response status code (in handler)" },
-  { name = "api.body", signature = "api.body()", description = "Response body string (in handler)" },
-  { name = "api.ok", signature = "api.ok()", description = "1 if status 200-299 (in handler)" },
-  { name = "api.json", signature = "api.json(path)", description = "Extract JSON value by dot-path (in handler)" },
-  { name = "api.responseHeader", signature = "api.responseHeader(name)", description = "Get response header (in handler)" },
+  { name = "api.auth", signature = "api.auth(scheme, credential)", description = "Set auth for ALL subsequent requests (bearer or basic). Persists until api.clearAuth()." },
+  { name = "api.clearAuth", signature = "api.clearAuth()", description = "Clear stored auth credentials" },
+  # ApiResponse properties — read on 'result' after 'later' resolves
+  { name = "result.ok", signature = "result.ok", description = "boolean — true if HTTP status 200-299" },
+  { name = "result.status", signature = "result.status", description = "integer — HTTP status code (0 = network error)" },
+  { name = "result.body", signature = "result.body", description = "string — response body" },
+  { name = "result.json", signature = "result.json(path)", description = "Extract value from JSON body via dot-notation path. Returns any." },
+  { name = "result.header", signature = "result.header(name)", description = "Get response header value by name" },
   # Live
   { name = "live.open", signature = "live.open(url, onMessageName, onCloseName, onErrorName)", description = "Open WebSocket connection (handlers are exported function names), returns connection ID" },
   { name = "live.send", signature = "live.send(connId, message)", description = "Send message on connection" },
@@ -109,15 +111,60 @@ functions = [
 ]
 
 completions = [
-  { trigger = "api.get", insert = "api.get(\"${1:/api/}\", \"${2:onResponse}\")" },
-  { trigger = "api.post", insert = "api.post(\"${1:/api/}\", ${2:body}, \"${3:onResponse}\")" },
-  { trigger = "api.submit", insert = "api.submit(\"${1:#form}\", \"${2:/api/}\", \"POST\", \"${3:onResponse}\")" },
+  { trigger = "api.get", insert = "later ${1:result} = api.get(\"${2:/api/}\")" },
+  { trigger = "api.post", insert = "later ${1:result} = api.post(\"${2:/api/}\", ${3:body})" },
+  { trigger = "api.put", insert = "later ${1:result} = api.put(\"${2:/api/}\", ${3:body})" },
+  { trigger = "api.patch", insert = "later ${1:result} = api.patch(\"${2:/api/}\", ${3:body})" },
+  { trigger = "api.delete", insert = "later ${1:result} = api.delete(\"${2:/api/}\")" },
+  { trigger = "api.submit", insert = "later ${1:result} = api.submit(\"${2:#form}\", \"${3:/api/}\", \"POST\")" },
   { trigger = "api.auth", insert = "api.auth(\"bearer\", ${1:token})" },
   { trigger = "live.open", insert = "live.open(\"${1:wss://}\", \"${2:onMessage}\", \"${3:onClose}\", \"${4:onError}\")" },
   { trigger = "live.send", insert = "live.send(${1:conn}, ${2:message})" },
   { trigger = "feed.open", insert = "feed.open(\"${1:/api/stream}\", \"${2:onMessage}\", \"${3:onError}\")" },
   { trigger = "feed.on", insert = "feed.on(${1:conn}, \"${2:event}\", \"${3:onEvent}\")" },
 ]
+
+[ai]
+description = "Client-side communication plugin. Use api.* with 'later result = api.get(url)' for HTTP requests, live.* for WebSocket connections, feed.* for SSE streams. Never use JavaScript fetch/XHR/WebSocket/EventSource."
+constraints = [
+  "Never use JavaScript fetch(), XMLHttpRequest, or $.ajax() — use api.* for all HTTP calls",
+  "Never write <script> tags with WebSocket or EventSource — use live.* and feed.* instead",
+  "api.* uses 'later result = api.get(url)' — NEVER pass a handler name to api.get/post/put/patch/delete/submit",
+  "live.* and feed.* still use named handler strings — they are persistent streams, not one-shot requests",
+  "frame.client runs in the browser WASM context — never call db.*, http.*, or any server-only functions",
+  "api.auth(scheme, credential) persists for all subsequent requests — call once per session, not per request",
+  "Check result.ok before reading result.json() — always handle the error case to avoid silent failures",
+]
+
+[[ai.patterns]]
+name = "crud-form"
+use_when = "a component creates or updates a record via an API call with form data"
+anti_pattern = "calling fetch() or XMLHttpRequest directly, passing a handler name to api.post, or manually serializing form fields — use api.submit() which collects the form as JSON automatically"
+example = "patterns/crud-form.cln"
+
+[[ai.patterns]]
+name = "auth-flow"
+use_when = "a component authenticates and must persist credentials for subsequent API calls"
+anti_pattern = "storing the token in a JS variable, localStorage, or passing it manually in every request header — call api.auth('bearer', token) once and it applies to all subsequent api.* calls automatically"
+example = "patterns/auth-flow.cln"
+
+[[ai.patterns]]
+name = "live-notifications"
+use_when = "the app needs real-time server-to-client push: chat, presence, live counters, or collaborative editing"
+anti_pattern = "writing new WebSocket(...) in a <script> tag, polling with repeated api.get() calls, or storing the connection object in JS — use live.open() with named handler functions and store the connId in state"
+example = "patterns/live-notifications.cln"
+
+[[ai.patterns]]
+name = "sse-progress"
+use_when = "a component tracks progress of a long-running server operation: file import, batch job, report generation"
+anti_pattern = "polling with repeated api.get() calls every N seconds, or writing new EventSource(...) in a <script> tag — use feed.open() which handles reconnection and named events automatically"
+example = "patterns/sse-progress.cln"
+
+[[ai.patterns]]
+name = "api-error-handling"
+use_when = "any component that makes API calls and must show user-facing error messages or handle network failures"
+anti_pattern = "ignoring result.ok and assuming success, showing the raw result.body as an error message, or crashing when result.status == 0 (network error) — always check result.ok first, then branch on result.status for specific cases"
+example = "patterns/api-error-handling.cln"
 
 [paths]
 owns = []

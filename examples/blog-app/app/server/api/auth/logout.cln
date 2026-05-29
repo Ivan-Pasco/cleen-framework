@@ -1,9 +1,6 @@
 // Logout endpoint
 
 endpoints:
-	POST "/api/auth/logout":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
-		_auth_logout()
+	[user, admin] POST "/api/auth/logout":
+		auth.session.destroy()
 		return jsonResponse("{\"ok\": true}")

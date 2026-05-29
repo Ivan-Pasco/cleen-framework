@@ -10,9 +10,6 @@ endpoints:
 		return jsonResponse("{\"ok\": true, \"comments\": " + comments + "}")
 
 	[user, admin] POST "/api/comments":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
 		string body = body()
 		any data = json.tryTextToData(body)
 		if data == null
@@ -21,7 +18,7 @@ endpoints:
 		string commentBody = json.get(data, "body")
 		if postId == "" or commentBody == ""
 			return badRequest("post_id and body are required")
-		string session = _auth_get_session()
+		string session = auth.getCurrentUser()
 		string authorId = json.getField(session, "id")
 		Comment.insert:
 			post_id = postId

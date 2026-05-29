@@ -1,9 +1,6 @@
 // User lookup endpoint
 
 endpoints:
-	GET "/api/user":
-		integer authed = _auth_require_auth()
-		if authed != 1
-			return unauthorized()
-		string session = _auth_get_session()
+	[user, admin] GET "/api/user":
+		string session = auth.getCurrentUser()
 		return jsonResponse("{\"ok\": true, \"user\": " + session + "}")

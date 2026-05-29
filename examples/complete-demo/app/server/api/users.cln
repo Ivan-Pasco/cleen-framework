@@ -2,36 +2,21 @@
 
 endpoints:
 	GET "/api/users":
-		string sql = "SELECT id, email, username, created_at, is_active FROM users ORDER BY id DESC LIMIT 50"
-		string result = _db_query(sql, "[]")
-
-		any data = json.tryTextToData(result)
-		if data == null
-			return badRequest("Database query failed")
-
-		any dataObj = data.data
-		if dataObj == null
-			return badRequest("No data returned")
-
-		any rowCount = dataObj.count
-		any rows = dataObj.rows
-
-		string resp = "{\"ok\":true,\"count\":"
-		resp = resp + rowCount.toString()
-		resp = resp + ",\"users\":"
-		resp = resp + json.dataToText(rows)
-		resp = resp + "}"
-		return jsonResponse(resp)
+		list<User> users = User.find:
+			order:
+				id desc
+			limit:
+				50
+		return json(users)
 
 	POST "/api/users":
-		string body = body()
-		any bodyData = json.tryTextToData(body)
-		if bodyData == null
+		any body = json.tryTextToData(body())
+		if body == null
 			return badRequest("Invalid JSON")
 
-		any emailField = bodyData.email
-		any usernameField = bodyData.username
-		any passwordField = bodyData.password
+		any emailField = body.email
+		any usernameField = body.username
+		any passwordField = body.password
 
 		if emailField == null
 			return badRequest("Email is required")
@@ -44,66 +29,45 @@ endpoints:
 		string username = usernameField.toString()
 		string password = passwordField.toString()
 
-		string sql = "INSERT INTO users (email, username, password_hash, is_active) VALUES (?, ?, ?, 1)"
-		string params = "[\"" + email + "\",\"" + username + "\",\"" + password + "\"]"
-		integer insertId = _db_execute(sql, params)
+		integer insertId = User.insert:
+			email = email
+			username = username
+			password_hash = password
+			is_active = true
 
 		if insertId < 1
 			return badRequest("Insert failed")
 
-		string resp = "{\"ok\":true,\"id\":"
-		resp = resp + insertId.toString()
-		resp = resp + ",\"email\":\""
-		resp = resp + email
-		resp = resp + "\",\"username\":\""
-		resp = resp + username
-		resp = resp + "\"}"
-		return jsonResponse(resp)
+		return json({ "ok": true, "id": insertId, "email": email, "username": username })
 
 	GET "/api/users/:id":
 		string userId = param("id")
-
 		if userId == ""
 			return badRequest("User ID required")
 
-		string sql = "SELECT id, email, username, created_at, is_active FROM users WHERE id = ?"
-		string params = "[" + userId + "]"
-		string result = _db_query(sql, params)
+		User user = User.first:
+			where:
+				id == userId.toInteger()
 
-		any data = json.tryTextToData(result)
-		if data == null
-			return badRequest("Query failed")
-
-		any dataObj = data.data
-		any rowCount = dataObj.count
-		integer count = rowCount.toInteger()
-
-		if count == 0
+		if user == null
 			return notFound()
 
-		any rows = dataObj.rows
-		any user = list.get(rows, 0)
-
-		string resp = "{\"ok\":true,\"user\":"
-		resp = resp + json.dataToText(user)
-		resp = resp + "}"
-		return jsonResponse(resp)
+		return json(user)
 
 	DELETE "/api/users/:id":
 		string userId = param("id")
-		string sql = "DELETE FROM users WHERE id = ?"
-		string params = "[" + userId + "]"
-		integer deleteResult = _db_execute(sql, params)
-		return jsonResponse("{\"ok\":true,\"message\":\"User deleted\"}")
+		User.delete:
+			where:
+				id == userId.toInteger()
+		return json({ "ok": true, "message": "User deleted" })
 
 	POST "/api/users/login":
-		string body = body()
-		any bodyData = json.tryTextToData(body)
-		if bodyData == null
+		any body = json.tryTextToData(body())
+		if body == null
 			return badRequest("Invalid JSON")
 
-		any emailField = bodyData.email
-		any passwordField = bodyData.password
+		any emailField = body.email
+		any passwordField = body.password
 
 		if emailField == null
 			return badRequest("Email required")
@@ -113,25 +77,13 @@ endpoints:
 		string email = emailField.toString()
 		string password = passwordField.toString()
 
-		string sql = "SELECT id, email, username FROM users WHERE email = ? AND password_hash = ? AND is_active = 1"
-		string params = "[\"" + email + "\",\"" + password + "\"]"
-		string result = _db_query(sql, params)
+		User user = User.first:
+			where:
+				email == email
+				password_hash == password
+				is_active == true
 
-		any data = json.tryTextToData(result)
-		if data == null
-			return badRequest("Query failed")
-
-		any dataObj = data.data
-		any rowCount = dataObj.count
-		integer count = rowCount.toInteger()
-
-		if count == 0
+		if user == null
 			return unauthorized()
 
-		any rows = dataObj.rows
-		any user = list.get(rows, 0)
-
-		string resp = "{\"ok\":true,\"user\":"
-		resp = resp + json.dataToText(user)
-		resp = resp + "}"
-		return jsonResponse(resp)
+		return json({ "ok": true, "user": user })

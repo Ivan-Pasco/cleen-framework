@@ -16,7 +16,7 @@ endpoints:
 				email = email
 		if existing != "" and existing != "null"
 			return badRequest("An account with that email already exists")
-		string hash = _auth_hash_password(password)
+		string hash = auth.password.hash(password)
 		User.insert:
 			email = email
 			password_hash = hash
@@ -26,5 +26,5 @@ endpoints:
 			where:
 				email = email
 		string userId = json.getField(user, "id")
-		string token = _auth_create_session(userId, "user")
+		string token = auth.session.create(userId, "user")
 		return jsonResponse("{\"ok\": true, \"token\": \"" + token + "\"}")

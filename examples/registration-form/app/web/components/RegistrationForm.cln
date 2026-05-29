@@ -1,24 +1,7 @@
 // Registration Form Component
-// Renders the account creation form with password strength indicator
+// Renders the account creation form with art deco styling
 
-component RegistrationForm:
-	functions:
-		integer calculateStrength(string password)
-			integer strength = 0
-			if password.length() >= 8
-				strength = strength + 1
-			if password.length() >= 12
-				strength = strength + 1
-			return strength
-
-		string getStrengthLabel(integer strength)
-			if strength >= 3
-				return "Strong"
-			if strength >= 2
-				return "Medium"
-			if strength >= 1
-				return "Weak"
-			return ""
+component: tag="registration-form", client="off"
 
 	html:
 		<div class="page-container">

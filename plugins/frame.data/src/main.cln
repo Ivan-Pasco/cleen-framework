@@ -793,13 +793,16 @@ functions:
 		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
 
 	// Expand Model.first: block
+	// Injects limit: 1 into the body before delegating to expand_find so the
+	// SQL gets LIMIT 1 baked in.  The result is wrapped with list.first() to
+	// extract the single element from the typed list<Model> that expand_find
+	// returns.  This avoids the undefined __parse_first helper.
 	string expand_first(string model_name, string body)
-		string find_expr = expand_find(model_name, body)
-		// Add LIMIT 1 if not present
-		if find_expr.indexOf("LIMIT") == -1
-			integer close_quote = find_expr.lastIndexOf("\"")
-			find_expr = find_expr.substring(0, close_quote) + " LIMIT 1" + find_expr.substring(close_quote, find_expr.length())
-		return "__parse_first(" + find_expr + ")"
+		string first_body = body
+		if first_body.indexOf("limit:") == -1
+			first_body = first_body + "\nlimit:\n\t1\n"
+		string find_expr = expand_find(model_name, first_body)
+		return "list.first(" + find_expr + ")"
 
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
@@ -1051,11 +1054,10 @@ functions:
 			result = result + "\t\treturn 0\n"
 		result = result + "\n"
 
-		// Register the migration with the runtime so it is tracked in the
-		// migrations version table.  The runtime stores name, version hash,
-		// and applied_at timestamp; the function pointers are resolved by name.
-		result = result + "\n"
-		result = result + "_db_register_migration(\"" + migration_name + "\")\n"
+		// Register the migration with the runtime at startup so it is tracked
+		// in the migrations version table.
+		result = result + "\nstart:\n"
+		result = result + "\t_db_register_migration(\"" + migration_name + "\")\n"
 
 		return result
 
