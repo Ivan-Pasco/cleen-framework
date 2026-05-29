@@ -1,0 +1,955 @@
+// frame.mcp plugin - MCP Server DSL
+// Provides: mcp: block with tool, resource, and prompt sub-blocks
+// Version: 1.0.0
+// Implements: Frame MCP Specification v1.0 (documents/specification/15_frame_mcp.md)
+//
+// expand_block("mcp", attributes, body) → valid Clean Language code string
+// that, when compiled, runs a fully compliant MCP JSON-RPC 2.0 server.
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
+
+functions:
+	string expand_block(string block_name, string attributes, string body)
+		if block_name == "mcp"
+			return expand_mcp(attributes, body)
+		return body
+
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "mcp"
+			return validate_mcp(attributes, body)
+		return ""
+
+	string get_keywords()
+		return "[\"mcp\", \"tool\", \"resource\", \"prompt\", \"params\", \"args\", \"transport\", \"apiKey\", \"mimeType\", \"version\", \"description\", \"port\", \"host\", \"json\", \"text\", \"error\"]"
+
+// ============================================================================
+// TOP-LEVEL MCP EXPANSION
+// ============================================================================
+
+functions:
+	string expand_mcp(string attributes, string body)
+		// Extract server-level config
+		string server_name = extract_server_name(attributes)
+		string server_version = extract_config_value(body, "version")
+		if server_version == ""
+			server_version = "1.0.0"
+		string transport = extract_transport(body)
+
+		// Collect all tools
+		string tools_code = ""
+		string tools_list_entries = ""
+		string tools_dispatch_cases = ""
+		integer tool_count = 0
+		integer tool_scan_start = 0
+		boolean tools_keep_going = true
+
+		while tool_count < 50 and tools_keep_going
+			integer tool_pos = find_block_start(body, "\ttool \"", tool_scan_start)
+			if tool_pos < 0
+				tools_keep_going = false
+			else
+				string tool_name = extract_quoted_name(body, tool_pos + 6)
+				integer tool_body_start = find_block_body_start(body, tool_pos)
+				integer tool_body_end = find_block_end_at_one_tab(body, tool_body_start)
+				string tool_body = body.substring(tool_body_start, tool_body_end)
+
+				string t_desc = extract_subconfig_value(tool_body, "description")
+				string params_body = extract_params_body(tool_body, "params")
+				string handler_body = extract_handler_body(tool_body, params_body)
+
+				string schema_json = build_tool_json_schema(params_body)
+				string list_entry = "{\"name\":\"" + tool_name + "\",\"description\":\"" + json_escape_str(t_desc) + "\",\"inputSchema\":" + schema_json + "}"
+				if tool_count > 0
+					tools_list_entries = tools_list_entries + ","
+				tools_list_entries = tools_list_entries + list_entry
+
+				string fn_name = "__mcp_tool_" + sanitize_name(tool_name)
+				tools_code = tools_code + build_tool_handler(fn_name, params_body, handler_body)
+
+				string dispatch_case = "\t\tif name == \"" + tool_name + "\"\n\t\t\tresult = " + fn_name + "(__params_json)\n"
+				tools_dispatch_cases = tools_dispatch_cases + dispatch_case
+
+				tool_scan_start = tool_body_end
+				tool_count = tool_count + 1
+
+		// Collect all resources
+		string resources_code = ""
+		string resources_list_entries = ""
+		string resources_dispatch_cases = ""
+		integer resource_count = 0
+		integer resource_scan_start = 0
+		boolean resources_keep_going = true
+
+		while resource_count < 50 and resources_keep_going
+			integer resource_pos = find_block_start(body, "\tresource \"", resource_scan_start)
+			if resource_pos < 0
+				resources_keep_going = false
+			else
+				string resource_uri = extract_quoted_name(body, resource_pos + 10)
+				integer resource_body_start = find_block_body_start(body, resource_pos)
+				integer resource_body_end = find_block_end_at_one_tab(body, resource_body_start)
+				string resource_body = body.substring(resource_body_start, resource_body_end)
+
+				string r_desc = extract_subconfig_value(resource_body, "description")
+				string r_mime = extract_subconfig_value(resource_body, "mimeType")
+				if r_mime == ""
+					r_mime = "application/json"
+				string r_handler_body = extract_resource_handler_body(resource_body)
+
+				string r_list_entry = "{\"uri\":\"" + resource_uri + "\",\"name\":\"" + resource_uri + "\",\"description\":\"" + json_escape_str(r_desc) + "\",\"mimeType\":\"" + r_mime + "\"}"
+				if resource_count > 0
+					resources_list_entries = resources_list_entries + ","
+				resources_list_entries = resources_list_entries + r_list_entry
+
+				string r_safe_name = "__mcp_resource_" + sanitize_uri(resource_uri)
+				resources_code = resources_code + build_resource_handler(r_safe_name, r_handler_body)
+
+				string r_dispatch_case = "\t\tif uri == \"" + resource_uri + "\"\n\t\t\tresult = " + r_safe_name + "()\n"
+				resources_dispatch_cases = resources_dispatch_cases + r_dispatch_case
+
+				resource_scan_start = resource_body_end
+				resource_count = resource_count + 1
+
+		// Collect all prompts
+		string prompts_code = ""
+		string prompts_list_entries = ""
+		string prompts_dispatch_cases = ""
+		integer prompt_count = 0
+		integer prompt_scan_start = 0
+		boolean prompts_keep_going = true
+
+		while prompt_count < 50 and prompts_keep_going
+			integer prompt_pos = find_block_start(body, "\tprompt \"", prompt_scan_start)
+			if prompt_pos < 0
+				prompts_keep_going = false
+			else
+				string prompt_name = extract_quoted_name(body, prompt_pos + 8)
+				integer prompt_body_start = find_block_body_start(body, prompt_pos)
+				integer prompt_body_end = find_block_end_at_one_tab(body, prompt_body_start)
+				string prompt_body = body.substring(prompt_body_start, prompt_body_end)
+
+				string p_desc = extract_subconfig_value(prompt_body, "description")
+				string args_body = extract_params_body(prompt_body, "args")
+				string p_handler_body = extract_handler_body(prompt_body, args_body)
+
+				string p_args_json = build_prompt_args_json(args_body)
+				string p_list_entry = "{\"name\":\"" + prompt_name + "\",\"description\":\"" + json_escape_str(p_desc) + "\",\"arguments\":" + p_args_json + "}"
+				if prompt_count > 0
+					prompts_list_entries = prompts_list_entries + ","
+				prompts_list_entries = prompts_list_entries + p_list_entry
+
+				string p_fn_name = "__mcp_prompt_" + sanitize_name(prompt_name)
+				prompts_code = prompts_code + build_prompt_handler(p_fn_name, args_body, p_handler_body)
+
+				string p_dispatch_case = "\t\tif name == \"" + prompt_name + "\"\n\t\t\tresult = " + p_fn_name + "(__args_json)\n"
+				prompts_dispatch_cases = prompts_dispatch_cases + p_dispatch_case
+
+				prompt_scan_start = prompt_body_end
+				prompt_count = prompt_count + 1
+
+		// Assemble capabilities for initialize response
+		string capabilities = build_capabilities_json(tool_count, resource_count, prompt_count)
+
+		// Build the full output
+		string out = "functions:\n"
+
+		// JSON escape utility (always emitted)
+		out = out + "\tstring __mcp_json_escape(string s)\n"
+		out = out + "\t\tstring r = s.replace(\"\\\\\", \"\\\\\\\\\")\n"
+		out = out + "\t\tr = r.replace(\"\\\"\", \"\\\\\\\"\")\n"
+		out = out + "\t\tr = r.replace(\"\\n\", \"\\\\n\")\n"
+		out = out + "\t\tr = r.replace(\"\\r\", \"\\\\r\")\n"
+		out = out + "\t\tr = r.replace(\"\\t\", \"\\\\t\")\n"
+		out = out + "\t\treturn r\n\n"
+
+		// JSON extraction helpers (always emitted)
+		out = out + "\tstring __mcp_extract_str(string __json, string __key)\n"
+		out = out + "\t\tstring __search = \"\\\"\" + __key + \"\\\":\\\"\"\n"
+		out = out + "\t\tinteger __pos = __json.indexOf(__search)\n"
+		out = out + "\t\tif __pos < 0\n"
+		out = out + "\t\t\treturn \"\"\n"
+		out = out + "\t\tinteger __start = __pos + __search.length()\n"
+		out = out + "\t\tinteger __end = __json.indexOf(\"\\\"\", __start)\n"
+		out = out + "\t\tif __end < 0\n"
+		out = out + "\t\t\treturn \"\"\n"
+		out = out + "\t\treturn __json.substring(__start, __end)\n\n"
+
+		out = out + "\tstring __mcp_extract_str_default(string __json, string __key, string __default)\n"
+		out = out + "\t\tstring __search2 = \"\\\"\" + __key + \"\\\":\\\"\"\n"
+		out = out + "\t\tinteger __pos2 = __json.indexOf(__search2)\n"
+		out = out + "\t\tif __pos2 < 0\n"
+		out = out + "\t\t\treturn __default\n"
+		out = out + "\t\tinteger __start2 = __pos2 + __search2.length()\n"
+		out = out + "\t\tinteger __end2 = __json.indexOf(\"\\\"\", __start2)\n"
+		out = out + "\t\tif __end2 < 0\n"
+		out = out + "\t\t\treturn __default\n"
+		out = out + "\t\tstring __val2 = __json.substring(__start2, __end2)\n"
+		out = out + "\t\tif __val2 == \"\"\n"
+		out = out + "\t\t\treturn __default\n"
+		out = out + "\t\treturn __val2\n\n"
+
+		out = out + "\tinteger __mcp_extract_int(string __json, string __key)\n"
+		out = out + "\t\tstring __isearch = \"\\\"\" + __key + \"\\\":\"\n"
+		out = out + "\t\tinteger __ipos = __json.indexOf(__isearch)\n"
+		out = out + "\t\tif __ipos < 0\n"
+		out = out + "\t\t\treturn 0\n"
+		out = out + "\t\tinteger __istart = __ipos + __isearch.length()\n"
+		out = out + "\t\tstring __irest = __json.substring(__istart, __json.length())\n"
+		out = out + "\t\tinteger __icomma = __irest.indexOf(\",\")\n"
+		out = out + "\t\tinteger __ibrace = __irest.indexOf(\"}\")\n"
+		out = out + "\t\tinteger __iend = __irest.length()\n"
+		out = out + "\t\tif __icomma >= 0 and __icomma < __iend\n"
+		out = out + "\t\t\t__iend = __icomma\n"
+		out = out + "\t\tif __ibrace >= 0 and __ibrace < __iend\n"
+		out = out + "\t\t\t__iend = __ibrace\n"
+		out = out + "\t\tstring __inum = __irest.substring(0, __iend).trim()\n"
+		out = out + "\t\tif __inum == \"\"\n"
+		out = out + "\t\t\treturn 0\n"
+		out = out + "\t\treturn __inum.toInteger()\n\n"
+
+		out = out + "\tinteger __mcp_extract_int_default(string __json, string __key, integer __default)\n"
+		out = out + "\t\tstring __disearch = \"\\\"\" + __key + \"\\\":\"\n"
+		out = out + "\t\tinteger __dipos = __json.indexOf(__disearch)\n"
+		out = out + "\t\tif __dipos < 0\n"
+		out = out + "\t\t\treturn __default\n"
+		out = out + "\t\treturn __mcp_extract_int(__json, __key)\n\n"
+
+		out = out + "\tstring __mcp_extract_bool_str(string __json, string __key)\n"
+		out = out + "\t\tstring __bsearch = \"\\\"\" + __key + \"\\\":\"\n"
+		out = out + "\t\tinteger __bpos = __json.indexOf(__bsearch)\n"
+		out = out + "\t\tif __bpos < 0\n"
+		out = out + "\t\t\treturn \"false\"\n"
+		out = out + "\t\tinteger __bstart = __bpos + __bsearch.length()\n"
+		out = out + "\t\tstring __brest = __json.substring(__bstart, __json.length())\n"
+		out = out + "\t\tinteger __bcomma = __brest.indexOf(\",\")\n"
+		out = out + "\t\tinteger __bbrace = __brest.indexOf(\"}\")\n"
+		out = out + "\t\tinteger __bend = __brest.length()\n"
+		out = out + "\t\tif __bcomma >= 0 and __bcomma < __bend\n"
+		out = out + "\t\t\t__bend = __bcomma\n"
+		out = out + "\t\tif __bbrace >= 0 and __bbrace < __bend\n"
+		out = out + "\t\t\t__bend = __bbrace\n"
+		out = out + "\t\treturn __brest.substring(0, __bend).trim()\n\n"
+
+		// Response helpers (json, text, error)
+		out = out + "\tstring json(string __data)\n"
+		out = out + "\t\treturn \"{\\\"type\\\":\\\"text\\\",\\\"text\\\":\" + __data + \"}\"\n\n"
+
+		out = out + "\tstring text(string __msg)\n"
+		out = out + "\t\treturn \"{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"\" + __mcp_json_escape(__msg) + \"\\\"}\"\n\n"
+
+		out = out + "\tstring error(string __message)\n"
+		out = out + "\t\treturn \"{\\\"isError\\\":true,\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"\" + __mcp_json_escape(__message) + \"\\\"}]}\"\n\n"
+
+		// Tool handlers
+		if tools_code.length() > 0
+			out = out + tools_code
+
+		// __mcp_tools_list()
+		out = out + "\tstring __mcp_tools_list()\n"
+		out = out + "\t\treturn \"[" + tools_list_entries + "]\"\n\n"
+
+		// Resource handlers
+		if resources_code.length() > 0
+			out = out + resources_code
+
+		// __mcp_resources_list()
+		out = out + "\tstring __mcp_resources_list()\n"
+		out = out + "\t\treturn \"[" + resources_list_entries + "]\"\n\n"
+
+		// Prompt handlers
+		if prompts_code.length() > 0
+			out = out + prompts_code
+
+		// __mcp_prompts_list()
+		out = out + "\tstring __mcp_prompts_list()\n"
+		out = out + "\t\treturn \"[" + prompts_list_entries + "]\"\n\n"
+
+		// __mcp_dispatch_tool
+		out = out + "\tstring __mcp_dispatch_tool(string name, string __params_json, string __req_id)\n"
+		out = out + "\t\tstring result = \"\"\n"
+		if tools_dispatch_cases.length() > 0
+			out = out + tools_dispatch_cases
+		out = out + "\t\tif result == \"\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Tool not found: \" + name + \"\\\"}}\"\n"
+		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"content\\\":[\" + result + \"]}}\"\n\n"
+
+		// __mcp_dispatch_resource
+		out = out + "\tstring __mcp_dispatch_resource(string uri, string __req_id)\n"
+		out = out + "\t\tstring result = \"\"\n"
+		if resources_dispatch_cases.length() > 0
+			out = out + resources_dispatch_cases
+		out = out + "\t\tif result == \"\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Resource not found: \" + uri + \"\\\"}}\"\n"
+		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"contents\\\":[{\\\"uri\\\":\\\"\" + uri + \"\\\",\\\"mimeType\\\":\\\"application/json\\\",\\\"text\\\":\" + result + \"}]}}\"\n\n"
+
+		// __mcp_dispatch_prompt
+		out = out + "\tstring __mcp_dispatch_prompt(string name, string __args_json, string __req_id)\n"
+		out = out + "\t\tstring result = \"\"\n"
+		if prompts_dispatch_cases.length() > 0
+			out = out + prompts_dispatch_cases
+		out = out + "\t\tif result == \"\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Prompt not found: \" + name + \"\\\"}}\"\n"
+		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":{\\\"type\\\":\\\"text\\\",\\\"text\\\":\" + result + \"}}]}}\"\n\n"
+
+		// __mcp_handle — the main JSON-RPC dispatcher
+		out = out + build_handle_fn(server_name, server_version, capabilities)
+
+		// start: block with the transport loop
+		out = out + build_start_block(transport)
+
+		return out
+
+// ============================================================================
+// SERVER NAME AND CONFIG EXTRACTION
+// ============================================================================
+
+functions:
+	// Extract server name from attributes: mcp "server-name" → server-name
+	string extract_server_name(string attributes)
+		string trimmed = attributes.trim()
+		integer open_q = trimmed.indexOf("\"")
+		if open_q < 0
+			return "mcp-server"
+		string after_open = trimmed.substring(open_q + 1, trimmed.length())
+		integer close_q = after_open.indexOf("\"")
+		if close_q < 0
+			return "mcp-server"
+		return after_open.substring(0, close_q)
+
+	// Find a top-level config line: \tkey: "value" → value (without quotes)
+	string extract_config_value(string body, string key)
+		string search = "\t" + key + ": \""
+		integer pos = body.indexOf(search)
+		if pos < 0
+			return ""
+		integer val_start = pos + search.length()
+		string after = body.substring(val_start, body.length())
+		integer close_q = after.indexOf("\"")
+		if close_q < 0
+			return ""
+		return after.substring(0, close_q)
+
+	// Extract transport: stdio or http (default: stdio)
+	string extract_transport(string body)
+		string search = "\ttransport: "
+		integer pos = body.indexOf(search)
+		if pos < 0
+			return "stdio"
+		integer val_start = pos + search.length()
+		string after = body.substring(val_start, body.length())
+		integer nl = after.indexOf("\n")
+		string line = ""
+		if nl < 0
+			line = after.trim()
+		else
+			line = after.substring(0, nl).trim()
+		if line.startsWith("http")
+			return "http"
+		return "stdio"
+
+// ============================================================================
+// SUB-BLOCK EXTRACTION HELPERS
+// ============================================================================
+
+functions:
+	// Find the first occurrence of a marker starting at or after scan_start.
+	// Returns the position of the marker, or -1 if not found.
+	integer find_block_start(string body, string marker, integer scan_start)
+		string remaining = body.substring(scan_start, body.length())
+		integer rel_pos = remaining.indexOf(marker)
+		if rel_pos < 0
+			return -1
+		return scan_start + rel_pos
+
+	// Given position of \ttool/resource/prompt, find the position of the first
+	// character of the block body (the line after the header line).
+	integer find_block_body_start(string body, integer header_pos)
+		string from_header = body.substring(header_pos, body.length())
+		integer nl = from_header.indexOf("\n")
+		if nl < 0
+			return body.length()
+		return header_pos + nl + 1
+
+	// Find the end of a block that started at body_start.
+	// The block ends when we reach a line that starts with exactly one tab
+	// (the next sibling block) OR end of string. Returns the position in body
+	// of the start of that next sibling line (or body.length()).
+	integer find_block_end_at_one_tab(string body, integer body_start)
+		string remaining = body.substring(body_start, body.length())
+		integer scan = 0
+		integer safety = 0
+		while safety < 2000 and scan < remaining.length()
+			safety = safety + 1
+			// Find next newline
+			string from_scan = remaining.substring(scan, remaining.length())
+			integer nl = from_scan.indexOf("\n")
+			if nl < 0
+				return body.length()
+			integer line_start = scan + nl + 1
+			// Check if the new line starts with exactly one tab (sibling) or no tab (end of outer block)
+			if line_start >= remaining.length()
+				return body.length()
+			string line_first = remaining.substring(line_start, line_start + 1)
+			if line_first == "\t"
+				// Check if second char is NOT a tab (making it a one-tab-indented line = sibling)
+				if line_start + 1 < remaining.length()
+					string line_second = remaining.substring(line_start + 1, line_start + 2)
+					if line_second != "\t"
+						// This is a sibling block start — stop here
+						return body_start + line_start
+			else
+				// Line starts without a tab — we've exited the outer block
+				return body_start + line_start
+			scan = line_start
+
+		return body.length()
+
+	// Extract description: or mimeType: from a sub-block body (2-tab indented)
+	string extract_subconfig_value(string block_body, string key)
+		string search = "\t\t" + key + ": \""
+		integer pos = block_body.indexOf(search)
+		if pos < 0
+			// Try without quotes (e.g. transport: stdio)
+			string search2 = "\t\t" + key + ": "
+			integer pos2 = block_body.indexOf(search2)
+			if pos2 < 0
+				return ""
+			integer start2 = pos2 + search2.length()
+			string after2 = block_body.substring(start2, block_body.length())
+			integer nl2 = after2.indexOf("\n")
+			if nl2 < 0
+				return after2.trim()
+			return after2.substring(0, nl2).trim()
+		integer val_start = pos + search.length()
+		string after = block_body.substring(val_start, block_body.length())
+		integer close_q = after.indexOf("\"")
+		if close_q < 0
+			return ""
+		return after.substring(0, close_q)
+
+	// Extract the params: or args: sub-block body from a tool/prompt block body.
+	// Returns the raw text of the params block (lines starting with \t\t\t).
+	string extract_params_body(string block_body, string block_keyword)
+		string search = "\t\t" + block_keyword + ":\n"
+		integer pos = block_body.indexOf(search)
+		if pos < 0
+			return ""
+		integer params_content_start = pos + search.length()
+		string remaining = block_body.substring(params_content_start, block_body.length())
+		// Collect lines starting with three tabs (\t\t\t)
+		string result = ""
+		integer scan = 0
+		integer safety = 0
+		while safety < 200 and scan < remaining.length()
+			safety = safety + 1
+			string from_scan = remaining.substring(scan, remaining.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			// Check if line starts with three tabs
+			if line.startsWith("\t\t\t")
+				result = result + line + "\n"
+				if nl < 0
+					scan = remaining.length()
+				else
+					scan = scan + nl + 1
+			else
+				// End of params block
+				scan = remaining.length()
+		return result
+
+	// Extract the handler body lines from a tool/prompt block: everything that
+	// is not a description:, params:, args:, or the params/args sub-lines.
+	string extract_handler_body(string block_body, string params_body)
+		string result = ""
+		string remaining = block_body
+		integer scan = 0
+		integer safety = 0
+		while safety < 500 and scan < remaining.length()
+			safety = safety + 1
+			string from_scan = remaining.substring(scan, remaining.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			string trimmed_line = line.trim()
+			// Skip description: line
+			boolean skip = trimmed_line.startsWith("description:")
+			// Skip params: and args: header lines
+			if trimmed_line == "params:" or trimmed_line == "args:"
+				skip = true
+			// Skip triple-tab lines (those are param declarations)
+			if line.startsWith("\t\t\t")
+				skip = true
+			// Keep double-tab lines that are actual handler code
+			if not skip and line.startsWith("\t\t") and trimmed_line.length() > 0
+				result = result + line + "\n"
+			if nl < 0
+				scan = remaining.length()
+			else
+				scan = scan + nl + 1
+		return result
+
+	// Extract resource handler body (same as handler but no params block to skip)
+	string extract_resource_handler_body(string block_body)
+		string result = ""
+		integer scan = 0
+		integer safety = 0
+		while safety < 500 and scan < block_body.length()
+			safety = safety + 1
+			string from_scan = block_body.substring(scan, block_body.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			string trimmed_line = line.trim()
+			boolean skip = trimmed_line.startsWith("description:") or trimmed_line.startsWith("mimeType:")
+			if not skip and line.startsWith("\t\t") and trimmed_line.length() > 0
+				result = result + line + "\n"
+			if nl < 0
+				scan = block_body.length()
+			else
+				scan = scan + nl + 1
+		return result
+
+// ============================================================================
+// TOOL CODE GENERATION
+// ============================================================================
+
+functions:
+	// Build the complete handler function for a tool.
+	// fn_name: e.g. __mcp_tool_get_post
+	// params_body: raw param lines (\t\t\tTYPE name = default\n)
+	// handler_body: raw user code lines (\t\tcode\n)
+	string build_tool_handler(string fn_name, string params_body, string handler_body)
+		string out = "\tstring " + fn_name + "(string __params_json)\n"
+		// Emit param extractors
+		out = out + build_param_extractors(params_body)
+		// Inline the user's handler body verbatim (already at \t\t indent)
+		out = out + handler_body
+		out = out + "\n"
+		return out
+
+	// Build the resource handler function (no params).
+	string build_resource_handler(string fn_name, string handler_body)
+		string out = "\tstring " + fn_name + "()\n"
+		out = out + handler_body
+		out = out + "\n"
+		return out
+
+	// Build the prompt handler function.
+	string build_prompt_handler(string fn_name, string args_body, string handler_body)
+		string out = "\tstring " + fn_name + "(string __args_json)\n"
+		out = out + build_param_extractors(args_body)
+		out = out + handler_body
+		out = out + "\n"
+		return out
+
+	// Generate param extraction code from a params block.
+	// Each param line is: \t\t\tTYPE name\n or \t\t\tTYPE name = default\n
+	string build_param_extractors(string params_body)
+		string out = ""
+		integer scan = 0
+		integer safety = 0
+		while safety < 100 and scan < params_body.length()
+			safety = safety + 1
+			string from_scan = params_body.substring(scan, params_body.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				// Parse: TYPE name or TYPE name = default
+				// Find first space to get type
+				integer sp1 = trimmed.indexOf(" ")
+				if sp1 > 0
+					string ptype = trimmed.substring(0, sp1)
+					string rest_after_type = trimmed.substring(sp1 + 1, trimmed.length()).trim()
+					// Check for default value: "= default"
+					integer eq_pos = rest_after_type.indexOf(" = ")
+					string pname = ""
+					string pdefault = ""
+					boolean has_default = false
+					if eq_pos >= 0
+						pname = rest_after_type.substring(0, eq_pos).trim()
+						pdefault = rest_after_type.substring(eq_pos + 3, rest_after_type.length()).trim()
+						has_default = true
+					else
+						pname = rest_after_type.trim()
+					// Emit the extraction line
+					out = out + build_single_extractor(ptype, pname, pdefault, has_default)
+			if nl < 0
+				scan = params_body.length()
+			else
+				scan = scan + nl + 1
+		return out
+
+	// Emit the single line that extracts one parameter from __params_json.
+	string build_single_extractor(string ptype, string pname, string pdefault, boolean has_default)
+		if ptype == "string"
+			if has_default
+				// Strip surrounding quotes from default string literal if present
+				string clean_default = pdefault
+				if pdefault.startsWith("\"") and pdefault.length() >= 2
+					clean_default = pdefault.substring(1, pdefault.length() - 1)
+				return "\t\tstring " + pname + " = __mcp_extract_str_default(__params_json, \"" + pname + "\", \"" + clean_default + "\")\n"
+			return "\t\tstring " + pname + " = __mcp_extract_str(__params_json, \"" + pname + "\")\n"
+		if ptype == "integer"
+			if has_default
+				return "\t\tinteger " + pname + " = __mcp_extract_int_default(__params_json, \"" + pname + "\", " + pdefault + ")\n"
+			return "\t\tinteger " + pname + " = __mcp_extract_int(__params_json, \"" + pname + "\")\n"
+		if ptype == "number"
+			if has_default
+				return "\t\tnumber " + pname + " = __mcp_extract_int_default(__params_json, \"" + pname + "\", " + pdefault + ").toNumber()\n"
+			return "\t\tnumber " + pname + " = __mcp_extract_int(__params_json, \"" + pname + "\").toNumber()\n"
+		if ptype == "boolean"
+			if has_default
+				return "\t\tboolean " + pname + " = __mcp_extract_bool_str(__params_json, \"" + pname + "\") == \"true\"\n"
+			return "\t\tboolean " + pname + " = __mcp_extract_bool_str(__params_json, \"" + pname + "\") == \"true\"\n"
+		// list<T> or any — extract as raw string for now
+		if has_default
+			return "\t\tstring " + pname + " = __mcp_extract_str_default(__params_json, \"" + pname + "\", \"" + pdefault + "\")\n"
+		return "\t\tstring " + pname + " = __mcp_extract_str(__params_json, \"" + pname + "\")\n"
+
+// ============================================================================
+// JSON SCHEMA GENERATION
+// ============================================================================
+
+functions:
+	// Build the inputSchema JSON object for a tool's params block.
+	string build_tool_json_schema(string params_body)
+		if params_body.trim() == ""
+			return "{\"type\":\"object\",\"properties\":{}}"
+		string properties = ""
+		string required_arr = ""
+		integer prop_count = 0
+		integer req_count = 0
+		integer scan = 0
+		integer safety = 0
+		while safety < 100 and scan < params_body.length()
+			safety = safety + 1
+			string from_scan = params_body.substring(scan, params_body.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				integer sp1 = trimmed.indexOf(" ")
+				if sp1 > 0
+					string ptype = trimmed.substring(0, sp1)
+					string rest_after_type = trimmed.substring(sp1 + 1, trimmed.length()).trim()
+					integer eq_pos = rest_after_type.indexOf(" = ")
+					string pname = ""
+					boolean has_default = false
+					if eq_pos >= 0
+						pname = rest_after_type.substring(0, eq_pos).trim()
+						has_default = true
+					else
+						pname = rest_after_type.trim()
+					string schema_type = type_to_json_schema(ptype)
+					if prop_count > 0
+						properties = properties + ","
+					properties = properties + "\"" + pname + "\":" + schema_type
+					prop_count = prop_count + 1
+					if not has_default
+						if req_count > 0
+							required_arr = required_arr + ","
+						required_arr = required_arr + "\"" + pname + "\""
+						req_count = req_count + 1
+			if nl < 0
+				scan = params_body.length()
+			else
+				scan = scan + nl + 1
+		string schema = "{\"type\":\"object\",\"properties\":{" + properties + "}"
+		if req_count > 0
+			schema = schema + ",\"required\":[" + required_arr + "]"
+		schema = schema + "}"
+		return schema
+
+	// Map a Clean type to its JSON Schema representation.
+	string type_to_json_schema(string clean_type)
+		if clean_type == "string"
+			return "{\"type\":\"string\"}"
+		if clean_type == "integer"
+			return "{\"type\":\"integer\"}"
+		if clean_type == "number"
+			return "{\"type\":\"number\"}"
+		if clean_type == "boolean"
+			return "{\"type\":\"boolean\"}"
+		if clean_type == "any"
+			return "{}"
+		// list<T> types
+		if clean_type == "list<string>"
+			return "{\"type\":\"array\",\"items\":{\"type\":\"string\"}}"
+		if clean_type == "list<integer>"
+			return "{\"type\":\"array\",\"items\":{\"type\":\"integer\"}}"
+		if clean_type == "list<number>"
+			return "{\"type\":\"array\",\"items\":{\"type\":\"number\"}}"
+		if clean_type == "list<boolean>"
+			return "{\"type\":\"array\",\"items\":{\"type\":\"boolean\"}}"
+		if clean_type == "list<any>"
+			return "{\"type\":\"array\"}"
+		// Named model types → object
+		return "{\"type\":\"object\"}"
+
+	// Build the arguments JSON array for a prompt's prompts/list entry.
+	string build_prompt_args_json(string args_body)
+		if args_body.trim() == ""
+			return "[]"
+		string entries = ""
+		integer count = 0
+		integer scan = 0
+		integer safety = 0
+		while safety < 100 and scan < args_body.length()
+			safety = safety + 1
+			string from_scan = args_body.substring(scan, args_body.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				integer sp1 = trimmed.indexOf(" ")
+				if sp1 > 0
+					string rest_after_type = trimmed.substring(sp1 + 1, trimmed.length()).trim()
+					integer eq_pos = rest_after_type.indexOf(" = ")
+					string aname = ""
+					boolean has_default = false
+					if eq_pos >= 0
+						aname = rest_after_type.substring(0, eq_pos).trim()
+						has_default = true
+					else
+						aname = rest_after_type.trim()
+					string required_field = "true"
+					if has_default
+						required_field = "false"
+					if count > 0
+						entries = entries + ","
+					entries = entries + "{\"name\":\"" + aname + "\",\"required\":" + required_field + "}"
+					count = count + 1
+			if nl < 0
+				scan = args_body.length()
+			else
+				scan = scan + nl + 1
+		return "[" + entries + "]"
+
+// ============================================================================
+// CAPABILITIES AND PROTOCOL GENERATION
+// ============================================================================
+
+functions:
+	// Build the JSON capabilities object for the initialize response.
+	string build_capabilities_json(integer tool_count, integer resource_count, integer prompt_count)
+		string caps = "{"
+		boolean first = true
+		if tool_count > 0
+			caps = caps + "\\\"tools\\\":{\\\"listChanged\\\":false}"
+			first = false
+		if resource_count > 0
+			if not first
+				caps = caps + ","
+			caps = caps + "\\\"resources\\\":{\\\"subscribe\\\":false,\\\"listChanged\\\":false}"
+			first = false
+		if prompt_count > 0
+			if not first
+				caps = caps + ","
+			caps = caps + "\\\"prompts\\\":{\\\"listChanged\\\":false}"
+		caps = caps + "}"
+		return caps
+
+	// Build the __mcp_handle function that dispatches all JSON-RPC methods.
+	string build_handle_fn(string server_name, string server_version, string capabilities)
+		string out = "\tstring __mcp_handle(string __msg)\n"
+		out = out + "\t\tstring __method = __mcp_extract_str(__msg, \"method\")\n"
+		out = out + "\t\tstring __req_id = __mcp_extract_str(__msg, \"id\")\n\n"
+
+		// initialize
+		out = out + "\t\tif __method == \"initialize\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"protocolVersion\\\":\\\"2024-11-05\\\",\\\"capabilities\\\":" + capabilities + ",\\\"serverInfo\\\":{\\\"name\\\":\\\"" + server_name + "\\\",\\\"version\\\":\\\"" + server_version + "\\\"}}}\"\n\n"
+
+		// initialized (notification — no response)
+		out = out + "\t\tif __method == \"initialized\"\n"
+		out = out + "\t\t\treturn \"\"\n\n"
+
+		// ping
+		out = out + "\t\tif __method == \"ping\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{}}\"\n\n"
+
+		// tools/list
+		out = out + "\t\tif __method == \"tools/list\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"tools\\\":\" + __mcp_tools_list() + \"}}\"\n\n"
+
+		// tools/call
+		out = out + "\t\tif __method == \"tools/call\"\n"
+		out = out + "\t\t\tstring __tool_name = __mcp_extract_str(__msg, \"name\")\n"
+		out = out + "\t\t\tstring __args_key = \"\\\"arguments\\\":\"\n"
+		out = out + "\t\t\tinteger __args_pos = __msg.indexOf(__args_key)\n"
+		out = out + "\t\t\tstring __tool_params = \"{}\"\n"
+		out = out + "\t\t\tif __args_pos >= 0\n"
+		out = out + "\t\t\t\tinteger __args_start = __args_pos + __args_key.length()\n"
+		out = out + "\t\t\t\t__tool_params = __msg.substring(__args_start, __msg.length() - 1)\n"
+		out = out + "\t\t\treturn __mcp_dispatch_tool(__tool_name, __tool_params, __req_id)\n\n"
+
+		// resources/list
+		out = out + "\t\tif __method == \"resources/list\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"resources\\\":\" + __mcp_resources_list() + \"}}\"\n\n"
+
+		// resources/read
+		out = out + "\t\tif __method == \"resources/read\"\n"
+		out = out + "\t\t\tstring __uri = __mcp_extract_str(__msg, \"uri\")\n"
+		out = out + "\t\t\treturn __mcp_dispatch_resource(__uri, __req_id)\n\n"
+
+		// prompts/list
+		out = out + "\t\tif __method == \"prompts/list\"\n"
+		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"prompts\\\":\" + __mcp_prompts_list() + \"}}\"\n\n"
+
+		// prompts/get
+		out = out + "\t\tif __method == \"prompts/get\"\n"
+		out = out + "\t\t\tstring __prompt_name = __mcp_extract_str(__msg, \"name\")\n"
+		out = out + "\t\t\tstring __pargs_key = \"\\\"arguments\\\":\"\n"
+		out = out + "\t\t\tinteger __pargs_pos = __msg.indexOf(__pargs_key)\n"
+		out = out + "\t\t\tstring __prompt_args = \"{}\"\n"
+		out = out + "\t\t\tif __pargs_pos >= 0\n"
+		out = out + "\t\t\t\tinteger __pargs_start = __pargs_pos + __pargs_key.length()\n"
+		out = out + "\t\t\t\t__prompt_args = __msg.substring(__pargs_start, __msg.length() - 1)\n"
+		out = out + "\t\t\treturn __mcp_dispatch_prompt(__prompt_name, __prompt_args, __req_id)\n\n"
+
+		// Unknown method
+		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Method not found: \" + __method + \"\\\"}}\"\n\n"
+		return out
+
+	// Build the start: block for the selected transport.
+	string build_start_block(string transport)
+		string out = "start:\n"
+		if transport == "http"
+			out = out + "\t_mcp_http_serve(3001, \"0.0.0.0\")\n"
+			out = out + "\tboolean __http_running = true\n"
+			out = out + "\twhile __http_running\n"
+			out = out + "\t\tstring __req = _mcp_http_accept()\n"
+			out = out + "\t\tif __req.length() > 0\n"
+			out = out + "\t\t\tstring __resp = __mcp_handle(__req)\n"
+			out = out + "\t\t\tif __resp.length() > 0\n"
+			out = out + "\t\t\t\t_mcp_stdio_write(__resp)\n"
+		else
+			// stdio (default)
+			out = out + "\tboolean __running = true\n"
+			out = out + "\twhile __running\n"
+			out = out + "\t\tstring __msg = _mcp_stdio_read()\n"
+			out = out + "\t\tif __msg.length() == 0\n"
+			out = out + "\t\t\t__running = false\n"
+			out = out + "\t\tif __running\n"
+			out = out + "\t\t\tstring __response = __mcp_handle(__msg)\n"
+			out = out + "\t\t\tif __response.length() > 0\n"
+			out = out + "\t\t\t\t_mcp_stdio_write(__response)\n"
+		return out
+
+// ============================================================================
+// NAME AND URI SANITIZATION
+// ============================================================================
+
+functions:
+	// Convert a tool/prompt name to a safe Clean Language identifier.
+	// Replaces hyphens and spaces with underscores, keeps letters/digits.
+	string sanitize_name(string name)
+		string result = ""
+		integer i = 0
+		integer safety = 0
+		while safety < 200 and i < name.length()
+			safety = safety + 1
+			string ch = name.substring(i, i + 1)
+			boolean is_ok = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "_"
+			if is_ok
+				result = result + ch
+			else
+				result = result + "_"
+			i = i + 1
+		return result
+
+	// Convert a resource URI like "posts://recent" to a safe function name suffix.
+	string sanitize_uri(string uri)
+		return sanitize_name(uri)
+
+	// Escape a string for embedding inside a JSON string literal in generated code.
+	string json_escape_str(string s)
+		string r = s.replace("\\", "\\\\")
+		r = r.replace("\"", "\\\"")
+		r = r.replace("\n", "\\n")
+		r = r.replace("\r", "\\r")
+		r = r.replace("\t", "\\t")
+		return r
+
+	// Extract the quoted name from a position in body where the opening quote is.
+	// body.substring(name_open_pos) should start at the opening quote character.
+	string extract_quoted_name(string body, integer quote_start)
+		string from_here = body.substring(quote_start, body.length())
+		integer open_q = from_here.indexOf("\"")
+		if open_q < 0
+			return ""
+		string after_open = from_here.substring(open_q + 1, from_here.length())
+		integer close_q = after_open.indexOf("\"")
+		if close_q < 0
+			return ""
+		return after_open.substring(0, close_q)
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+functions:
+	string validate_mcp(string attributes, string body)
+		// Must have a server name in attributes
+		string server_name = extract_server_name(attributes)
+		if server_name == "mcp-server"
+			// Might be OK if they named it literally — only error if attributes is empty
+			if attributes.trim() == ""
+				return "mcp: block must have a quoted server name: mcp \"my-server\":"
+
+		// Must have a transport declaration
+		string transport = extract_transport(body)
+		if transport != "stdio" and transport != "http"
+			return "mcp: block must declare transport: stdio or transport: http:"
+
+		// Check for at least one of tool, resource, or prompt
+		integer tool_pos = find_block_start(body, "\ttool \"", 0)
+		integer resource_pos = find_block_start(body, "\tresource \"", 0)
+		integer prompt_pos = find_block_start(body, "\tprompt \"", 0)
+		if tool_pos < 0 and resource_pos < 0 and prompt_pos < 0
+			return "mcp: block must contain at least one tool, resource, or prompt declaration"
+
+		// Validate each tool has a description
+		integer t_scan = 0
+		integer t_count = 0
+		boolean t_going = true
+		while t_count < 50 and t_going
+			integer tpos = find_block_start(body, "\ttool \"", t_scan)
+			if tpos < 0
+				t_going = false
+			else
+				integer tb_start = find_block_body_start(body, tpos)
+				integer tb_end = find_block_end_at_one_tab(body, tb_start)
+				string tb = body.substring(tb_start, tb_end)
+				string tdesc = extract_subconfig_value(tb, "description")
+				if tdesc == ""
+					string tname = extract_quoted_name(body, tpos + 6)
+					return "tool \"" + tname + "\" must have a description: field"
+				t_scan = tb_end
+				t_count = t_count + 1
+
+		return ""

@@ -23,6 +23,7 @@ It helps development tools locate relevant files, understand module boundaries, 
 | 12 | [12_frame_canvas.md](12_frame_canvas.md) | Canvas rendering, animation, drawing primitives, bridge functions |
 | 13 | [13_frame_future_evolution.md](13_frame_future_evolution.md) | Roadmap, research directions, versioning policy |
 | 14 | [14_frame_ui_client_communication.md](14_frame_ui_client_communication.md) | Client-side communication via frame.client plugin (api.*, live.*, feed.* namespaces) |
+| 15 | [15_frame_mcp.md](15_frame_mcp.md) | MCP server plugin — tools, resources, prompts over stdio and HTTP+SSE |
 | -- | [frame_bridge_contracts.md](frame_bridge_contracts.md) | Host Bridge JSON contracts, WASM imports, platform availability |
 
 ---
@@ -46,6 +47,7 @@ Each Frame subsystem has a clear boundary and relies on the Host Bridge as the s
 │  Compiler Plugins (10) ──▶ Compiler        │
 │  Database Plugins (11) ──▶ Data Layer      │
 │  Canvas           (12) ──▶ Bridge (canvas) │
+│  MCP              (15) ──▶ host:mcp bridge │
 │  Guidelines       (09)                     │
 │  Future           (13)                     │
 └────────────────────────────────────────────┘
@@ -66,6 +68,7 @@ Each Frame subsystem has a clear boundary and relies on the Host Bridge as the s
 | Compiler Plugins | Compiler | Block expansion, keyword handling |
 | Database Plugins | Data, Bridge | Driver implementations, connection pooling |
 | Canvas | Bridge | 2D rendering, animation, input handling |
+| MCP | host:mcp Bridge, frame.data (optional) | MCP server — tools, resources, prompts for AI agents |
 
 ---
 
@@ -92,6 +95,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 /app/canvas/scenes/*.cln       → Scene definitions                                         [frame.canvas]
 /app/canvas/sprites/*.cln      → Sprite sheet definitions                                  [frame.canvas]
 /app/canvas/audio/*.cln        → Audio asset definitions                                   [frame.canvas]
+/app/mcp/*.cln                 → MCP server definitions (tools, resources, prompts)        [frame.mcp]
 /public/*                      → Static assets (CSS, images, served as-is)
 /dist/*                        → Compiled WASM and bundles
 /documents/specification/*     → Specification documents
@@ -107,6 +111,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
 | `frame.canvas` | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` |
+| `frame.mcp` | `app/mcp/` |
 | `frame.client` | *(no owned folders — used in component handlers and backend code)* |
 
 ### Plugin Block Handles
@@ -120,6 +125,7 @@ Each plugin responds to specific top-level block keywords in `.cln` files:
 | `frame.auth` | `auth`, `protected`, `login`, `roles` | |
 | `frame.ui` | `component`, `screen`, `page`, `html`, `styles`, `ui` | |
 | `frame.canvas` | `canvasScene`, `draw`, `onFrame`, `onPointerDown`, `onPointerMove`, `onKeyDown` | |
+| `frame.mcp` | `mcp` | One `mcp:` block per file; sub-blocks are `tool`, `resource`, `prompt` |
 | `frame.client` | *(none — bridge-function-only plugin)* | Provides `api.*`, `live.*`, `feed.*` namespaces |
 
 ---
@@ -136,6 +142,7 @@ Each plugin responds to specific top-level block keywords in `.cln` files:
 | `host:log` | frame_bridge_contracts.md | Server, Plugins |
 | `host:fs` | frame_bridge_contracts.md | Desktop, CLI |
 | `host:sys` | frame_bridge_contracts.md | CLI, Platform |
+| `host:mcp` | 15_frame_mcp.md §13 | MCP (stdio_read, stdio_write, http_serve, http_accept, sse_send, log) |
 
 ---
 
@@ -158,6 +165,7 @@ When AI agents process the repository:
 | Extend ORM or migrations | 04_frame_data.md + frame_bridge_contracts.md |
 | Add new plugin hooks | 07_frame_plugins.md + 10_compiler_plugins.md |
 | Add canvas/graphics | 12_frame_canvas.md |
+| Build an MCP server for AI agents | 15_frame_mcp.md |
 | Configure authentication | 06_frame_auth.md |
 | Package for deployment | 08_frame_platforms.md |
 | Add database driver | 11_database_plugins.md |

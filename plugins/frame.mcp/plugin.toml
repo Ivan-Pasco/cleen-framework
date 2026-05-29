@@ -1,0 +1,120 @@
+[plugin]
+name = "frame.mcp"
+version = "1.0.0"
+description = "MCP server plugin — define AI-callable tools, resources, and prompts inside mcp: blocks. Handles the full MCP lifecycle: capability negotiation, JSON-RPC 2.0 dispatch, param deserialization, and stdio/HTTP+SSE transports."
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.31.0"
+
+[exports]
+expand = "expand_block"
+validate = "validate_block"
+get_keywords = "get_keywords"
+
+[handles]
+# Only mcp is a top-level block the compiler expands directly.
+# Sub-blocks (tool, resource, prompt, params, args) are nested inside mcp and
+# must NOT be listed here — if they were, the compiler would expand them before
+# calling expand_block, stripping all sub-block headers from the body.
+blocks = ["mcp"]
+
+# Bridge function declarations — MCP-specific functions provided by the runtime.
+# String params use (ptr i32, len i32) pairs when expand_strings = true.
+[bridge]
+functions = [
+  { name = "_mcp_stdio_read",  params = [],                    returns = "string",  description = "Read one newline-delimited JSON-RPC 2.0 message from stdin. Blocks until a complete message is available. Returns empty string on EOF." },
+  { name = "_mcp_stdio_write", params = ["string"],            returns = "integer", description = "Write one newline-terminated JSON-RPC 2.0 message to stdout.", expand_strings = true },
+  { name = "_mcp_http_serve",  params = ["integer", "string"], returns = "integer", description = "Bind and start HTTP+SSE listener on the given port and host. Blocks until the server stops.", expand_strings = true },
+  { name = "_mcp_http_accept", params = [],                    returns = "string",  description = "Wait for the next HTTP request; returns it as a JSON string containing method, headers, and body." },
+  { name = "_mcp_sse_send",    params = ["string", "string"],  returns = "integer", description = "Send an SSE event to a connected client identified by clientId.", expand_strings = true },
+  { name = "_mcp_log",         params = ["string", "string"],  returns = "integer", description = "Write a structured log entry to stderr (never pollutes the stdio transport). level is debug, info, warn, or error.", expand_strings = true },
+]
+
+[language]
+# Block-level keywords
+blocks = ["mcp"]
+
+# Keywords used within plugin context
+keywords = [
+  { name = "tool",      description = "Declare an AI-callable tool function inside an mcp: block", context = "block" },
+  { name = "resource",  description = "Declare a URI-addressable read-only resource inside an mcp: block", context = "block" },
+  { name = "prompt",    description = "Declare a parameterized prompt template inside an mcp: block", context = "block" },
+  { name = "params",    description = "Declare tool input parameters (name: type or name: type = default)", context = "block" },
+  { name = "args",      description = "Declare prompt template arguments (name: type or name: type = default)", context = "block" },
+  { name = "transport", description = "Configure the transport: stdio (default) or http: with port/host sub-fields", context = "config" },
+  { name = "apiKey",    description = "API key for HTTP transport Bearer authentication — use env() to read from environment", context = "config" },
+  { name = "mimeType",  description = "MIME type hint for resource content (application/json, text/plain, text/markdown, text/csv)", context = "block" },
+  { name = "version",   description = "Server version string reported in the initialize handshake", context = "config" },
+  { name = "description", description = "Human-readable description sent in capability negotiation", context = "config" },
+  { name = "port",      description = "TCP port for HTTP transport", context = "config" },
+  { name = "host",      description = "Interface to bind for HTTP transport (e.g. \"0.0.0.0\" for all interfaces)", context = "config" },
+]
+
+# Custom types provided by the plugin
+types = []
+
+# Built-in functions available inside tool/resource/prompt bodies
+functions = [
+  { name = "json",  signature = "json(value)",    description = "Serialize value to JSON and return as MCP text content block. Works with models, lists, primitives." },
+  { name = "text",  signature = "text(message)",  description = "Return a plain-text string as an MCP text content block." },
+  { name = "error", signature = "error(message)", description = "Return an MCP error result with isError: true. The server continues running." },
+]
+
+# Auto-completion suggestions
+completions = [
+  { trigger = "mcp ", insert = "mcp \"${1:server-name}\":\n\tversion: \"1.0.0\"\n\tdescription: \"${2:What this MCP server does}\"\n\ttransport: stdio\n\n\ttool \"${3:tool-name}\":\n\t\tdescription: \"${4:What this tool does}\"\n\t\tparams:\n\t\t\t${5:id}: ${6:integer}\n\t\treturn json(${7:result})" },
+  { trigger = "tool ", insert = "tool \"${1:name}\":\n\t\tdescription: \"${2:What this tool does}\"\n\t\tparams:\n\t\t\t${3:param}: ${4:string}\n\t\treturn json(${5:result})", context = "mcp" },
+  { trigger = "resource ", insert = "resource \"${1:scheme://path}\":\n\t\tdescription: \"${2:What this resource provides}\"\n\t\tmimeType: \"application/json\"\n\t\treturn json(${3:data})", context = "mcp" },
+  { trigger = "prompt ", insert = "prompt \"${1:name}\":\n\t\tdescription: \"${2:What this prompt template does}\"\n\t\targs:\n\t\t\t${3:arg}: ${4:string}\n\t\treturn \"${5:Your prompt template here with {{ arg }} interpolation}\"", context = "mcp" },
+]
+
+[paths]
+# Folders owned by this plugin - auto-created on plugin import
+owns = ["app/mcp"]
+auto_create = true
+patterns = ["*.cln"]
+# Files in app/mcp/ are automatically processed without per-file imports
+implicit_import = true
+
+[templates]
+# Starter file created when frame.mcp is first added to a project
+files = [
+  { path = "app/mcp/tools.cln", template = "tools.cln" },
+]
+
+[enforcement]
+severity = "warn"
+
+required_blocks = [
+  { folder = "app/mcp/", block = "mcp", message = "Files in app/mcp/ must contain an mcp: block. Each file declares one MCP server with its tools, resources, and prompts." },
+]
+
+block_folder_rules = [
+  { block = "mcp", allowed_in = ["app/mcp/"], message = "mcp: blocks must be in app/mcp/" },
+]
+
+[ai]
+description = "MCP server plugin. Declare AI-callable tools, URI-addressable resources, and prompt templates inside a single mcp: block per file. The plugin generates all JSON-RPC boilerplate, handles the initialize handshake, dispatches calls, and serializes params. Use json() for structured data, text() for plain strings, error() for failures. Combine with frame.data for database-backed tools."
+constraints = [
+  "Each file in app/mcp/ may contain exactly one mcp: block — two mcp: blocks in the same file is a compile error",
+  "Tool params without a default value are required — the AI must supply them; params with a default are optional",
+  "Resource bodies must not use the params: block — use a tool if you need parameterized data access",
+  "Every tool, resource, and prompt body must end with return json(), return text(), or return error()",
+  "Never call _mcp_stdio_write() or _mcp_log() directly — use the response helpers and the log bridge via mcp.log()",
+  "Do not print to stdout inside tool/resource/prompt bodies when using stdio transport — it corrupts the JSON-RPC stream",
+  "Required params must be declared before optional params in the params: block",
+]
+
+[[ai.patterns]]
+name = "database-tools"
+use_when = "building tools that read or write data from the application database (blog posts, users, orders, etc.)"
+anti_pattern = "returning raw SQL or unstructured strings — always return typed model values via json() so the AI client receives a consistent schema; pair frame.mcp with frame.data in main.cln"
+example = "patterns/database-tools.cln"
+
+[[ai.patterns]]
+name = "basic-tools"
+use_when = "building computation tools, greeting generators, or tools that don't need a database"
+anti_pattern = "adding unnecessary database queries just to follow a pattern — keep tool bodies simple when no data persistence is needed"
+example = "patterns/basic-tools.cln"

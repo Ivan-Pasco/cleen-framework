@@ -1,0 +1,210 @@
+// patterns/database-tools.cln
+// MCP server with database-backed tools using frame.data ORM.
+// Requires frame.data declared in main.cln alongside frame.mcp:
+//
+//   target:
+//       platform: server
+//       plugins:
+//           frame.mcp
+//           frame.data
+//
+// Model files must exist in app/data/models/ (e.g. Post.cln, Comment.cln, User.cln).
+
+mcp "blog-tools":
+	version: "1.0.0"
+	description: "Blog content management tools for AI agents — read, create, and manage posts and comments"
+	transport: stdio
+
+	// ─── TOOLS ────────────────────────────────────────────────────────────────
+
+	tool "list_posts":
+		description: "List published blog posts with optional pagination. Returns an array of post objects."
+		params:
+			limit: integer = 10
+			offset: integer = 0
+		list<Post> posts = Post.find:
+			where:
+				published == true
+			order:
+				createdAt desc
+			limit: limit
+			offset: offset
+		return json(posts)
+
+	tool "get_post":
+		description: "Retrieve a single blog post by its numeric ID. Returns the full post object or an error if not found."
+		params:
+			id: integer
+		Post? post = Post.first:
+			where:
+				id == id
+		if post == null
+			return error("Post not found with id " + id.toString())
+		return json(post)
+
+	tool "search_posts":
+		description: "Search published posts by keyword match in title or content. Returns matching posts."
+		params:
+			query: string
+			limit: integer = 20
+		list<Post> results = Post.find:
+			where:
+				published == true and title contains query
+			order:
+				createdAt desc
+			limit: limit
+		return json(results)
+
+	tool "create_post":
+		description: "Create a new blog post in draft state (published = false). Returns the created post with its assigned ID."
+		params:
+			title: string
+			content: string
+			author_id: integer
+		Post post = Post.insert:
+			title = title
+			content = content
+			authorId = author_id
+			published = false
+		return json(post)
+
+	tool "publish_post":
+		description: "Publish a draft post, making it publicly visible. Returns an error if the post is already published or does not exist."
+		params:
+			id: integer
+		Post? post = Post.first:
+			where:
+				id == id
+		if post == null
+			return error("Post not found with id " + id.toString())
+		Post updated = Post.update:
+			where:
+				id == id
+			published = true
+		return json(updated)
+
+	tool "delete_post":
+		description: "Permanently delete a post and all its associated comments. Returns a confirmation message."
+		params:
+			id: integer
+		Post? post = Post.first:
+			where:
+				id == id
+		if post == null
+			return error("Post not found with id " + id.toString())
+		Comment.delete:
+			where:
+				postId == id
+		Post.delete:
+			where:
+				id == id
+		return text("Post " + id.toString() + " and all its comments have been permanently deleted.")
+
+	tool "add_comment":
+		description: "Add a comment to a blog post. Returns the created comment object."
+		params:
+			post_id: integer
+			author_name: string
+			body: string
+		Post? post = Post.first:
+			where:
+				id == post_id
+		if post == null
+			return error("Post not found with id " + post_id.toString())
+		Comment c = Comment.insert:
+			postId = post_id
+			authorName = author_name
+			body = body
+		return json(c)
+
+	tool "list_comments":
+		description: "List all comments on a specific blog post in chronological order."
+		params:
+			post_id: integer
+		list<Comment> comments = Comment.find:
+			where:
+				postId == post_id
+			order:
+				createdAt asc
+		return json(comments)
+
+	tool "get_stats":
+		description: "Return aggregate blog statistics: total posts, published posts, draft posts, total comments, and total authors."
+		params:
+		integer total_posts = Post.count()
+		integer published_count = Post.count:
+			where:
+				published == true
+		integer total_comments = Comment.count()
+		integer total_authors = User.count:
+			where:
+				role == "author"
+		return json("{\"totalPosts\":" + total_posts.toString() + ",\"publishedPosts\":" + published_count.toString() + ",\"draftPosts\":" + (total_posts - published_count).toString() + ",\"totalComments\":" + total_comments.toString() + ",\"totalAuthors\":" + total_authors.toString() + "}")
+
+	// ─── RESOURCES ────────────────────────────────────────────────────────────
+
+	resource "posts://recent":
+		description: "The 10 most recently published blog posts — useful for giving AI agents current context about the blog"
+		mimeType: "application/json"
+		list<Post> posts = Post.find:
+			where:
+				published == true
+			order:
+				createdAt desc
+			limit: 10
+		return json(posts)
+
+	resource "posts://drafts":
+		description: "All unpublished draft posts awaiting editorial review"
+		mimeType: "application/json"
+		list<Post> drafts = Post.find:
+			where:
+				published == false
+			order:
+				createdAt desc
+		return json(drafts)
+
+	resource "users://authors":
+		description: "All registered authors on this blog platform"
+		mimeType: "application/json"
+		list<User> authors = User.find:
+			where:
+				role == "author"
+			order:
+				name asc
+		return json(authors)
+
+	// ─── PROMPTS ──────────────────────────────────────────────────────────────
+
+	prompt "summarize_post":
+		description: "Generate a prompt asking an AI to write a social media summary for a specific blog post"
+		args:
+			post_id: integer
+			platform: string = "twitter"
+			max_chars: integer = 280
+		Post? post = Post.first:
+			where:
+				id == post_id
+		if post == null
+			return error("Post not found with id " + post_id.toString())
+		return "Write a compelling " + platform + " summary of this blog post in " + max_chars.toString() + " characters or fewer. Include a hook, the key takeaway, and a call to action.\n\nTitle: " + post.title + "\n\nContent:\n" + post.content
+
+	prompt "write_post":
+		description: "Generate a prompt to write a complete blog post on a given topic"
+		args:
+			topic: string
+			audience: string = "general readers"
+			word_count: integer = 800
+		return "Write a complete, well-structured blog post about '" + topic + "' for " + audience + ". Target approximately " + word_count.toString() + " words. Structure: an engaging introduction that hooks the reader, 3-5 main sections with clear headings and practical examples, and a conclusion with a specific call to action. Use a conversational but authoritative tone."
+
+	prompt "reply_to_comment":
+		description: "Generate a prompt to draft an author reply to a specific reader comment"
+		args:
+			comment_id: integer
+			tone: string = "friendly and professional"
+		Comment? comment = Comment.first:
+			where:
+				id == comment_id
+		if comment == null
+			return error("Comment not found with id " + comment_id.toString())
+		return "Write a " + tone + " author reply to the following reader comment. Acknowledge the reader's point directly, add value with your response, and keep it under 3 sentences.\n\nComment by " + comment.authorName + ":\n" + comment.body
