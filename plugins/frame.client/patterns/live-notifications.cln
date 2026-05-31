@@ -1,0 +1,46 @@
+// Pattern: live-notifications
+// Use when: the app needs real-time server-to-client push: chat, presence, live counters,
+//           or collaborative editing
+// Anti-pattern: writing new WebSocket(...) in a <script> tag, polling with repeated api.get()
+//               calls, or storing the connection object in JS — use live.open() with named
+//               handler functions and store the connId in state so it can be closed on unmount
+
+component NotificationBell
+	state:
+		integer count = 0
+		integer conn = 0
+		boolean connected = false
+
+	events:
+		onMount:
+			integer c = live.open("wss://example.com/ws/notifications", "onMessage", "onClose", "onError")
+			state.conn = c
+			state.connected = true
+
+		onMessage:
+			string msg = live.message()
+			state.count = state.count + 1
+
+		onClose:
+			state.connected = false
+			state.conn = 0
+
+		onError:
+			state.connected = false
+			state.conn = 0
+
+		onUnmount:
+			if state.conn > 0
+				live.close(state.conn)
+
+		onClearAll:
+			state.count = 0
+
+	render:
+		<div class="notification-bell">
+			<button onclick="onClearAll">
+				<span class="icon">🔔</span>
+				<span cl-if="state.count > 0" class="badge">{state.count}</span>
+			</button>
+			<span cl-if="!state.connected" class="offline-dot"></span>
+		</div>

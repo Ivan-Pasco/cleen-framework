@@ -1614,6 +1614,10 @@ functions:
 		if html_content != ""
 			// html: block found - generate render() from it
 
+			// Declare inputs variable so render() can reference inputs.fieldName
+			if before_html.indexOf("inputs:") != -1
+				result = result + "\tInputs inputs\n"
+
 			// Add sections before html: (typically inputs:, state:, events:)
 			if before_html.trim().length() > 0
 				string norm_before = normalize_handlers(before_html)

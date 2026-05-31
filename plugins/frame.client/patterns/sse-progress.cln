@@ -1,0 +1,67 @@
+// Pattern: sse-progress
+// Use when: a component tracks progress of a long-running server operation:
+//           file import, batch job, report generation, or any multi-step task
+// Anti-pattern: polling with repeated api.get() calls every N seconds, or writing
+//               new EventSource(...) in a <script> tag — feed.open() handles reconnection
+//               and named events automatically; polling wastes server resources and
+//               produces choppy progress updates
+
+component ImportProgress
+	state:
+		integer percent = 0
+		string status = "idle"
+		string message = ""
+		integer conn = 0
+
+	events:
+		onStart:
+			state.status = "starting"
+			later result = api.post("/api/import/start", "{}")
+			if result.ok
+				string jobId = result.json("jobId")
+				integer c = feed.open("/api/import/progress?job=" + jobId, "onProgress", "onFeedError")
+				feed.on(c, "complete", "onComplete")
+				state.conn = c
+				state.status = "running"
+			else
+				state.status = "error"
+				state.message = result.json("message") default "Failed to start import"
+
+		onProgress:
+			string data = feed.data()
+			state.percent = data.toInteger()
+			state.message = state.percent.toString() + "% complete"
+
+		onComplete:
+			state.percent = 100
+			state.status = "done"
+			state.message = "Import complete"
+			if state.conn > 0
+				feed.close(state.conn)
+				state.conn = 0
+
+		onFeedError:
+			state.status = "error"
+			state.message = "Connection lost"
+			state.conn = 0
+
+	render:
+		<div class="import-progress">
+			<button cl-if="state.status == 'idle'" onclick="onStart">Start Import</button>
+
+			<div cl-if="state.status == 'running' or state.status == 'starting'">
+				<div class="progress-bar">
+					<div class="progress-fill" style="width: {state.percent}%"></div>
+				</div>
+				<p>{state.message}</p>
+			</div>
+
+			<div cl-if="state.status == 'done'" class="success">
+				<p>{state.message}</p>
+			</div>
+
+			<div cl-if="state.status == 'error'" class="error">
+				<p>{state.message}</p>
+				<button onclick="onStart">Retry</button>
+			</div>
+		</div>

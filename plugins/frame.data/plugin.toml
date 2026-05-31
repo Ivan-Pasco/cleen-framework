@@ -103,6 +103,7 @@ types = [
   { name = "Model", description = "Base type for data models" },
   { name = "Query", description = "Database query builder" },
   { name = "Transaction", description = "Database transaction context" },
+  { name = "datetime", description = "Database datetime/timestamp field type — serialized as ISO string in JSON responses" },
 ]
 
 # Built-in functions/expressions

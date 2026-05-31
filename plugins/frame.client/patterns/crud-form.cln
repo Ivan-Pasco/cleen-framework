@@ -1,0 +1,27 @@
+// Pattern: crud-form
+// Use when: a component creates or updates a record via an API call with form data
+// Anti-pattern: calling fetch() directly, passing a handler name to api.post, or manually
+//               serializing form fields — api.submit() collects the form as JSON automatically
+
+component CreateUserForm
+	state:
+		string error = ""
+		boolean saved = false
+
+	events:
+		onSave:
+			later result = api.submit("#user-form", "/api/users", "POST")
+			if result.ok
+				state.saved = true
+				state.error = ""
+			else
+				state.error = result.json("message") default "Save failed"
+
+	render:
+		<form id="user-form">
+			<input name="name" type="text" placeholder="Name" />
+			<input name="email" type="email" placeholder="Email" />
+			<div cl-if="state.error != ''" class="error">{state.error}</div>
+			<div cl-if="state.saved" class="success">Saved!</div>
+			<button cl-if="!state.saved" onclick="onSave">Save</button>
+		</form>
