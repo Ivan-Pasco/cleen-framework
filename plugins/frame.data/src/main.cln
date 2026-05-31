@@ -952,7 +952,7 @@ functions:
 				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter + \" AND " + parsed_where + "\"\n"
 			else
 				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter\n"
-			__tc_result = __tc_result + "__parse_count(_db_query(__tc_sql, \"[]\"))"
+			__tc_result = __tc_result + "json.get(_db_query(__tc_sql, \"[]\"), \"0.count\").toInteger()"
 			return __tc_result
 
 		string sql = "SELECT COUNT(*) as count FROM " + table_name
@@ -960,7 +960,7 @@ functions:
 		if where_clause.length() > 0
 			sql = sql + " WHERE " + parse_where_clause(where_clause)
 
-		return "__parse_count(_db_query(\"" + sql + "\", \"[]\"))"
+		return "json.get(_db_query(\"" + sql + "\", \"[]\"), \"0.count\").toInteger()"
 
 	// Expand Model.insert: block.
 	// For tenant-aware models, the tenant_id column is prepended automatically
