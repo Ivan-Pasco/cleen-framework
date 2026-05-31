@@ -282,8 +282,58 @@ functions:
 
 		return result
 
+	// Normalize a field line to canonical "type name [= default] [: constraints]" form.
+	// Handles two input formats:
+	//   New DSL format: "name: type [modifiers]"  e.g. "id: integer pk auto"
+	//   Old format:     "type name [: constraints]" e.g. "integer email : unique"
+	// When the colon appears before the first space the line is in new DSL format.
+	string normalize_field_line(string line)
+		integer colon_pos = line.indexOf(":")
+		integer first_space = line.indexOf(" ")
+
+		// Old format: colon comes after first space (or no colon at all)
+		if colon_pos == -1 or (first_space != -1 and first_space < colon_pos)
+			return line
+
+		// New DSL format: "name: type [modifiers]"
+		string field_name = line.substring(0, colon_pos).trim()
+		string rest = line.substring(colon_pos + 1, line.length()).trim()
+
+		// Extract type (first word) and remaining modifiers
+		integer rest_space = rest.indexOf(" ")
+		string field_type = ""
+		string modifiers = ""
+		if rest_space == -1
+			field_type = rest
+		else
+			field_type = rest.substring(0, rest_space).trim()
+			modifiers = rest.substring(rest_space + 1, rest.length()).trim()
+
+		if field_type.length() == 0
+			return ""
+
+		// Split modifiers into default value and constraints
+		string default_val = ""
+		string constraints = modifiers
+		integer def_pos = modifiers.indexOf("default ")
+		if def_pos != -1
+			constraints = modifiers.substring(0, def_pos).trim()
+			default_val = modifiers.substring(def_pos + 8, modifiers.length()).trim()
+
+		// Build canonical: "type name [= default] [: constraints]"
+		string result = field_type + " " + field_name
+		if default_val.length() > 0
+			result = result + " = " + default_val
+		if constraints.length() > 0
+			result = result + " : " + constraints
+
+		return result
+
 	// Parse a single field line like "string email : unique" or "boolean active = true"
 	string parse_field_line(string line)
+		line = normalize_field_line(line)
+		if line.length() == 0
+			return ""
 		// Check for constraints (colon separator)
 		integer colon_pos = line.indexOf(" : ")
 		string field_part = line
@@ -341,6 +391,7 @@ functions:
 
 	// Extract field name from a line
 	string extract_field_name_from_line(string line)
+		line = normalize_field_line(line)
 		// Remove constraints
 		integer colon_pos = line.indexOf(" : ")
 		if colon_pos != -1
@@ -384,6 +435,7 @@ functions:
 
 	// Extract field type from a line (first word)
 	string extract_field_type_from_line(string line)
+		line = normalize_field_line(line)
 		// Remove constraints
 		integer colon_pos = line.indexOf(" : ")
 		if colon_pos != -1
@@ -547,6 +599,7 @@ functions:
 
 			string line = lines.substring(line_start, line_end).trim()
 			if line.length() > 0
+				line = normalize_field_line(line)
 				// Only process lines that have constraint section
 				integer colon_pos = line.indexOf(" : ")
 				if colon_pos != -1
@@ -1487,6 +1540,7 @@ functions:
 
 			string line = lines.substring(line_start, line_end).trim()
 			if line.length() > 0
+				line = normalize_field_line(line)
 				// Parse constraints
 				integer colon_pos = line.indexOf(" : ")
 				string field_part = line
