@@ -1587,7 +1587,6 @@ functions:
 		string tag = get_attr(attrs, "tag", "")
 		string name = get_attr(attrs, "name", "")
 		string client = get_attr(attrs, "client", "off")
-		string css_attr = get_attr(attrs, "css", "")
 
 		// Use tag to derive name if not provided
 		if name == "" and tag != ""
@@ -1654,20 +1653,7 @@ functions:
 			string norm_body = normalize_handlers(body)
 			result = result + "\t" + norm_body.replace("\n", "\n\t") + "\n"
 
-		// Build renderSSR body — injects a <link> for the component's CSS file
-		// Default: /css/components/{tag}.css  Override: css="custom/path.css" attribute
-		string ssr_body = ""
-		string css_href = ""
-		if css_attr != ""
-			css_href = css_attr
-		else if tag != ""
-			css_href = "/css/components/" + tag + ".css"
-
-		if css_href != ""
-			ssr_body = "\t\t\tinteger __link_r = _ui_injectHeadLink(\"" + css_href + "\")\n"
-			ssr_body = ssr_body + "\t\t\treturn this.render()\n"
-		else
-			ssr_body = "\t\t\treturn this.render()\n"
+		string ssr_body = "\t\t\treturn this.render()\n"
 
 		// Add slot setter and SSR wrapper
 		if html_content != "" and after_html.trim().startsWith("functions:")
