@@ -390,6 +390,11 @@ functions:
 				if __first_ch != "\""
 					default_val = "\"" + default_val + "\""
 
+		// datetime has no Clean Language primitive type; store as string in generated class code
+		// (SQL schema generation uses clean_type_to_sql which still maps it to TIMESTAMP)
+		if field_type == "datetime"
+			field_type = "string"
+
 		// Generate field declaration
 		string result = field_type + " " + field_name
 		if default_val.length() > 0
@@ -482,7 +487,11 @@ functions:
 		if space_pos == -1
 			return ""
 
-		return line.substring(0, space_pos).trim()
+		string ftype = line.substring(0, space_pos).trim()
+		// datetime has no Clean Language primitive type; report as string for constructor/parse_as generation
+		if ftype == "datetime"
+			return "string"
+		return ftype
 
 // ============================================================================
 // STATIC METHOD GENERATION (find, first, count, insert, update, delete)
