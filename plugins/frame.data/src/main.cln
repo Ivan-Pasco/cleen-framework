@@ -872,6 +872,8 @@ functions:
 
 functions:
 	// Expand Model.find: block.
+	// Returns a raw JSON string from _db_query so callers can declare the result as
+	// string and use json.get(results, "N.field") — consistent with all other ORM ops.
 	// When the model body declares a tenantId field or a ": tenant" constraint,
 	// the generated SQL automatically prepends a tenant_id filter so that callers
 	// never have to include it explicitly in their where: sub-blocks.
@@ -922,7 +924,7 @@ functions:
 			string __tf_offset = extract_subblock(body, "offset:")
 			if __tf_offset.length() > 0
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" OFFSET " + __tf_offset.trim() + "\"\n"
-			__tf_result = __tf_result + "__parse_as_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
+			__tf_result = __tf_result + "_db_query(__tf_sql, \"[]\")"
 			return __tf_result
 
 		// Handle where clause (non-tenant path)
@@ -942,7 +944,7 @@ functions:
 		if offset_clause.length() > 0
 			sql = sql + " OFFSET " + offset_clause.trim()
 
-		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
+		return "_db_query(\"" + sql + "\", \"[]\")"
 
 	// Expand Model.first: block.
 	// Returns a raw JSON string from _db_query with LIMIT 1 baked in.
