@@ -209,7 +209,9 @@ functions:
 
 		return result
 
-	// Expand a 'data:' configuration block (no model name) into _db_configure() call
+	// Expand a 'data:' configuration block (no model name) into _db_configure() call.
+	// _db_configure takes a single JSON string (bridge contract: params = ["string"]).
+	// Wrap static values as string literals; pass _env_get() calls through as expressions.
 	string expand_data_config(string body)
 		string engine = extract_config_value(body, "engine", "sqlite")
 		string host = extract_config_value(body, "host", "localhost")
@@ -226,8 +228,28 @@ functions:
 			pool_max = extract_config_value(pool_config, "max", "10")
 			pool_idle = extract_config_value(pool_config, "idleTimeout", "30000")
 
+		// Wrap each value: static values become "\"value\""; _env_get() calls pass through as-is
+		string engine_expr = engine
+		if not engine.startsWith("_env_get")
+			engine_expr = "\"" + engine + "\""
+		string host_expr = host
+		if not host.startsWith("_env_get")
+			host_expr = "\"" + host + "\""
+		string database_expr = database
+		if not database.startsWith("_env_get")
+			database_expr = "\"" + database + "\""
+		string user_expr = user
+		if not user.startsWith("_env_get")
+			user_expr = "\"" + user + "\""
+		string password_expr = password
+		if not password.startsWith("_env_get")
+			password_expr = "\"" + password + "\""
+
+		// Generate: string __db_cfg = "{\"engine\":\"" + <expr> + "\",...}"
+		// then: _db_configure(__db_cfg)  (single JSON string argument)
 		string result = "// Database configuration\n"
-		result = result + "_db_configure(\"" + engine + "\", \"" + host + "\", " + port + ", \"" + database + "\", \"" + user + "\", \"" + password + "\", " + pool_max + ", " + pool_idle + ")\n\n"
+		result = result + "string __db_cfg = \"{\\\"engine\\\":\\\"\" + " + engine_expr + " + \"\\\",\\\"host\\\":\\\"\" + " + host_expr + " + \"\\\",\\\"port\\\":\\\"" + port + "\\\",\\\"database\\\":\\\"\" + " + database_expr + " + \"\\\",\\\"user\\\":\\\"\" + " + user_expr + " + \"\\\",\\\"password\\\":\\\"\" + " + password_expr + " + \"\\\",\\\"pool_max\\\":\\\"" + pool_max + "\\\",\\\"pool_idle_timeout_ms\\\":\\\"" + pool_idle + "\\\"}\"\n"
+		result = result + "_db_configure(__db_cfg)\n\n"
 		return result
 
 	// Extract a named key=value from a configuration block body
