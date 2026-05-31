@@ -206,6 +206,7 @@ functions:
 		// Generate the top-level typed parser function for this model
 		result = result + "\nfunctions:\n"
 		result = result + generate_parse_as_function(model_name, field_names, field_types)
+		result = result + generate_json_rows_function(model_name)
 
 		return result
 
@@ -933,7 +934,7 @@ functions:
 			string __tf_offset = extract_subblock(body, "offset:")
 			if __tf_offset.length() > 0
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" OFFSET " + __tf_offset.trim() + "\"\n"
-			__tf_result = __tf_result + "__parse_as_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
+			__tf_result = __tf_result + "__find_as_strings_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
 			return __tf_result
 
 		// Handle where clause (non-tenant path)
@@ -953,7 +954,7 @@ functions:
 		if offset_clause.length() > 0
 			sql = sql + " OFFSET " + offset_clause.trim()
 
-		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
+		return "__find_as_strings_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
 
 	// Expand Model.first: block.
 	// Returns a raw JSON string from _db_query with LIMIT 1 baked in.
@@ -1826,4 +1827,20 @@ functions:
 		result = result + "\t\t\t__i = __i + 1\n"
 		result = result + "\t\t\t__check = json.get(__json, __i.toString() + \".id\")\n"
 		result = result + "\t\treturn __result\n"
+		return result
+
+	// Generate __find_as_strings_ModelName: returns list<string> where each element is
+	// one JSON row from _db_query. Used by block-based Model.where: expansions so that
+	// callers may declare list<string> and access fields via json.get(row, "field").
+	// The typed list<ModelName> path is served by the static find() method via __parse_as_ModelName.
+	string generate_json_rows_function(string model_name)
+		string result = "\tlist<string> __find_as_strings_" + model_name + "(string __json)\n"
+		result = result + "\t\tlist<string> __fstr_result = []\n"
+		result = result + "\t\tinteger __fstr_i = 0\n"
+		result = result + "\t\tstring __fstr_check = json.get(__json, \"0.id\")\n"
+		result = result + "\t\twhile __fstr_check != \"\"\n"
+		result = result + "\t\t\t__fstr_result.add(json.dataToText(json.get(__json, __fstr_i.toString())))\n"
+		result = result + "\t\t\t__fstr_i = __fstr_i + 1\n"
+		result = result + "\t\t\t__fstr_check = json.get(__json, __fstr_i.toString() + \".id\")\n"
+		result = result + "\t\treturn __fstr_result\n"
 		return result
