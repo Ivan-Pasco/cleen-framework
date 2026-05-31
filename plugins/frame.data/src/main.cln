@@ -922,17 +922,37 @@ functions:
 
 		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
 
-	// Expand Model.first: block
-	// Injects limit: 1 into the body before delegating to expand_find so the
-	// SQL gets LIMIT 1 baked in.  The result is wrapped with list.first() to
-	// extract the single element from the typed list<Model> that expand_find
-	// returns.  This avoids the undefined __parse_first helper.
+	// Expand Model.first: block.
+	// Returns a raw JSON string from _db_query with LIMIT 1 baked in.
+	// Callers declare the result as string and use json.get(result, "0.field")
+	// for field access — consistent with the generated static first() method.
 	string expand_first(string model_name, string body)
-		string first_body = body
-		if first_body.indexOf("limit:") == -1
-			first_body = first_body + "\nlimit:\n\t1\n"
-		string find_expr = expand_find(model_name, first_body)
-		return "list.first(" + find_expr + ")"
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		string order_clause = extract_subblock(body, "order:")
+		boolean has_tenant = detect_tenant_field(body)
+
+		if has_tenant
+			string __ff_result = "string __ff_sql = \"SELECT * FROM " + table_name + "\"\n"
+			__ff_result = __ff_result + "string __ff_tenant = tenant_getId()\n"
+			__ff_result = __ff_result + "string __ff_filter = \"tenant_id = '\" + __ff_tenant + \"'\"\n"
+			if where_clause.length() > 0
+				__ff_result = __ff_result + "__ff_sql = __ff_sql + \" WHERE \" + __ff_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
+			else
+				__ff_result = __ff_result + "__ff_sql = __ff_sql + \" WHERE \" + __ff_filter\n"
+			if order_clause.length() > 0
+				__ff_result = __ff_result + "__ff_sql = __ff_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
+			__ff_result = __ff_result + "__ff_sql = __ff_sql + \" LIMIT 1\"\n"
+			__ff_result = __ff_result + "_db_query(__ff_sql, \"[]\")"
+			return __ff_result
+
+		string sql = "SELECT * FROM " + table_name
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+		if order_clause.length() > 0
+			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
+		sql = sql + " LIMIT 1"
+		return "_db_query(\"" + sql + "\", \"[]\")"
 
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
