@@ -359,6 +359,15 @@ functions:
 		string field_type = field_part.substring(0, space_pos).trim()
 		string field_name = field_part.substring(space_pos + 1, field_part.length()).trim()
 
+		// The compiler strips string literal quotes from DSL body lines, so a string field
+		// default like "Untitled" arrives as just: Untitled (no quotes). Re-add quotes so
+		// the generated class field declaration compiles as a valid string literal.
+		if field_type == "string" and default_val.length() > 0
+			if default_val != "true" and default_val != "false" and default_val != "null"
+				string __first_ch = default_val.substring(0, 1)
+				if __first_ch != "\""
+					default_val = "\"" + default_val + "\""
+
 		// Generate field declaration
 		string result = field_type + " " + field_name
 		if default_val.length() > 0
@@ -1577,11 +1586,15 @@ functions:
 						result = result + field_name + " " + sql_type + sql_constraint
 
 						if default_val.length() > 0 and constraints.indexOf("default=") == -1
-							if default_val == "true" or default_val == "false"
-								result = result + " DEFAULT " + default_val
+							// Strip outer double-quotes the compiler adds to string literals
+							string sql_default = default_val
+							if sql_default.startsWith("\"") and sql_default.endsWith("\"") and sql_default.length() > 1
+								sql_default = sql_default.substring(1, sql_default.length() - 1)
+							if sql_default == "true" or sql_default == "false"
+								result = result + " DEFAULT " + sql_default
 							else
 								// Escape single quotes in default value to prevent SQL injection
-								result = result + " DEFAULT '" + default_val.replace("'", "''") + "'"
+								result = result + " DEFAULT '" + sql_default.replace("'", "''") + "'"
 					else
 						// Non-primitive type: treat as foreign key reference to another model
 						// Column stored as INTEGER referencing the related table's id column
