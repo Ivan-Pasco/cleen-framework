@@ -86,7 +86,7 @@ functions:
 
 functions:
 	string expand_endpoints(string body)
-		string result = ""
+		string result = "functions:\n"
 
 		// Parse endpoints
 		string remaining = body
