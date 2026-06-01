@@ -31,8 +31,7 @@ functions:
 
 functions:
 	// Generates the response helper functions block.
-	// Called both from expand_endpoints (for endpoints: files) and from the
-	// __preamble path (for functions:-only files such as guard/load handlers).
+	// Called exclusively from __preamble — emitted once per build target.
 	string emit_response_helpers()
 		string result = "functions:\n"
 		result = result + "\tstring jsonResponse(string data)\n"
@@ -88,9 +87,6 @@ functions:
 functions:
 	string expand_endpoints(string body)
 		string result = ""
-
-		// Add response helpers (shared with __preamble path)
-		result = result + emit_response_helpers()
 
 		// Parse endpoints
 		string remaining = body
