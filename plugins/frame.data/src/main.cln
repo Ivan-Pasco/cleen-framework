@@ -1235,7 +1235,7 @@ functions:
 		// Register the migration with the runtime at startup so it is tracked
 		// in the migrations version table.
 		result = result + "\nstart:\n"
-		result = result + "\t_db_register_migration(\"" + migration_name + "\")\n"
+		result = result + "\t_db_register_migration(\"" + migration_name + "\", \"" + escaped_up + "\", \"" + escaped_down + "\")\n"
 
 		return result
 
