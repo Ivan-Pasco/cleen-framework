@@ -52,7 +52,7 @@ functions = [
   # Migration System
   # Register a named migration for version tracking; the runtime records it in the
   # schema_migrations table with a pending status until it is applied.
-  { name = "_db_register_migration", params = ["string"], returns = "integer", description = "Register a migration by name for version tracking; returns 0 on success, -1 on error", expand_strings = true },
+  { name = "_db_register_migration", params = ["string", "string", "string"], returns = "integer", description = "Register a migration (name, up_sql, down_sql) for version tracking; the runtime executes up_sql before first request if not already applied; returns 1 on success, 0 on error", expand_strings = true },
 
   # Compare the declared field definitions for a table against the live database
   # schema and return the ALTER TABLE SQL needed to reconcile the difference.
