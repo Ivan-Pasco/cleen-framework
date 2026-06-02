@@ -4244,7 +4244,7 @@ functions:
 
 		string injected_json = ""
 		if has_server and route_fns.length() > 0
-			string module_content = "// Auto-generated page routes\nfunctions:\n" + route_fns + "start:\n" + route_registrations
+			string module_content = "// Auto-generated page routes\nstart:\n" + route_registrations + "\nfunctions:\n" + route_fns
 			injected_json = "{\"virtual_path\":\"__page_routes_generated.cln\",\"content\":\"" + escape_json_string(module_content) + "\"}"
 
 		return "{\"injected_sources\":[" + injected_json + "],\"transformed_sources\":[" + transformed_json + "]}"
