@@ -30,6 +30,11 @@ get_page_meta = "get_page_meta"
 # IDE keyword support
 get_keywords = "get_keywords"
 
+# Plugin assembly hook — scans source files for page companions, prefixes their
+# load()/guard() functions, and generates a synthetic route module when
+# has_frame_server=true. Required by compiler >= 0.30.213.
+assemble = "assemble"
+
 [handles]
 blocks = ["component", "screen", "page", "html", "styles", "ui"]
 

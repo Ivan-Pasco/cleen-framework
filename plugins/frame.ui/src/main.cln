@@ -4044,3 +4044,202 @@ functions:
 						result = result + "__theme_css = __theme_css + \"--" + prefix + "-" + var_name + ": " + raw_value + "; \"\n"
 
 		return result
+
+// ============================================================================
+// PAGE COMPANION ASSEMBLY HOOK
+// ============================================================================
+// Implements the assemble() WASM export required by the compiler's plugin
+// assembly hook (PluginExports.assemble, compiler >= 0.30.213).
+//
+// Scans source_files for page companions — .cln files in any pages/ directory
+// that define any load() or any guard() — then:
+//   1. Prefixes their function names with a module name from the file path
+//      (e.g. app/web/pages/login.cln → pages_login_load / pages_login_guard)
+//   2. Normalises Request parameter types to any on prefixed signatures
+//   3. When has_frame_server=true, injects __page_routes_generated.cln which
+//      registers a GET route per page using _http_route + _ui_render_page
+//
+// Input JSON:  {"source_files":[{"path":"...","content":"..."},...],
+//               "project_root":"...","manifest_dir":"...","has_frame_server":true}
+// Output JSON: {"injected_sources":[{"virtual_path":"...","content":"..."},...],
+//               "transformed_sources":[{"path":"...","content":"..."},...]}
+
+functions:
+	string assemble(string input_json)
+		boolean has_server = input_json.indexOf("\"has_frame_server\":true") != -1
+
+		list<string> source_files = parse_source_files(input_json)
+
+		string transformed_json = ""
+		string route_fns = ""
+		string route_registrations = ""
+		boolean first_transformed = true
+
+		integer fi = 0
+		while fi < source_files.length()
+			string file_obj = source_files[fi]
+			string file_path = extract_json_field(file_obj, "path")
+			string file_content = extract_json_field(file_obj, "content")
+
+			boolean in_pages = file_path.indexOf("pages/") != -1
+			boolean has_load = file_content.indexOf("any load(") != -1
+			boolean has_guard = file_content.indexOf("any guard(") != -1
+
+			if in_pages and (has_load or has_guard)
+				string module_name = derive_module_name(file_path)
+
+				// Prefix load()/guard() — handle Request param normalisation first
+				// so the second replace doesn't double-match
+				string new_content = file_content
+				if has_load
+					new_content = new_content.replace("any load(Request ", "any " + module_name + "_load(any ")
+					new_content = new_content.replace("any load(", "any " + module_name + "_load(")
+				if has_guard
+					new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
+					new_content = new_content.replace("any guard(", "any " + module_name + "_guard(")
+
+				if first_transformed == false
+					transformed_json = transformed_json + ","
+				first_transformed = false
+				transformed_json = transformed_json + "{\"path\":\"" + escape_json_string(file_path) + "\",\"content\":\"" + escape_json_string(new_content) + "\"}"
+
+				if has_server
+					string url = derive_url_path(file_path)
+					string html_path = derive_html_path(file_path)
+					route_fns = route_fns + "\tstring " + module_name + "_render()\n"
+					route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n\n"
+					route_registrations = route_registrations + "\t_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
+
+			fi = fi + 1
+
+		string injected_json = ""
+		if has_server and route_fns.length() > 0
+			string module_content = "// Auto-generated page routes\nfunctions:\n" + route_fns + "start:\n" + route_registrations
+			injected_json = "{\"virtual_path\":\"__page_routes_generated.cln\",\"content\":\"" + escape_json_string(module_content) + "\"}"
+
+		return "{\"injected_sources\":[" + injected_json + "],\"transformed_sources\":[" + transformed_json + "]}"
+
+	// Extract the source_files JSON array from assemble input, returning each
+	// element as a raw JSON object string. Properly handles { } inside string
+	// values so Clean code in content fields doesn't corrupt the depth counter.
+	list<string> parse_source_files(string input_json)
+		list<string> result = []
+
+		integer sf_start = input_json.indexOf("\"source_files\"")
+		if sf_start == -1
+			return result
+
+		integer arr_start = input_json.indexOf("[", sf_start)
+		if arr_start == -1
+			return result
+
+		integer pos = arr_start + 1
+		integer json_len = input_json.length()
+		integer outer_safety = 0
+
+		while pos < json_len and outer_safety < 10000
+			outer_safety = outer_safety + 1
+
+			string ch = input_json.substring(pos, pos + 1)
+
+			if ch == " " or ch == "\n" or ch == "\r" or ch == "\t"
+				pos = pos + 1
+			else if ch == "]"
+				break
+			else if ch == ","
+				pos = pos + 1
+			else if ch == "{"
+				// Parse one source-file object using string-aware brace matching
+				integer obj_start = pos
+				integer depth = 1
+				pos = pos + 1
+				boolean in_str = false
+
+				while pos < json_len and depth > 0
+					string c = input_json.substring(pos, pos + 1)
+					if in_str
+						if c == "\\"
+							// Skip the escaped character
+							if pos + 1 < json_len
+								pos = pos + 2
+							else
+								pos = pos + 1
+						else
+							if c == "\""
+								in_str = false
+							pos = pos + 1
+					else
+						if c == "\""
+							in_str = true
+							pos = pos + 1
+						else if c == "{"
+							depth = depth + 1
+							pos = pos + 1
+						else if c == "}"
+							depth = depth - 1
+							pos = pos + 1
+						else
+							pos = pos + 1
+
+				string obj = input_json.substring(obj_start, pos)
+				result.push(obj)
+			else
+				pos = pos + 1
+
+		return result
+
+	// "app/web/pages/login.cln"           -> "pages_login"
+	// "app/web/pages/dashboard/index.cln" -> "pages_dashboard_index"
+	// "app/web/pages/blog/[slug].cln"     -> "pages_blog_slug"
+	string derive_module_name(string file_path)
+		integer pages_pos = file_path.indexOf("pages/")
+		string rel = file_path
+		if pages_pos != -1
+			rel = file_path.substring(pages_pos + 6, file_path.length())
+
+		// Strip extension
+		integer dot_pos = rel.lastIndexOf(".")
+		if dot_pos != -1
+			rel = rel.substring(0, dot_pos)
+
+		// Flatten path and strip dynamic-segment brackets
+		string name = rel.replace("/", "_").replace("[", "").replace("]", "")
+
+		return "pages_" + name
+
+	// "app/web/pages/login.cln"           -> "/login"
+	// "app/web/pages/index.cln"           -> "/"
+	// "app/web/pages/dashboard/index.cln" -> "/dashboard"
+	// "app/web/pages/blog/[slug].cln"     -> "/blog/:slug"
+	string derive_url_path(string file_path)
+		integer pages_pos = file_path.indexOf("pages/")
+		string rel = file_path
+		if pages_pos != -1
+			rel = file_path.substring(pages_pos + 6, file_path.length())
+
+		// Strip extension
+		integer dot_pos = rel.lastIndexOf(".")
+		if dot_pos != -1
+			rel = rel.substring(0, dot_pos)
+
+		// Root index
+		if rel == "index"
+			return "/"
+
+		// Convert [param] to :param
+		string url = rel.replace("[", ":").replace("]", "")
+
+		// Folder index: strip trailing /index
+		if url.endsWith("/index")
+			url = url.substring(0, url.length() - 6)
+
+		if url.length() == 0
+			return "/"
+
+		return "/" + url
+
+	// "app/web/pages/login.cln" -> "app/web/pages/login.html"
+	string derive_html_path(string file_path)
+		if file_path.endsWith(".cln")
+			return file_path.substring(0, file_path.length() - 4) + ".html"
+		return file_path

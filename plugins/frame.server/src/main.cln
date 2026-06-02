@@ -13,6 +13,8 @@ functions:
 			return expand_endpoints(body)
 		if block_name == "server"
 			return expand_server(body)
+		if block_name == "routes"
+			return expand_routes(body)
 		// Preamble: emit response helpers unconditionally so they are available
 		// in functions: blocks even when no endpoints: block is present.
 		if block_name == "__preamble"
@@ -22,10 +24,12 @@ functions:
 	string validate_block(string block_name, string attributes, string body)
 		if block_name == "endpoints"
 			return validate_endpoints(body)
+		if block_name == "routes"
+			return validate_routes(body)
 		return ""
 
 	string get_keywords()
-		return "[\"endpoints\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\"]"
+		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\"]"
 
 // ============================================================================
 // RESPONSE HELPERS — emitted for every file that loads frame.server
@@ -463,6 +467,125 @@ functions:
 				result = result + indent + trimmed + "\n"
 
 		return result
+
+// ============================================================================
+// ROUTES BLOCK EXPANSION
+// ============================================================================
+// Handles routes: blocks which declare declarative redirects.
+//
+// Supported directives:
+//   redirect: "/from" -> "/to"        — 302 redirect
+//   redirect: "/from" -> "/to" [301]  — permanent redirect
+//
+// Example:
+//   routes:
+//       redirect: "/" -> "/dashboard"
+//       redirect: "/home" -> "/dashboard" [301]
+//
+// Generates handler functions + start: route registrations.
+
+functions:
+	string expand_routes(string body)
+		string fn_block = "functions:\n"
+		string route_calls = ""
+		integer idx = 0
+
+		string remaining = body
+		integer safety = 0
+
+		while safety < 200 and remaining.length() > 0
+			safety = safety + 1
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			string trimmed = line.trim()
+			if trimmed.length() == 0
+				continue
+
+			if trimmed.startsWith("redirect:")
+				string after = trimmed.substring(9, trimmed.length()).trim()
+
+				// Parse from path (first quoted string)
+				integer q1 = after.indexOf("\"")
+				if q1 != -1
+					integer q2 = after.indexOf("\"", q1 + 1)
+					if q2 != -1
+						string from_path = after.substring(q1 + 1, q2)
+
+						// Skip "->" separator
+						string rest = after.substring(q2 + 1, after.length()).trim()
+						if rest.startsWith("->")
+							rest = rest.substring(2, rest.length()).trim()
+
+						// Parse to path (second quoted string)
+						integer q3 = rest.indexOf("\"")
+						if q3 != -1
+							integer q4 = rest.indexOf("\"", q3 + 1)
+							if q4 != -1
+								string to_path = rest.substring(q3 + 1, q4)
+
+								// Optional status code: [301] or [302]
+								string after_to = rest.substring(q4 + 1, rest.length()).trim()
+								string status = "302"
+								if after_to.startsWith("[")
+									integer close_b = after_to.indexOf("]")
+									if close_b != -1
+										status = after_to.substring(1, close_b).trim()
+
+								// Emit redirect handler function
+								fn_block = fn_block + "\tstring __redirect_" + idx.toString() + "()\n"
+								fn_block = fn_block + "\t\treturn redirectToStatus(\"" + to_path + "\", " + status + ")\n\n"
+
+								// Register GET route for from_path
+								route_calls = route_calls + "\t_http_route(\"GET\", \"" + from_path + "\", \"__redirect_" + idx.toString() + "\")\n"
+
+								idx = idx + 1
+
+		if idx == 0
+			return ""
+
+		string result = fn_block
+		result = result + "start:\n"
+		result = result + route_calls
+		return result
+
+	string validate_routes(string body)
+		if body.trim().length() == 0
+			return "routes: block is empty"
+
+		string remaining = body
+		integer safety = 0
+
+		while safety < 200 and remaining.length() > 0
+			safety = safety + 1
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			string trimmed = line.trim()
+			if trimmed.length() == 0
+				continue
+
+			if trimmed.startsWith("redirect:")
+				string after = trimmed.substring(9, trimmed.length()).trim()
+				if after.indexOf("\"") == -1
+					return "routes: redirect: directive must specify a quoted from-path"
+				if after.indexOf("->") == -1
+					return "routes: redirect: directive must use '->' separator: redirect: \"/from\" -> \"/to\""
+			// Unknown directive — silently ignore (forward-compat)
+
+		return ""
 
 // ============================================================================
 // VALIDATION
