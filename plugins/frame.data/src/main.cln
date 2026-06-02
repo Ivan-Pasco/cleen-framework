@@ -934,7 +934,7 @@ functions:
 			string __tf_offset = extract_subblock(body, "offset:")
 			if __tf_offset.length() > 0
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" OFFSET " + __tf_offset.trim() + "\"\n"
-			__tf_result = __tf_result + "__find_as_strings_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
+			__tf_result = __tf_result + "__parse_as_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
 			return __tf_result
 
 		// Handle where clause (non-tenant path)
@@ -954,7 +954,7 @@ functions:
 		if offset_clause.length() > 0
 			sql = sql + " OFFSET " + offset_clause.trim()
 
-		return "__find_as_strings_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
+		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
 
 	// Expand Model.first: block.
 	// Returns a raw JSON string from _db_query with LIMIT 1 baked in.
