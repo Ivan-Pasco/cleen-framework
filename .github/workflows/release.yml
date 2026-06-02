@@ -51,7 +51,7 @@ jobs:
             - **frame.canvas** - Canvas rendering and game development
             - **frame.client** - Client-side communication (HTTP, WebSocket, SSE)
             - **frame.data** - ORM and database operations
-            - **frame.i18n** - Internationalization and localization
+            - **frame.locale** - Internationalization and localization
             - **frame.jobs** - Background job queue and cron scheduling
             - **frame.mcp** - MCP server (tools, resources, prompts for AI agents)
             - **frame.server** - HTTP server runtime
@@ -78,7 +78,7 @@ jobs:
           cp -r plugins/frame.canvas frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.client frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.data frame-plugins-${{ needs.create-release.outputs.version }}/
-          cp -r plugins/frame.i18n frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.locale frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.jobs frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.mcp frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.server frame-plugins-${{ needs.create-release.outputs.version }}/
@@ -98,7 +98,7 @@ jobs:
           - frame.canvas - Canvas rendering and game development
           - frame.client - Client-side communication (HTTP, WebSocket, SSE)
           - frame.data - ORM and database operations
-          - frame.i18n - Internationalization and localization
+          - frame.locale - Internationalization and localization
           - frame.jobs - Background job queue and cron scheduling
           - frame.mcp - MCP server (tools, resources, prompts for AI agents)
           - frame.server - HTTP server runtime
@@ -154,7 +154,7 @@ jobs:
               "frame.canvas": "included",
               "frame.client": "included",
               "frame.data": "included",
-              "frame.i18n": "included",
+              "frame.locale": "included",
               "frame.jobs": "included",
               "frame.mcp": "included",
               "frame.server": "included",

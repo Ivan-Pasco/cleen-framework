@@ -1,6 +1,6 @@
-// frame.i18n plugin - Internationalization DSL
+// frame.locale plugin - Internationalization DSL
 // Provides: locale block for BCP 47 locale configuration, t() and tc() translation functions,
-//           i18n.formatNumber, i18n.formatCurrency, i18n.formatDate helpers
+//           locale.formatNumber, locale.formatCurrency, locale.formatDate helpers
 // Version: 1.0.0
 // Implements: Frame i18n Specification §16
 
@@ -15,7 +15,7 @@ functions:
 		return body
 
 	string get_keywords()
-		return "[\"locale\", \"t\", \"tc\", \"i18n.locale\", \"i18n.setLocale\", \"i18n.formatNumber\", \"i18n.formatCurrency\", \"i18n.formatDate\"]"
+		return "[\"locale\", \"t\", \"tc\", \"locale.current\", \"locale.set\", \"locale.formatNumber\", \"locale.formatCurrency\", \"locale.formatDate\"]"
 
 // ============================================================================
 // LOCALE BLOCK EXPANSION

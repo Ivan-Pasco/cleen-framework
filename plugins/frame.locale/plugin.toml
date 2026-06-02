@@ -1,5 +1,5 @@
 [plugin]
-name = "frame.i18n"
+name = "frame.locale"
 version = "1.0.0"
 description = "Internationalization: translation keys, locale detection, number/currency/date formatting"
 author = "Clean Language Team"
@@ -42,11 +42,11 @@ types = [
 functions = [
   { name = "t", signature = "t(key, params) -> string", description = "Translate a key. params is a JSON object for interpolation." },
   { name = "tc", signature = "tc(key, count, params) -> string", description = "Translate with plural form selection." },
-  { name = "i18n.locale", signature = "i18n.locale() -> string", description = "Current locale BCP 47 tag." },
-  { name = "i18n.setLocale", signature = "i18n.setLocale(locale)", description = "Change active locale." },
-  { name = "i18n.formatNumber", signature = "i18n.formatNumber(value, locale, options) -> string", description = "Format number in locale." },
-  { name = "i18n.formatCurrency", signature = "i18n.formatCurrency(value, currency, locale) -> string", description = "Format currency value." },
-  { name = "i18n.formatDate", signature = "i18n.formatDate(timestamp, style, locale) -> string", description = "Format date with style: short|medium|long|full." },
+  { name = "locale.current", signature = "locale.current() -> string", description = "Current locale BCP 47 tag." },
+  { name = "locale.set", signature = "locale.set(locale)", description = "Change active locale." },
+  { name = "locale.formatNumber", signature = "locale.formatNumber(value, locale, options) -> string", description = "Format number in locale." },
+  { name = "locale.formatCurrency", signature = "locale.formatCurrency(value, currency, locale) -> string", description = "Format currency value." },
+  { name = "locale.formatDate", signature = "locale.formatDate(timestamp, style, locale) -> string", description = "Format date with style: short|medium|long|full." },
 ]
 completions = [
   { trigger = "locale:", insert = "locale:\n\tdefault = \"${1:en}\"\n\tfallback = \"en\"\n\tdetection = \"header\"\n\tpath = \"app/i18n\"" },
@@ -62,9 +62,9 @@ patterns = ["*.json"]
 functions = [
   { clean_name = "t", bridge_name = "_i18n_t" },
   { clean_name = "tc", bridge_name = "_i18n_t_count" },
-  { clean_name = "i18n.locale", bridge_name = "_i18n_locale" },
-  { clean_name = "i18n.setLocale", bridge_name = "_i18n_set_locale" },
-  { clean_name = "i18n.formatNumber", bridge_name = "_i18n_format_number" },
-  { clean_name = "i18n.formatCurrency", bridge_name = "_i18n_format_currency" },
-  { clean_name = "i18n.formatDate", bridge_name = "_i18n_format_date" },
+  { clean_name = "locale.current", bridge_name = "_i18n_locale" },
+  { clean_name = "locale.set", bridge_name = "_i18n_set_locale" },
+  { clean_name = "locale.formatNumber", bridge_name = "_i18n_format_number" },
+  { clean_name = "locale.formatCurrency", bridge_name = "_i18n_format_currency" },
+  { clean_name = "locale.formatDate", bridge_name = "_i18n_format_date" },
 ]

@@ -2,7 +2,7 @@
 
 **Project:** Frame – Full-Stack Framework for Clean Language
 **Version:** 1.0
-**Location:** `/documents/specification/16_frame_i18n.md`
+**Location:** `/documents/specification/16_frame_locale.md`
 
 ---
 
@@ -10,7 +10,7 @@
 
 ## 1. Purpose
 
-`frame.i18n` provides internationalization (i18n) support for Clean Language applications. It covers translation key lookup, plural form selection via CLDR rules, locale detection, and locale-aware formatting of numbers, currencies, and dates. The same API works on both the server (reads translation files from disk) and in the browser (fetches translation files over HTTP).
+`frame.locale` provides internationalization (i18n) support for Clean Language applications. It covers translation key lookup, plural form selection via CLDR rules, locale detection, and locale-aware formatting of numbers, currencies, and dates. The same API works on both the server (reads translation files from disk) and in the browser (fetches translation files over HTTP).
 
 **Goals:**
 - Simple `t(key, params)` API for translators and developers.
@@ -23,7 +23,7 @@
 ## 2. File Layout
 
 ```
-app/i18n/           # Owned by frame.i18n plugin
+app/i18n/           # Owned by frame.locale plugin
   en.json           # English translations (BCP 47 tag as filename)
   fr.json           # French translations
   de.json           # German translations
@@ -164,9 +164,9 @@ On each server request, the active locale is selected in this order:
 3. **Accept-Language header:** Parsed and matched against loaded locales using BCP 47 quality values.
 4. **Default locale:** The `default` value from the `locale:` block.
 
-When `detection = "manual"` is configured, only explicit `i18n.setLocale()` calls change the locale; the first three detection methods are skipped.
+When `detection = "manual"` is configured, only explicit `locale.set()` calls change the locale; the first three detection methods are skipped.
 
-In the browser, the locale is a module-level variable. `i18n.setLocale()` changes it and fires a `cl-locale-change` custom event on `window`.
+In the browser, the locale is a module-level variable. `locale.set()` changes it and fires a `cl-locale-change` custom event on `window`.
 
 ---
 
@@ -174,11 +174,11 @@ In the browser, the locale is a module-level variable. `i18n.setLocale()` change
 
 ```clean
 // Read the active locale
-string locale = i18n.locale()
+string locale = locale.current()
 // → "en", "fr-CA", etc.
 
 // Change the active locale
-i18n.setLocale("fr")
+locale.set("fr")
 // Server: scoped to the current request
 // Browser: persists for the module lifetime; fires cl-locale-change
 ```
@@ -191,16 +191,16 @@ i18n.setLocale("fr")
 
 ```clean
 // Format with active locale
-string n = i18n.formatNumber(1234567.89, "", "{}")
+string n = locale.formatNumber(1234567.89, "", "{}")
 // en-US → "1,234,567.89"
 // de-DE → "1.234.567,89"
 
 // Explicit locale and options
-string n2 = i18n.formatNumber(0.1234, "en-US", "{\"minimumFractionDigits\": 2, \"maximumFractionDigits\": 2}")
+string n2 = locale.formatNumber(0.1234, "en-US", "{\"minimumFractionDigits\": 2, \"maximumFractionDigits\": 2}")
 // → "0.12"
 ```
 
-Signature: `i18n.formatNumber(value: number, locale: string, options: string) -> string`
+Signature: `locale.formatNumber(value: number, locale: string, options: string) -> string`
 
 Pass `""` for `locale` to use the active locale. `options` is a JSON object corresponding to `Intl.NumberFormat` options.
 
@@ -208,15 +208,15 @@ Pass `""` for `locale` to use the active locale. `options` is a JSON object corr
 
 ```clean
 // Format as currency
-string price = i18n.formatCurrency(49.99, "USD", "")
+string price = locale.formatCurrency(49.99, "USD", "")
 // en-US → "$49.99"
 // de-DE → "49,99 $"
 
-string euros = i18n.formatCurrency(1299.0, "EUR", "de-DE")
+string euros = locale.formatCurrency(1299.0, "EUR", "de-DE")
 // → "1.299,00 €"
 ```
 
-Signature: `i18n.formatCurrency(value: number, currency: string, locale: string) -> string`
+Signature: `locale.formatCurrency(value: number, currency: string, locale: string) -> string`
 
 `currency` is an ISO 4217 code (`"USD"`, `"EUR"`, `"GBP"`, `"JPY"`, etc.). Pass `""` for `locale` to use the active locale.
 
@@ -225,15 +225,15 @@ Signature: `i18n.formatCurrency(value: number, currency: string, locale: string)
 ```clean
 // Format a Unix timestamp
 integer now = _time_now()
-string date = i18n.formatDate(now, "medium", "")
+string date = locale.formatDate(now, "medium", "")
 // en-US → "Jun 2, 2026"
 // fr-FR → "2 juin 2026"
 
-string full = i18n.formatDate(now, "full", "ja-JP")
+string full = locale.formatDate(now, "full", "ja-JP")
 // → "2026年6月2日火曜日"
 ```
 
-Signature: `i18n.formatDate(timestamp: number, style: string, locale: string) -> string`
+Signature: `locale.formatDate(timestamp: number, style: string, locale: string) -> string`
 
 | Style | Example (en-US) |
 |-------|----------------|
@@ -271,7 +271,7 @@ functions:
 
 ## 11. RTL Language Support
 
-When `i18n.setLocale()` is called with a right-to-left locale, the runtime automatically sets `dir="rtl"` on the document root:
+When `locale.set()` is called with a right-to-left locale, the runtime automatically sets `dir="rtl"` on the document root:
 
 | Language | BCP 47 tag | Direction |
 |----------|-----------|-----------|
@@ -360,7 +360,7 @@ endpoints:
         list<Product> products = Product.find:
             where: active == true
         string countMsg = tc("products.count", products.length(), "{}")
-        return json({ products: products, message: countMsg, locale: i18n.locale() })
+        return json({ products: products, message: countMsg, locale: locale.current() })
 ```
 
 ### Page with formatted price
@@ -372,7 +372,7 @@ functions:
         string id = req.params.id
         Product p = Product.first:
             where: id == id.toInteger()
-        string priceStr = i18n.formatCurrency(p.price, "USD", "")
+        string priceStr = locale.formatCurrency(p.price, "USD", "")
         return {
             product: p,
             priceLabel: t("products.price", "{\"price\": \"" + priceStr + "\"}")
