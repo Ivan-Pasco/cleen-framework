@@ -1626,6 +1626,9 @@ functions:
 							string join_table = pluralize(to_snake_case(join_model))
 							result = result.replace(join_model + ".", join_table + ".")
 				line_start = line_end + 1
+			// Explicit return inside the if block — avoids compiler codegen bug where
+			// return after two consecutive if blocks generates unreachable instead of return.
+			return result
 
 		return result
 

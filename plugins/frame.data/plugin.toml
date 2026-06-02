@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.data"
-version = "2.0.7"
+version = "2.0.8"
 description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
 author = "Clean Language Team"
 license = "MIT"
