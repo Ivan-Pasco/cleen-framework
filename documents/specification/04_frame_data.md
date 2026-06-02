@@ -541,5 +541,119 @@ It turns database interaction into clean, declarative statements — readable fo
 
 ---
 
+## 17. Pagination — Offset-Based (`paginate:`)
+
+The `paginate:` sub-block replaces manual `LIMIT`/`OFFSET` arithmetic and eliminates the need for a separate `COUNT(*)` query. The plugin computes the total count and page metadata in a single database round-trip.
+
+Using `paginate:` and `limit:`/`offset:` in the same query is a compile-time error — they are mutually exclusive strategies.
+
+Queries that use `paginate:` return `PagedResult<T>` instead of `Array<T>`.
+
+### `PagedResult<T>` Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `items` | `Array<T>` | The records for this page |
+| `totalCount` | `integer` | Total matching records across all pages |
+| `totalPages` | `integer` | `ceil(totalCount / perPage)` |
+| `currentPage` | `integer` | The page requested (1-based) |
+| `perPage` | `integer` | Records per page |
+| `hasNext` | `boolean` | `currentPage < totalPages` |
+| `hasPrev` | `boolean` | `currentPage > 1` |
+
+### Example
+
+```clean
+endpoints:
+    GET "/api/posts":
+        integer page    = int(req.query("page") ?? "1")
+        integer perPage = 20
+
+        PagedResult<Post> result = Post.find:
+            where:
+                published == true
+            order:
+                createdAt desc
+            paginate:
+                page:    page
+                perPage: perPage
+
+        return json({
+            items:       result.items,
+            totalPages:  result.totalPages,
+            currentPage: result.currentPage,
+            hasNext:     result.hasNext
+        })
+```
+
+---
+
+## 18. Pagination — Cursor-Based (`cursor:`)
+
+Cursor-based pagination is more efficient than offset pagination for large datasets because it does not issue a `COUNT(*)` query and does not scan skipped rows. Use it for infinite scroll and feeds where the absolute page number does not matter.
+
+Queries that use `cursor:` return `CursorResult<T>` instead of `Array<T>`.
+
+### `cursor:` Sub-Fields
+
+| Field | Description |
+|---|---|
+| `after:` | Cursor value from the previous page's `nextCursor`; pass `""` to start from the beginning |
+| `perPage:` | Maximum records to return |
+| `by:` | The field used as the cursor key — must be monotonically ordered (typically `id` or `createdAt`) |
+
+### `CursorResult<T>` Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `items` | `Array<T>` | The records for this page |
+| `nextCursor` | `string` | Opaque cursor to pass as `after:` for the next page; `""` if no more pages |
+| `hasPrev` | `boolean` | Whether a previous page exists |
+| `count` | `integer` | Number of items in this page (may be < `perPage` on the last page) |
+
+### Example
+
+```clean
+endpoints:
+    GET "/api/feed":
+        string  cursor  = req.query("cursor") ?? ""
+        integer perPage = 25
+
+        CursorResult<Post> result = Post.find:
+            where:
+                published == true
+            order:
+                id desc
+            cursor:
+                after:   cursor
+                perPage: perPage
+                by:      id
+
+        return json({
+            items:      result.items,
+            nextCursor: result.nextCursor
+        })
+```
+
+---
+
+## 19. Dynamic Sort Safety
+
+When an `order:` clause uses a runtime variable for the field name, the plugin validates the value against the model's declared fields before executing the query. An unknown field name produces a `ValidationError`, not a SQL error — this prevents SQL injection through sort parameters.
+
+```clean
+// Safe — field name is validated at query time even though it comes from user input
+string sortField = req.query("sort")
+string sortDir   = req.query("dir")
+
+Array<Post> posts = Post.find:
+    order: sortField sortDir   // ValidationError if sortField is not a Post field
+    limit: 20
+```
+
+The validation is performed at the ORM layer before any SQL is generated. The allowed values for `sortField` are exactly the field names declared on the model; any other value is rejected with `VALIDATION_ERROR`.
+
+---
+
 **End of Document 04 — Frame Data (ORM) Specification (Unified Block Syntax)**
 

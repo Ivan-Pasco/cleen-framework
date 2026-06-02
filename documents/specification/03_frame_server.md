@@ -457,5 +457,129 @@ endpoints:
 
 ---
 
+## 22. File Download Response (`res.download`)
+
+Calling `res.download(filename)` sets `Content-Disposition: attachment; filename="<filename>"` on the response before it is sent. The browser presents a save-file dialog instead of rendering the content inline.
+
+Call `res.download` before the `return` statement. It modifies the pending response headers; it does not send data itself.
+
+```clean
+endpoints:
+    GET "/api/reports/daily":
+        string pdf = reports.generateDailyPdf()
+        res.download("daily-report.pdf")
+        return res.binary(pdf, "application/pdf")
+
+    GET "/api/data/export":
+        string csv = db.exportCsv("SELECT * FROM orders")
+        res.download("orders.csv")
+        return res.text(csv, "text/csv")
+```
+
+---
+
+## 23. File Upload (Multipart)
+
+Multipart form uploads are accessed through `req.files()` and `req.file(fieldName)`.
+
+- `req.files()` returns all uploaded files as `Array<UploadedFile>`.
+- `req.file("fieldName")` returns the first file uploaded under that input name.
+- Temporary files written to disk are cleaned up automatically after the handler returns.
+- Validate MIME type and size before processing; do not trust the client-provided values without checking `mimeType` and `size`.
+
+### `UploadedFile` Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `fieldName` | `string` | The `<input name>` attribute |
+| `originalName` | `string` | The filename the user selected |
+| `mimeType` | `string` | Detected MIME type |
+| `size` | `integer` | File size in bytes |
+| `tempPath` | `string` | Path to the temp file on server disk |
+| `content` | `string` | File content as string (text files < 1 MB only) |
+
+### Example
+
+```clean
+endpoints:
+    POST "/api/avatar" [user]:
+        UploadedFile avatar = req.file("avatar")
+        if avatar.mimeType != "image/jpeg" and avatar.mimeType != "image/png":
+            return badRequest("Only JPEG and PNG allowed")
+        if avatar.size > 5242880:
+            return badRequest("File too large")
+        string path = files.saveUpload(avatar.tempPath, "avatars/" + req.userId)
+        return json({ path: path })
+```
+
+---
+
+## 24. Email Sending — SMTP Core
+
+**Scope:** Transactional email only. No templates, no queuing, no multi-provider. Templates and queuing are Tier 2 and will be specified in a dedicated `frame.email` spec.
+
+### Configuration
+
+SMTP connection settings are declared in a `mail:` block in `main.cln`. All values support `$ENV_VAR` syntax for environment variable substitution.
+
+```clean
+server:
+    port: 3000
+
+mail:
+    host     = $SMTP_HOST
+    port     = 587
+    secure   = true
+    username = $SMTP_USER
+    password = $SMTP_PASS
+    from     = "no-reply@myapp.com"
+```
+
+### Functions
+
+| Function | Signature | Description |
+|---|---|---|
+| `email.send` | `(to, subject, html, text) -> boolean` | Send using the configured `from` address |
+| `email.sendFrom` | `(from, to, subject, html, text) -> boolean` | Override the `from` address per call |
+| `email.lastError` | `() -> string` | Error message from the most recent failed send; `""` on success |
+
+`email.send` and `email.sendFrom` return `false` on failure — they do not throw. Call `email.lastError()` to retrieve the reason after a failed send.
+
+### Example — Magic Link
+
+```clean
+endpoints:
+    POST "/auth/magic-link":
+        string address = req.json("email")
+        string token   = auth.createMagicLink(address, 3600)
+        string link    = "https://myapp.com/auth/verify?token=" + token
+
+        boolean sent = email.send(
+            address,
+            "Your sign-in link",
+            "<p><a href=\"" + link + "\">Sign in</a></p>",
+            "Sign in: " + link
+        )
+
+        if not sent:
+            return status(500, json({ error: "Could not send login email" }))
+        return json({ sent: true })
+```
+
+### Non-Blocking Send
+
+Use the `background` keyword to dispatch the send without holding up the HTTP response:
+
+```clean
+background email.send(
+    order.customerEmail,
+    "Order confirmed",
+    "<p>Your order #" + order.id + " is confirmed.</p>",
+    "Your order #" + order.id + " is confirmed."
+)
+```
+
+---
+
 **End of Document 03 — Frame Server Specification (endpoints, routing)**
 

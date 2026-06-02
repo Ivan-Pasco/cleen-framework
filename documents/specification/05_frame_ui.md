@@ -1468,4 +1468,270 @@ See `03_frame_server.md §18` for the server-side `STREAM` endpoint and `sse.*` 
 
 ---
 
+## 20. Context Menu Event (`oncontextmenu`)
+
+`oncontextmenu` fires when the user right-clicks (or long-presses on mobile) an element. Always use the `.prevent` modifier to suppress the browser's native context menu.
+
+The handler receives a `ContextMenuEvent` with fields: `clientX: number`, `clientY: number`, `targetId: string`.
+
+```clean
+component: tag="file-tree"
+    events:
+        showMenu(e: ContextMenuEvent):
+            openContextMenu(e.clientX, e.clientY, e.targetId)
+    html:
+        <div id="tree" oncontextmenu.prevent="showMenu">
+            ...
+        </div>
+```
+
+---
+
+## 21. Global Keyboard Shortcuts
+
+`ui.shortcut(keys, handler, scope)` registers an application-level shortcut that fires regardless of which element has focus.
+
+- Use `"mod"` for the platform meta key: `ctrl` on Windows/Linux, `cmd` on macOS.
+- Scope: `"global"` (always fires), `"focused"` (page must be focused), or a CSS selector (fires only when an ancestor of the focused element matches the selector).
+- Returns an integer ID that can be passed to `ui.removeShortcut(id)`.
+- `ui.clearShortcuts()` removes all registered shortcuts.
+- The handler receives a `ShortcutEvent` with fields: `keys: string`, `targetId: string`.
+
+```clean
+component: tag="app-shell"
+    state:
+        shortcuts: Array<integer> = []
+    functions:
+        setup():
+            shortcuts = [
+                ui.shortcut("mod+s", "save", "global"),
+                ui.shortcut("mod+z", "undo", "global"),
+                ui.shortcut("escape", "closeModal", "global"),
+                ui.shortcut("delete", "deleteSelected", "#canvas")
+            ]
+        teardown():
+            ui.clearShortcuts()
+    events:
+        save(e: ShortcutEvent):   canvas.saveCurrentFile()
+        undo(e: ShortcutEvent):   canvas.undo()
+        closeModal(e: ShortcutEvent): modal.close()
+        deleteSelected(e: ShortcutEvent): canvas.deleteSelected()
+```
+
+---
+
+## 22. CSS Variable Runtime Manipulation
+
+Reads and writes CSS custom properties at runtime — no page reload, no server round-trip. Required for instant theme preview, dark/light mode toggling, and design system switching.
+
+All four functions are **browser-only**; server-side calls are silent no-ops.
+
+| Function | Signature | Description |
+|---|---|---|
+| `ui.setCssVar` | `(name, value)` | Set on `:root` |
+| `ui.setCssVarOn` | `(selector, name, value)` | Set on a specific element |
+| `ui.getCssVar` | `(name) -> string` | Read computed value |
+| `ui.applyCssVars` | `(tokensJson)` | Set multiple variables from a JSON object in one call |
+
+`ui.applyCssVars(json)` accepts a JSON object and applies all key-value pairs atomically — faster than looping `setCssVar` for bulk updates such as design-system switches.
+
+```clean
+events:
+    applyDarkMode():
+        ui.setCssVar("--color-surface-base", "oklch(8% 0 0)")
+        ui.setCssVar("--color-text-primary", "oklch(95% 0 0)")
+
+    previewDesignSystem(tokens: string):
+        ui.applyCssVars(tokens)
+
+    readCurrentBrand() -> string:
+        return ui.getCssVar("--color-brand-primary")
+```
+
+---
+
+## 23. Focus Management
+
+Programmatic focus control is required for accessible modals, dropdowns, and command palettes. All five functions are **browser-only**.
+
+| Function | Signature | Description |
+|---|---|---|
+| `ui.focus` | `(selector)` | Move focus to the first matched element |
+| `ui.blur` | `(selector)` | Remove focus from the first matched element |
+| `ui.getFocus` | `() -> string` | Return selector of currently focused element (`""` if body) |
+| `ui.focusTrap` | `(selector) -> integer` | Constrain Tab/Shift+Tab to focusable elements inside the container; return a trap ID |
+| `ui.focusTrapRelease` | `(id)` | Remove the trap and restore focus to the element that was focused before the trap was set |
+
+Multiple traps can be stacked; they are released in LIFO order.
+
+```clean
+component: tag="confirm-modal"
+    state:
+        trapId: integer = 0
+    events:
+        open():
+            trapId = ui.focusTrap("#confirm-modal")
+            ui.focus("#confirm-modal-primary-button")
+        close():
+            ui.focusTrapRelease(trapId)
+```
+
+---
+
+## 24. Browser Storage
+
+`storage.local.*` persists between sessions; `storage.session.*` is cleared when the tab closes. All eight functions are **browser-only** — server-side calls return `""` silently.
+
+Namespace keys by application to avoid collisions: `"myapp:theme"`, `"myapp:sidebar"`.
+
+| Function | Description |
+|---|---|
+| `storage.local.get(key) -> string` | Read value; returns `""` if not set |
+| `storage.local.set(key, value)` | Write value |
+| `storage.local.remove(key)` | Delete a key |
+| `storage.local.clear()` | Delete all keys for this origin |
+| `storage.session.get/set/remove/clear` | Same semantics, but session-scoped |
+
+```clean
+functions:
+    loadPrefs():
+        string theme = storage.local.get("app:theme")
+        if theme == "":
+            theme = "light"
+        ui.applyCssVars(themes.getTokens(theme))
+
+    savePrefs():
+        storage.local.set("app:theme", currentTheme)
+```
+
+---
+
+## 25. File Download Trigger
+
+Two client-side functions and one server-side response helper cover both canonical download patterns.
+
+**Client-side (browser-only — no-ops on the server):**
+- `ui.downloadText(filename, content, mimeType)` — creates a `Blob` from the content string and triggers a save dialog.
+- `ui.downloadUrl(url, filename)` — navigates to a URL with a `Content-Disposition: attachment` hint.
+
+**Server-side:**
+- `res.download(filename)` — sets `Content-Disposition: attachment; filename="<filename>"` on the response; use with a binary or text body.
+
+```clean
+// Client: generate CSV in the browser
+events:
+    exportCsv():
+        string csv = table.toCsv(data)
+        ui.downloadText("export.csv", csv, "text/csv")
+
+// Server: serve a generated file
+endpoints:
+    GET "/api/report":
+        string pdf = reports.generatePdf()
+        res.download("report.pdf")
+        return res.binary(pdf, "application/pdf")
+```
+
+---
+
+## 26. Clipboard API
+
+`ui.clipboardWrite` and `ui.clipboardRead` use `navigator.clipboard` — both operations are async. Callbacks are Clean function names passed as strings; pass `""` to ignore an outcome. Both functions are **browser-only**; server-side calls are no-ops.
+
+| Function | Signature | Description |
+|---|---|---|
+| `ui.clipboardWrite` | `(text, onSuccess, onError)` | Write text; calls `onSuccess()` or `onError(msg)` |
+| `ui.clipboardRead` | `(onSuccess, onError)` | Read text; calls `onSuccess(text)` or `onError(msg)` |
+
+```clean
+state:
+    copyLabel: string = "Copy"
+events:
+    copyApiKey():
+        ui.clipboardWrite(apiKey, "onCopied", "onFailed")
+    onCopied():
+        copyLabel = "Copied!"
+    onFailed(error: string):
+        copyLabel = "Copy failed"
+```
+
+---
+
+## 27. Resize and Intersection Observers
+
+**Resize Observer** fires when an element's own dimensions change (not the viewport). **Intersection Observer** fires when an element's visibility ratio crosses a threshold.
+
+| Function | Signature | Description |
+|---|---|---|
+| `ui.resizeObserve` | `(selector, handler) -> integer` | Observe size changes; handler receives `ResizeEntry` JSON |
+| `ui.resizeUnobserve` | `(id)` | Stop observing |
+| `ui.intersectObserve` | `(selector, handler, threshold) -> integer` | Observe intersection; threshold is 0.0–1.0 |
+| `ui.intersectUnobserve` | `(id)` | Stop observing |
+
+`ResizeEntry` JSON: `{"width": number, "height": number, "selector": string}`
+
+`IntersectionEntry` JSON: `{"selector": string, "ratio": number, "isVisible": boolean}`
+
+```clean
+component: tag="lazy-image"
+    state:
+        loaded: boolean = false
+        observerId: integer = 0
+    functions:
+        setup():
+            observerId = ui.intersectObserve("#" + imageId, "onVisible", 0.1)
+        teardown():
+            ui.intersectUnobserve(observerId)
+    events:
+        onVisible(entry: string):
+            if json.getBool(entry, "isVisible") and not loaded:
+                loaded = true
+                ui.intersectUnobserve(observerId)
+```
+
+---
+
+## 28. Toast Notification System
+
+Zero-setup: `toast.success("Saved")` works without placing any markup in the layout. The toast container is created on first use; manually placing `<div id="toast-container">` overrides the auto-created position. Design tokens are used for colors — toasts automatically match the application theme.
+
+| Function | Signature | Description |
+|---|---|---|
+| `toast.success` | `(text) -> integer` | Green toast, 4 s auto-dismiss |
+| `toast.error` | `(text) -> integer` | Red toast, 4 s auto-dismiss |
+| `toast.warning` | `(text) -> integer` | Amber toast, 4 s auto-dismiss |
+| `toast.info` | `(text) -> integer` | Surface-colored toast, 4 s auto-dismiss |
+| `toast.show` | `(text, variant, duration, position) -> integer` | Full control |
+| `toast.dismiss` | `(id)` | Remove a specific toast |
+| `toast.dismissAll` | `()` | Remove all visible toasts |
+
+Position values: `"top-right"`, `"top-center"`, `"top-left"`, `"bottom-right"` (default), `"bottom-center"`, `"bottom-left"`. Duration `0` means permanent (no auto-dismiss).
+
+Configure application-wide defaults in `main.cln`:
+
+```clean
+ui:
+    toast:
+        position = "top-right"
+        duration = 3000
+        maxVisible = 5
+```
+
+```clean
+events:
+    saveFile():
+        boolean ok = files.save(current)
+        if ok:
+            toast.success("Saved")
+        else:
+            toast.error("Save failed — check your connection")
+
+    copyLink():
+        ui.clipboardWrite(shareUrl, "onCopied", "")
+    onCopied():
+        toast.show("Link copied", "success", 2000, "bottom-center")
+```
+
+---
+
 **End of Document 05**
