@@ -19,6 +19,11 @@ functions:
 		// in functions: blocks even when no endpoints: block is present.
 		if block_name == "__preamble"
 			return emit_response_helpers()
+		// Suppress unimplemented directive blocks so they don't fall through as raw code
+		if block_name == "error"
+			return ""
+		if block_name == "guard"
+			return ""
 		return body
 
 	string validate_block(string block_name, string attributes, string body)
@@ -798,6 +803,10 @@ functions:
 			string trimmed = line.trim()
 			if trimmed.length() == 0
 				continue
+			if trimmed.startsWith("error:")
+				continue
+			if trimmed.startsWith("guard:")
+				continue
 
 			if trimmed.startsWith("redirect:")
 				string after = trimmed.substring(9, trimmed.length()).trim()
@@ -867,6 +876,10 @@ functions:
 
 			string trimmed = line.trim()
 			if trimmed.length() == 0
+				continue
+			if trimmed.startsWith("error:")
+				continue
+			if trimmed.startsWith("guard:")
 				continue
 
 			if trimmed.startsWith("redirect:")
