@@ -29,7 +29,7 @@ functions:
 		return ""
 
 	string get_keywords()
-		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\", \"WEBSOCKET\", \"ws.send\", \"ws.broadcast\", \"ws.close\", \"ws.clientId\", \"ws.message\", \"ws.roomJoin\", \"ws.roomLeave\", \"ws.roomBroadcast\", \"ws.onMessage\", \"ws.onClose\"]"
+		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\", \"LIVE\", \"FEED\", \"live.send\", \"live.broadcast\", \"live.close\", \"live.clientId\", \"live.message\", \"live.roomJoin\", \"live.roomLeave\", \"live.roomBroadcast\", \"live.onMessage\", \"live.onClose\"]"
 
 // ============================================================================
 // RESPONSE HELPERS — emitted for every file that loads frame.server
@@ -249,10 +249,10 @@ functions:
 			integer put_pos = find_method_pos(remaining, "PUT")
 			integer delete_pos = find_method_pos(remaining, "DELETE")
 			integer patch_pos = find_method_pos(remaining, "PATCH")
-			// §FEXT-4: STREAM routes are SSE endpoints (GET at HTTP level, keeps connection open)
-			integer stream_pos = find_method_pos(remaining, "STREAM")
-			// §15: WEBSOCKET routes upgrade the connection to WebSocket protocol
-			integer websocket_pos = find_method_pos(remaining, "WEBSOCKET")
+			// §FEXT-4: FEED routes are SSE endpoints (GET at HTTP level, keeps connection open)
+			integer stream_pos = find_method_pos(remaining, "FEED")
+			// §15: LIVE routes upgrade the connection to WebSocket protocol
+			integer websocket_pos = find_method_pos(remaining, "LIVE")
 
 			integer method_pos = -1
 			string method = ""
@@ -274,10 +274,10 @@ functions:
 				method = "PATCH"
 			if stream_pos >= 0 and (method_pos == -1 or stream_pos < method_pos)
 				method_pos = stream_pos
-				method = "STREAM"
+				method = "FEED"
 			if websocket_pos >= 0 and (method_pos == -1 or websocket_pos < method_pos)
 				method_pos = websocket_pos
-				method = "WEBSOCKET"
+				method = "LIVE"
 
 			if method_pos == -1
 				keep_going = false
@@ -329,8 +329,8 @@ functions:
 				// Extract handler body (after route ':' newline, up to next route)
 				string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
 
-				// §15: WEBSOCKET routes split their body into three handler functions
-				if method == "WEBSOCKET"
+				// §15: LIVE routes split their body into three handler functions
+				if method == "LIVE"
 					string ws_connect = extract_ws_connect_body(endpoint_body)
 					string ws_message = extract_ws_message_body(endpoint_body)
 					string ws_close = extract_ws_close_body(endpoint_body)
@@ -383,9 +383,9 @@ functions:
 						result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
 					result = result + "\n"
 
-					// §FEXT-4: STREAM routes use _http_sse_route which sets text/event-stream headers
+					// §FEXT-4: FEED routes use _http_sse_route which sets text/event-stream headers
 					// and keeps the connection open. Regular routes use _http_route.
-					if method == "STREAM"
+					if method == "FEED"
 						route_calls = route_calls + "\t_http_sse_route(\"GET\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
 					else
 						route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
@@ -530,8 +530,8 @@ functions:
 		integer next_put = find_method_pos(endpoint_body, "PUT")
 		integer next_delete = find_method_pos(endpoint_body, "DELETE")
 		integer next_patch = find_method_pos(endpoint_body, "PATCH")
-		integer next_stream = find_method_pos(endpoint_body, "STREAM")
-		integer next_ws = find_method_pos(endpoint_body, "WEBSOCKET")
+		integer next_stream = find_method_pos(endpoint_body, "FEED")
+		integer next_ws = find_method_pos(endpoint_body, "LIVE")
 
 		if next_get >= 0 and next_get < end_pos
 			end_pos = next_get
@@ -603,32 +603,32 @@ functions:
 		return result
 
 // ============================================================================
-// WEBSOCKET HANDLER BODY EXTRACTION
+// LIVE HANDLER BODY EXTRACTION
 // ============================================================================
-// §15: Split a WEBSOCKET route body into three sections:
-//   onConnect  — everything before ws.onMessage: label
-//   onMessage  — content of ws.onMessage: block
-//   onClose    — content of ws.onClose: block
+// §15: Split a LIVE route body into three sections:
+//   onConnect  — everything before live.onMessage: label
+//   onMessage  — content of live.onMessage: block
+//   onClose    — content of live.onClose: block
 //
 // Each section is re-indented to \t\t base.
 
 functions:
-	// Extract the onConnect section: all lines before the first ws.onMessage: label.
+	// Extract the onConnect section: all lines before the first live.onMessage: label.
 	string extract_ws_connect_body(string endpoint_body)
 		string raw = extract_ws_raw_section(endpoint_body)
-		integer msg_pos = raw.indexOf("\tws.onMessage:")
+		integer msg_pos = raw.indexOf("\tlive.onMessage:")
 		if msg_pos == -1
-			msg_pos = raw.indexOf("ws.onMessage:")
+			msg_pos = raw.indexOf("live.onMessage:")
 		integer section_end = raw.length()
 		if msg_pos >= 0
 			section_end = msg_pos
 		string section = raw.substring(0, section_end)
 		return reindent_ws_section(section)
 
-	// Extract the onMessage section: content inside ws.onMessage: block.
+	// Extract the onMessage section: content inside live.onMessage: block.
 	string extract_ws_message_body(string endpoint_body)
 		string raw = extract_ws_raw_section(endpoint_body)
-		integer label_pos = raw.indexOf("ws.onMessage:")
+		integer label_pos = raw.indexOf("live.onMessage:")
 		if label_pos == -1
 			return ""
 		// Skip past the label and its newline
@@ -637,18 +637,18 @@ functions:
 		if nl == -1
 			return ""
 		string block_start = raw.substring(nl + 1, raw.length())
-		// Find ws.onClose: or end of section
-		integer close_label = block_start.indexOf("ws.onClose:")
+		// Find live.onClose: or end of section
+		integer close_label = block_start.indexOf("live.onClose:")
 		integer section_end = block_start.length()
 		if close_label >= 0
 			section_end = close_label
 		string section = block_start.substring(0, section_end)
 		return reindent_ws_section(section)
 
-	// Extract the onClose section: content inside ws.onClose: block.
+	// Extract the onClose section: content inside live.onClose: block.
 	string extract_ws_close_body(string endpoint_body)
 		string raw = extract_ws_raw_section(endpoint_body)
-		integer label_pos = raw.indexOf("ws.onClose:")
+		integer label_pos = raw.indexOf("live.onClose:")
 		if label_pos == -1
 			return ""
 		// Skip past the label and its newline
@@ -659,7 +659,7 @@ functions:
 		string section = raw.substring(nl + 1, raw.length())
 		return reindent_ws_section(section)
 
-	// Extract the raw body of a WEBSOCKET route handler — up to the next route boundary.
+	// Extract the raw body of a LIVE route handler — up to the next route boundary.
 	// Uses the same boundary detection as extract_handler_body.
 	string extract_ws_raw_section(string endpoint_body)
 		integer end_pos = endpoint_body.length()
@@ -668,8 +668,8 @@ functions:
 		integer next_put = find_method_pos(endpoint_body, "PUT")
 		integer next_delete = find_method_pos(endpoint_body, "DELETE")
 		integer next_patch = find_method_pos(endpoint_body, "PATCH")
-		integer next_stream = find_method_pos(endpoint_body, "STREAM")
-		integer next_ws = find_method_pos(endpoint_body, "WEBSOCKET")
+		integer next_stream = find_method_pos(endpoint_body, "FEED")
+		integer next_ws = find_method_pos(endpoint_body, "LIVE")
 		if next_get >= 0 and next_get < end_pos
 			end_pos = next_get
 		if next_post >= 0 and next_post < end_pos

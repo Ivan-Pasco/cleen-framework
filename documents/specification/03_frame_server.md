@@ -326,52 +326,52 @@ routes:
 
 ---
 
-## 18. Server-Sent Events (STREAM Endpoints)
+## 18. Server-Sent Events (FEED Endpoints)
 
-Use the `STREAM` method to declare a Server-Sent Event endpoint. The server responds with `Content-Type: text/event-stream` and keeps the connection open until the handler calls `sse.close()` or returns.
+Use the `FEED` method to declare a Server-Sent Event endpoint. The server responds with `Content-Type: text/event-stream` and keeps the connection open until the handler calls `feed.close()` or returns.
 
 ```clean
 endpoints:
-    STREAM "/api/generate/{jobId}" :
+    FEED "/api/generate/{jobId}" :
         string jobId = req.params.jobId
         GenerationJob job = generation.startJob(jobId)
 
-        sse.emit(json.encode({ status: "started", job: jobId }))
+        feed.emit(json.encode({ status: "started", job: jobId }))
 
         for task in job.tasks:
-            if not sse.isConnected():
+            if not feed.isConnected():
                 generation.cancelJob(jobId)
                 return
 
             generation.runTask(task)
-            sse.emitEvent("task-complete", json.encode({
+            feed.emitEvent("task-complete", json.encode({
                 taskId: task.id,
                 label:  task.label,
                 status: "done"
             }))
 
-        sse.emitEvent("generation-complete", json.encode({ files: job.outputFiles }))
-        sse.close()
+        feed.emitEvent("generation-complete", json.encode({ files: job.outputFiles }))
+        feed.close()
 ```
 
 **Rules:**
-- `STREAM` routes are GET-only at the HTTP level. The plugin registers them via `_http_sse_route("GET", ...)`.
-- No return type annotation is valid on a `STREAM` handler — it never produces a single response value.
+- `FEED` routes are GET-only at the HTTP level. The plugin registers them via `_http_sse_route("GET", ...)`.
+- No return type annotation is valid on a `FEED` handler — it never produces a single response value.
 - Inline modifiers (`[guard]`, `cache()`, `middleware()`) are supported in the same fixed order as regular routes.
 
 ### 18.1 SSE Functions
 
 | Function | Description |
 |----------|-------------|
-| `sse.emit(data)` | Send `data: {payload}\n\n` to the client |
-| `sse.emitEvent(name, data)` | Send `event: {name}\ndata: {payload}\n\n` to the client |
-| `sse.close()` | Close the stream gracefully |
-| `sse.retry(ms)` | Tell the client to reconnect after `ms` milliseconds if disconnected |
-| `sse.isConnected() -> boolean` | Returns `false` when the client has disconnected; use to abort long loops |
+| `feed.emit(data)` | Send `data: {payload}\n\n` to the client |
+| `feed.emitEvent(name, data)` | Send `event: {name}\ndata: {payload}\n\n` to the client |
+| `feed.close()` | Close the stream gracefully |
+| `feed.retry(ms)` | Tell the client to reconnect after `ms` milliseconds if disconnected |
+| `feed.isConnected() -> boolean` | Returns `false` when the client has disconnected; use to abort long loops |
 
 ### 18.2 Client-Side: `cl-stream` Directive
 
-Connect an HTML element to a STREAM endpoint with `cl-stream`:
+Connect an HTML element to a FEED endpoint with `cl-stream`:
 
 ```html
 <div
@@ -382,8 +382,8 @@ Connect an HTML element to a STREAM endpoint with `cl-stream`:
 
 - On mount the browser opens an `EventSource` to the URL.
 - Each `data:` event replaces the element's `innerHTML` with the payload.
-- Named events (from `sse.emitEvent`) are dispatched as `CustomEvent` on the element.
-- The connection closes when the server calls `sse.close()`, or when the element unmounts.
+- Named events (from `feed.emitEvent`) are dispatched as `CustomEvent` on the element.
+- The connection closes when the server calls `feed.close()`, or when the element unmounts.
 - The URL may include `{interpolated}` expressions from the component's state.
 
 ---
@@ -583,25 +583,25 @@ background email.send(
 
 ## 25. WebSocket Endpoints
 
-WebSocket endpoints handle persistent bidirectional connections. They are declared with the `WEBSOCKET` method keyword inside an `endpoints:` block.
+WebSocket endpoints handle persistent bidirectional connections. They are declared with the `LIVE` method keyword inside an `endpoints:` block.
 
 ### 25.1 Syntax
 
 ```clean
 endpoints:
-    WEBSOCKET "/ws/chat" :
+    LIVE "/ws/chat" :
         // onConnect body — runs when a client establishes the connection
-        ws.roomJoin(ws.clientId(), "lobby")
+        live.roomJoin(live.clientId(), "lobby")
 
-        ws.onMessage:
+        live.onMessage:
             // runs each time the client sends a frame
-            string msg = ws.message()
-            integer id = ws.clientId()
-            ws.roomBroadcast("lobby", "{\"from\":" + id.toString() + ",\"text\":\"" + msg + "\"}")
+            string msg = live.message()
+            integer id = live.clientId()
+            live.roomBroadcast("lobby", "{\"from\":" + id.toString() + ",\"text\":\"" + msg + "\"}")
 
-        ws.onClose:
+        live.onClose:
             // runs when the connection closes (client disconnect or server close)
-            ws.roomLeave(ws.clientId(), "lobby")
+            live.roomLeave(live.clientId(), "lobby")
 ```
 
 ### 25.2 Lifecycle
@@ -609,32 +609,32 @@ endpoints:
 | Phase | Handler | Bridge function called |
 |-------|---------|----------------------|
 | Connection established | Route body (onConnect) | `_http_ws_route` registers it |
-| Message received | `ws.onMessage:` sub-block | Called per frame |
-| Connection closed | `ws.onClose:` sub-block | Called once on disconnect |
+| Message received | `live.onMessage:` sub-block | Called per frame |
+| Connection closed | `live.onClose:` sub-block | Called once on disconnect |
 
 ### 25.3 WebSocket Bridge Functions
 
-All WebSocket bridge functions are server-only (Layer 3). They may only be called inside `WEBSOCKET` endpoint handlers.
+All WebSocket bridge functions are server-only (Layer 3). They may only be called inside `LIVE` endpoint handlers.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `ws.clientId()` | `-> integer` | Integer ID of the client whose handler is executing |
-| `ws.message()` | `-> string` | UTF-8 payload of the incoming frame (onMessage only) |
-| `ws.send(clientId, message)` | `(integer, string)` | Send a text frame to a specific client |
-| `ws.broadcast(room, message)` | `(string, string)` | Send a frame to all clients in a room |
-| `ws.close(clientId)` | `(integer)` | Close a client's connection with normal closure (1000) |
-| `ws.roomJoin(clientId, room)` | `(integer, string)` | Add a client to a named room |
-| `ws.roomLeave(clientId, room)` | `(integer, string)` | Remove a client from a named room |
-| `ws.roomBroadcast(room, message)` | `(string, string)` | Alias for `ws.broadcast` |
+| `live.clientId()` | `-> integer` | Integer ID of the client whose handler is executing |
+| `live.message()` | `-> string` | UTF-8 payload of the incoming frame (onMessage only) |
+| `live.send(clientId, message)` | `(integer, string)` | Send a text frame to a specific client |
+| `live.broadcast(room, message)` | `(string, string)` | Send a frame to all clients in a room |
+| `live.close(clientId)` | `(integer)` | Close a client's connection with normal closure (1000) |
+| `live.roomJoin(clientId, room)` | `(integer, string)` | Add a client to a named room |
+| `live.roomLeave(clientId, room)` | `(integer, string)` | Remove a client from a named room |
+| `live.roomBroadcast(room, message)` | `(string, string)` | Alias for `live.broadcast` |
 
 ### 25.4 Auth Guards
 
-Role guards are supported on `WEBSOCKET` routes:
+Role guards are supported on `LIVE` routes:
 
 ```clean
 endpoints:
-    WEBSOCKET "/ws/admin" [admin] :
-        ws.roomJoin(ws.clientId(), "admin-channel")
+    LIVE "/ws/admin" [admin] :
+        live.roomJoin(live.clientId(), "admin-channel")
 ```
 
 The guard is evaluated at connection time. Unauthorized connections receive a `401` HTTP response before the WebSocket upgrade and are never established.
@@ -648,21 +648,21 @@ Rooms are in-memory sets of client IDs managed by the server runtime. A client m
 ```clean
 // app/server/api/chat.cln
 endpoints:
-    WEBSOCKET "/ws/chat/:room" :
+    LIVE "/ws/chat/:room" :
         string room = req.params.room
-        integer cid = ws.clientId()
-        ws.roomJoin(cid, room)
-        ws.broadcast(room, "{\"event\":\"joined\",\"id\":" + cid.toString() + "}")
+        integer cid = live.clientId()
+        live.roomJoin(cid, room)
+        live.broadcast(room, "{\"event\":\"joined\",\"id\":" + cid.toString() + "}")
 
-        ws.onMessage:
-            string payload = ws.message()
-            integer sender = ws.clientId()
-            ws.roomBroadcast(req.params.room, "{\"event\":\"message\",\"from\":" + sender.toString() + ",\"text\":" + payload + "}")
+        live.onMessage:
+            string payload = live.message()
+            integer sender = live.clientId()
+            live.roomBroadcast(req.params.room, "{\"event\":\"message\",\"from\":" + sender.toString() + ",\"text\":" + payload + "}")
 
-        ws.onClose:
-            integer cid = ws.clientId()
-            ws.roomLeave(cid, req.params.room)
-            ws.broadcast(req.params.room, "{\"event\":\"left\",\"id\":" + cid.toString() + "}")
+        live.onClose:
+            integer cid = live.clientId()
+            live.roomLeave(cid, req.params.room)
+            live.broadcast(req.params.room, "{\"event\":\"left\",\"id\":" + cid.toString() + "}")
 ```
 
 ---
