@@ -841,9 +841,10 @@ functions:
 		if idx == 0
 			return ""
 
-		string result = fn_block
-		result = result + "start:\n"
+		string result = "start:\n"
 		result = result + route_calls
+		result = result + "\n"
+		result = result + fn_block
 		return result
 
 	string validate_routes(string body)
