@@ -292,8 +292,8 @@ functions = [
   { name = "ui.queryRemoveClass", signature = "ui.queryRemoveClass(selector, className)", description = "Remove class from ALL matching elements", maps_to = "_ui_query_remove_class" },
 
   # --- §FEXT-1: Drag data transfer ---
-  { name = "_ui_set_drag_data", params = ["string", "string"], returns = "integer", description = "Set drag-and-drop transfer data: key, value", expand_strings = true },
-  { name = "_ui_get_drag_data", params = ["string"], returns = "string", description = "Get drag-and-drop transfer data by key", expand_strings = true },
+  { name = "_ui_set_drag_data", params = ["string", "string"], returns = "integer", description = "Set drag-and-drop transfer data: key, value", expand_strings = true, signature = "_ui_set_drag_data(key, value)" },
+  { name = "_ui_get_drag_data", params = ["string"], returns = "string", description = "Get drag-and-drop transfer data by key", expand_strings = true, signature = "_ui_get_drag_data(key) -> string" },
   { name = "ui.setDragData", signature = "ui.setDragData(key, value)", description = "Set drag transfer data", maps_to = "_ui_set_drag_data" },
   { name = "ui.getDragData", signature = "ui.getDragData(key) -> string", description = "Get drag transfer data by key", maps_to = "_ui_get_drag_data" },
 
