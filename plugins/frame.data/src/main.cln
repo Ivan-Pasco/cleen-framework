@@ -937,23 +937,41 @@ functions:
 			__tf_result = __tf_result + "__parse_as_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
 			return __tf_result
 
-		// Handle where clause (non-tenant path)
+		// Non-tenant path: build a single _db_query expression so the compiler
+		// receives one expression value (no injected variable declarations).
+		// WHERE conditions that reference runtime variables are handled by
+		// build_where_expr, which emits inline Clean string concatenation.
 		if where_clause.length() > 0
-			sql = sql + " WHERE " + parse_where_clause(where_clause)
+			// SQL prefix up to and including " WHERE " (as a string literal in the expr)
+			string __fq_prefix = "\"SELECT * FROM " + table_name
+			if join_clause.length() > 0
+				__fq_prefix = __fq_prefix + " " + parse_join_clause(join_clause, model_name)
+			if link_clause.length() > 0
+				__fq_prefix = __fq_prefix + " " + parse_link_clause(link_clause, table_name)
+			__fq_prefix = __fq_prefix + " WHERE \""
 
-		// Handle order clause
+			// Static suffix: ORDER BY / LIMIT / OFFSET appended as string literal
+			string __fq_suffix = ""
+			if order_clause.length() > 0
+				__fq_suffix = __fq_suffix + " + \" ORDER BY " + parse_order_clause(order_clause) + "\""
+			if limit_clause.length() > 0
+				__fq_suffix = __fq_suffix + " + \" LIMIT " + limit_clause.trim() + "\""
+			string __fq_off = extract_subblock(body, "offset:")
+			if __fq_off.length() > 0
+				__fq_suffix = __fq_suffix + " + \" OFFSET " + __fq_off.trim() + "\""
+
+			// Single expression: prefix + dynamic_where + suffix
+			string __fq_sql_expr = __fq_prefix + " + " + build_where_expr(where_clause) + __fq_suffix
+			return "__parse_as_" + model_name + "(_db_query(" + __fq_sql_expr + ", \"[]\"))"
+
+		// No WHERE: static SQL string is sufficient
 		if order_clause.length() > 0
 			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
-
-		// Handle limit
 		if limit_clause.length() > 0
 			sql = sql + " LIMIT " + limit_clause.trim()
-
-		// Handle offset
 		string offset_clause = extract_subblock(body, "offset:")
 		if offset_clause.length() > 0
 			sql = sql + " OFFSET " + offset_clause.trim()
-
 		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
 
 	// Expand Model.first: block.
@@ -1347,6 +1365,111 @@ functions:
 		result = result.replace(" or ", " OR ")
 		// Convert "value" → 'value' so the value doesn't break the generated string literal
 		result = sql_quote_strings(result)
+		return result
+
+	// Build a Clean code expression that evaluates to a single SQL condition fragment.
+	// Detects literal vs variable RHS and generates dynamic concatenation for variables.
+	// Literal:  "name == \"Alice\""   → "\"name = 'Alice'\""  (static SQL string)
+	// Variable: "email == targetEmail" → "\"email = '\" + targetEmail + \"'\""
+	// Numeric:  "count > 5"            → "\"count > 5\""
+	string build_condition_expr(string condition)
+		condition = condition.trim()
+		string op_sql = ""
+		integer op_pos = -1
+		integer op_len = 0
+
+		integer p = condition.indexOf(" == ")
+		if p != -1 and op_pos == -1
+			op_sql = "="
+			op_pos = p
+			op_len = 4
+
+		p = condition.indexOf(" != ")
+		if p != -1 and op_pos == -1
+			op_sql = "<>"
+			op_pos = p
+			op_len = 4
+
+		p = condition.indexOf(" >= ")
+		if p != -1 and op_pos == -1
+			op_sql = ">="
+			op_pos = p
+			op_len = 4
+
+		p = condition.indexOf(" <= ")
+		if p != -1 and op_pos == -1
+			op_sql = "<="
+			op_pos = p
+			op_len = 4
+
+		p = condition.indexOf(" > ")
+		if p != -1 and op_pos == -1
+			op_sql = ">"
+			op_pos = p
+			op_len = 3
+
+		p = condition.indexOf(" < ")
+		if p != -1 and op_pos == -1
+			op_sql = "<"
+			op_pos = p
+			op_len = 3
+
+		if op_pos == -1
+			return "\"" + parse_condition(condition) + "\""
+
+		string lhs = condition.substring(0, op_pos).trim()
+		string rhs = condition.substring(op_pos + op_len, condition.length()).trim()
+
+		if rhs == "null" or rhs == "NULL"
+			return "\"" + lhs + " IS NULL\""
+
+		if rhs == "true" or rhs == "false"
+			return "\"" + lhs + " " + op_sql + " " + rhs + "\""
+
+		if rhs.startsWith("\"") and rhs.length() >= 2
+			string inner = rhs.substring(1, rhs.length() - 1)
+			return "\"" + lhs + " " + op_sql + " '" + inner + "'\""
+
+		string digits_chars = "0123456789"
+		boolean rhs_is_num = false
+		if rhs.length() > 0
+			if digits_chars.indexOf(rhs.substring(0, 1)) != -1
+				rhs_is_num = true
+			if rhs.substring(0, 1) == "-" and rhs.length() > 1
+				if digits_chars.indexOf(rhs.substring(1, 2)) != -1
+					rhs_is_num = true
+		if rhs_is_num
+			return "\"" + lhs + " " + op_sql + " " + rhs + "\""
+
+		// Variable reference: generate dynamic code expression
+		return "\"" + lhs + " " + op_sql + " '\" + " + rhs + " + \"'\""
+
+	// Build a Clean code expression that evaluates to the full SQL WHERE clause content.
+	// Iterates conditions, calls build_condition_expr on each, and combines with AND.
+	// Returns a string that is a valid Clean code expression.
+	string build_where_expr(string where_body)
+		string result = ""
+		string lines = where_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string cond_expr = build_condition_expr(line)
+				if result.length() == 0
+					result = cond_expr
+				else
+					result = result + " + \" AND \" + " + cond_expr
+
+			line_start = line_end + 1
+
+		if result.length() == 0
+			return "\"\""
+
 		return result
 
 	// Replace double-quoted string literals with single-quoted SQL strings.
