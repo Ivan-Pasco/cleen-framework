@@ -831,7 +831,7 @@ functions:
 
 								// Emit redirect handler function
 								fn_block = fn_block + "\tstring __redirect_" + idx.toString() + "()\n"
-								fn_block = fn_block + "\t\treturn redirectToStatus(\"" + to_path + "\", " + status + ")\n\n"
+								fn_block = fn_block + "\t\treturn _http_redirect(" + status + ", \"" + to_path + "\")\n\n"
 
 								// Register GET route for from_path
 								route_calls = route_calls + "\t_http_route(\"GET\", \"" + from_path + "\", \"__redirect_" + idx.toString() + "\")\n"
