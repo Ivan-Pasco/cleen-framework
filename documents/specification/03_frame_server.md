@@ -326,7 +326,69 @@ routes:
 
 ---
 
-## 18. Server-Side HTTP Client
+## 18. Server-Sent Events (STREAM Endpoints)
+
+Use the `STREAM` method to declare a Server-Sent Event endpoint. The server responds with `Content-Type: text/event-stream` and keeps the connection open until the handler calls `sse.close()` or returns.
+
+```clean
+endpoints:
+    STREAM "/api/generate/{jobId}" :
+        string jobId = req.params.jobId
+        GenerationJob job = generation.startJob(jobId)
+
+        sse.emit(json.encode({ status: "started", job: jobId }))
+
+        for task in job.tasks:
+            if not sse.isConnected():
+                generation.cancelJob(jobId)
+                return
+
+            generation.runTask(task)
+            sse.emitEvent("task-complete", json.encode({
+                taskId: task.id,
+                label:  task.label,
+                status: "done"
+            }))
+
+        sse.emitEvent("generation-complete", json.encode({ files: job.outputFiles }))
+        sse.close()
+```
+
+**Rules:**
+- `STREAM` routes are GET-only at the HTTP level. The plugin registers them via `_http_sse_route("GET", ...)`.
+- No return type annotation is valid on a `STREAM` handler — it never produces a single response value.
+- Inline modifiers (`[guard]`, `cache()`, `middleware()`) are supported in the same fixed order as regular routes.
+
+### 18.1 SSE Functions
+
+| Function | Description |
+|----------|-------------|
+| `sse.emit(data)` | Send `data: {payload}\n\n` to the client |
+| `sse.emitEvent(name, data)` | Send `event: {name}\ndata: {payload}\n\n` to the client |
+| `sse.close()` | Close the stream gracefully |
+| `sse.retry(ms)` | Tell the client to reconnect after `ms` milliseconds if disconnected |
+| `sse.isConnected() -> boolean` | Returns `false` when the client has disconnected; use to abort long loops |
+
+### 18.2 Client-Side: `cl-stream` Directive
+
+Connect an HTML element to a STREAM endpoint with `cl-stream`:
+
+```html
+<div
+    class="task-list"
+    cl-stream="/api/generate/{jobId}">
+</div>
+```
+
+- On mount the browser opens an `EventSource` to the URL.
+- Each `data:` event replaces the element's `innerHTML` with the payload.
+- Named events (from `sse.emitEvent`) are dispatched as `CustomEvent` on the element.
+- The connection closes when the server calls `sse.close()`, or when the element unmounts.
+- The URL may include `{interpolated}` expressions from the component's state.
+
+---
+
+## 19. Server-Side HTTP Client  <!-- was §18 -->
 
 The server can make outbound HTTP requests using the `http.*` bridge functions. This is separate from client-side communication (`frame.client`).
 
@@ -351,7 +413,7 @@ Available: `http.get(url)`, `http.postJson(url, body)`, `http.put(url, body)`, `
 
 ---
 
-## 19. Security
+## 20. Security
 - Enforce HTTPS at host; set HSTS as appropriate.
 - Use `HttpOnly` + `SameSite` cookies for sessions.
 - Limit CORS; expose only required origins/headers.
@@ -359,7 +421,7 @@ Available: `http.get(url)`, `http.postJson(url, body)`, `http.put(url, body)`, `
 
 ---
 
-## 20. Examples
+## 21. Examples
 
 ### 20.1 Simple CRUD
 ```clean

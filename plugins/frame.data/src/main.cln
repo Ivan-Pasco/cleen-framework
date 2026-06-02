@@ -115,6 +115,26 @@ functions:
 			if __m.length() > 0
 				return expand_delete(__m, body)
 
+		// paginate: → expand_paginate
+		if __bname == "paginate" or __bname.endsWith(".paginate")
+			string __m = ""
+			if __bname == "paginate"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 9)
+			if __m.length() > 0
+				return expand_paginate(__m, body)
+
+		// cursor: → expand_cursor
+		if __bname == "cursor" or __bname.endsWith(".cursor")
+			string __m = ""
+			if __bname == "cursor"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 7)
+			if __m.length() > 0
+				return expand_cursor(__m, body)
+
 		return body
 
 	// Validation entry point
@@ -127,7 +147,7 @@ functions:
 
 	// Keywords for IDE support
 	string get_keywords()
-		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\"]"
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"paginate\", \"cursor\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\", \"page\", \"perPage\", \"after\", \"by\"]"
 
 // ============================================================================
 // DATA MODEL EXPANSION
@@ -887,6 +907,11 @@ functions:
 	// When the model body declares a tenantId field or a ": tenant" constraint,
 	// the generated SQL automatically prepends a tenant_id filter so that callers
 	// never have to include it explicitly in their where: sub-blocks.
+	//
+	// Dynamic order: safety — when the order: value is a camelCase variable name
+	// (heuristic: single word with an uppercase letter) a _db_valid_field guard is
+	// emitted before the query so that unknown column names fail fast with a
+	// VALIDATION_ERROR rather than reaching the database.
 	string expand_find(string model_name, string body)
 		string table_name = pluralize(to_snake_case(model_name))
 		string where_clause = extract_subblock(body, "where:")
@@ -895,6 +920,13 @@ functions:
 		string link_clause = extract_subblock(body, "link:")
 		string join_clause = extract_subblock(body, "join:")
 		boolean has_tenant = detect_tenant_field(body)
+
+		// Dynamic order guard: emit a field validation check before the query
+		// when the order clause is a runtime variable reference.
+		string order_guard = ""
+		if order_clause.length() > 0 and is_dynamic_order(order_clause.trim())
+			string __dyn_order_var = order_clause.trim()
+			order_guard = "if not _db_valid_field(\"" + table_name + "\", " + __dyn_order_var + ")\n\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + __dyn_order_var + " + \"\\\"}}\"\n"
 
 		// Resolve ModelName.field references in where/order clauses using join context
 		if join_clause.length() > 0
@@ -915,7 +947,8 @@ functions:
 
 		// Build WHERE clause with optional tenant isolation prefix
 		if has_tenant
-			string __tf_result = "string __tf_sql = \"SELECT * FROM " + table_name
+			string __tf_result = order_guard
+			__tf_result = __tf_result + "string __tf_sql = \"SELECT * FROM " + table_name
 			if join_clause.length() > 0
 				__tf_result = __tf_result + " " + parse_join_clause(join_clause, model_name)
 			if link_clause.length() > 0
@@ -928,7 +961,10 @@ functions:
 			else
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" WHERE \" + __tf_filter\n"
 			if order_clause.length() > 0
-				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
+				if is_dynamic_order(order_clause.trim())
+					__tf_result = __tf_result + "__tf_sql = __tf_sql + \" ORDER BY \" + " + order_clause.trim() + "\n"
+				else
+					__tf_result = __tf_result + "__tf_sql = __tf_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
 			if limit_clause.length() > 0
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" LIMIT " + limit_clause.trim() + "\"\n"
 			string __tf_offset = extract_subblock(body, "offset:")
@@ -953,7 +989,10 @@ functions:
 			// Static suffix: ORDER BY / LIMIT / OFFSET appended as string literal
 			string __fq_suffix = ""
 			if order_clause.length() > 0
-				__fq_suffix = __fq_suffix + " + \" ORDER BY " + parse_order_clause(order_clause) + "\""
+				if is_dynamic_order(order_clause.trim())
+					__fq_suffix = __fq_suffix + " + \" ORDER BY \" + " + order_clause.trim()
+				else
+					__fq_suffix = __fq_suffix + " + \" ORDER BY " + parse_order_clause(order_clause) + "\""
 			if limit_clause.length() > 0
 				__fq_suffix = __fq_suffix + " + \" LIMIT " + limit_clause.trim() + "\""
 			string __fq_off = extract_subblock(body, "offset:")
@@ -962,10 +1001,22 @@ functions:
 
 			// Single expression: prefix + dynamic_where + suffix
 			string __fq_sql_expr = __fq_prefix + " + " + build_where_expr(where_clause) + __fq_suffix
-			return "__parse_as_" + model_name + "(_db_query(" + __fq_sql_expr + ", \"[]\"))"
+			return order_guard + "__parse_as_" + model_name + "(_db_query(" + __fq_sql_expr + ", \"[]\"))"
 
 		// No WHERE: static SQL string is sufficient
 		if order_clause.length() > 0
+			if is_dynamic_order(order_clause.trim())
+				// Dynamic order on a static-prefix SQL needs a variable block, not a single expression
+				string __dyn_result = order_guard
+				__dyn_result = __dyn_result + "string __find_sql = \"" + sql + "\"\n"
+				__dyn_result = __dyn_result + "__find_sql = __find_sql + \" ORDER BY \" + " + order_clause.trim() + "\n"
+				if limit_clause.length() > 0
+					__dyn_result = __dyn_result + "__find_sql = __find_sql + \" LIMIT " + limit_clause.trim() + "\"\n"
+				string __dyn_off = extract_subblock(body, "offset:")
+				if __dyn_off.length() > 0
+					__dyn_result = __dyn_result + "__find_sql = __find_sql + \" OFFSET " + __dyn_off.trim() + "\"\n"
+				__dyn_result = __dyn_result + "__parse_as_" + model_name + "(_db_query(__find_sql, \"[]\"))"
+				return __dyn_result
 			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
 		if limit_clause.length() > 0
 			sql = sql + " LIMIT " + limit_clause.trim()
@@ -1147,6 +1198,186 @@ functions:
 		return "_db_execute(\"" + sql + "\", \"[]\")"
 
 // ============================================================================
+// PAGINATION EXPANSION
+// ============================================================================
+
+functions:
+	// Expand Model.paginate: block.
+	// Recognises sub-blocks: where:, paginate: (page / perPage), order:.
+	//
+	// paginate: sub-block fields (both optional — defaults: page=1, perPage=20):
+	//   page    <expr>     — 1-based page number (integer expression)
+	//   perPage <expr>     — records per page (integer expression)
+	//
+	// When order: contains a runtime variable (not a bare SQL identifier) a
+	// _db_valid_field guard is emitted before the bridge call so that unknown
+	// column names are rejected at runtime before reaching SQL.
+	//
+	// Generated code pattern:
+	//   string __where_json_<n> = <where_json_expr>
+	//   string __paged_json_<n> = _db_paginate("<Table>", __where_json_<n>, <page>, <perPage>)
+	//   PagedResult result = json.parse(__paged_json_<n>)
+	string expand_paginate(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+
+		string where_clause = extract_subblock(body, "where:")
+		string order_clause = extract_subblock(body, "order:")
+		string paginate_clause = extract_subblock(body, "paginate:")
+
+		// Extract page and perPage from the paginate: sub-block
+		string page_expr = "1"
+		string per_page_expr = "20"
+		if paginate_clause.length() > 0
+			string pg_val = extract_paginate_field(paginate_clause, "page")
+			if pg_val.length() > 0
+				page_expr = pg_val
+			string pp_val = extract_paginate_field(paginate_clause, "perPage")
+			if pp_val.length() > 0
+				per_page_expr = pp_val
+
+		// Build the where JSON string expression
+		string where_json_expr = build_where_json_expr(where_clause)
+
+		// Build order string (may be static SQL or a runtime variable)
+		string order_expr = "\"\""
+		boolean order_is_dynamic = false
+		if order_clause.length() > 0
+			string parsed_order = parse_order_clause(order_clause)
+			// Detect runtime variable: if the order clause contains only a bare identifier
+			// with no spaces and no ASC/DESC suffix it might be a variable reference.
+			// Heuristic: if parsed_order is a single word with no spaces it could be
+			// either a column name or a variable — we treat it as dynamic when the
+			// original order body is a single word that matches no Clean keyword.
+			order_is_dynamic = is_dynamic_order(order_clause.trim())
+			if order_is_dynamic
+				order_expr = order_clause.trim()
+			else
+				order_expr = "\"" + parsed_order + "\""
+
+		string result = ""
+
+		// Emit runtime field validation guard when order comes from a variable
+		if order_is_dynamic
+			result = result + "if not _db_valid_field(\"" + table_name + "\", " + order_expr + ")\n"
+			result = result + "\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + order_expr + " + \"\\\"}}\"\n"
+
+		// Build where JSON (simple approach: pass where clause conditions as JSON object)
+		result = result + "string __where_json_pg = " + where_json_expr + "\n"
+
+		// Incorporate order into the paginate call via the where JSON when present
+		// The runtime _db_paginate uses the table name + where JSON for SQL generation;
+		// order is passed as part of the where JSON under the key "__order"
+		if order_clause.length() > 0
+			result = result + "if __where_json_pg == \"{}\"\n"
+			result = result + "\t__where_json_pg = \"{\\\"__order\\\":\\\"\" + " + order_expr + " + \"\\\"}\"\n"
+			result = result + "else\n"
+			result = result + "\t__where_json_pg = __where_json_pg.substring(0, __where_json_pg.length() - 1) + \",\\\"__order\\\":\\\"\" + " + order_expr + " + \"\\\"}\"\n"
+
+		result = result + "string __paged_json = _db_paginate(\"" + table_name + "\", __where_json_pg, " + page_expr + ", " + per_page_expr + ")\n"
+		result = result + "json.parse(__paged_json)"
+		return result
+
+	// Expand Model.cursor: block.
+	// Recognises sub-blocks: where:, cursor: (perPage / after / by).
+	//
+	// cursor: sub-block fields:
+	//   perPage <expr>     — records per page (default 20)
+	//   after   <expr>     — opaque cursor string from a previous CursorResult.nextCursor
+	//   by      <expr>     — column name to cursor on (default "id")
+	//
+	// Generated code pattern:
+	//   string __where_json_cur = <where_json_expr>
+	//   string __cursor_json    = _db_cursor_page("<Table>", __where_json_cur, <perPage>, <after>, <by>)
+	//   CursorResult result = json.parse(__cursor_json)
+	string expand_cursor(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+
+		string where_clause = extract_subblock(body, "where:")
+		string cursor_clause = extract_subblock(body, "cursor:")
+
+		string per_page_expr = "20"
+		string after_expr = "\"\""
+		string by_expr = "\"id\""
+
+		if cursor_clause.length() > 0
+			string pp_val = extract_paginate_field(cursor_clause, "perPage")
+			if pp_val.length() > 0
+				per_page_expr = pp_val
+			string after_val = extract_paginate_field(cursor_clause, "after")
+			if after_val.length() > 0
+				// If the value is already quoted it is a string literal — pass as-is.
+				// Otherwise it is a variable expression — pass as-is (the runtime expects a string).
+				after_expr = after_val
+			string by_val = extract_paginate_field(cursor_clause, "by")
+			if by_val.length() > 0
+				by_expr = by_val
+
+		string where_json_expr = build_where_json_expr(where_clause)
+
+		string result = "string __where_json_cur = " + where_json_expr + "\n"
+		result = result + "string __cursor_json = _db_cursor_page(\"" + table_name + "\", __where_json_cur, " + per_page_expr + ", " + after_expr + ", " + by_expr + ")\n"
+		result = result + "json.parse(__cursor_json)"
+		return result
+
+	// Extract a named field value from a paginate: or cursor: sub-block.
+	// Lines have the form:  <fieldName> <value>  (space-separated, single line each).
+	// Returns the raw value token, or empty string when the field is not present.
+	string extract_paginate_field(string clause_body, string field_name)
+		string lines = clause_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.startsWith(field_name + " ")
+				return line.substring(field_name.length() + 1, line.length()).trim()
+			if line.startsWith(field_name + "\t")
+				return line.substring(field_name.length() + 1, line.length()).trim()
+			line_start = line_end + 1
+		return ""
+
+	// Build a Clean code expression that evaluates to a JSON object string
+	// representing the WHERE conditions for use as the where_json argument to
+	// _db_paginate and _db_cursor_page.
+	//
+	// When no where clause is present returns the literal "\"{}\"".
+	// When conditions are present, encodes them as {"__where":"<sql_fragment>"}.
+	// Dynamic variable references in conditions are handled by build_where_expr.
+	string build_where_json_expr(string where_clause)
+		if where_clause.length() == 0
+			return "\"{}\""
+		// Build the SQL fragment expression using the same logic as expand_find
+		string where_sql_expr = build_where_expr(where_clause)
+		// Wrap in JSON: {"__where":"<sql>"}
+		return "\"{\\\"__where\\\":\\\"\" + " + where_sql_expr + " + \"\\\"}\""
+
+	// Determine whether an order: clause value is a dynamic (runtime) expression
+	// rather than a static SQL column reference.
+	//
+	// An order expression is considered dynamic when it is a single bare word that
+	// could be a variable identifier (all lowercase-or-camelCase, no spaces).
+	// Static SQL references look like "name ASC", "created_at DESC", or "id".
+	// A lone identifier like "sortField" is ambiguous — we treat it as dynamic
+	// when it contains at least one uppercase letter (camelCase variable convention)
+	// or when the caller's identifier matches no column-name pattern.
+	//
+	// The rule keeps false-positive dynamic detection low: column names are
+	// snake_case; variable names are camelCase.
+	boolean is_dynamic_order(string order_val)
+		// Multi-word: "field ASC" — static
+		if order_val.indexOf(" ") != -1
+			return false
+		// Contains uppercase letter — treat as camelCase variable
+		integer i = 0
+		while i < order_val.length()
+			string ch = order_val.substring(i, i + 1)
+			if ch >= "A" and ch <= "Z"
+				return true
+			i = i + 1
+		return false
+
+// ============================================================================
 // TRANSACTION EXPANSION
 // ============================================================================
 
@@ -1318,7 +1549,7 @@ functions:
 		integer content_start = start_pos + block_name.length()
 
 		// Find the end of this sub-block (next sub-block or end of body)
-		string subblock_markers = ",where:,order:,limit:,offset:,link:,join:,set:,sql:,params:,up:,down:,"
+		string subblock_markers = ",where:,order:,limit:,offset:,link:,join:,set:,sql:,params:,up:,down:,paginate:,cursor:,"
 		integer end_pos = body.length()
 
 		integer search_pos = content_start
@@ -1327,7 +1558,7 @@ functions:
 			if body.substring(search_pos, search_pos + 1) == "\n"
 				string after_newline = body.substring(search_pos + 1, body.length()).trim()
 				// Check if next line starts a new sub-block
-				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:")
+				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:") or after_newline.startsWith("paginate:") or after_newline.startsWith("cursor:")
 					end_pos = search_pos
 					break
 			search_pos = search_pos + 1

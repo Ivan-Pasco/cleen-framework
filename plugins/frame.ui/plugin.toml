@@ -43,13 +43,31 @@ blocks = ["component", "screen", "page", "html", "styles", "ui"]
 extensions = [".html"]
 
 # Directives recognized in HTML
-directives = ["cl-if", "cl-else", "cl-iterate", "cl-bind", "cl-client", "cl-slot", "cl-show", "cl-validate"]
+directives = ["cl-if", "cl-else", "cl-iterate", "cl-bind", "cl-client", "cl-slot", "cl-show", "cl-validate", "cl-preview", "cl-stream"]
 
 # Event attributes recognized (with modifiers like .prevent, .stop)
-events = ["onclick", "oninput", "onchange", "onsubmit", "onfocus", "onblur", "onkeydown", "onkeyup", "onmouseenter", "onmouseleave"]
+# Extended in §FEXT-1: added drag, pointer, wheel, scroll, and additional mouse events
+events = [
+  # Mouse
+  "onclick", "oninput", "onchange", "onsubmit",
+  "onmouseover", "onmouseenter", "onmouseleave", "onmousedown", "onmouseup", "onmousemove",
+  # Keyboard
+  "onkeydown", "onkeyup", "onkeypress",
+  # Focus
+  "onfocus", "onblur",
+  # Drag (§FEXT-1)
+  "ondragstart", "ondragend", "ondragenter", "ondragover", "ondragleave", "ondrop",
+  # Pointer (§FEXT-1)
+  "onpointerdown", "onpointermove", "onpointerup", "onpointercancel", "onpointerenter", "onpointerleave",
+  # Wheel / Scroll (§FEXT-1)
+  "onwheel", "onscroll",
+  # Context menu
+  "oncontextmenu"
+]
 
 # Event modifiers
-event_modifiers = ["prevent", "stop", "once", "enter", "escape", "space"]
+# Extended in §FEXT-1: added passive (wheel), left/right (pointer button filter)
+event_modifiers = ["prevent", "stop", "once", "enter", "escape", "space", "left", "right", "passive"]
 
 # Interpolation syntax
 interpolation_escaped = "{}"
@@ -142,6 +160,53 @@ functions = [
   { name = "_ui_form_data", params = ["string"], returns = "string", description = "Collect all named inputs as URL-encoded key=value string", expand_strings = true },
   { name = "_ui_checked", params = ["string"], returns = "integer", description = "Get checkbox checked state (0=unchecked, 1=checked)", expand_strings = true },
   { name = "_ui_set_input", params = ["string", "string"], returns = "integer", description = "Set value of input/textarea/select", expand_strings = true },
+
+  # Keyboard shortcuts
+  { name = "_ui_shortcut_register", params = ["string", "string", "string"], returns = "integer", description = "Register global keyboard shortcut: key descriptor (e.g. mod+shift+s), handler name, scope (global or CSS selector)", expand_strings = true },
+  { name = "_ui_shortcut_remove", params = ["integer"], returns = "void", description = "Remove keyboard shortcut by ID" },
+  { name = "_ui_shortcut_clear", params = [], returns = "void", description = "Remove all keyboard shortcuts registered by this WASM instance" },
+
+  # CSS variable runtime manipulation
+  { name = "_ui_set_css_var", params = ["string", "string"], returns = "void", description = "Set CSS custom property on :root: name, value", expand_strings = true },
+  { name = "_ui_set_css_var_on", params = ["string", "string", "string"], returns = "void", description = "Set CSS custom property on element matching selector: selector, name, value", expand_strings = true },
+  { name = "_ui_get_css_var", params = ["string"], returns = "string", description = "Get computed value of CSS custom property from :root", expand_strings = true },
+  { name = "_ui_apply_css_vars", params = ["string"], returns = "void", description = "Apply JSON object of CSS variable name→value pairs to :root", expand_strings = true },
+
+  # Focus management
+  { name = "_ui_focus", params = ["string"], returns = "void", description = "Call focus() on first element matching selector", expand_strings = true },
+  { name = "_ui_blur", params = ["string"], returns = "void", description = "Call blur() on first element matching selector", expand_strings = true },
+  { name = "_ui_get_focus", params = [], returns = "string", description = "Return CSS selector path of currently focused element, or empty string if body" },
+  { name = "_ui_focus_trap", params = ["string"], returns = "integer", description = "Trap Tab/Shift+Tab focus within container matching selector; returns trap ID", expand_strings = true },
+  { name = "_ui_focus_trap_release", params = ["integer"], returns = "void", description = "Release focus trap by ID and restore previously focused element" },
+
+  # Browser storage
+  { name = "_storage_local_get", params = ["string"], returns = "string", description = "Get value from localStorage by key", expand_strings = true },
+  { name = "_storage_local_set", params = ["string", "string"], returns = "void", description = "Set key-value pair in localStorage", expand_strings = true },
+  { name = "_storage_local_remove", params = ["string"], returns = "void", description = "Remove key from localStorage", expand_strings = true },
+  { name = "_storage_local_clear", params = [], returns = "void", description = "Clear all entries in localStorage" },
+  { name = "_storage_session_get", params = ["string"], returns = "string", description = "Get value from sessionStorage by key", expand_strings = true },
+  { name = "_storage_session_set", params = ["string", "string"], returns = "void", description = "Set key-value pair in sessionStorage", expand_strings = true },
+  { name = "_storage_session_remove", params = ["string"], returns = "void", description = "Remove key from sessionStorage", expand_strings = true },
+  { name = "_storage_session_clear", params = [], returns = "void", description = "Clear all entries in sessionStorage" },
+
+  # File download trigger (client-side only)
+  { name = "_ui_download_text", params = ["string", "string", "string"], returns = "void", description = "Trigger browser download of text content: filename, content, mimeType", expand_strings = true },
+  { name = "_ui_download_url", params = ["string", "string"], returns = "void", description = "Trigger browser download from URL: url, filename", expand_strings = true },
+
+  # Clipboard API (async with callbacks)
+  { name = "_ui_clipboard_write_cb", params = ["string", "string", "string"], returns = "void", description = "Write text to clipboard with callbacks: text, onSuccessHandler, onErrorHandler (empty string = no callback)", expand_strings = true },
+  { name = "_ui_clipboard_read_cb", params = ["string", "string"], returns = "void", description = "Read text from clipboard with callbacks: onSuccessHandler, onErrorHandler", expand_strings = true },
+
+  # Resize and Intersection Observers
+  { name = "_ui_resize_observe", params = ["string", "string"], returns = "integer", description = "Observe element resize: selector, handler name; returns observer ID", expand_strings = true },
+  { name = "_ui_resize_unobserve", params = ["integer"], returns = "void", description = "Stop resize observation by ID" },
+  { name = "_ui_intersect_observe", params = ["string", "string", "number"], returns = "integer", description = "Observe element intersection: selector, handler name, threshold (0.0–1.0); returns observer ID", expand_strings = true },
+  { name = "_ui_intersect_unobserve", params = ["integer"], returns = "void", description = "Stop intersection observation by ID" },
+
+  # Toast / notification system
+  { name = "_ui_toast", params = ["string", "string", "integer", "string"], returns = "integer", description = "Show toast notification: text, variant (success|error|warning|info), duration ms (0=permanent), position; returns toast ID", expand_strings = true },
+  { name = "_ui_toast_dismiss", params = ["integer"], returns = "void", description = "Dismiss toast by ID with exit animation" },
+  { name = "_ui_toast_dismiss_all", params = [], returns = "void", description = "Dismiss all visible toasts" },
 ]
 
 [language]
@@ -205,7 +270,7 @@ functions = [
   { name = "ui.eventAttr", signature = "ui.eventAttr(attr)", description = "Get attribute from current event target", maps_to = "_ui_event_attr" },
   { name = "ui.eventValue", signature = "ui.eventValue()", description = "Get value/textContent of current event target", maps_to = "_ui_event_value" },
   { name = "ui.eventClosestAttr", signature = "ui.eventClosestAttr(selector, attr)", description = "Get attribute from closest ancestor matching selector", maps_to = "_ui_event_closest_attr" },
-  { name = "ui.clipboardWrite", signature = "ui.clipboardWrite(text)", description = "Write text to clipboard", maps_to = "_ui_clipboard_write" },
+  { name = "ui.clipboardWriteRaw", signature = "ui.clipboardWriteRaw(text)", description = "Write text to clipboard (fire-and-forget, no callbacks)", maps_to = "_ui_clipboard_write" },
   { name = "ui.locationHref", signature = "ui.locationHref(url)", description = "Navigate to URL", maps_to = "_ui_location_href" },
   { name = "ui.locationQuery", signature = "ui.locationQuery(param)", description = "Get URL query parameter", maps_to = "_ui_location_query" },
   { name = "ui.locationPath", signature = "ui.locationPath()", description = "Get current URL pathname", maps_to = "_ui_location_path" },
@@ -215,6 +280,92 @@ functions = [
   { name = "ui.filterByText", signature = "ui.filterByText(selector, nameAttr, descAttr, query)", description = "Filter elements by text search", maps_to = "_ui_filter_by_text" },
   { name = "ui.queryAddClass", signature = "ui.queryAddClass(selector, className)", description = "Add class to ALL matching elements", maps_to = "_ui_query_add_class" },
   { name = "ui.queryRemoveClass", signature = "ui.queryRemoveClass(selector, className)", description = "Remove class from ALL matching elements", maps_to = "_ui_query_remove_class" },
+
+  # --- §FEXT-1: Drag data transfer ---
+  { name = "_ui_set_drag_data", params = ["string", "string"], returns = "integer", description = "Set drag-and-drop transfer data: key, value", expand_strings = true },
+  { name = "_ui_get_drag_data", params = ["string"], returns = "string", description = "Get drag-and-drop transfer data by key", expand_strings = true },
+  { name = "ui.setDragData", signature = "ui.setDragData(key, value)", description = "Set drag transfer data", maps_to = "_ui_set_drag_data" },
+  { name = "ui.getDragData", signature = "ui.getDragData(key) -> string", description = "Get drag transfer data by key", maps_to = "_ui_get_drag_data" },
+
+  # --- §FEXT-2: DOM Query bridge functions (browser-only; server stubs return "") ---
+  { name = "_ui_get_bounds", params = ["string"], returns = "string", description = "Get bounding box of element matching selector (JSON: x,y,width,height,top,left,right,bottom)", expand_strings = true },
+  { name = "_ui_get_offset_bounds", params = ["string"], returns = "string", description = "Get bounding box relative to offset parent (JSON)", expand_strings = true },
+  { name = "_ui_get_scroll", params = ["string"], returns = "string", description = "Get scroll position of element (JSON: scrollX,scrollY,scrollWidth,scrollHeight)", expand_strings = true },
+  { name = "_ui_set_scroll", params = ["string", "number", "number"], returns = "integer", description = "Set scroll position of element: selector, x, y", expand_strings = true },
+  { name = "_ui_query_all", params = ["string"], returns = "string", description = "Query all elements matching selector; returns JSON array of CSS selector paths", expand_strings = true },
+  { name = "_ui_get_computed_style", params = ["string", "string"], returns = "string", description = "Get computed CSS property value: selector, property name", expand_strings = true },
+  { name = "ui.getBounds", signature = "ui.getBounds(selector) -> BoundsResult", description = "Get element bounding box", maps_to = "_ui_get_bounds" },
+  { name = "ui.getOffsetBounds", signature = "ui.getOffsetBounds(selector) -> BoundsResult", description = "Get element bounding box relative to offset parent", maps_to = "_ui_get_offset_bounds" },
+  { name = "ui.getScroll", signature = "ui.getScroll(selector) -> ScrollResult", description = "Get element scroll position", maps_to = "_ui_get_scroll" },
+  { name = "ui.setScroll", signature = "ui.setScroll(selector, x, y)", description = "Set element scroll position", maps_to = "_ui_set_scroll" },
+  { name = "ui.queryAll", signature = "ui.queryAll(selector) -> Array<string>", description = "Query all matching elements; returns selector paths", maps_to = "_ui_query_all" },
+  { name = "ui.getAttr", signature = "ui.getAttr(selector, attr) -> string", description = "Get attribute value from first matching element", maps_to = "_ui_get_attr" },
+  { name = "ui.getComputedStyle", signature = "ui.getComputedStyle(selector, property) -> string", description = "Get computed CSS property value", maps_to = "_ui_get_computed_style" },
+
+  # --- §FEXT-3: iframe communication bridge (browser-only) ---
+  { name = "_ui_iframe_send", params = ["string", "string"], returns = "integer", description = "Send postMessage to iframe: selector, message string", expand_strings = true },
+  { name = "_ui_iframe_on_message", params = ["string"], returns = "integer", description = "Register handler for incoming iframe postMessages: handler function name", expand_strings = true },
+  { name = "_ui_iframe_get_bounds", params = ["string", "string"], returns = "string", description = "Get bounds of element inside iframe: iframe selector, inner selector (100ms timeout)", expand_strings = true },
+  { name = "_ui_iframe_inject", params = ["string", "string"], returns = "integer", description = "Inject script into iframe: selector, script string (returns 1=ok, 0=threw)", expand_strings = true },
+  { name = "ui.iframeSend", signature = "ui.iframeSend(selector, message)", description = "Send message to iframe via postMessage", maps_to = "_ui_iframe_send" },
+  { name = "ui.iframeOnMessage", signature = "ui.iframeOnMessage(handler)", description = "Register handler for messages from iframes", maps_to = "_ui_iframe_on_message" },
+  { name = "ui.iframeGetBounds", signature = "ui.iframeGetBounds(iframeSelector, innerSelector) -> BoundsResult", description = "Get bounds of element inside iframe", maps_to = "_ui_iframe_get_bounds" },
+  { name = "ui.iframeInject", signature = "ui.iframeInject(selector, script) -> boolean", description = "Inject script into iframe", maps_to = "_ui_iframe_inject" },
+
+  # --- §FEXT-5: Incremental DOM patching (browser-only; server is a no-op) ---
+  { name = "_ui_patch", params = ["string", "string"], returns = "integer", description = "Diff and incrementally patch DOM subtree: selector, new HTML (preserves focus, scroll, selection)", expand_strings = true },
+  { name = "ui.patch", signature = "ui.patch(selector, newHtml)", description = "Incrementally patch DOM subtree without full re-render", maps_to = "_ui_patch" },
+
+  # --- Keyboard shortcuts ---
+  { name = "ui.shortcut", signature = "ui.shortcut(keys, handlerName, scope) -> integer", description = "Register global keyboard shortcut; scope is 'global' or a CSS selector", maps_to = "_ui_shortcut_register" },
+  { name = "ui.removeShortcut", signature = "ui.removeShortcut(id)", description = "Remove keyboard shortcut by ID", maps_to = "_ui_shortcut_remove" },
+  { name = "ui.clearShortcuts", signature = "ui.clearShortcuts()", description = "Remove all keyboard shortcuts registered by this WASM instance", maps_to = "_ui_shortcut_clear" },
+
+  # --- CSS variable manipulation ---
+  { name = "ui.setCssVar", signature = "ui.setCssVar(name, value)", description = "Set CSS custom property on :root", maps_to = "_ui_set_css_var" },
+  { name = "ui.setCssVarOn", signature = "ui.setCssVarOn(selector, name, value)", description = "Set CSS custom property on specific element", maps_to = "_ui_set_css_var_on" },
+  { name = "ui.getCssVar", signature = "ui.getCssVar(name) -> string", description = "Get computed value of CSS custom property from :root", maps_to = "_ui_get_css_var" },
+  { name = "ui.applyCssVars", signature = "ui.applyCssVars(tokensJson)", description = "Apply JSON object of CSS variable name→value pairs to :root", maps_to = "_ui_apply_css_vars" },
+
+  # --- Focus management ---
+  { name = "ui.focus", signature = "ui.focus(selector)", description = "Focus element matching selector", maps_to = "_ui_focus" },
+  { name = "ui.blur", signature = "ui.blur(selector)", description = "Blur element matching selector", maps_to = "_ui_blur" },
+  { name = "ui.getFocus", signature = "ui.getFocus() -> string", description = "Get selector path of currently focused element", maps_to = "_ui_get_focus" },
+  { name = "ui.focusTrap", signature = "ui.focusTrap(selector) -> integer", description = "Trap keyboard focus within container; returns trap ID", maps_to = "_ui_focus_trap" },
+  { name = "ui.focusTrapRelease", signature = "ui.focusTrapRelease(id)", description = "Release focus trap and restore previously focused element", maps_to = "_ui_focus_trap_release" },
+
+  # --- Browser storage ---
+  { name = "storage.local.get", signature = "storage.local.get(key) -> string", description = "Get value from localStorage", maps_to = "_storage_local_get" },
+  { name = "storage.local.set", signature = "storage.local.set(key, value)", description = "Set value in localStorage", maps_to = "_storage_local_set" },
+  { name = "storage.local.remove", signature = "storage.local.remove(key)", description = "Remove key from localStorage", maps_to = "_storage_local_remove" },
+  { name = "storage.local.clear", signature = "storage.local.clear()", description = "Clear all localStorage entries", maps_to = "_storage_local_clear" },
+  { name = "storage.session.get", signature = "storage.session.get(key) -> string", description = "Get value from sessionStorage", maps_to = "_storage_session_get" },
+  { name = "storage.session.set", signature = "storage.session.set(key, value)", description = "Set value in sessionStorage", maps_to = "_storage_session_set" },
+  { name = "storage.session.remove", signature = "storage.session.remove(key)", description = "Remove key from sessionStorage", maps_to = "_storage_session_remove" },
+  { name = "storage.session.clear", signature = "storage.session.clear()", description = "Clear all sessionStorage entries", maps_to = "_storage_session_clear" },
+
+  # --- File download ---
+  { name = "ui.downloadText", signature = "ui.downloadText(filename, content, mimeType)", description = "Trigger browser download of in-memory text content", maps_to = "_ui_download_text" },
+  { name = "ui.downloadUrl", signature = "ui.downloadUrl(url, filename)", description = "Trigger browser download from a URL", maps_to = "_ui_download_url" },
+
+  # --- Clipboard (async with callbacks) ---
+  { name = "ui.clipboardWrite", signature = "ui.clipboardWrite(text, onSuccess, onError)", description = "Write text to clipboard; call onSuccess/onError handler names on completion", maps_to = "_ui_clipboard_write_cb" },
+  { name = "ui.clipboardRead", signature = "ui.clipboardRead(onSuccess, onError)", description = "Read text from clipboard; onSuccess called with text, onError with error message", maps_to = "_ui_clipboard_read_cb" },
+
+  # --- Resize and Intersection Observers ---
+  { name = "ui.resizeObserve", signature = "ui.resizeObserve(selector, handlerName) -> integer", description = "Observe element size changes; handler called with {width, height, selector} JSON", maps_to = "_ui_resize_observe" },
+  { name = "ui.resizeUnobserve", signature = "ui.resizeUnobserve(id)", description = "Stop resize observation by ID", maps_to = "_ui_resize_unobserve" },
+  { name = "ui.intersectObserve", signature = "ui.intersectObserve(selector, handlerName, threshold) -> integer", description = "Observe element intersection; handler called with {selector, ratio, isVisible} JSON", maps_to = "_ui_intersect_observe" },
+  { name = "ui.intersectUnobserve", signature = "ui.intersectUnobserve(id)", description = "Stop intersection observation by ID", maps_to = "_ui_intersect_unobserve" },
+
+  # --- Toast / notification system ---
+  { name = "toast.show", signature = "toast.show(text, variant, durationMs, position) -> integer", description = "Show toast notification; returns toast ID", maps_to = "_ui_toast" },
+  { name = "toast.dismiss", signature = "toast.dismiss(id)", description = "Dismiss a toast by ID", maps_to = "_ui_toast_dismiss" },
+  { name = "toast.dismissAll", signature = "toast.dismissAll()", description = "Dismiss all visible toasts", maps_to = "_ui_toast_dismiss_all" },
+  { name = "toast.success", signature = "toast.success(text, variant, durationMs, position) -> integer", description = "Show success toast (pass variant='success')", maps_to = "_ui_toast" },
+  { name = "toast.error", signature = "toast.error(text, variant, durationMs, position) -> integer", description = "Show error toast (pass variant='error')", maps_to = "_ui_toast" },
+  { name = "toast.warning", signature = "toast.warning(text, variant, durationMs, position) -> integer", description = "Show warning toast (pass variant='warning')", maps_to = "_ui_toast" },
+  { name = "toast.info", signature = "toast.info(text, variant, durationMs, position) -> integer", description = "Show info toast (pass variant='info')", maps_to = "_ui_toast" },
 ]
 
 # Auto-completion suggestions

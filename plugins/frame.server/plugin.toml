@@ -26,6 +26,15 @@ functions = [
   # HTTP Server - Route Registration
   { name = "_http_route", params = ["string", "string", "string"], returns = "integer", description = "Register route: method, path, handler function name", expand_strings = true },
   { name = "_http_route_protected", params = ["string", "string", "string", "string"], returns = "integer", description = "Register protected route: method, path, handler name, required role", expand_strings = true },
+  # §FEXT-4: SSE route registration — sets Content-Type: text/event-stream and keeps connection open
+  { name = "_http_sse_route", params = ["string", "string", "string"], returns = "integer", description = "Register SSE (STREAM) route: method, path, handler function name", expand_strings = true },
+
+  # §FEXT-4: Server-Sent Events bridge functions (server-only; client receives event stream)
+  { name = "_sse_emit", params = ["string"], returns = "integer", description = "Send data: event to SSE client on current connection", expand_strings = true },
+  { name = "_sse_emit_event", params = ["string", "string"], returns = "integer", description = "Send named event+data to SSE client: event name, data string", expand_strings = true },
+  { name = "_sse_close", params = [], returns = "integer", description = "Close the SSE stream; client receives final empty event" },
+  { name = "_sse_retry", params = ["integer"], returns = "integer", description = "Set client reconnect interval in milliseconds" },
+  { name = "_sse_is_connected", params = [], returns = "integer", description = "Returns 1 if SSE client is still connected, 0 if disconnected" },
 
   # HTTP Server - Static Files
   { name = "_http_serve_static", params = ["string", "string"], returns = "integer", description = "Mount filesystem directory as static file server: url_prefix, dir_path. Serves files with correct MIME types.", expand_strings = true },
@@ -123,6 +132,14 @@ functions = [
   { name = "http_encode_url", params = ["string"], returns = "string", description = "Percent-encode a string for safe use in a URL", expand_strings = true },
   { name = "http_decode_url", params = ["string"], returns = "string", description = "Decode a percent-encoded URL string", expand_strings = true },
   { name = "http_build_query", params = ["string"], returns = "string", description = "Build a URL query string from a JSON object of key-value pairs", expand_strings = true },
+
+  # Response - File Download
+  { name = "_res_download", params = ["string"], returns = "void", description = "Set Content-Disposition: attachment header for file download; argument is the filename sent to the client", expand_strings = true },
+
+  # Email - SMTP
+  { name = "_email_configure", params = ["string", "integer", "boolean", "string", "string", "string"], returns = "void", description = "Configure SMTP connection: host, port, secure, username, password, from address. Called once during startup from a mail: config block.", expand_strings = true },
+  { name = "_email_send", params = ["string", "string", "string", "string", "string"], returns = "boolean", description = "Send email: to, subject, html body, plain-text body, from override (empty string uses configured default). Returns true on success.", expand_strings = true },
+  { name = "_email_last_error", params = [], returns = "string", description = "Return the error message from the last failed _email_send call; returns empty string when the last send succeeded." },
 ]
 
 [language]
@@ -145,6 +162,7 @@ keywords = [
   { name = "static", description = "Static file directory to serve (e.g. static: \"public/\")", context = "config" },
   { name = "cors", description = "CORS configuration", context = "config" },
   { name = "rateLimit", description = "Rate limiting configuration", context = "config" },
+  { name = "mail", description = "SMTP mail configuration block — host, port, secure, username, password, from", context = "config" },
 ]
 
 # Custom types provided by the plugin
@@ -192,6 +210,18 @@ functions = [
   { name = "http.putJson", signature = "http.putJson(url, body)", description = "PUT with Content-Type: application/json; returns response body", maps_to = "http_put_json" },
   { name = "http.postForm", signature = "http.postForm(url, formData)", description = "POST form-urlencoded body; returns response body", maps_to = "http_post_form" },
   { name = "http.responseCode", signature = "http.responseCode()", description = "Get HTTP status code of the last outbound response", maps_to = "http_get_response_code" },
+  # §FEXT-4: Server-Sent Events helpers (usable inside STREAM endpoint handlers)
+  { name = "sse.emit", signature = "sse.emit(data)", description = "Send data: event to the SSE client", maps_to = "_sse_emit" },
+  { name = "sse.emitEvent", signature = "sse.emitEvent(name, data)", description = "Send named event+data to the SSE client", maps_to = "_sse_emit_event" },
+  { name = "sse.close", signature = "sse.close()", description = "Close the SSE stream and terminate the connection", maps_to = "_sse_close" },
+  { name = "sse.retry", signature = "sse.retry(ms)", description = "Set the client reconnect interval in milliseconds", maps_to = "_sse_retry" },
+  { name = "sse.isConnected", signature = "sse.isConnected() -> boolean", description = "Returns true if the SSE client is still connected", maps_to = "_sse_is_connected" },
+  # File download
+  { name = "res.download", signature = "res.download(filename)", description = "Set Content-Disposition: attachment header so the browser downloads the response as a file named filename", maps_to = "_res_download" },
+  # Email helpers
+  { name = "email.send", signature = "email.send(to, subject, html, text)", description = "Send email with HTML and plain-text body; uses configured SMTP server. Returns true on success.", maps_to = "_email_send" },
+  { name = "email.sendFrom", signature = "email.sendFrom(to, subject, html, text, from)", description = "Send email with explicit from address override. Returns true on success.", maps_to = "_email_send" },
+  { name = "email.lastError", signature = "email.lastError()", description = "Return error message from the last failed email.send call; empty string when last send succeeded", maps_to = "_email_last_error" },
 ]
 
 # Auto-completion suggestions
@@ -200,8 +230,10 @@ completions = [
   { trigger = "endpoints:", insert = "endpoints:\n\t${1:GET} \"${2:/path}\" :\n\t\treturn json({ ${3:data} })" },
   { trigger = "GET ", insert = "GET \"${1:/path}\" :\n\treturn json({ ${2:data} })" },
   { trigger = "POST ", insert = "POST \"${1:/path}\" :\n\t${2:Type} body = req.json(${2:Type})\n\treturn json({ ${3:data} })" },
+  { trigger = "STREAM ", insert = "STREAM \"${1:/api/events}\" :\n\tsse.emit(\"started\")\n\tsse.close()" },
   { trigger = "[", insert = "[${1:role}]", context = "route_header" },
   { trigger = "middleware ", insert = "middleware ${1:Name}\n\tfunctions:\n\t\tRequest handle(Request req)\n\t\t\t${2:// inspect or modify request}\n\t\t\treturn req" },
+  { trigger = "email.", insert = "email.send(${1:to}, ${2:subject}, ${3:html}, ${4:text})" },
 ]
 
 [paths]

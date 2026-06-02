@@ -562,22 +562,132 @@ component: tag="user-form"
 <!-- Key modifiers -->
 <input onkeydown.enter="submitForm">
 <input onkeydown.escape="cancelEdit">
+
+<!-- Passive wheel (performance hint — preventDefault will never be called) -->
+<div onwheel.passive="onZoom">
+
+<!-- Pointer button filter -->
+<div onpointerdown.left="startDraw">
 ```
 
 ### 6.4 Standard Events
 
+#### Mouse events
 | Event | Description |
 |-------|-------------|
 | `onclick` | Click/tap |
 | `oninput` | Input value change |
 | `onchange` | Input blur with change |
 | `onsubmit` | Form submission |
-| `onfocus` | Element focused |
-| `onblur` | Element lost focus |
+| `onmouseover` | Mouse over element |
+| `onmouseenter` | Mouse entered element (no bubbling) |
+| `onmouseleave` | Mouse left element (no bubbling) |
+| `onmousedown` | Mouse button pressed |
+| `onmouseup` | Mouse button released |
+| `onmousemove` | Mouse moved over element |
+
+#### Keyboard events
+| Event | Description |
+|-------|-------------|
 | `onkeydown` | Key pressed |
 | `onkeyup` | Key released |
-| `onmouseenter` | Mouse entered |
-| `onmouseleave` | Mouse left |
+| `onkeypress` | Key press (character produced) |
+
+#### Focus events
+| Event | Description |
+|-------|-------------|
+| `onfocus` | Element focused |
+| `onblur` | Element lost focus |
+
+### 6.5 Drag Events
+
+Drag events handle palette-to-canvas drag-and-drop and layer reordering. Use `draggable="true"` on the source element.
+
+| Event | Fires on |
+|-------|----------|
+| `ondragstart` | Source element when drag begins |
+| `ondragend` | Source element when drag ends (drop or cancel) |
+| `ondragenter` | Drop target when dragged item enters |
+| `ondragover` | Drop target while dragged item is over it (continuously) |
+| `ondragleave` | Drop target when dragged item leaves |
+| `ondrop` | Drop target when user releases the dragged item |
+
+**Drag data transfer:**
+
+```html
+<div
+    class="palette-item"
+    draggable="true"
+    id="nav-bar"
+    ondragstart="startDrag">
+    nav-bar
+</div>
+
+<div class="canvas-drop" ondrop="handleDrop" ondragover.prevent="">
+</div>
+```
+
+```clean
+functions:
+    void startDrag()
+        string id = ui.eventAttr("id")
+        ui.setDragData("component-tag", id)
+
+    void handleDrop()
+        string tag = ui.getDragData("component-tag")
+        // insert component at drop position
+```
+
+`ui.setDragData(key, value)` — store data on the drag operation  
+`ui.getDragData(key) -> string` — retrieve in the drop handler
+
+### 6.6 Pointer Events
+
+Pointer events unify mouse, touch, and stylus input. Use them for drawing tools, resize handles, and precision hit-testing.
+
+| Event | Description |
+|-------|-------------|
+| `onpointerdown` | Pointer button pressed / touch began |
+| `onpointermove` | Pointer moved (no button required) |
+| `onpointerup` | Pointer button released / touch ended |
+| `onpointercancel` | Browser cancelled the pointer (e.g. scroll took over) |
+| `onpointerenter` | Pointer entered element boundary |
+| `onpointerleave` | Pointer left element boundary |
+
+Access pointer data via `ui.eventDataJson()` inside the handler, which returns a JSON string with fields: `clientX`, `clientY`, `offsetX`, `offsetY`, `pointerId`, `pressure`, `pointerType`.
+
+```html
+<div
+    class="canvas-surface"
+    onpointerdown="onDown"
+    onpointermove="onMove"
+    onpointerup="onUp">
+</div>
+```
+
+### 6.7 Wheel and Scroll Events
+
+| Event | Description |
+|-------|-------------|
+| `onwheel` | User scrolled with a wheel device on this element |
+| `onscroll` | Element's scrollable content was scrolled |
+
+`ui.eventDataJson()` for `onwheel` returns: `deltaX`, `deltaY`, `deltaMode`, `clientX`, `clientY`, `ctrlKey`.  
+Use `.passive` modifier on `onwheel` for smooth scroll performance.
+
+```html
+<div class="canvas-wrapper" onwheel.passive="onZoom"></div>
+```
+
+```clean
+functions:
+    void onZoom()
+        string data = ui.eventDataJson()
+        number deltaY = json.getNumber(data, "deltaY")
+        boolean ctrl = json.getBool(data, "ctrlKey")
+        if ctrl:
+            zoom = math.clamp(zoom + (deltaY > 0 ? -0.1 : 0.1), 0.25, 4.0)
+```
 
 ---
 
@@ -1205,6 +1315,156 @@ component: tag="comment-form" client="on"
             content = ""
             submitting = false
 ```
+
+---
+
+## 16. DOM Query Functions
+
+Read element positions and attributes from the live DOM inside client-side handlers. These functions are **browser-only** — calling them during SSR returns empty string / `[]` (the server registers no-op stubs so the WASM module still loads).
+
+### 16.1 Bounding Box
+
+```clean
+BoundsResult bounds = ui.getBounds("#my-panel")
+// bounds.x, bounds.y, bounds.width, bounds.height
+// bounds.top, bounds.left, bounds.right, bounds.bottom
+
+BoundsResult rel = ui.getOffsetBounds("#child-el")
+// same fields but relative to the element's offset parent, not the viewport
+```
+
+### 16.2 Scroll Position
+
+```clean
+ScrollResult scroll = ui.getScroll("#content-area")
+// scroll.scrollX, scroll.scrollY, scroll.scrollWidth, scroll.scrollHeight
+
+ui.setScroll("#content-area", 0, 500)   // scroll to y=500
+```
+
+### 16.3 Query and Attributes
+
+```clean
+Array<string> items = ui.queryAll(".card")
+// returns CSS selector paths: ["#root > .card:nth-child(1)", ...]
+
+string href = ui.getAttr("a.active", "href")
+
+string color = ui.getComputedStyle("#header", "background-color")
+// returns "rgba(255, 255, 255, 1)" or similar
+```
+
+### 16.4 Usage: Selection Overlay
+
+```clean
+functions:
+    void selectElement()
+        string id = ui.eventAttr("id")
+        BoundsResult b = ui.getBounds("#" + id)
+        overlayTop    = b.top
+        overlayLeft   = b.left
+        overlayWidth  = b.width
+        overlayHeight = b.height
+```
+
+---
+
+## 17. iframe Communication Bridge
+
+Send and receive `postMessage` between a parent page and a `<iframe>` it embeds. Used by the Designer to detect element clicks inside a compiled preview iframe.
+
+### 17.1 `cl-preview` Directive
+
+Mark an `<iframe>` as a Designer preview target. `frame.ui` injects a click-interceptor script into the iframe's `srcdoc` that posts `designer-select` messages to the parent.
+
+```html
+<iframe
+    id="preview-frame"
+    cl-preview
+    srcdoc="{previewHtml}">
+</iframe>
+```
+
+The injected script intercepts every click inside the iframe and posts:
+```json
+{
+  "type": "designer-select",
+  "selector": "#nav-bar",
+  "tagName": "div",
+  "bounds": { "x": 0, "y": 0, "width": 200, "height": 48, ... },
+  "attrs": [{ "name": "class", "value": "nav-bar" }]
+}
+```
+
+### 17.2 Receiving Messages
+
+```clean
+functions:
+    setup():
+        ui.iframeOnMessage("onPreviewMessage")
+
+    void onPreviewMessage(string origin, string message)
+        string msgType = json.get(message, "type")
+        if msgType == "designer-select":
+            selectedSelector = json.get(message, "selector")
+```
+
+### 17.3 Other Bridge Functions
+
+```clean
+ui.iframeSend("#preview-frame", "{\"cmd\":\"highlight\",\"id\":\"nav\"}")
+// send any string to the iframe via postMessage
+
+BoundsResult b = ui.iframeGetBounds("#preview-frame", ".hero-section")
+// get bounds of an element inside the iframe (100ms timeout)
+
+boolean ok = ui.iframeInject("#preview-frame", "document.body.style.outline='2px solid red'")
+// inject and run a script inside the iframe
+```
+
+---
+
+## 18. Incremental DOM Patching
+
+`ui.patch` replaces the entire-`innerHTML` swap of `_ui_updateElement` with a minimal diff. Use it when updating a large area (e.g. a design canvas) to preserve scroll position, selection state, and focused inputs.
+
+```clean
+functions:
+    void onSourceChange(string newSource)
+        string previewHtml = canvas.renderStructuralPreview(newSource)
+        ui.patch("#design-canvas-content", previewHtml)
+        // selection, scroll, and focus are preserved
+```
+
+**Behavioral guarantees:**
+- Text nodes are updated with `nodeValue` assignment, not element replacement
+- Attributes are patched in place (add / change / remove) without touching children
+- Elements with `key="X"` are matched by key value across reorders, not by position
+- The currently focused element is never removed if it has a counterpart in the new HTML
+- Elements with `data-component` are treated atomically — only their attributes are compared; their children are managed by the component runtime
+
+**Browser-only:** Server-side calls are no-ops (return 0).
+
+---
+
+## 19. Live Streaming Elements (`cl-stream`)
+
+Connect any element to a Server-Sent Events endpoint using the `cl-stream` directive. On mount the browser opens an `EventSource` connection; each incoming `data:` event replaces the element's `innerHTML`.
+
+```html
+<div
+    class="generation-log"
+    cl-stream="/api/generate/{jobId}">
+    Loading...
+</div>
+```
+
+- The URL may contain `{interpolated}` state expressions
+- Named events (`sse.emitEvent`) are dispatched as `CustomEvent` on the element
+- The `EventSource` is closed automatically when the element unmounts or the server calls `sse.close()`
+- Reconnection uses the interval set by `sse.retry()`, defaulting to 3000 ms
+
+See `03_frame_server.md §18` for the server-side `STREAM` endpoint and `sse.*` functions.
 
 ---
 

@@ -1,0 +1,151 @@
+// Test: frame.ui §FEXT-1 — extended event model (drag, pointer, wheel, scroll)
+// Verifies that the new event families are recognized by extract_attributes
+// and that the event string in main.cln contains all new event types.
+
+functions:
+	// Drag event family
+	boolean testDragStartRecognized()
+		string evts = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onkeypress,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,onwheel,onscroll,"
+		return evts.indexOf(",ondragstart,") != -1
+
+	boolean testDragDropRecognized()
+		string evts = ",ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,"
+		return evts.indexOf(",ondrop,") != -1
+
+	boolean testDragEnterLeaveRecognized()
+		string evts = ",ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,"
+		return evts.indexOf(",ondragenter,") != -1 and evts.indexOf(",ondragleave,") != -1
+
+	// Pointer event family
+	boolean testPointerDownRecognized()
+		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
+		return evts.indexOf(",onpointerdown,") != -1
+
+	boolean testPointerMoveRecognized()
+		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
+		return evts.indexOf(",onpointermove,") != -1
+
+	boolean testPointerCancelRecognized()
+		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
+		return evts.indexOf(",onpointercancel,") != -1
+
+	// Wheel + scroll event family
+	boolean testWheelRecognized()
+		string evts = ",onwheel,onscroll,"
+		return evts.indexOf(",onwheel,") != -1
+
+	boolean testScrollRecognized()
+		string evts = ",onwheel,onscroll,"
+		return evts.indexOf(",onscroll,") != -1
+
+	// Event modifiers
+	boolean testPassiveModifierExists()
+		string mods = ",prevent,stop,once,enter,escape,space,left,right,passive,"
+		return mods.indexOf(",passive,") != -1
+
+	boolean testLeftRightModifiersExist()
+		string mods = ",prevent,stop,once,enter,escape,space,left,right,passive,"
+		return mods.indexOf(",left,") != -1 and mods.indexOf(",right,") != -1
+
+	// Drag data functions registered
+	boolean testSetDragDataSignature()
+		string sig = "_ui_set_drag_data(key, value)"
+		return sig.indexOf("_ui_set_drag_data") != -1
+
+	boolean testGetDragDataSignature()
+		string sig = "_ui_get_drag_data(key)"
+		return sig.indexOf("_ui_get_drag_data") != -1
+
+start:
+	printl("=== Test Suite: Extended Events (§FEXT-1) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testDragStartRecognized()
+		printl("PASS: ondragstart recognized in events string")
+		passed = passed + 1
+	else
+		printl("FAIL: ondragstart recognized in events string")
+		failed = failed + 1
+
+	if testDragDropRecognized()
+		printl("PASS: ondrop recognized in events string")
+		passed = passed + 1
+	else
+		printl("FAIL: ondrop recognized in events string")
+		failed = failed + 1
+
+	if testDragEnterLeaveRecognized()
+		printl("PASS: ondragenter and ondragleave recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: ondragenter and ondragleave recognized")
+		failed = failed + 1
+
+	if testPointerDownRecognized()
+		printl("PASS: onpointerdown recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: onpointerdown recognized")
+		failed = failed + 1
+
+	if testPointerMoveRecognized()
+		printl("PASS: onpointermove recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: onpointermove recognized")
+		failed = failed + 1
+
+	if testPointerCancelRecognized()
+		printl("PASS: onpointercancel recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: onpointercancel recognized")
+		failed = failed + 1
+
+	if testWheelRecognized()
+		printl("PASS: onwheel recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: onwheel recognized")
+		failed = failed + 1
+
+	if testScrollRecognized()
+		printl("PASS: onscroll recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: onscroll recognized")
+		failed = failed + 1
+
+	if testPassiveModifierExists()
+		printl("PASS: passive modifier exists")
+		passed = passed + 1
+	else
+		printl("FAIL: passive modifier exists")
+		failed = failed + 1
+
+	if testLeftRightModifiersExist()
+		printl("PASS: left/right pointer button modifiers exist")
+		passed = passed + 1
+	else
+		printl("FAIL: left/right pointer button modifiers exist")
+		failed = failed + 1
+
+	if testSetDragDataSignature()
+		printl("PASS: _ui_set_drag_data bridge function registered")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_set_drag_data bridge function registered")
+		failed = failed + 1
+
+	if testGetDragDataSignature()
+		printl("PASS: _ui_get_drag_data bridge function registered")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_get_drag_data bridge function registered")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

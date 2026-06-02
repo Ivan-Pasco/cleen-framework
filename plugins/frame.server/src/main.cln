@@ -29,7 +29,7 @@ functions:
 		return ""
 
 	string get_keywords()
-		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\"]"
+		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\"]"
 
 // ============================================================================
 // RESPONSE HELPERS — emitted for every file that loads frame.server
@@ -84,6 +84,14 @@ functions:
 		result = result + "\t\treturn _req_header(name)\n\n"
 		result = result + "\tstring method()\n"
 		result = result + "\t\treturn _req_method()\n\n"
+		result = result + "\tvoid resDownload(string filename)\n"
+		result = result + "\t\t_res_download(filename)\n\n"
+		result = result + "\tboolean emailSend(string to, string subject, string html, string text)\n"
+		result = result + "\t\treturn _email_send(to, subject, html, text, \"\")\n\n"
+		result = result + "\tboolean emailSendFrom(string to, string subject, string html, string text, string from)\n"
+		result = result + "\t\treturn _email_send(to, subject, html, text, from)\n\n"
+		result = result + "\tstring emailLastError()\n"
+		result = result + "\t\treturn _email_last_error()\n\n"
 		return result
 
 // ============================================================================
@@ -91,43 +99,87 @@ functions:
 // ============================================================================
 
 functions:
-	// Expand server: block into a start: fragment that registers static dirs
-	// and starts the HTTP listener.  The compiler merges this start: section
-	// with any other start: content in the same build target.
+	// Expand server: block into a start: fragment that registers static dirs,
+	// configures optional SMTP mail settings, and starts the HTTP listener.
 	//
 	// Supported fields:
 	//   port:   3000               — listener port (default 3000)
 	//   host:   "0.0.0.0"          — bind address (informational, passed to listener)
 	//   static: "public/"          — serve filesystem directory at URL root /
 	//
-	// Example:
-	//   server:
-	//       port:   8080
-	//       static: "public/"
+	// Supported sub-block:
+	//   mail:                      — SMTP configuration sub-block
+	//     host:     "smtp.example.com"
+	//     port:     587              (default 587)
+	//     secure:   true             (default true)
+	//     username: env("SMTP_USER")
+	//     password: env("SMTP_PASS")
+	//     from:     "noreply@example.com"
 	//
 	// Generates:
 	//   start:
+	//       _email_configure("smtp.example.com", 587, true, "user", "pass", "from@example.com")
 	//       _http_serve_static("/", "public/")
 	//       _http_listen(8080)
 	string expand_server(string body)
 		string port_str = "3000"
 		string static_dir = ""
 
+		// Mail configuration defaults
+		string mail_host = ""
+		string mail_port = "587"
+		string mail_secure = "true"
+		string mail_username = ""
+		string mail_password = ""
+		string mail_from = ""
+		boolean has_mail = false
+
 		string lines = body
 		integer line_start = 0
+		boolean in_mail_block = false
 
 		while line_start < lines.length()
 			integer line_end = lines.indexOf("\n", line_start)
 			if line_end == -1
 				line_end = lines.length()
 
-			string line = lines.substring(line_start, line_end).trim()
+			string line = lines.substring(line_start, line_end)
+			string trimmed = line.trim()
 
-			if line.startsWith("port:")
-				port_str = line.substring(5, line.length()).trim()
+			// Detect the start of the mail: sub-block
+			if trimmed == "mail:"
+				has_mail = true
+				in_mail_block = true
+				line_start = line_end + 1
+				continue
 
-			if line.startsWith("static:")
-				string dir_val = line.substring(7, line.length()).trim()
+			// While inside mail: block, collect its fields (indented lines)
+			if in_mail_block
+				// An unindented non-empty line ends the mail block
+				if trimmed.length() > 0 and not line.startsWith("\t") and not line.startsWith("  ")
+					in_mail_block = false
+					// Fall through to process this line as a top-level field
+				else
+					if trimmed.startsWith("host:")
+						mail_host = resolve_server_config_value(trimmed.substring(5, trimmed.length()).trim())
+					if trimmed.startsWith("port:")
+						mail_port = trimmed.substring(5, trimmed.length()).trim()
+					if trimmed.startsWith("secure:")
+						mail_secure = trimmed.substring(7, trimmed.length()).trim()
+					if trimmed.startsWith("username:")
+						mail_username = resolve_server_config_value(trimmed.substring(9, trimmed.length()).trim())
+					if trimmed.startsWith("password:")
+						mail_password = resolve_server_config_value(trimmed.substring(9, trimmed.length()).trim())
+					if trimmed.startsWith("from:")
+						mail_from = resolve_server_config_value(trimmed.substring(5, trimmed.length()).trim())
+					line_start = line_end + 1
+					continue
+
+			if trimmed.startsWith("port:")
+				port_str = trimmed.substring(5, trimmed.length()).trim()
+
+			if trimmed.startsWith("static:")
+				string dir_val = trimmed.substring(7, trimmed.length()).trim()
 				// Strip surrounding double-quotes if present
 				if dir_val.startsWith("\"") and dir_val.length() > 1
 					if dir_val.endsWith("\"")
@@ -138,6 +190,10 @@ functions:
 
 		string result = "start:\n"
 
+		// Configure SMTP before starting the server when a mail: block was found
+		if has_mail
+			result = result + "\t_email_configure(" + mail_host + ", " + mail_port + ", " + mail_secure + ", " + mail_username + ", " + mail_password + ", " + mail_from + ")\n"
+
 		// Register static directory before opening the listener port
 		if static_dir.length() > 0
 			result = result + "\t_http_serve_static(\"/\", \"" + static_dir + "\")\n"
@@ -145,6 +201,32 @@ functions:
 		result = result + "\t_http_listen(" + port_str + ")"
 
 		return result
+
+	// Resolve a config value that may be a literal string, a bare value, or an
+	// env("VAR") reference.  Mirrors expand_data_config's handling in frame.data.
+	//
+	// Input forms:
+	//   "smtp.example.com"     → "\"smtp.example.com\""  (quoted string literal)
+	//   smtp.example.com       → "\"smtp.example.com\""  (bare value → quoted literal)
+	//   env("SMTP_HOST")       → _env_get("SMTP_HOST")   (runtime env lookup)
+	//   $SMTP_HOST             → _env_get("SMTP_HOST")   (shell-style env reference)
+	string resolve_server_config_value(string raw)
+		// env("VAR") form
+		if raw.startsWith("env(\"")
+			integer env_end = raw.indexOf("\")")
+			if env_end != -1
+				return "_env_get(\"" + raw.substring(5, env_end) + "\")"
+
+		// $VAR form
+		if raw.startsWith("$")
+			return "_env_get(\"" + raw.substring(1, raw.length()) + "\")"
+
+		// Already a double-quoted string literal — pass through as-is
+		if raw.startsWith("\"") and raw.endsWith("\"")
+			return raw
+
+		// Bare value — wrap in double-quotes to produce a string literal
+		return "\"" + raw + "\""
 
 // ============================================================================
 // ENDPOINTS BLOCK EXPANSION
@@ -167,6 +249,8 @@ functions:
 			integer put_pos = find_method_pos(remaining, "PUT")
 			integer delete_pos = find_method_pos(remaining, "DELETE")
 			integer patch_pos = find_method_pos(remaining, "PATCH")
+			// §FEXT-4: STREAM routes are SSE endpoints (GET at HTTP level, keeps connection open)
+			integer stream_pos = find_method_pos(remaining, "STREAM")
 
 			integer method_pos = -1
 			string method = ""
@@ -186,6 +270,9 @@ functions:
 			if patch_pos >= 0 and (method_pos == -1 or patch_pos < method_pos)
 				method_pos = patch_pos
 				method = "PATCH"
+			if stream_pos >= 0 and (method_pos == -1 or stream_pos < method_pos)
+				method_pos = stream_pos
+				method = "STREAM"
 
 			if method_pos == -1
 				keep_going = false
@@ -260,7 +347,12 @@ functions:
 					result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
 				result = result + "\n"
 
-				route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
+				// §FEXT-4: STREAM routes use _http_sse_route which sets text/event-stream headers
+				// and keeps the connection open. Regular routes use _http_route.
+				if method == "STREAM"
+					route_calls = route_calls + "\t_http_sse_route(\"GET\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
+				else
+					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
 				handler_idx = handler_idx + 1
 				remaining = from_method.substring(abs_colon + 1, from_method.length())
 

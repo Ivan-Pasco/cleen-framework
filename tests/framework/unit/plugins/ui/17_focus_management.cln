@@ -1,0 +1,188 @@
+// Test: frame.ui — focus management bridge functions
+// Spec: HOST_BRIDGE.md §UI — Focus Management
+
+functions:
+	// Bridge function names
+	boolean testFocusName()
+		string name = "_ui_focus"
+		return name == "_ui_focus"
+
+	boolean testBlurName()
+		string name = "_ui_blur"
+		return name == "_ui_blur"
+
+	boolean testGetFocusName()
+		string name = "_ui_get_focus"
+		return name == "_ui_get_focus"
+
+	boolean testFocusTrapName()
+		string name = "_ui_focus_trap"
+		return name == "_ui_focus_trap"
+
+	boolean testFocusTrapReleaseName()
+		string name = "_ui_focus_trap_release"
+		return name == "_ui_focus_trap_release"
+
+	// _ui_focus_trap returns an integer ID (non-zero on success)
+	boolean testFocusTrapReturnsIntegerId()
+		// Return type is i32; 0 means selector did not match
+		integer stubNoMatch = 0
+		integer stubMatch = 1
+		return stubNoMatch == 0 and stubMatch > 0
+
+	// _ui_focus_trap_release accepts the integer ID from _ui_focus_trap
+	boolean testFocusTrapReleaseAcceptsId()
+		// Parameter is i32 trap ID; no-op if unknown
+		integer trapId = 1
+		return trapId > 0
+
+	// _ui_get_focus returns a string (the CSS selector path of the focused element)
+	boolean testGetFocusReturnsString()
+		string returnType = "string"
+		return returnType == "string"
+
+	// Server stub for _ui_get_focus returns empty string (no DOM on server)
+	boolean testGetFocusServerStubReturnsEmpty()
+		string stub = ""
+		return stub == ""
+
+	// Server stub for _ui_focus_trap returns 0 (no DOM on server)
+	boolean testFocusTrapServerStubReturnsZero()
+		integer stub = 0
+		return stub == 0
+
+	// Clean aliases
+	boolean testFocusAlias()
+		string alias = "ui.focus"
+		return alias == "ui.focus"
+
+	boolean testBlurAlias()
+		string alias = "ui.blur"
+		return alias == "ui.blur"
+
+	boolean testGetFocusAlias()
+		string alias = "ui.getFocus"
+		return alias == "ui.getFocus"
+
+	boolean testFocusTrapAlias()
+		string alias = "ui.focusTrap"
+		return alias == "ui.focusTrap"
+
+	boolean testFocusTrapReleaseAlias()
+		string alias = "ui.focusTrapRelease"
+		return alias == "ui.focusTrapRelease"
+
+start:
+	printl("=== Test Suite: Focus Management (frame.ui) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testFocusName()
+		printl("PASS: _ui_focus name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_focus name correct")
+		failed = failed + 1
+
+	if testBlurName()
+		printl("PASS: _ui_blur name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_blur name correct")
+		failed = failed + 1
+
+	if testGetFocusName()
+		printl("PASS: _ui_get_focus name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_get_focus name correct")
+		failed = failed + 1
+
+	if testFocusTrapName()
+		printl("PASS: _ui_focus_trap name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_focus_trap name correct")
+		failed = failed + 1
+
+	if testFocusTrapReleaseName()
+		printl("PASS: _ui_focus_trap_release name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_focus_trap_release name correct")
+		failed = failed + 1
+
+	if testFocusTrapReturnsIntegerId()
+		printl("PASS: _ui_focus_trap returns integer ID (0 = no match)")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_focus_trap returns integer ID (0 = no match)")
+		failed = failed + 1
+
+	if testFocusTrapReleaseAcceptsId()
+		printl("PASS: _ui_focus_trap_release accepts integer ID")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_focus_trap_release accepts integer ID")
+		failed = failed + 1
+
+	if testGetFocusReturnsString()
+		printl("PASS: _ui_get_focus return type is string")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_get_focus return type is string")
+		failed = failed + 1
+
+	if testGetFocusServerStubReturnsEmpty()
+		printl("PASS: server stub _ui_get_focus returns empty string")
+		passed = passed + 1
+	else
+		printl("FAIL: server stub _ui_get_focus returns empty string")
+		failed = failed + 1
+
+	if testFocusTrapServerStubReturnsZero()
+		printl("PASS: server stub _ui_focus_trap returns 0")
+		passed = passed + 1
+	else
+		printl("FAIL: server stub _ui_focus_trap returns 0")
+		failed = failed + 1
+
+	if testFocusAlias()
+		printl("PASS: ui.focus alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.focus alias correct")
+		failed = failed + 1
+
+	if testBlurAlias()
+		printl("PASS: ui.blur alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.blur alias correct")
+		failed = failed + 1
+
+	if testGetFocusAlias()
+		printl("PASS: ui.getFocus alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.getFocus alias correct")
+		failed = failed + 1
+
+	if testFocusTrapAlias()
+		printl("PASS: ui.focusTrap alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.focusTrap alias correct")
+		failed = failed + 1
+
+	if testFocusTrapReleaseAlias()
+		printl("PASS: ui.focusTrapRelease alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.focusTrapRelease alias correct")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

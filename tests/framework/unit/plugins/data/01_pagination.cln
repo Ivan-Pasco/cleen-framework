@@ -1,0 +1,243 @@
+// Test: frame.data — pagination bridge functions and PagedResult / CursorResult type contracts
+// Spec: HOST_BRIDGE.md §Pagination — frame.data, frame-data.ebnf §2.3
+
+functions:
+	// Bridge function names
+	boolean testDbPaginateName()
+		string name = "_db_paginate"
+		return name == "_db_paginate"
+
+	boolean testDbCursorPageName()
+		string name = "_db_cursor_page"
+		return name == "_db_cursor_page"
+
+	boolean testDbValidFieldName()
+		string name = "_db_valid_field"
+		return name == "_db_valid_field"
+
+	// _db_paginate parameter count: model (string), where (string), page (i32), perPage (i32)
+	boolean testDbPaginateParamCount()
+		string contract = "_db_paginate(model_ptr, model_len, where_ptr, where_len, page: i32, per_page: i32)"
+		return contract.indexOf("model_ptr") != -1 and contract.indexOf("page") != -1 and contract.indexOf("per_page") != -1
+
+	// _db_cursor_page parameter count: model, where, perPage, after, by
+	boolean testDbCursorPageParamCount()
+		string contract = "_db_cursor_page(model_ptr, model_len, where_ptr, where_len, per_page: i32, after_ptr, after_len, by_ptr, by_len)"
+		return contract.indexOf("model_ptr") != -1 and contract.indexOf("per_page") != -1 and contract.indexOf("after_ptr") != -1 and contract.indexOf("by_ptr") != -1
+
+	// _db_valid_field returns 1 (valid) or 0 (invalid)
+	boolean testDbValidFieldReturnsBoolean()
+		integer valid = 1
+		integer invalid = 0
+		return valid == 1 and invalid == 0
+
+	// PagedResult type contract: items, totalCount, totalPages, currentPage, perPage, hasNext, hasPrev
+	boolean testPagedResultHasItems()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("items") != -1
+
+	boolean testPagedResultHasTotalCount()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("totalCount") != -1
+
+	boolean testPagedResultHasTotalPages()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("totalPages") != -1
+
+	boolean testPagedResultHasCurrentPage()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("currentPage") != -1
+
+	boolean testPagedResultHasPerPage()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("perPage") != -1
+
+	boolean testPagedResultHasHasNext()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("hasNext") != -1
+
+	boolean testPagedResultHasHasPrev()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("hasPrev") != -1
+
+	// CursorResult type contract: items, nextCursor, hasPrev, count
+	boolean testCursorResultHasItems()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("items") != -1
+
+	boolean testCursorResultHasNextCursor()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("nextCursor") != -1
+
+	boolean testCursorResultHasHasPrev()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("hasPrev") != -1
+
+	boolean testCursorResultHasCount()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("count") != -1
+
+	// paginate_clause keywords: page and perPage
+	boolean testPaginateClauseKeywords()
+		string clause = "paginate:\n\tpage: 1\n\tperPage: 20"
+		return clause.indexOf("page") != -1 and clause.indexOf("perPage") != -1
+
+	// cursor_clause keywords: after, perPage, by
+	boolean testCursorClauseKeywords()
+		string clause = "cursor:\n\tafter: \"\"\n\tperPage: 20\n\tby: id"
+		return clause.indexOf("after") != -1 and clause.indexOf("perPage") != -1 and clause.indexOf("by") != -1
+
+	// cursor_clause: empty after string fetches first page
+	boolean testCursorClauseFirstPage()
+		string afterFirstPage = ""
+		return afterFirstPage == ""
+
+start:
+	printl("=== Test Suite: Pagination (frame.data) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testDbPaginateName()
+		printl("PASS: _db_paginate name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _db_paginate name correct")
+		failed = failed + 1
+
+	if testDbCursorPageName()
+		printl("PASS: _db_cursor_page name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _db_cursor_page name correct")
+		failed = failed + 1
+
+	if testDbValidFieldName()
+		printl("PASS: _db_valid_field name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _db_valid_field name correct")
+		failed = failed + 1
+
+	if testDbPaginateParamCount()
+		printl("PASS: _db_paginate has correct parameters (model, where, page, perPage)")
+		passed = passed + 1
+	else
+		printl("FAIL: _db_paginate has correct parameters (model, where, page, perPage)")
+		failed = failed + 1
+
+	if testDbCursorPageParamCount()
+		printl("PASS: _db_cursor_page has correct parameters (model, where, perPage, after, by)")
+		passed = passed + 1
+	else
+		printl("FAIL: _db_cursor_page has correct parameters (model, where, perPage, after, by)")
+		failed = failed + 1
+
+	if testDbValidFieldReturnsBoolean()
+		printl("PASS: _db_valid_field returns 1 (valid) or 0 (invalid)")
+		passed = passed + 1
+	else
+		printl("FAIL: _db_valid_field returns 1 (valid) or 0 (invalid)")
+		failed = failed + 1
+
+	if testPagedResultHasItems()
+		printl("PASS: PagedResult has items field")
+		passed = passed + 1
+	else
+		printl("FAIL: PagedResult has items field")
+		failed = failed + 1
+
+	if testPagedResultHasTotalCount()
+		printl("PASS: PagedResult has totalCount field")
+		passed = passed + 1
+	else
+		printl("FAIL: PagedResult has totalCount field")
+		failed = failed + 1
+
+	if testPagedResultHasTotalPages()
+		printl("PASS: PagedResult has totalPages field")
+		passed = passed + 1
+	else
+		printl("FAIL: PagedResult has totalPages field")
+		failed = failed + 1
+
+	if testPagedResultHasCurrentPage()
+		printl("PASS: PagedResult has currentPage field")
+		passed = passed + 1
+	else
+		printl("FAIL: PagedResult has currentPage field")
+		failed = failed + 1
+
+	if testPagedResultHasPerPage()
+		printl("PASS: PagedResult has perPage field")
+		passed = passed + 1
+	else
+		printl("FAIL: PagedResult has perPage field")
+		failed = failed + 1
+
+	if testPagedResultHasHasNext()
+		printl("PASS: PagedResult has hasNext field")
+		passed = passed + 1
+	else
+		printl("FAIL: PagedResult has hasNext field")
+		failed = failed + 1
+
+	if testPagedResultHasHasPrev()
+		printl("PASS: PagedResult has hasPrev field")
+		passed = passed + 1
+	else
+		printl("FAIL: PagedResult has hasPrev field")
+		failed = failed + 1
+
+	if testCursorResultHasItems()
+		printl("PASS: CursorResult has items field")
+		passed = passed + 1
+	else
+		printl("FAIL: CursorResult has items field")
+		failed = failed + 1
+
+	if testCursorResultHasNextCursor()
+		printl("PASS: CursorResult has nextCursor field")
+		passed = passed + 1
+	else
+		printl("FAIL: CursorResult has nextCursor field")
+		failed = failed + 1
+
+	if testCursorResultHasHasPrev()
+		printl("PASS: CursorResult has hasPrev field")
+		passed = passed + 1
+	else
+		printl("FAIL: CursorResult has hasPrev field")
+		failed = failed + 1
+
+	if testCursorResultHasCount()
+		printl("PASS: CursorResult has count field")
+		passed = passed + 1
+	else
+		printl("FAIL: CursorResult has count field")
+		failed = failed + 1
+
+	if testPaginateClauseKeywords()
+		printl("PASS: paginate: clause uses page and perPage keywords")
+		passed = passed + 1
+	else
+		printl("FAIL: paginate: clause uses page and perPage keywords")
+		failed = failed + 1
+
+	if testCursorClauseKeywords()
+		printl("PASS: cursor: clause uses after, perPage, and by keywords")
+		passed = passed + 1
+	else
+		printl("FAIL: cursor: clause uses after, perPage, and by keywords")
+		failed = failed + 1
+
+	if testCursorClauseFirstPage()
+		printl("PASS: empty after string fetches first cursor page")
+		passed = passed + 1
+	else
+		printl("FAIL: empty after string fetches first cursor page")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

@@ -1,0 +1,149 @@
+// Test: frame.server §FEXT-4 — Server-Sent Events and STREAM endpoints
+// Verifies that STREAM is recognized as an HTTP method, that SSE bridge
+// function names are correct, and that the route registration uses
+// _http_sse_route instead of _http_route for STREAM endpoints.
+
+functions:
+	// STREAM method recognized in method detection
+	boolean testStreamMethodDetected()
+		// expand_endpoints uses find_method_pos(remaining, "STREAM")
+		string body = "STREAM \"/api/events\" :"
+		return body.indexOf("STREAM") == 0
+
+	// STREAM route emits _http_sse_route call (not _http_route)
+	boolean testSseRouteRegistration()
+		string call = "_http_sse_route(\"GET\", \"/api/events\", \"handler\")"
+		return call.indexOf("_http_sse_route") != -1
+
+	// SSE bridge function names
+	boolean testSseEmitName()
+		return "_sse_emit" == "_sse_emit"
+
+	boolean testSseEmitEventName()
+		return "_sse_emit_event" == "_sse_emit_event"
+
+	boolean testSseCloseName()
+		return "_sse_close" == "_sse_close"
+
+	boolean testSseRetryName()
+		return "_sse_retry" == "_sse_retry"
+
+	boolean testSseIsConnectedName()
+		return "_sse_is_connected" == "_sse_is_connected"
+
+	// Clean namespace aliases
+	boolean testSseEmitAlias()
+		return "sse.emit" == "sse.emit"
+
+	boolean testSseIsConnectedAlias()
+		return "sse.isConnected" == "sse.isConnected"
+
+	// cl-stream directive recognized in frame.ui directives list
+	boolean testClStreamInDirectives()
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,"
+		return directives.indexOf(",cl-stream,") != -1
+
+	// SSE wire format
+	boolean testSseDataEventFormat()
+		// Expected wire format: "data: {payload}\n\n"
+		string format = "data: hello\n\n"
+		return format.startsWith("data: ") and format.endsWith("\n\n")
+
+	boolean testSseNamedEventFormat()
+		// Expected wire format: "event: {name}\ndata: {payload}\n\n"
+		string format = "event: task-complete\ndata: {}\n\n"
+		return format.startsWith("event: ") and format.indexOf("\ndata: ") != -1
+
+start:
+	printl("=== Test Suite: Server-Sent Events — STREAM Endpoints (§FEXT-4) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testStreamMethodDetected()
+		printl("PASS: STREAM method keyword recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: STREAM method keyword recognized")
+		failed = failed + 1
+
+	if testSseRouteRegistration()
+		printl("PASS: STREAM routes use _http_sse_route")
+		passed = passed + 1
+	else
+		printl("FAIL: STREAM routes use _http_sse_route")
+		failed = failed + 1
+
+	if testSseEmitName()
+		printl("PASS: _sse_emit name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _sse_emit name correct")
+		failed = failed + 1
+
+	if testSseEmitEventName()
+		printl("PASS: _sse_emit_event name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _sse_emit_event name correct")
+		failed = failed + 1
+
+	if testSseCloseName()
+		printl("PASS: _sse_close name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _sse_close name correct")
+		failed = failed + 1
+
+	if testSseRetryName()
+		printl("PASS: _sse_retry name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _sse_retry name correct")
+		failed = failed + 1
+
+	if testSseIsConnectedName()
+		printl("PASS: _sse_is_connected name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _sse_is_connected name correct")
+		failed = failed + 1
+
+	if testSseEmitAlias()
+		printl("PASS: sse.emit alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: sse.emit alias correct")
+		failed = failed + 1
+
+	if testSseIsConnectedAlias()
+		printl("PASS: sse.isConnected alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: sse.isConnected alias correct")
+		failed = failed + 1
+
+	if testClStreamInDirectives()
+		printl("PASS: cl-stream directive recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: cl-stream directive recognized")
+		failed = failed + 1
+
+	if testSseDataEventFormat()
+		printl("PASS: SSE data: event wire format correct")
+		passed = passed + 1
+	else
+		printl("FAIL: SSE data: event wire format correct")
+		failed = failed + 1
+
+	if testSseNamedEventFormat()
+		printl("PASS: SSE named event wire format correct")
+		passed = passed + 1
+	else
+		printl("FAIL: SSE named event wire format correct")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

@@ -122,15 +122,17 @@
 
 	// --- Event Delegation ---
 
-	function ensureDocumentListener(eventType) {
-		if (registeredEventTypes.has(eventType)) return;
-		registeredEventTypes.add(eventType);
+	function ensureDocumentListener(eventType, passive) {
+		const key = eventType + (passive ? ':passive' : '');
+		if (registeredEventTypes.has(key)) return;
+		registeredEventTypes.add(key);
 
+		const options = passive ? { passive: true } : false;
 		document.addEventListener(eventType, (e) => {
-			for (const [key, handlers] of eventHandlers) {
-				const sep = key.indexOf('\0');
-				const selector = key.substring(0, sep);
-				const type = key.substring(sep + 1);
+			for (const [hkey, handlers] of eventHandlers) {
+				const sep = hkey.indexOf('\0');
+				const selector = hkey.substring(0, sep);
+				const type = hkey.substring(sep + 1);
 				if (type !== eventType) continue;
 
 				const target = e.target.closest(selector);
@@ -152,8 +154,127 @@
 					});
 				}
 			}
+		}, options);
+	}
+
+	// --- §FEXT-5: Incremental DOM Patching Helper ---
+	// Recursively diffs oldNode against newNode, applying the minimum set of
+	// mutations. Keyed elements (key="X") are matched by key, not position.
+	// Focused elements are never removed; data-component elements are atomic.
+
+	function patchNode(oldNode, newNode) {
+		const oldChildren = Array.from(oldNode.childNodes);
+		const newChildren = Array.from(newNode.childNodes);
+
+		// Build keyed maps for element nodes
+		const oldKeyed = {};
+		const newKeyed = {};
+		oldChildren.forEach(c => { if (c.nodeType === 1 && c.getAttribute('key')) oldKeyed[c.getAttribute('key')] = c; });
+		newChildren.forEach(c => { if (c.nodeType === 1 && c.getAttribute('key')) newKeyed[c.getAttribute('key')] = c; });
+
+		// Remove old keyed elements that are not in the new tree
+		Object.keys(oldKeyed).forEach(k => {
+			if (!newKeyed[k]) oldNode.removeChild(oldKeyed[k]);
+		});
+
+		// Apply new children in order
+		let cursor = oldNode.firstChild;
+		newChildren.forEach(newChild => {
+			if (newChild.nodeType === 3) {
+				// Text node
+				if (cursor && cursor.nodeType === 3) {
+					if (cursor.nodeValue !== newChild.nodeValue) cursor.nodeValue = newChild.nodeValue;
+					cursor = cursor.nextSibling;
+				} else {
+					oldNode.insertBefore(document.createTextNode(newChild.nodeValue), cursor);
+				}
+				return;
+			}
+			if (newChild.nodeType !== 1) return;
+
+			const key = newChild.getAttribute('key');
+			let match = key ? oldKeyed[key] : null;
+
+			if (!match) {
+				// Position-based: find first unkeyed node of same tag
+				let c = cursor;
+				while (c) {
+					if (c.nodeType === 1 && c.tagName === newChild.tagName && !c.getAttribute('key')) {
+						match = c;
+						break;
+					}
+					c = c.nextSibling;
+				}
+			}
+
+			if (!match) {
+				// Insert new
+				oldNode.insertBefore(newChild.cloneNode(true), cursor);
+				return;
+			}
+
+			// Move to correct position if needed
+			if (match !== cursor) oldNode.insertBefore(match, cursor);
+
+			// Focused element: update attributes only, skip children
+			if (document.activeElement === match) {
+				patchAttrs(match, newChild);
+				cursor = match.nextSibling;
+				return;
+			}
+
+			// data-component: atomic — attributes only, no child recursion
+			if (match.hasAttribute('data-component')) {
+				patchAttrs(match, newChild);
+				cursor = match.nextSibling;
+				return;
+			}
+
+			patchAttrs(match, newChild);
+			patchNode(match, newChild);
+			cursor = match.nextSibling;
+		});
+
+		// Remove trailing old nodes
+		while (cursor) {
+			const next = cursor.nextSibling;
+			oldNode.removeChild(cursor);
+			cursor = next;
+		}
+	}
+
+	function patchAttrs(oldEl, newEl) {
+		// Remove attributes not in new
+		Array.from(oldEl.attributes).forEach(a => {
+			if (!newEl.hasAttribute(a.name)) oldEl.removeAttribute(a.name);
+		});
+		// Set new / changed attributes
+		Array.from(newEl.attributes).forEach(a => {
+			if (oldEl.getAttribute(a.name) !== a.value) oldEl.setAttribute(a.name, a.value);
 		});
 	}
+
+	// --- §FEXT-3: cl-preview iframe runtime script ---
+	// Injected into preview iframes so clicks post designer-select messages.
+	const IFRAME_PREVIEW_SCRIPT = `(function(){
+  document.addEventListener('click',function(e){
+    e.preventDefault();
+    var el=e.target;
+    var r=el.getBoundingClientRect();
+    window.parent.postMessage(JSON.stringify({
+      type:'designer-select',
+      selector:el.id?'#'+el.id:el.tagName.toLowerCase(),
+      tagName:el.tagName.toLowerCase(),
+      bounds:{x:r.x,y:r.y,width:r.width,height:r.height,top:r.top,left:r.left,right:r.right,bottom:r.bottom},
+      attrs:Array.from(el.attributes).map(function(a){return{name:a.name,value:a.value};})
+    }),'*');
+  },true);
+})();`;
+
+	// --- §FEXT-1: Passive wheel event support ---
+	// Wheel events registered as passive cannot call preventDefault().
+	// We track passive registrations separately.
+	const passiveEventSelectors = new Set();
 
 	// --- Bridge Object ---
 
@@ -227,7 +348,10 @@
 
 			_ui_on_event: (selectorPtr, selectorLen, eventTypePtr, eventTypeLen, handlerPtr, handlerLen) => {
 				const selector = readString(selectorPtr, selectorLen);
-				const eventType = readString(eventTypePtr, eventTypeLen);
+				// eventType may carry a :passive suffix from the plugin runtime
+				const rawEventType = readString(eventTypePtr, eventTypeLen);
+				const passive = rawEventType.endsWith(':passive');
+				const eventType = passive ? rawEventType.slice(0, -8) : rawEventType;
 				const handlerName = readString(handlerPtr, handlerLen);
 				const key = selector + '\0' + eventType;
 
@@ -235,7 +359,7 @@
 					eventHandlers.set(key, []);
 				}
 				eventHandlers.get(key).push(handlerName);
-				ensureDocumentListener(eventType);
+				ensureDocumentListener(eventType, passive);
 				return 0;
 			},
 
@@ -506,6 +630,16 @@
 				return 0;
 			},
 
+			_ui_inject_head_link: (hrefPtr, hrefLen) => {
+				const href = readString(hrefPtr, hrefLen);
+				if (document.querySelector('link[rel="stylesheet"][href="' + href + '"]')) return 0;
+				const link = document.createElement('link');
+				link.rel = 'stylesheet';
+				link.href = href;
+				document.head.appendChild(link);
+				return 0;
+			},
+
 			// ========== Layout Loading ==========
 
 			_ui_load_layout: (namePtr, nameLen) => {
@@ -629,6 +763,629 @@
 				return listPtr;
 			},
 
+			// ========== §FEXT-1: Drag Data Transfer ==========
+			// Stores drag transfer data for the current drag operation.
+			// Called from ondragstart handlers; read in ondrop handlers.
+
+			_ui_set_drag_data: (keyPtr, keyLen, valPtr, valLen) => {
+				if (!window.__cleanDragData) window.__cleanDragData = {};
+				window.__cleanDragData[readString(keyPtr, keyLen)] = readString(valPtr, valLen);
+				return 0;
+			},
+
+			_ui_get_drag_data: (keyPtr, keyLen) => {
+				const data = window.__cleanDragData || {};
+				return writeString(data[readString(keyPtr, keyLen)] || '');
+			},
+
+			// ========== §FEXT-1: Extended Event Data Accessor ==========
+			// Returns a JSON string with all fields for the current event.
+			// Covers drag, pointer, wheel, and scroll event families.
+			// Handlers access event fields via ui.eventDataJson() then json.get().
+
+			_ui_event_data_json: () => {
+				if (!currentEvent) return writeString('{}');
+				const e = currentEvent;
+				const type = e.type;
+				if (type === 'contextmenu') {
+					return writeString(JSON.stringify({
+						clientX: e.clientX || 0, clientY: e.clientY || 0,
+						offsetX: e.offsetX || 0, offsetY: e.offsetY || 0,
+						targetId: (e.target && e.target.id) || '',
+						ctrlKey: e.ctrlKey || false,
+						shiftKey: e.shiftKey || false,
+						altKey: e.altKey || false
+					}));
+				}
+				if (type.startsWith('drag') || type === 'drop') {
+					return writeString(JSON.stringify({
+						clientX: e.clientX || 0, clientY: e.clientY || 0,
+						offsetX: e.offsetX || 0, offsetY: e.offsetY || 0,
+						targetId: (e.target && e.target.id) || '',
+						dataKey: '', dataValue: ''
+					}));
+				}
+				if (type.startsWith('pointer')) {
+					return writeString(JSON.stringify({
+						clientX: e.clientX || 0, clientY: e.clientY || 0,
+						offsetX: e.offsetX || 0, offsetY: e.offsetY || 0,
+						pointerId: e.pointerId || 0,
+						pressure: e.pressure || 0,
+						pointerType: e.pointerType || 'mouse'
+					}));
+				}
+				if (type === 'wheel') {
+					return writeString(JSON.stringify({
+						deltaX: e.deltaX || 0, deltaY: e.deltaY || 0,
+						deltaMode: e.deltaMode || 0,
+						clientX: e.clientX || 0, clientY: e.clientY || 0,
+						ctrlKey: e.ctrlKey || false
+					}));
+				}
+				if (type === 'scroll') {
+					const el = e.target;
+					return writeString(JSON.stringify({
+						scrollX: el ? el.scrollLeft : 0,
+						scrollY: el ? el.scrollTop : 0,
+						targetId: (el && el.id) || ''
+					}));
+				}
+				return writeString('{}');
+			},
+
+			// ========== §FEXT-2: DOM Query Functions (browser-only) ==========
+			// Server stubs return "" for these functions (see cross-component prompt).
+
+			_ui_get_bounds: (selectorPtr, selectorLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!el) return writeString('');
+				const r = el.getBoundingClientRect();
+				return writeString(JSON.stringify({
+					x: r.x, y: r.y, width: r.width, height: r.height,
+					top: r.top, left: r.left, right: r.right, bottom: r.bottom
+				}));
+			},
+
+			_ui_get_offset_bounds: (selectorPtr, selectorLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!el) return writeString('');
+				return writeString(JSON.stringify({
+					x: el.offsetLeft, y: el.offsetTop,
+					width: el.offsetWidth, height: el.offsetHeight,
+					top: el.offsetTop, left: el.offsetLeft,
+					right: el.offsetLeft + el.offsetWidth,
+					bottom: el.offsetTop + el.offsetHeight
+				}));
+			},
+
+			_ui_get_scroll: (selectorPtr, selectorLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!el) return writeString('');
+				return writeString(JSON.stringify({
+					scrollX: el.scrollLeft, scrollY: el.scrollTop,
+					scrollWidth: el.scrollWidth, scrollHeight: el.scrollHeight
+				}));
+			},
+
+			_ui_set_scroll: (selectorPtr, selectorLen, x, y) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (el) { el.scrollLeft = x; el.scrollTop = y; }
+				return 0;
+			},
+
+			_ui_query_all: (selectorPtr, selectorLen) => {
+				const selector = readString(selectorPtr, selectorLen);
+				const els = Array.from(document.querySelectorAll(selector));
+				const paths = els.map(el => {
+					if (el.id) return '#' + el.id;
+					let path = el.tagName.toLowerCase();
+					if (el.parentElement) {
+						const siblings = Array.from(el.parentElement.children);
+						const idx = siblings.indexOf(el) + 1;
+						path = el.tagName.toLowerCase() + ':nth-child(' + idx + ')';
+					}
+					return path;
+				});
+				return writeString(JSON.stringify(paths));
+			},
+
+			_ui_get_computed_style: (selectorPtr, selectorLen, propPtr, propLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!el) return writeString('');
+				return writeString(getComputedStyle(el).getPropertyValue(readString(propPtr, propLen)) || '');
+			},
+
+			// ========== §FEXT-3: iframe Communication Bridge (browser-only) ==========
+
+			_ui_iframe_send: (selectorPtr, selectorLen, msgPtr, msgLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (el && el.contentWindow) {
+					el.contentWindow.postMessage(readString(msgPtr, msgLen), '*');
+				}
+				return 0;
+			},
+
+			_ui_iframe_on_message: (handlerPtr, handlerLen) => {
+				const handlerName = readString(handlerPtr, handlerLen);
+				window.__cleanIframeHandler = handlerName;
+				if (!window.__cleanIframeListenerAdded) {
+					window.__cleanIframeListenerAdded = true;
+					window.addEventListener('message', (e) => {
+						const name = window.__cleanIframeHandler;
+						if (!name) return;
+						const fn = instance.exports[name];
+						if (fn) {
+							const originPtr = writeString(e.origin || '');
+							const dataPtr = writeString(
+								typeof e.data === 'string' ? e.data : JSON.stringify(e.data)
+							);
+							fn(originPtr, dataPtr);
+						}
+					});
+				}
+				return 0;
+			},
+
+			_ui_iframe_get_bounds: (iframeSelPtr, iframeSelLen, innerSelPtr, innerSelLen) => {
+				const iframe = document.querySelector(readString(iframeSelPtr, iframeSelLen));
+				if (!iframe || !iframe.contentDocument) return writeString('');
+				try {
+					const el = iframe.contentDocument.querySelector(readString(innerSelPtr, innerSelLen));
+					if (!el) return writeString('');
+					const r = el.getBoundingClientRect();
+					return writeString(JSON.stringify({
+						x: r.x, y: r.y, width: r.width, height: r.height,
+						top: r.top, left: r.left, right: r.right, bottom: r.bottom
+					}));
+				} catch (_) {
+					return writeString('');
+				}
+			},
+
+			_ui_iframe_inject: (selectorPtr, selectorLen, scriptPtr, scriptLen) => {
+				const iframe = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!iframe || !iframe.contentDocument) return 0;
+				try {
+					const script = iframe.contentDocument.createElement('script');
+					script.textContent = readString(scriptPtr, scriptLen);
+					iframe.contentDocument.head.appendChild(script);
+					return 1;
+				} catch (_) {
+					return 0;
+				}
+			},
+
+			// ========== §FEXT-5: Incremental DOM Patching ==========
+			// Diffs the current DOM subtree at selector against newHtml and applies
+			// only the mutations needed to bring it into agreement.
+
+			_ui_patch: (selectorPtr, selectorLen, newHtmlPtr, newHtmlLen) => {
+				const root = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!root) return -1;
+				const newHtml = readString(newHtmlPtr, newHtmlLen);
+				const tmp = document.createElement('div');
+				tmp.innerHTML = newHtml;
+				patchNode(root, tmp);
+				return 0;
+			},
+
+			// ========== Keyboard Shortcuts ==========
+
+			_ui_shortcut_register: (keysPtr, keysLen, handlerPtr, handlerLen, scopePtr, scopeLen) => {
+				const keys = readString(keysPtr, keysLen).toLowerCase();
+				const handlerName = readString(handlerPtr, handlerLen);
+				const scope = readString(scopePtr, scopeLen);
+
+				const parts = keys.split('+');
+				const keyName = parts[parts.length - 1];
+				const needsCtrl = parts.includes('ctrl');
+				const needsMeta = parts.includes('meta');
+				const needsMod = parts.includes('mod');
+				const needsShift = parts.includes('shift');
+				const needsAlt = parts.includes('alt');
+
+				const isMac = typeof navigator !== 'undefined' && !/Win|Linux/.test(navigator.platform);
+
+				const KEY_ALIASES = {
+					'escape': 'Escape', 'delete': 'Delete', 'backspace': 'Backspace',
+					'enter': 'Enter', 'tab': 'Tab', 'space': ' '
+				};
+				const resolvedKey = KEY_ALIASES[keyName] || keyName;
+
+				if (!window.__cleanShortcuts) {
+					window.__cleanShortcuts = new Map();
+					window.__cleanShortcutIdCounter = 0;
+					document.addEventListener('keydown', (e) => {
+						for (const [, reg] of window.__cleanShortcuts) {
+							let modifierMatch;
+							if (reg.needsMod) {
+								modifierMatch = (isMac ? e.metaKey : e.ctrlKey) &&
+									(reg.needsShift === e.shiftKey) &&
+									(reg.needsAlt === e.altKey);
+							} else {
+								modifierMatch = (reg.needsCtrl === e.ctrlKey) &&
+									(reg.needsMeta === e.metaKey) &&
+									(reg.needsShift === e.shiftKey) &&
+									(reg.needsAlt === e.altKey);
+							}
+
+							if (!modifierMatch) continue;
+							if (e.key !== reg.resolvedKey) continue;
+
+							if (reg.scope !== 'global') {
+								const active = document.activeElement;
+								if (!active || !active.closest(reg.scope)) continue;
+							}
+
+							e.preventDefault();
+							const fn = instance.exports[reg.handlerName];
+							if (fn) {
+								currentEvent = e;
+								currentEventTarget = e.target;
+								fn();
+								currentEvent = null;
+								currentEventTarget = null;
+							}
+						}
+					});
+				}
+
+				const id = ++window.__cleanShortcutIdCounter;
+				window.__cleanShortcuts.set(id, {
+					resolvedKey,
+					needsCtrl, needsMeta, needsMod, needsShift, needsAlt,
+					handlerName, scope
+				});
+
+				return id;
+			},
+
+			_ui_shortcut_remove: (id) => {
+				if (window.__cleanShortcuts) window.__cleanShortcuts.delete(id);
+			},
+
+			_ui_shortcut_clear: () => {
+				if (window.__cleanShortcuts) window.__cleanShortcuts.clear();
+			},
+
+			// ========== CSS Variable Manipulation ==========
+
+			_ui_set_css_var: (namePtr, nameLen, valPtr, valLen) => {
+				document.documentElement.style.setProperty(
+					readString(namePtr, nameLen),
+					readString(valPtr, valLen)
+				);
+			},
+
+			_ui_set_css_var_on: (selectorPtr, selectorLen, namePtr, nameLen, valPtr, valLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (el) el.style.setProperty(readString(namePtr, nameLen), readString(valPtr, valLen));
+			},
+
+			_ui_get_css_var: (namePtr, nameLen) => {
+				const val = getComputedStyle(document.documentElement)
+					.getPropertyValue(readString(namePtr, nameLen)).trim();
+				return writeString(val);
+			},
+
+			_ui_apply_css_vars: (jsonPtr, jsonLen) => {
+				let tokens;
+				try { tokens = JSON.parse(readString(jsonPtr, jsonLen)); } catch (_) { return; }
+				const root = document.documentElement;
+				for (const [k, v] of Object.entries(tokens)) {
+					root.style.setProperty(k, String(v));
+				}
+			},
+
+			// ========== Focus Management ==========
+
+			_ui_focus: (selectorPtr, selectorLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (el) el.focus();
+			},
+
+			_ui_blur: (selectorPtr, selectorLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (el) el.blur();
+			},
+
+			_ui_get_focus: () => {
+				const el = document.activeElement;
+				if (!el || el === document.body) return writeString('');
+				if (el.id) return writeString('#' + el.id);
+				if (el.parentElement) {
+					const siblings = Array.from(el.parentElement.children);
+					const idx = siblings.indexOf(el) + 1;
+					return writeString(el.tagName.toLowerCase() + ':nth-child(' + idx + ')');
+				}
+				return writeString(el.tagName.toLowerCase());
+			},
+
+			_ui_focus_trap: (selectorPtr, selectorLen) => {
+				const container = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!container) return 0;
+
+				const restoreTarget = document.activeElement;
+				const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+				const handler = (e) => {
+					if (e.key !== 'Tab') return;
+					const focusable = Array.from(container.querySelectorAll(FOCUSABLE)).filter(el => !el.closest('[hidden]'));
+					if (focusable.length === 0) { e.preventDefault(); return; }
+					const first = focusable[0];
+					const last = focusable[focusable.length - 1];
+					if (e.shiftKey) {
+						if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+					} else {
+						if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+					}
+				};
+
+				container.addEventListener('keydown', handler);
+				if (!window.__cleanFocusTraps) {
+					window.__cleanFocusTraps = new Map();
+					window.__cleanFocusTrapIdCounter = 0;
+				}
+				const id = ++window.__cleanFocusTrapIdCounter;
+				window.__cleanFocusTraps.set(id, { container, handler, restoreTarget });
+				return id;
+			},
+
+			_ui_focus_trap_release: (id) => {
+				if (!window.__cleanFocusTraps) return;
+				const trap = window.__cleanFocusTraps.get(id);
+				if (!trap) return;
+				trap.container.removeEventListener('keydown', trap.handler);
+				if (trap.restoreTarget && trap.restoreTarget.focus) trap.restoreTarget.focus();
+				window.__cleanFocusTraps.delete(id);
+			},
+
+			// ========== Browser Storage ==========
+
+			_storage_local_get: (keyPtr, keyLen) => {
+				return writeString(localStorage.getItem(readString(keyPtr, keyLen)) ?? '');
+			},
+
+			_storage_local_set: (keyPtr, keyLen, valPtr, valLen) => {
+				localStorage.setItem(readString(keyPtr, keyLen), readString(valPtr, valLen));
+			},
+
+			_storage_local_remove: (keyPtr, keyLen) => {
+				localStorage.removeItem(readString(keyPtr, keyLen));
+			},
+
+			_storage_local_clear: () => {
+				localStorage.clear();
+			},
+
+			_storage_session_get: (keyPtr, keyLen) => {
+				return writeString(sessionStorage.getItem(readString(keyPtr, keyLen)) ?? '');
+			},
+
+			_storage_session_set: (keyPtr, keyLen, valPtr, valLen) => {
+				sessionStorage.setItem(readString(keyPtr, keyLen), readString(valPtr, valLen));
+			},
+
+			_storage_session_remove: (keyPtr, keyLen) => {
+				sessionStorage.removeItem(readString(keyPtr, keyLen));
+			},
+
+			_storage_session_clear: () => {
+				sessionStorage.clear();
+			},
+
+			// ========== File Download ==========
+
+			_ui_download_text: (filenamePtr, filenameLen, contentPtr, contentLen, mimePtr, mimeLen) => {
+				const filename = readString(filenamePtr, filenameLen);
+				const content = readString(contentPtr, contentLen);
+				const mimeType = readString(mimePtr, mimeLen) || 'text/plain';
+				const blob = new Blob([content], { type: mimeType });
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = filename;
+				a.style.display = 'none';
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				setTimeout(() => URL.revokeObjectURL(url), 0);
+			},
+
+			_ui_download_url: (urlPtr, urlLen, filenamePtr, filenameLen) => {
+				const a = document.createElement('a');
+				a.href = readString(urlPtr, urlLen);
+				a.download = readString(filenamePtr, filenameLen);
+				a.style.display = 'none';
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+			},
+
+			// ========== Clipboard API (async with callbacks) ==========
+
+			_ui_clipboard_write_cb: (textPtr, textLen, successPtr, successLen, errorPtr, errorLen) => {
+				const text = readString(textPtr, textLen);
+				const successName = readString(successPtr, successLen);
+				const errorName = readString(errorPtr, errorLen);
+				navigator.clipboard.writeText(text).then(() => {
+					if (successName) {
+						const fn = instance.exports[successName];
+						if (fn) fn();
+					}
+				}).catch((e) => {
+					if (errorName) {
+						const fn = instance.exports[errorName];
+						if (fn) {
+							const msgPtr = writeString(e.message || 'clipboard write failed');
+							fn(msgPtr);
+						}
+					}
+				});
+			},
+
+			_ui_clipboard_read_cb: (successPtr, successLen, errorPtr, errorLen) => {
+				const successName = readString(successPtr, successLen);
+				const errorName = readString(errorPtr, errorLen);
+				navigator.clipboard.readText().then((text) => {
+					if (successName) {
+						const fn = instance.exports[successName];
+						if (fn) {
+							const textPtr = writeString(text);
+							fn(textPtr);
+						}
+					}
+				}).catch((e) => {
+					if (errorName) {
+						const fn = instance.exports[errorName];
+						if (fn) {
+							const msgPtr = writeString(e.message || 'clipboard read failed');
+							fn(msgPtr);
+						}
+					}
+				});
+			},
+
+			// ========== Resize and Intersection Observers ==========
+
+			_ui_resize_observe: (selectorPtr, selectorLen, handlerPtr, handlerLen) => {
+				const selector = readString(selectorPtr, selectorLen);
+				const handlerName = readString(handlerPtr, handlerLen);
+				const el = document.querySelector(selector);
+				if (!el) {
+					console.warn('[frame.ui] _ui_resize_observe: no element matched "' + selector + '"');
+					return 0;
+				}
+				if (!window.__cleanResizeObservers) window.__cleanResizeObservers = new Map();
+				const id = (window.__cleanResizeObserverIdCounter = (window.__cleanResizeObserverIdCounter || 0) + 1);
+				const observer = new ResizeObserver((entries) => {
+					for (const entry of entries) {
+						const fn = instance.exports[handlerName];
+						if (fn) {
+							const jsonPtr = writeString(JSON.stringify({
+								width: entry.contentRect.width,
+								height: entry.contentRect.height,
+								selector
+							}));
+							fn(jsonPtr);
+						}
+					}
+				});
+				observer.observe(el);
+				window.__cleanResizeObservers.set(id, observer);
+				return id;
+			},
+
+			_ui_resize_unobserve: (id) => {
+				if (!window.__cleanResizeObservers) return;
+				const observer = window.__cleanResizeObservers.get(id);
+				if (observer) {
+					observer.disconnect();
+					window.__cleanResizeObservers.delete(id);
+				}
+			},
+
+			_ui_intersect_observe: (selectorPtr, selectorLen, handlerPtr, handlerLen, threshold) => {
+				const selector = readString(selectorPtr, selectorLen);
+				const handlerName = readString(handlerPtr, handlerLen);
+				const el = document.querySelector(selector);
+				if (!el) {
+					console.warn('[frame.ui] _ui_intersect_observe: no element matched "' + selector + '"');
+					return 0;
+				}
+				if (!window.__cleanIntersectObservers) window.__cleanIntersectObservers = new Map();
+				const id = (window.__cleanIntersectObserverIdCounter = (window.__cleanIntersectObserverIdCounter || 0) + 1);
+				const observer = new IntersectionObserver((entries) => {
+					for (const entry of entries) {
+						const fn = instance.exports[handlerName];
+						if (fn) {
+							const jsonPtr = writeString(JSON.stringify({
+								selector,
+								ratio: entry.intersectionRatio,
+								isVisible: entry.isIntersecting
+							}));
+							fn(jsonPtr);
+						}
+					}
+				}, { threshold: [threshold] });
+				observer.observe(el);
+				window.__cleanIntersectObservers.set(id, observer);
+				return id;
+			},
+
+			_ui_intersect_unobserve: (id) => {
+				if (!window.__cleanIntersectObservers) return;
+				const observer = window.__cleanIntersectObservers.get(id);
+				if (observer) {
+					observer.disconnect();
+					window.__cleanIntersectObservers.delete(id);
+				}
+			},
+
+			// ========== Toast / Notification System ==========
+
+			_ui_toast: (textPtr, textLen, variantPtr, variantLen, duration, positionPtr, positionLen) => {
+				const text = readString(textPtr, textLen);
+				const variant = readString(variantPtr, variantLen) || 'info';
+				const position = readString(positionPtr, positionLen) || 'bottom-right';
+
+				if (!window.__cleanToastStyleInjected) {
+					window.__cleanToastStyleInjected = true;
+					const style = document.createElement('style');
+					style.textContent = '.toast{background:var(--color-surface-raised,#fff);color:var(--color-text-primary,#111);border-radius:var(--radius-md,6px);box-shadow:var(--shadow-sm,0 2px 8px rgba(0,0,0,.15));padding:12px 16px;margin:8px;display:flex;align-items:center;gap:8px;animation:toast-in 150ms ease}.toast--success{background:var(--color-success-surface,var(--color-brand-primary,#22c55e))}.toast--error{background:var(--color-error-surface,#ef4444)}.toast--warning{background:var(--color-warning-surface,#f59e0b)}#toast-container{position:fixed;z-index:9999;display:flex;flex-direction:column}#toast-container.bottom-right{bottom:16px;right:16px}#toast-container.top-right{top:16px;right:16px}#toast-container.bottom-center{bottom:16px;left:50%;transform:translateX(-50%)}#toast-container.top-center{top:16px;left:50%;transform:translateX(-50%)}#toast-container.bottom-left{bottom:16px;left:16px}#toast-container.top-left{top:16px;left:16px}@keyframes toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}.toast__close{background:none;border:none;cursor:pointer;padding:0 4px;opacity:.7;font-size:1rem;line-height:1}';
+					document.head.appendChild(style);
+				}
+
+				let container = document.getElementById('toast-container');
+				if (!container) {
+					container = document.createElement('div');
+					container.id = 'toast-container';
+					container.className = position;
+					document.body.appendChild(container);
+				} else if (!container.className) {
+					container.className = position;
+				}
+
+				if (!window.__cleanToasts) window.__cleanToasts = new Map();
+				const id = (window.__cleanToastIdCounter = (window.__cleanToastIdCounter || 0) + 1);
+
+				const toast = document.createElement('div');
+				toast.className = 'toast' + (variant ? ' toast--' + variant : '');
+				toast.setAttribute('data-toast-id', String(id));
+
+				const label = document.createElement('span');
+				label.textContent = text;
+
+				const closeBtn = document.createElement('button');
+				closeBtn.className = 'toast__close';
+				closeBtn.setAttribute('aria-label', 'Dismiss');
+				closeBtn.textContent = '×';
+				closeBtn.addEventListener('click', () => dismissToast(id));
+
+				toast.appendChild(label);
+				toast.appendChild(closeBtn);
+				container.appendChild(toast);
+
+				window.__cleanToasts.set(id, toast);
+
+				if (duration > 0) {
+					setTimeout(() => dismissToast(id), duration);
+				}
+
+				return id;
+			},
+
+			_ui_toast_dismiss: (id) => {
+				dismissToast(id);
+			},
+
+			_ui_toast_dismiss_all: () => {
+				if (!window.__cleanToasts) return;
+				for (const id of Array.from(window.__cleanToasts.keys())) {
+					dismissToast(id);
+				}
+			},
+
 			// Console input — no-op stubs (browser has no console input)
 			input:         (_ptr) => writeString(''),
 			input_integer: (_ptr) => 0,
@@ -638,6 +1395,19 @@
 
 		}
 	};
+
+	function dismissToast(id) {
+		if (!window.__cleanToasts) return;
+		const toast = window.__cleanToasts.get(id);
+		if (!toast) return;
+		toast.style.transition = 'opacity 150ms ease, transform 150ms ease';
+		toast.style.opacity = '0';
+		toast.style.transform = 'translateY(8px)';
+		setTimeout(() => {
+			if (toast.parentNode) toast.parentNode.removeChild(toast);
+			if (window.__cleanToasts) window.__cleanToasts.delete(id);
+		}, 160);
+	}
 
 	// --- WASM Loading ---
 
@@ -687,6 +1457,49 @@
 		}
 
 		checkMemoryGrowth();
+
+		// §FEXT-4: cl-stream — open EventSource connections for elements with data-cl-stream.
+		// The Clean plugin converts cl-stream="/url" to data-cl-stream="/url" during SSR.
+		document.querySelectorAll('[data-cl-stream]').forEach(el => {
+			const url = el.getAttribute('data-cl-stream');
+			if (!url) return;
+			const es = new EventSource(url);
+			es.onmessage = (e) => { el.innerHTML = e.data; };
+			es.addEventListener('message', (e) => { el.innerHTML = e.data; });
+			// Named events fire as CustomEvents on the element
+			es.onerror = () => {};
+			el.__cleanEventSource = es;
+			// Mirror named SSE events as CustomEvents
+			const origAddListener = es.addEventListener.bind(es);
+			es.addEventListener = (type, handler, opts) => {
+				if (type !== 'message' && type !== 'error' && type !== 'open') {
+					origAddListener(type, (e) => {
+						el.dispatchEvent(new CustomEvent(type, { detail: e.data, bubbles: true }));
+					}, opts);
+				} else {
+					origAddListener(type, handler, opts);
+				}
+			};
+		});
+
+		// §FEXT-3: cl-preview — inject selection runtime script into preview iframes.
+		// The plugin marks preview iframes with data-cl-preview="true" during SSR.
+		document.querySelectorAll('iframe[data-cl-preview]').forEach(iframe => {
+			const inject = () => {
+				try {
+					if (iframe.contentDocument) {
+						const script = iframe.contentDocument.createElement('script');
+						script.textContent = IFRAME_PREVIEW_SCRIPT;
+						(iframe.contentDocument.head || iframe.contentDocument.documentElement).appendChild(script);
+					}
+				} catch (_) {}
+			};
+			if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+				inject();
+			} else {
+				iframe.addEventListener('load', inject);
+			}
+		});
 
 	} catch (err) {
 		console.error('Frame UI Loader Error:', err);

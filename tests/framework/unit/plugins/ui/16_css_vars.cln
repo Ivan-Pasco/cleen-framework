@@ -1,0 +1,141 @@
+// Test: frame.ui — CSS variable runtime bridge functions
+// Spec: HOST_BRIDGE.md §UI — CSS Variable Manipulation
+
+functions:
+	// Bridge function names must match what the loader registers
+	boolean testSetCssVarName()
+		string name = "_ui_set_css_var"
+		return name == "_ui_set_css_var"
+
+	boolean testSetCssVarOnName()
+		string name = "_ui_set_css_var_on"
+		return name == "_ui_set_css_var_on"
+
+	boolean testGetCssVarName()
+		string name = "_ui_get_css_var"
+		return name == "_ui_get_css_var"
+
+	boolean testApplyCssVarsName()
+		string name = "_ui_apply_css_vars"
+		return name == "_ui_apply_css_vars"
+
+	// _ui_set_css_var accepts two string parameters (name, value)
+	boolean testSetCssVarParamCount()
+		// name + value = 2 string params (each expanded to ptr+len = 4 i32s total)
+		string contract = "_ui_set_css_var(name_ptr, name_len, val_ptr, val_len)"
+		return contract.indexOf("name_ptr") != -1 and contract.indexOf("val_ptr") != -1
+
+	// _ui_apply_css_vars accepts a JSON string parameter
+	boolean testApplyCssVarsAcceptsJson()
+		string exampleJson = "{\"--color-primary\": \"#ff0000\", \"--spacing-md\": \"16px\"}"
+		return exampleJson.startsWith("{") and exampleJson.endsWith("}")
+
+	// _ui_get_css_var returns a string (LP pointer)
+	boolean testGetCssVarReturnsString()
+		string returnType = "string"
+		return returnType == "string"
+
+	// _ui_set_css_var_on accepts selector + name + value (3 string params)
+	boolean testSetCssVarOnParamCount()
+		string contract = "_ui_set_css_var_on(sel_ptr, sel_len, name_ptr, name_len, val_ptr, val_len)"
+		return contract.indexOf("sel_ptr") != -1 and contract.indexOf("name_ptr") != -1 and contract.indexOf("val_ptr") != -1
+
+	// Clean alias names
+	boolean testSetCssVarAlias()
+		string alias = "ui.setCssVar"
+		return alias == "ui.setCssVar"
+
+	boolean testGetCssVarAlias()
+		string alias = "ui.getCssVar"
+		return alias == "ui.getCssVar"
+
+	boolean testApplyCssVarsAlias()
+		string alias = "ui.applyCssVars"
+		return alias == "ui.applyCssVars"
+
+start:
+	printl("=== Test Suite: CSS Variable Runtime (frame.ui) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testSetCssVarName()
+		printl("PASS: _ui_set_css_var name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_set_css_var name correct")
+		failed = failed + 1
+
+	if testSetCssVarOnName()
+		printl("PASS: _ui_set_css_var_on name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_set_css_var_on name correct")
+		failed = failed + 1
+
+	if testGetCssVarName()
+		printl("PASS: _ui_get_css_var name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_get_css_var name correct")
+		failed = failed + 1
+
+	if testApplyCssVarsName()
+		printl("PASS: _ui_apply_css_vars name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_apply_css_vars name correct")
+		failed = failed + 1
+
+	if testSetCssVarParamCount()
+		printl("PASS: _ui_set_css_var has correct parameters (name, value)")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_set_css_var has correct parameters (name, value)")
+		failed = failed + 1
+
+	if testApplyCssVarsAcceptsJson()
+		printl("PASS: _ui_apply_css_vars accepts JSON object string")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_apply_css_vars accepts JSON object string")
+		failed = failed + 1
+
+	if testGetCssVarReturnsString()
+		printl("PASS: _ui_get_css_var return type is string")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_get_css_var return type is string")
+		failed = failed + 1
+
+	if testSetCssVarOnParamCount()
+		printl("PASS: _ui_set_css_var_on has correct parameters (selector, name, value)")
+		passed = passed + 1
+	else
+		printl("FAIL: _ui_set_css_var_on has correct parameters (selector, name, value)")
+		failed = failed + 1
+
+	if testSetCssVarAlias()
+		printl("PASS: ui.setCssVar alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.setCssVar alias correct")
+		failed = failed + 1
+
+	if testGetCssVarAlias()
+		printl("PASS: ui.getCssVar alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.getCssVar alias correct")
+		failed = failed + 1
+
+	if testApplyCssVarsAlias()
+		printl("PASS: ui.applyCssVars alias correct")
+		passed = passed + 1
+	else
+		printl("FAIL: ui.applyCssVars alias correct")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")

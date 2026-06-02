@@ -518,6 +518,22 @@ functions:
 			result = result + render_validation_error_span(bind_attr, validate_attr, error_msg_attr, has_data)
 			return result
 
+		// §FEXT-3: cl-preview — marks an <iframe> as a Designer preview target.
+		// Injects the click-interceptor runtime script into the iframe's srcdoc so
+		// the parent page receives designer-select postMessages on element click.
+		string preview_attr = ""
+		if tag_content.indexOf(" cl-preview") != -1
+			preview_attr = "present"
+		if preview_attr != "" and tag_name == "iframe"
+			return render_element_with_preview(tag_name, tag_content, inner_html, registry_json, has_data)
+
+		// §FEXT-4: cl-stream — connects an element to an SSE endpoint.
+		// The attribute value is passed as data-cl-stream so the browser runtime
+		// can open an EventSource connection after hydration.
+		string stream_attr = extract_attr_value("<" + tag_content + ">", "cl-stream")
+		if stream_attr != ""
+			return render_element_with_stream(tag_name, tag_content, inner_html, registry_json, has_data, stream_attr)
+
 		// Regular element
 		return render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 
@@ -632,6 +648,45 @@ functions:
 
 		result = result + "if " + condition + "\n"
 		result = result + "\thtml = html + \"<span class='cl-validation-error'>" + escape_string(error_msg) + "</span>\"\n"
+		return result
+
+	// §FEXT-3: Render an <iframe cl-preview> element.
+	// Injects the Designer selection runtime script into the srcdoc content so
+	// clicking an element inside the iframe posts a designer-select message to
+	// the parent page. The cl-preview attribute itself is stripped from output.
+	string render_element_with_preview(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		string attrs = extract_attributes(tag_content)
+		string result = "html = html + \"<" + tag_name
+		if attrs != ""
+			result = result + " " + attrs
+		// Inject the data-cl-preview marker so the browser runtime can identify
+		// preview iframes and attach the postMessage listener after srcdoc load.
+		result = result + " data-cl-preview='true'"
+		result = result + ">\"\n"
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+		return result
+
+	// §FEXT-4: Render an element with cl-stream attribute.
+	// Converts cl-stream="/url" to data-cl-stream="/url" so the browser runtime
+	// can open an EventSource connection after the WASM module loads.
+	string render_element_with_stream(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data, string stream_url)
+		string attrs = extract_attributes(tag_content)
+		string result = "html = html + \"<" + tag_name
+		if attrs != ""
+			result = result + " " + attrs
+		// Handle interpolated URLs: {expr} → runtime value
+		if stream_url.indexOf("{") != -1
+			result = result + " data-cl-stream='\" + " + interpolate_attr(stream_url) + " + \"'"
+		else
+			result = result + " data-cl-stream='" + stream_url + "'"
+		result = result + ">\"\n"
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
 		return result
 
 	// Render a <screen> tag as an island
@@ -801,9 +856,11 @@ functions:
 	// Event attributes (onclick, onsubmit, etc.) are transformed to data-on-* for SSR hydration
 	string extract_attributes(string tag_content)
 		// Directive attributes consumed by the compiler — not output to HTML
-		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,error-message,"
+		// §FEXT-3: added cl-preview; §FEXT-4: added cl-stream
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,error-message,"
 		// Known HTML event attribute prefixes (all start with "on")
-		string events = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onmouseenter,onmouseleave,"
+		// §FEXT-1: extended with drag, pointer, wheel, scroll families
+		string events = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onkeypress,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,oncontextmenu,ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,onwheel,onscroll,"
 		string result = ""
 
 		// Simple attribute extraction - find key="value" or key='value' pairs
