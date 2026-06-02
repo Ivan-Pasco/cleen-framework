@@ -349,3 +349,9 @@ name = "outbound-webhook"
 use_when = "your service needs to notify external systems when events occur (payment completed, order shipped, user created)"
 anti_pattern = "calling http.post inline in the handler — if the call fails the request fails; send webhook calls from a background job with retry, and always sign the payload with HMAC"
 example = "patterns/outbound-webhook.cln"
+
+[[ai.patterns]]
+name = "live-feed-realtime"
+use_when = "browser needs real-time updates — two-way (LIVE) or server-push (FEED)"
+anti_pattern = "polling the server with repeated GET requests on a timer — use LIVE for two-way connections, FEED for one-way server push"
+example = "patterns/live-feed-realtime.cln"

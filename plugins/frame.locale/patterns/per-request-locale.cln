@@ -1,0 +1,70 @@
+// Pattern: per-request-locale
+// Use when: a server API must return translated strings based on the caller's locale —
+//   derived from the Accept-Language header or from a stored user preference.
+// Anti-pattern: DON'T call locale.set() once at application startup and rely on it for
+//   all requests. The server handles concurrent requests; a locale set at startup (or
+//   in one request) leaks into every other concurrent request. On the server, locale.set()
+//   is scoped to the current request context — call it inside a middleware or at the top
+//   of each handler, never at module level or in the start: block.
+
+plugins:
+	frame.server
+	frame.locale
+
+// Translation files live at app/i18n/<locale>.json
+// Example app/i18n/en.json:
+//   { "tasks": { "empty": "No tasks yet.", "count_one": "1 task", "count_other": "{{count}} tasks" },
+//     "user": { "greeting": "Hello, {{name}}!" } }
+//
+// Example app/i18n/es.json:
+//   { "tasks": { "empty": "No hay tareas.", "count_one": "1 tarea", "count_other": "{{count}} tareas" },
+//     "user": { "greeting": "Hola, {{name}}!" } }
+
+locale:
+	default = "en"
+	fallback = "en"
+	detection = "header"
+	path = "app/i18n/translations"
+
+// Middleware: detect locale from Accept-Language header and set it for this request.
+// Apply this middleware globally so every endpoint benefits automatically.
+middleware LocaleDetect
+	functions:
+		Request handle(Request req)
+			string accept_lang = req.header("Accept-Language")
+			// Accept-Language may be "es-MX,es;q=0.9,en;q=0.8" — take the first tag only
+			string lang = accept_lang
+			integer comma = accept_lang.indexOf(",")
+			if comma > 0
+				lang = accept_lang.slice(0, comma)
+			integer semi = lang.indexOf(";")
+			if semi > 0
+				lang = lang.slice(0, semi)
+			// Only set a known locale — fall back to default for unrecognised tags
+			if lang == "es" or lang == "es-MX" or lang == "es-ES"
+				locale.set("es")
+			else
+				locale.set("en")
+			return req
+
+endpoints:
+	// GET /api/tasks — returns task list header translated for the caller's locale
+	GET "/api/tasks":
+		// locale is already set by LocaleDetect middleware for this request
+		list<any> tasks = []   // ... fetch real tasks ...
+		integer count = tasks.length()
+
+		string header_text = tc("tasks.count", count, "{}")
+		if count == 0
+			header_text = t("tasks.empty", "{}")
+
+		return json({ "count": count, "header": header_text })
+
+	// GET /api/users/:id/greeting — personalised greeting in the caller's locale
+	GET "/api/users/:id/greeting":
+		string user_id = req.param("id")
+		// ... load user record ...
+		string user_name = "Ivan"   // from DB
+		string params_json = "{\"name\":\"" + user_name + "\"}"
+		string greeting = t("user.greeting", params_json)
+		return json({ "greeting": greeting })

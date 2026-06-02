@@ -90,3 +90,23 @@ functions = [
   { clean_name = "schedule.cron", bridge_name = "_schedule_cron" },
   { clean_name = "schedule.cancel", bridge_name = "_schedule_cancel" },
 ]
+
+[ai]
+description = "Background job queue plugin. Use jobs: block to declare named job handlers in app/jobs/. Always enqueue work that should not block an HTTP response (email, exports, image processing). Use schedule for recurring tasks."
+constraints = [
+  "Never perform slow I/O (email, HTTP calls, file generation) inside an endpoint handler — enqueue a job instead",
+  "Pass only serializable primitives in job args (strings, integers, booleans) — never pass model objects",
+  "app/jobs/ files are auto-imported — no import statement needed",
+]
+
+[[ai.patterns]]
+name = "email-notification"
+use_when = "a user action (registration, assignment, status change) should trigger an email without delaying the HTTP response"
+anti_pattern = "calling email.send() inside the endpoint handler — the HTTP response waits for the SMTP call; if SMTP is slow or down, the user gets a timeout. Always enqueue."
+example = "patterns/email-notification.cln"
+
+[[ai.patterns]]
+name = "scheduled-cleanup"
+use_when = "recurring maintenance tasks (expiring sessions, archiving old records, sending weekly digests)"
+anti_pattern = "triggering cleanup from a user-facing endpoint with a cron-like timer check — that ties cleanup to traffic and fails silently when the endpoint is not called. Use schedule instead."
+example = "patterns/scheduled-cleanup.cln"

@@ -1,0 +1,87 @@
+// Pattern: locale-aware-formatting
+// Use when: displaying prices, statistics, or dates that must match the user's regional
+//   formatting conventions — decimal separators, digit grouping, currency placement, etc.
+// Anti-pattern: DON'T hardcode number formatting (e.g. "$" + price.toString() or
+//   number.toString() + " items"). Different locales use different decimal separators
+//   ("1,234.56" vs "1.234,56"), digit grouping rules, and currency placement (prefix vs
+//   suffix). Always use locale.formatCurrency(), locale.formatNumber(), and
+//   locale.formatDate() so the server emits correctly formatted strings for each caller.
+
+plugins:
+	frame.server
+	frame.locale
+
+locale:
+	default = "en"
+	fallback = "en"
+	detection = "header"
+	path = "app/i18n/translations"
+
+middleware LocaleDetect
+	functions:
+		Request handle(Request req)
+			string accept_lang = req.header("Accept-Language")
+			string lang = accept_lang
+			integer comma = accept_lang.indexOf(",")
+			if comma > 0
+				lang = accept_lang.slice(0, comma)
+			integer semi = lang.indexOf(";")
+			if semi > 0
+				lang = lang.slice(0, semi)
+			if lang == "de" or lang == "de-DE"
+				locale.set("de")
+			else if lang == "fr" or lang == "fr-FR"
+				locale.set("fr")
+			else if lang == "es" or lang == "es-ES" or lang == "es-MX"
+				locale.set("es")
+			else
+				locale.set("en")
+			return req
+
+endpoints:
+	// GET /api/dashboard — returns stats and prices formatted for the caller's locale.
+	// The locale is set per-request by LocaleDetect middleware before this handler runs.
+	GET "/api/dashboard":
+		// Fetch raw values from the data layer
+		number total_revenue = 184329.47       // from DB aggregation
+		integer total_orders = 1247
+		number avg_order_value = 147.81
+		number low_stock_threshold = 5.0
+
+		// locale.formatNumber — formats with locale-appropriate digit grouping and decimal mark
+		// en:    "1,247"           de: "1.247"           fr: "1 247"
+		string orders_formatted = locale.formatNumber(total_orders.toNumber(), locale.current(), "{}")
+
+		// locale.formatCurrency — places currency symbol and decimal correctly for the locale
+		// en: "$184,329.47"        de: "184.329,47 $"    fr: "184 329,47 $"
+		string revenue_formatted = locale.formatCurrency(total_revenue, "USD", locale.current())
+		string avg_order_formatted = locale.formatCurrency(avg_order_value, "USD", locale.current())
+
+		return json({
+			"revenue": revenue_formatted,
+			"orders": orders_formatted,
+			"avgOrder": avg_order_formatted
+		})
+
+	// GET /api/products/:id — returns product detail with locale-formatted price and dates.
+	GET "/api/products/:id":
+		string product_id = req.param("id")
+		// ... load product from DB ...
+		number price = 49.99
+		number created_ts = 1748822400.0     // Unix timestamp from DB
+		number updated_ts = 1751500800.0
+
+		string price_formatted = locale.formatCurrency(price, "USD", locale.current())
+
+		// locale.formatDate style "long"     — en: "June 2, 2025"   de: "2. Juni 2025"
+		// locale.formatDate style "short"    — en: "6/2/25"         de: "02.06.25"
+		// locale.formatDate style "relative" — "3 days ago" / "vor 3 Tagen" (locale-aware relative)
+		string created_long = locale.formatDate(created_ts, "long", locale.current())
+		string updated_relative = locale.formatDate(updated_ts, "relative", locale.current())
+
+		return json({
+			"id": product_id,
+			"price": price_formatted,
+			"createdAt": created_long,
+			"updatedAt": updated_relative
+		})

@@ -68,3 +68,23 @@ functions = [
   { clean_name = "locale.formatCurrency", bridge_name = "_i18n_format_currency" },
   { clean_name = "locale.formatDate", bridge_name = "_i18n_format_date" },
 ]
+
+[ai]
+description = "Internationalization plugin. Use locale: block to configure default language and translation file path. Use t() for string lookups, tc() for pluralization, locale.format*() for numbers/currencies/dates. Set locale per-request in middleware — never at startup."
+constraints = [
+  "Always set locale per-request (in middleware or handler) — locale.set() is request-scoped on the server",
+  "Use tc() for any string involving a count — never concatenate count into a translated string manually",
+  "Translation keys must be dot-namespaced (e.g. 'tasks.empty', 'user.greeting') — flat keys become unmaintainable at scale",
+]
+
+[[ai.patterns]]
+name = "per-request-locale"
+use_when = "a server API must return translated strings based on the caller's locale (Accept-Language header or stored user preference)"
+anti_pattern = "calling locale.set() once at startup and sharing it across all requests — the server handles concurrent requests; locale must be set per-request in middleware or at the top of each handler"
+example = "patterns/per-request-locale.cln"
+
+[[ai.patterns]]
+name = "locale-aware-formatting"
+use_when = "displaying prices, statistics, or dates that must match the user's regional formatting conventions"
+anti_pattern = "hardcoding number formatting (e.g. '$' + price.toString()) — different locales use different decimal separators, grouping symbols, and currency placement. Use locale.formatCurrency(), locale.formatNumber(), locale.formatDate()."
+example = "patterns/locale-aware-formatting.cln"

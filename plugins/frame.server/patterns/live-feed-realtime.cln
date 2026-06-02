@@ -1,0 +1,61 @@
+// Pattern: live-feed-realtime
+// Use when: the browser needs real-time updates from the server — two-way communication
+//   (chat, collaborative editing) or one-way server push (notifications, live counters,
+//   order status updates).
+// Anti-pattern: DON'T poll the server with repeated GET requests on a setInterval timer.
+//   Polling wastes HTTP connections (one full request/response cycle per interval per client),
+//   adds latency proportional to the poll interval, hammers the database unnecessarily,
+//   and does not scale. Use LIVE for two-way connections — it upgrades to WebSocket.
+//   Use FEED for one-way server push — it uses Server-Sent Events (SSE) which is a
+//   persistent HTTP connection with automatic browser reconnection.
+//
+// Client-side usage:
+//   LIVE  — connect with live.connect(url) from frame.client
+//   FEED  — subscribe with feed.open(url, onMsg, onError) or the cl-stream directive
+
+plugins:
+	frame.server
+	frame.auth
+
+// ── LIVE endpoint — two-way WebSocket (chat room) ────────────────────────────────────────
+//
+// live.onMessage fires once per incoming message from the connected client.
+// live.onClose fires when the client disconnects (clean or network drop).
+// live.roomBroadcast delivers the message to every client currently in the room.
+// Room membership is implicit: include the room key in every message payload so the
+// server can route it. Rooms are ephemeral — no persistence needed for stateless chat.
+//
+// [member] guard: only authenticated users may connect.
+
+endpoints:
+	LIVE "/chat/:room" [member]:
+		live.onMessage: (msg)
+			any data = json.decode(msg)
+			string room_name = data.room
+			string from_user = data.from
+			string text = data.text
+			// Broadcast to all clients in this room, including the sender
+			live.roomBroadcast(room_name, json.encode({ "from": from_user, "text": text, "room": room_name }))
+		live.onClose:
+			// Stateless rooms: no cleanup needed.
+			// For presence tracking, update a presence table or cache here.
+
+	// ── FEED endpoint — one-way SSE push (notification stream) ───────────────────────────
+	//
+	// The handler runs once when the client connects. Emit an immediate confirmation event,
+	// then return. The server keeps the SSE connection open and delivers events as they are
+	// triggered elsewhere (by jobs, webhooks, or other requests) via feed.emit().
+	// The client auto-reconnects on drop (built into the SSE protocol).
+	//
+	// feed.isConnected() lets you check whether the client is still listening before
+	// emitting into a long-running loop — avoid wasting CPU on disconnected clients.
+	//
+	// [member] guard: only authenticated users may subscribe.
+
+	FEED "/api/events/notifications" [member]:
+		Session sess = auth.session.get()
+		// Emit a connected confirmation so the client knows the stream is live
+		feed.emit(json.encode({ "type": "connected", "userId": sess.userId }))
+		// Handler returns here; the server holds the connection open.
+		// Use feed.emitEvent(name, data) from any job or endpoint handler
+		// to push named events to this client by user ID.

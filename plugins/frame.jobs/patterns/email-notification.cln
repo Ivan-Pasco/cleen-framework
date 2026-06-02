@@ -1,0 +1,50 @@
+// Pattern: email-notification
+// Use when: a user action (registration, assignment, status change) must trigger an email
+//   without adding SMTP latency to the HTTP response.
+// Anti-pattern: DON'T call email.send() inside the endpoint handler.
+//   The HTTP response is held open until the SMTP handshake completes. If the mail server
+//   is slow, under load, or temporarily unreachable, the user receives a timeout — even
+//   though the actual operation (e.g. account creation) succeeded. Always enqueue the job
+//   and return immediately. The job runner retries on failure without any user impact.
+
+plugins:
+	frame.server
+	frame.jobs
+
+// Translation note: pass only serializable primitives (strings, integers, booleans)
+// in job args. Never pass a model object — it cannot be serialized across the job boundary.
+// Fetch the record inside the job handler using the id you pass.
+
+jobs:
+	SendWelcomeEmail:
+		retry: 3
+		timeout: 30
+		handle(any args)
+			string to_email = args.email
+			string to_name = args.name
+			string subject = "Welcome to the platform, " + to_name + "!"
+			string html_body = "<h1>Hi " + to_name + ",</h1><p>Your account is ready. <a href=\"https://app.example.com/login\">Log in now</a>.</p>"
+			string text_body = "Hi " + to_name + ", your account is ready. Log in at https://app.example.com/login"
+			boolean ok = email.send(to_email, subject, html_body, text_body)
+			if ok == false
+				job.fail("SMTP rejected: " + email.lastError())
+
+endpoints:
+	POST "/users/register":
+		string email_addr = req.body_field("email")
+		string name = req.body_field("name")
+		string password = req.body_field("password")
+
+		if email_addr.length() == 0
+			return badRequest(json({ "code": "VALIDATION_ERROR", "field": "email", "message": "email is required" }))
+
+		if name.length() == 0
+			return badRequest(json({ "code": "VALIDATION_ERROR", "field": "name", "message": "name is required" }))
+
+		// ... create the user record ...
+
+		// Enqueue — returns immediately regardless of SMTP availability.
+		// Pass primitives only: email address and display name strings.
+		queue.enqueue("SendWelcomeEmail", json.encode({ "email": email_addr, "name": name }))
+
+		return json({ "status": "registered", "email": email_addr })

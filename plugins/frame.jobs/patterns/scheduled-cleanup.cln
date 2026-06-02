@@ -1,0 +1,73 @@
+// Pattern: scheduled-cleanup
+// Use when: recurring maintenance tasks must run on a fixed schedule — expiring tokens,
+//   archiving old records, purging soft-deleted rows, sending weekly digests.
+// Anti-pattern: DON'T check "is it time to clean up?" inside a user-facing endpoint
+//   using a timestamp comparison. That approach depends on traffic — if the endpoint
+//   is never called in a given window, cleanup silently never runs. It also blocks
+//   a real user request while cleanup executes. Use schedule to register a cron job
+//   with the server; the runner fires it independently of request traffic.
+
+plugins:
+	frame.server
+	frame.jobs
+	frame.data
+
+data Session:
+	id: integer pk auto
+	user_id: integer
+	token: string unique
+	expires_at: datetime
+	created_at: datetime auto
+
+data UserDigestSubscription:
+	id: integer pk auto
+	user_id: integer
+	email: string
+	subscribed_at: datetime auto
+
+jobs:
+	CleanExpiredSessions:
+		retry: 1
+		timeout: 60
+		handle(any args)
+			integer attempt = job.attempt()
+			// job.attempt() is 1-based: log which attempt is running
+			// so that on-call engineers can correlate log lines with retry history
+			_log_info("CleanExpiredSessions attempt " + attempt.toString())
+
+			Session.delete:
+				where:
+					expires_at < now()
+
+	WeeklyDigest:
+		retry: 2
+		timeout: 120
+		queue: "mailers"
+		handle(any args)
+			integer attempt = job.attempt()
+			_log_info("WeeklyDigest attempt " + attempt.toString())
+
+			list<any> subscribers = UserDigestSubscription.find:
+				order:
+					subscribed_at asc
+
+			integer sent = 0
+			integer failed = 0
+			for subscriber in subscribers
+				string subject = "Your weekly digest"
+				string html_body = "<p>Here is what happened this week.</p>"
+				string text_body = "Here is what happened this week."
+				boolean ok = email.send(subscriber.email, subject, html_body, text_body)
+				if ok
+					sent = sent + 1
+				else
+					failed = failed + 1
+
+			_log_info("WeeklyDigest complete: sent=" + sent.toString() + " failed=" + failed.toString())
+			if failed > 0
+				job.fail(failed.toString() + " subscriber emails failed")
+
+// Register cron schedules — these run independently of HTTP traffic.
+// Format: standard 5-field cron expression (minute hour day month weekday)
+schedule CleanExpiredSessions "0 * * * *"      // every hour, on the hour
+schedule WeeklyDigest "0 9 * * MON"            // every Monday at 09:00 server time

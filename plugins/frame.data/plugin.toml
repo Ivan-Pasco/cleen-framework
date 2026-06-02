@@ -228,8 +228,8 @@ example = "patterns/multi-tenant.cln"
 
 [[ai.patterns]]
 name = "pagination"
-use_when = "endpoints that return lists of records that can grow large"
-anti_pattern = "deep OFFSET pagination — past page ~10 it table-scans from row 0 on every request; use cursor pagination (last seen id) instead"
+use_when = "endpoint returns a list that can grow — use paginate: for page-number UI, cursor: for infinite scroll or large tables"
+anti_pattern = "manually calculating offset: (page-1)*limit and running a separate count: query — use paginate: which does both in one round trip; use cursor: for tables that will exceed ~1M rows"
 example = "patterns/pagination.cln"
 
 [[ai.patterns]]
