@@ -11,6 +11,8 @@ functions:
 	string expand_block(string block_name, string attributes, string body)
 		if block_name == "endpoints"
 			return expand_endpoints(body)
+		if block_name == "server"
+			return expand_server(body)
 		// Preamble: emit response helpers unconditionally so they are available
 		// in functions: blocks even when no endpoints: block is present.
 		if block_name == "__preamble"
@@ -78,6 +80,66 @@ functions:
 		result = result + "\t\treturn _req_header(name)\n\n"
 		result = result + "\tstring method()\n"
 		result = result + "\t\treturn _req_method()\n\n"
+		return result
+
+// ============================================================================
+// SERVER BLOCK EXPANSION
+// ============================================================================
+
+functions:
+	// Expand server: block into a start: fragment that registers static dirs
+	// and starts the HTTP listener.  The compiler merges this start: section
+	// with any other start: content in the same build target.
+	//
+	// Supported fields:
+	//   port:   3000               — listener port (default 3000)
+	//   host:   "0.0.0.0"          — bind address (informational, passed to listener)
+	//   static: "public/"          — serve filesystem directory at URL root /
+	//
+	// Example:
+	//   server:
+	//       port:   8080
+	//       static: "public/"
+	//
+	// Generates:
+	//   start:
+	//       _http_serve_static("/", "public/")
+	//       _http_listen(8080)
+	string expand_server(string body)
+		string port_str = "3000"
+		string static_dir = ""
+
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+
+			if line.startsWith("port:")
+				port_str = line.substring(5, line.length()).trim()
+
+			if line.startsWith("static:")
+				string dir_val = line.substring(7, line.length()).trim()
+				// Strip surrounding double-quotes if present
+				if dir_val.startsWith("\"") and dir_val.length() > 1
+					if dir_val.endsWith("\"")
+						dir_val = dir_val.substring(1, dir_val.length() - 1)
+				static_dir = dir_val
+
+			line_start = line_end + 1
+
+		string result = "start:\n"
+
+		// Register static directory before opening the listener port
+		if static_dir.length() > 0
+			result = result + "\t_http_serve_static(\"/\", \"" + static_dir + "\")\n"
+
+		result = result + "\t_http_listen(" + port_str + ")"
+
 		return result
 
 // ============================================================================

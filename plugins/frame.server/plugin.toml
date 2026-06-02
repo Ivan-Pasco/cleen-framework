@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.3.1"
+version = "2.4.0"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -10,7 +10,7 @@ min_compiler_version = "0.15.0"
 requires = "clean-server"
 
 [handles]
-blocks = ["endpoints", "middleware", "routes"]
+blocks = ["endpoints", "middleware", "routes", "server"]
 
 [exports]
 expand = "expand_block"
@@ -26,6 +26,9 @@ functions = [
   # HTTP Server - Route Registration
   { name = "_http_route", params = ["string", "string", "string"], returns = "integer", description = "Register route: method, path, handler function name", expand_strings = true },
   { name = "_http_route_protected", params = ["string", "string", "string", "string"], returns = "integer", description = "Register protected route: method, path, handler name, required role", expand_strings = true },
+
+  # HTTP Server - Static Files
+  { name = "_http_serve_static", params = ["string", "string"], returns = "integer", description = "Mount filesystem directory as static file server: url_prefix, dir_path. Serves files with correct MIME types.", expand_strings = true },
 
   # Request Context - Path Parameters
   { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name (e.g., :id)", expand_strings = true },
@@ -124,7 +127,7 @@ functions = [
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["endpoints", "middleware"]
+blocks = ["endpoints", "middleware", "server"]
 
 # Keywords used within plugin context
 keywords = [
@@ -139,6 +142,7 @@ keywords = [
   { name = "params", description = "Route parameter declaration", context = "block" },
   { name = "port", description = "Server port configuration", context = "config" },
   { name = "host", description = "Server host configuration", context = "config" },
+  { name = "static", description = "Static file directory to serve (e.g. static: \"public/\")", context = "config" },
   { name = "cors", description = "CORS configuration", context = "config" },
   { name = "rateLimit", description = "Rate limiting configuration", context = "config" },
 ]
@@ -192,6 +196,7 @@ functions = [
 
 # Auto-completion suggestions
 completions = [
+  { trigger = "server:", insert = "server:\n\tport: ${1:3000}\n\tstatic: \"${2:public/}\"" },
   { trigger = "endpoints:", insert = "endpoints:\n\t${1:GET} \"${2:/path}\" :\n\t\treturn json({ ${3:data} })" },
   { trigger = "GET ", insert = "GET \"${1:/path}\" :\n\treturn json({ ${2:data} })" },
   { trigger = "POST ", insert = "POST \"${1:/path}\" :\n\t${2:Type} body = req.json(${2:Type})\n\treturn json({ ${3:data} })" },
