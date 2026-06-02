@@ -297,7 +297,6 @@ restricted_functions = [
   { name = "_http_route", use_instead = "endpoints:", message = "Use 'endpoints:' block to define routes instead of calling _http_route() directly" },
   { name = "_http_route_protected", use_instead = "endpoints: with [role] inline guard", message = "Use 'endpoints:' block with [role] inline guard on the route header for protected routes" },
   { name = "_http_listen", use_instead = "server:", message = "Use 'server:' block to configure and start the HTTP server" },
-  { name = "_http_respond", use_instead = "return json()/html()/redirect()", message = "Use response helpers inside endpoints: handlers" },
 ]
 
 required_blocks = [
