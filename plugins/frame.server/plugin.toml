@@ -28,6 +28,18 @@ functions = [
   { name = "_http_route_protected", params = ["string", "string", "string", "string"], returns = "integer", description = "Register protected route: method, path, handler name, required role", expand_strings = true },
   # §FEXT-4: SSE route registration — sets Content-Type: text/event-stream and keeps connection open
   { name = "_http_sse_route", params = ["string", "string", "string"], returns = "integer", description = "Register SSE (STREAM) route: method, path, handler function name", expand_strings = true },
+  # §15: WebSocket route registration — upgrades connection and invokes named handler functions
+  { name = "_http_ws_route", params = ["string", "string", "string", "string", "string"], returns = "void", description = "Register WebSocket route: method, path, onConnect handler, onMessage handler, onClose handler", expand_strings = true },
+
+  # §15: WebSocket bridge functions (server-only; used inside WEBSOCKET endpoint handlers)
+  { name = "_ws_send", params = ["integer", "string"], returns = "void", description = "Send message to a specific WebSocket client by ID", expand_strings = true },
+  { name = "_ws_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true },
+  { name = "_ws_close", params = ["integer"], returns = "void", description = "Close WebSocket connection for a specific client ID" },
+  { name = "_ws_client_id", params = [], returns = "integer", description = "Get the current WebSocket client ID" },
+  { name = "_ws_message", params = [], returns = "string", description = "Get the current incoming WebSocket message payload" },
+  { name = "_ws_room_join", params = ["integer", "string"], returns = "void", description = "Add a client to a named room: clientId, room", expand_strings = true },
+  { name = "_ws_room_leave", params = ["integer", "string"], returns = "void", description = "Remove a client from a named room: clientId, room", expand_strings = true },
+  { name = "_ws_room_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true },
 
   # §FEXT-4: Server-Sent Events bridge functions (server-only; client receives event stream)
   { name = "_sse_emit", params = ["string"], returns = "integer", description = "Send data: event to SSE client on current connection", expand_strings = true },
@@ -163,6 +175,7 @@ keywords = [
   { name = "cors", description = "CORS configuration", context = "config" },
   { name = "rateLimit", description = "Rate limiting configuration", context = "config" },
   { name = "mail", description = "SMTP mail configuration block — host, port, secure, username, password, from", context = "config" },
+  { name = "WEBSOCKET", description = "WebSocket route declaration", context = "endpoints" },
 ]
 
 # Custom types provided by the plugin
@@ -216,6 +229,15 @@ functions = [
   { name = "sse.close", signature = "sse.close()", description = "Close the SSE stream and terminate the connection", maps_to = "_sse_close" },
   { name = "sse.retry", signature = "sse.retry(ms)", description = "Set the client reconnect interval in milliseconds", maps_to = "_sse_retry" },
   { name = "sse.isConnected", signature = "sse.isConnected() -> boolean", description = "Returns true if the SSE client is still connected", maps_to = "_sse_is_connected" },
+  # §15: WebSocket helpers (usable inside WEBSOCKET endpoint handlers)
+  { name = "ws.send", signature = "ws.send(clientId, message)", description = "Send message to a specific WebSocket client", maps_to = "_ws_send" },
+  { name = "ws.broadcast", signature = "ws.broadcast(room, message)", description = "Broadcast message to all clients in a room", maps_to = "_ws_broadcast" },
+  { name = "ws.close", signature = "ws.close(clientId)", description = "Close a WebSocket connection by client ID", maps_to = "_ws_close" },
+  { name = "ws.clientId", signature = "ws.clientId() -> integer", description = "Get the current WebSocket client ID", maps_to = "_ws_client_id" },
+  { name = "ws.message", signature = "ws.message() -> string", description = "Get the current incoming WebSocket message payload", maps_to = "_ws_message" },
+  { name = "ws.roomJoin", signature = "ws.roomJoin(clientId, room)", description = "Add a client to a named room", maps_to = "_ws_room_join" },
+  { name = "ws.roomLeave", signature = "ws.roomLeave(clientId, room)", description = "Remove a client from a named room", maps_to = "_ws_room_leave" },
+  { name = "ws.roomBroadcast", signature = "ws.roomBroadcast(room, message)", description = "Broadcast message to all clients in a named room", maps_to = "_ws_room_broadcast" },
   # File download
   { name = "res.download", signature = "res.download(filename)", description = "Set Content-Disposition: attachment header so the browser downloads the response as a file named filename", maps_to = "_res_download" },
   # Email helpers
@@ -231,6 +253,7 @@ completions = [
   { trigger = "GET ", insert = "GET \"${1:/path}\" :\n\treturn json({ ${2:data} })" },
   { trigger = "POST ", insert = "POST \"${1:/path}\" :\n\t${2:Type} body = req.json(${2:Type})\n\treturn json({ ${3:data} })" },
   { trigger = "STREAM ", insert = "STREAM \"${1:/api/events}\" :\n\tsse.emit(\"started\")\n\tsse.close()" },
+  { trigger = "WEBSOCKET", insert = "WEBSOCKET \"${1:/path}\" :\n\t\t${2:// handler}" },
   { trigger = "[", insert = "[${1:role}]", context = "route_header" },
   { trigger = "middleware ", insert = "middleware ${1:Name}\n\tfunctions:\n\t\tRequest handle(Request req)\n\t\t\t${2:// inspect or modify request}\n\t\t\treturn req" },
   { trigger = "email.", insert = "email.send(${1:to}, ${2:subject}, ${3:html}, ${4:text})" },
@@ -253,6 +276,18 @@ implicit_import = true
 # Starter files created when plugin is added to a project
 files = [
   { path = "app/server/api/health.cln", template = "health.cln" },
+]
+
+[aliases]
+functions = [
+  { clean_name = "ws.send", bridge_name = "_ws_send" },
+  { clean_name = "ws.broadcast", bridge_name = "_ws_broadcast" },
+  { clean_name = "ws.close", bridge_name = "_ws_close" },
+  { clean_name = "ws.clientId", bridge_name = "_ws_client_id" },
+  { clean_name = "ws.message", bridge_name = "_ws_message" },
+  { clean_name = "ws.roomJoin", bridge_name = "_ws_room_join" },
+  { clean_name = "ws.roomLeave", bridge_name = "_ws_room_leave" },
+  { clean_name = "ws.roomBroadcast", bridge_name = "_ws_room_broadcast" },
 ]
 
 [enforcement]

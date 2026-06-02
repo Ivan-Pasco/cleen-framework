@@ -581,5 +581,91 @@ background email.send(
 
 ---
 
+## 25. WebSocket Endpoints
+
+WebSocket endpoints handle persistent bidirectional connections. They are declared with the `WEBSOCKET` method keyword inside an `endpoints:` block.
+
+### 25.1 Syntax
+
+```clean
+endpoints:
+    WEBSOCKET "/ws/chat" :
+        // onConnect body — runs when a client establishes the connection
+        ws.roomJoin(ws.clientId(), "lobby")
+
+        ws.onMessage:
+            // runs each time the client sends a frame
+            string msg = ws.message()
+            integer id = ws.clientId()
+            ws.roomBroadcast("lobby", "{\"from\":" + id.toString() + ",\"text\":\"" + msg + "\"}")
+
+        ws.onClose:
+            // runs when the connection closes (client disconnect or server close)
+            ws.roomLeave(ws.clientId(), "lobby")
+```
+
+### 25.2 Lifecycle
+
+| Phase | Handler | Bridge function called |
+|-------|---------|----------------------|
+| Connection established | Route body (onConnect) | `_http_ws_route` registers it |
+| Message received | `ws.onMessage:` sub-block | Called per frame |
+| Connection closed | `ws.onClose:` sub-block | Called once on disconnect |
+
+### 25.3 WebSocket Bridge Functions
+
+All WebSocket bridge functions are server-only (Layer 3). They may only be called inside `WEBSOCKET` endpoint handlers.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `ws.clientId()` | `-> integer` | Integer ID of the client whose handler is executing |
+| `ws.message()` | `-> string` | UTF-8 payload of the incoming frame (onMessage only) |
+| `ws.send(clientId, message)` | `(integer, string)` | Send a text frame to a specific client |
+| `ws.broadcast(room, message)` | `(string, string)` | Send a frame to all clients in a room |
+| `ws.close(clientId)` | `(integer)` | Close a client's connection with normal closure (1000) |
+| `ws.roomJoin(clientId, room)` | `(integer, string)` | Add a client to a named room |
+| `ws.roomLeave(clientId, room)` | `(integer, string)` | Remove a client from a named room |
+| `ws.roomBroadcast(room, message)` | `(string, string)` | Alias for `ws.broadcast` |
+
+### 25.4 Auth Guards
+
+Role guards are supported on `WEBSOCKET` routes:
+
+```clean
+endpoints:
+    WEBSOCKET "/ws/admin" [admin] :
+        ws.roomJoin(ws.clientId(), "admin-channel")
+```
+
+The guard is evaluated at connection time. Unauthorized connections receive a `401` HTTP response before the WebSocket upgrade and are never established.
+
+### 25.5 Room System
+
+Rooms are in-memory sets of client IDs managed by the server runtime. A client may be in multiple rooms simultaneously. Rooms are created when the first client joins and destroyed when the last client leaves.
+
+### 25.6 Complete Example — Chat Room
+
+```clean
+// app/server/api/chat.cln
+endpoints:
+    WEBSOCKET "/ws/chat/:room" :
+        string room = req.params.room
+        integer cid = ws.clientId()
+        ws.roomJoin(cid, room)
+        ws.broadcast(room, "{\"event\":\"joined\",\"id\":" + cid.toString() + "}")
+
+        ws.onMessage:
+            string payload = ws.message()
+            integer sender = ws.clientId()
+            ws.roomBroadcast(req.params.room, "{\"event\":\"message\",\"from\":" + sender.toString() + ",\"text\":" + payload + "}")
+
+        ws.onClose:
+            integer cid = ws.clientId()
+            ws.roomLeave(cid, req.params.room)
+            ws.broadcast(req.params.room, "{\"event\":\"left\",\"id\":" + cid.toString() + "}")
+```
+
+---
+
 **End of Document 03 — Frame Server Specification (endpoints, routing)**
 

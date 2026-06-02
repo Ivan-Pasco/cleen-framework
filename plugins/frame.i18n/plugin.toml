@@ -1,0 +1,70 @@
+[plugin]
+name = "frame.i18n"
+version = "1.0.0"
+description = "Internationalization: translation keys, locale detection, number/currency/date formatting"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[handles]
+blocks = ["locale"]
+
+[exports]
+expand = "expand"
+get_keywords = "get_keywords"
+
+[bridge]
+functions = [
+  { name = "_i18n_t", params = ["string", "string"], returns = "string", expand_strings = true },
+  { name = "_i18n_t_count", params = ["string", "integer", "string"], returns = "string", expand_strings = true },
+  { name = "_i18n_locale", params = [], returns = "string" },
+  { name = "_i18n_set_locale", params = ["string"], returns = "void", expand_strings = true },
+  { name = "_i18n_format_number", params = ["number", "string", "string"], returns = "string", expand_strings = true },
+  { name = "_i18n_format_currency", params = ["number", "string", "string"], returns = "string", expand_strings = true },
+  { name = "_i18n_format_date", params = ["number", "string", "string"], returns = "string", expand_strings = true },
+  { name = "_i18n_load", params = ["string", "string"], returns = "void", expand_strings = true },
+]
+
+[language]
+blocks = ["locale"]
+keywords = [
+  { name = "locale", description = "Locale configuration block", context = "top-level" },
+  { name = "default", description = "Default locale BCP 47 tag", context = "locale" },
+  { name = "fallback", description = "Fallback locale", context = "locale" },
+  { name = "detection", description = "Locale detection strategy: header|cookie|query|manual", context = "locale" },
+  { name = "path", description = "Path to translation files", context = "locale" },
+]
+types = [
+  { name = "Locale", description = "BCP 47 locale identifier string" },
+]
+functions = [
+  { name = "t", signature = "t(key, params) -> string", description = "Translate a key. params is a JSON object for interpolation." },
+  { name = "tc", signature = "tc(key, count, params) -> string", description = "Translate with plural form selection." },
+  { name = "i18n.locale", signature = "i18n.locale() -> string", description = "Current locale BCP 47 tag." },
+  { name = "i18n.setLocale", signature = "i18n.setLocale(locale)", description = "Change active locale." },
+  { name = "i18n.formatNumber", signature = "i18n.formatNumber(value, locale, options) -> string", description = "Format number in locale." },
+  { name = "i18n.formatCurrency", signature = "i18n.formatCurrency(value, currency, locale) -> string", description = "Format currency value." },
+  { name = "i18n.formatDate", signature = "i18n.formatDate(timestamp, style, locale) -> string", description = "Format date with style: short|medium|long|full." },
+]
+completions = [
+  { trigger = "locale:", insert = "locale:\n\tdefault = \"${1:en}\"\n\tfallback = \"en\"\n\tdetection = \"header\"\n\tpath = \"app/i18n\"" },
+  { trigger = "t(", insert = "t(\"${1:key}\", \"{}\")" },
+]
+
+[paths]
+owns = ["app/i18n"]
+auto_create = true
+patterns = ["*.json"]
+
+[aliases]
+functions = [
+  { clean_name = "t", bridge_name = "_i18n_t" },
+  { clean_name = "tc", bridge_name = "_i18n_t_count" },
+  { clean_name = "i18n.locale", bridge_name = "_i18n_locale" },
+  { clean_name = "i18n.setLocale", bridge_name = "_i18n_set_locale" },
+  { clean_name = "i18n.formatNumber", bridge_name = "_i18n_format_number" },
+  { clean_name = "i18n.formatCurrency", bridge_name = "_i18n_format_currency" },
+  { clean_name = "i18n.formatDate", bridge_name = "_i18n_format_date" },
+]

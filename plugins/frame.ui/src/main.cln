@@ -856,8 +856,8 @@ functions:
 	// Event attributes (onclick, onsubmit, etc.) are transformed to data-on-* for SSR hydration
 	string extract_attributes(string tag_content)
 		// Directive attributes consumed by the compiler — not output to HTML
-		// §FEXT-3: added cl-preview; §FEXT-4: added cl-stream
-		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,error-message,"
+		// §FEXT-3: added cl-preview; §FEXT-4: added cl-stream; §14: cl-transition; §16: cl-boundary
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,cl-transition,cl-boundary,error-message,"
 		// Known HTML event attribute prefixes (all start with "on")
 		// §FEXT-1: extended with drag, pointer, wheel, scroll families
 		string events = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onkeypress,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,oncontextmenu,ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,onwheel,onscroll,"
@@ -1352,11 +1352,12 @@ functions:
 		return result
 
 	// Parse component body to extract html: block and other sections
-	// Returns JSON: {"before": "...", "html": "...", "after": "..."}
+	// Returns JSON: {"before": "...", "html": "...", "after": "...", "fallback": "..."}
 	string parse_component_body(string body)
 		string before = ""
 		string html_content = ""
 		string after = ""
+		string fallback_content = ""
 
 		// Search for html: as a section header
 		integer html_pos = -1
@@ -1384,7 +1385,7 @@ functions:
 
 		if html_pos == -1
 			// No html: block found
-			return "{\"before\":\"" + escape_json_string(body) + "\",\"html\":\"\",\"after\":\"\"}"
+			return "{\"before\":\"" + escape_json_string(body) + "\",\"html\":\"\",\"after\":\"\",\"fallback\":\"\"}"
 
 		// Extract content before html:
 		if html_pos > 0
@@ -1393,7 +1394,7 @@ functions:
 		// Find content start (after "html:\n")
 		integer content_start = body.indexOf("\n", html_pos)
 		if content_start == -1
-			return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"\",\"after\":\"\"}"
+			return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"\",\"after\":\"\",\"fallback\":\"\"}"
 		content_start = content_start + 1
 
 		// Determine the indentation level of the html: line
@@ -1405,7 +1406,7 @@ functions:
 
 		// Find end of html: block by scanning for next section header at same or lower indent
 		integer html_end = body.length()
-		string sections = ",inputs:,state:,functions:,computed:,events:,"
+		string sections = ",inputs:,state:,functions:,computed:,events:,fallback:,"
 		string search_remaining = body.substring(content_start, body.length())
 		integer line_start = 0
 
@@ -1439,7 +1440,55 @@ functions:
 
 		html_content = body.substring(content_start, html_end)
 
-		return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"" + escape_json_string(html_content) + "\",\"after\":\"" + escape_json_string(after) + "\"}"
+		// Extract fallback: block if present
+		integer fallback_pos = body.indexOf("fallback:")
+		if fallback_pos != -1
+			// Verify it is at a line boundary
+			boolean fallback_valid = false
+			if fallback_pos == 0
+				fallback_valid = true
+			else
+				string char_before_fallback = body.substring(fallback_pos - 1, fallback_pos)
+				if char_before_fallback == "\n" or char_before_fallback == "\t"
+					fallback_valid = true
+			if fallback_valid
+				integer nl_after_fallback = body.indexOf("\n", fallback_pos)
+				if nl_after_fallback != -1
+					integer fallback_content_start = nl_after_fallback + 1
+					integer fallback_end = body.length()
+					// Find end of fallback block (next section at same or lower indent level)
+					integer fallback_line_indent = 0
+					integer fscan = fallback_pos - 1
+					while fscan >= 0 and body.substring(fscan, fscan + 1) == "\t"
+						fallback_line_indent = fallback_line_indent + 1
+						fscan = fscan - 1
+					string fallback_sections = ",inputs:,state:,functions:,computed:,events:,html:,"
+					string fsearch = body.substring(fallback_content_start, body.length())
+					integer fline_start = 0
+					while fline_start < fsearch.length()
+						integer fnl = fsearch.indexOf("\n", fline_start)
+						if fnl == -1
+							fnl = fsearch.length()
+						string fline = fsearch.substring(fline_start, fnl)
+						integer findent = 0
+						while findent < fline.length() and fline.substring(findent, findent + 1) == "\t"
+							findent = findent + 1
+						if findent <= fallback_line_indent and fline.trim().length() > 0
+							string ftrimmed = fline.trim()
+							if ftrimmed.endsWith(":")
+								string fsection_name = ftrimmed.substring(0, ftrimmed.length() - 1)
+								if fallback_sections.indexOf("," + fsection_name + ",") != -1
+									fallback_end = fallback_content_start + fline_start
+									fline_start = fsearch.length()
+								else
+									fline_start = fnl + 1
+							else
+								fline_start = fnl + 1
+						else
+							fline_start = fnl + 1
+					fallback_content = body.substring(fallback_content_start, fallback_end).trim()
+
+		return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"" + escape_json_string(html_content) + "\",\"after\":\"" + escape_json_string(after) + "\",\"fallback\":\"" + escape_json_string(fallback_content) + "\"}"
 
 	// Strip common indentation from html: block content and collapse whitespace
 	string strip_block_indent(string content)
@@ -1666,6 +1715,12 @@ functions:
 		string before_html = extract_json_field(parsed, "before")
 		string html_content = extract_json_field(parsed, "html")
 		string after_html = extract_json_field(parsed, "after")
+		string fallback_html = extract_json_field(parsed, "fallback")
+
+		// When a fallback: section is present, store the content as a field so
+		// render() can emit it as a data-fallback attribute on the root element.
+		if fallback_html != ""
+			result = result + "\tstring _fallback = \"" + escape_string(fallback_html) + "\"\n"
 
 		if html_content != ""
 			// html: block found - generate render() from it
@@ -1683,13 +1738,27 @@ functions:
 			string cleaned_html = strip_block_indent(html_content)
 			string render_code = html_block_to_code(cleaned_html)
 
+			// When a fallback: section is present, wrap the rendered output in a
+			// data-component / data-fallback div so the error boundary runtime can
+			// locate the fallback content and render it on component failure.
+			string render_prefix = ""
+			string render_suffix = ""
+			if fallback_html != ""
+				string escaped_fb = escape_string(fallback_html).replace("'", "&#39;")
+				render_prefix = "__html = __html + \"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\"\n"
+				render_suffix = "__html = __html + \"</div>\"\n"
+
 			// Check if after_html contains a functions: section
 			if after_html.trim().length() > 0 and after_html.trim().startsWith("functions:")
 				// Merge render() into the existing functions: block
 				result = result + "\n\t" + after_html.trim().substring(0, 10) + "\n"
 				result = result + "\t\tstring render()\n"
 				result = result + "\t\t\tstring __html = \"\"\n"
+				if render_prefix != ""
+					result = result + "\t\t\t" + render_prefix
 				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+				if render_suffix != ""
+					result = result + "\t\t\t" + render_suffix
 				result = result + "\t\t\treturn __html\n\n"
 				// Add remaining functions after "functions:" header
 				string remaining_funcs = after_html.trim().substring(10, after_html.trim().length())
@@ -1700,7 +1769,11 @@ functions:
 				result = result + "\n\tfunctions:\n"
 				result = result + "\t\tstring render()\n"
 				result = result + "\t\t\tstring __html = \"\"\n"
+				if render_prefix != ""
+					result = result + "\t\t\t" + render_prefix
 				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+				if render_suffix != ""
+					result = result + "\t\t\t" + render_suffix
 				result = result + "\t\t\treturn __html\n"
 				// Add any remaining content after html:
 				if after_html.trim().length() > 0

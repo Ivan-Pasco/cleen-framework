@@ -1386,6 +1386,32 @@
 				}
 			},
 
+			// ========== §14: Client-Side Navigation and History API ==========
+
+			_ui_navigate: (pathPtr, pathLen) => {
+				navigate(readString(pathPtr, pathLen), false);
+			},
+
+			_ui_history_push: (pathPtr, pathLen, titlePtr, titleLen) => {
+				window.history.pushState({}, readString(titlePtr, titleLen), readString(pathPtr, pathLen));
+			},
+
+			_ui_history_replace: (pathPtr, pathLen, titlePtr, titleLen) => {
+				window.history.replaceState({}, readString(titlePtr, titleLen), readString(pathPtr, pathLen));
+			},
+
+			_ui_history_back: () => {
+				window.history.back();
+			},
+
+			_ui_history_forward: () => {
+				window.history.forward();
+			},
+
+			_ui_current_path: () => {
+				return writeString(window.location.pathname + window.location.search);
+			},
+
 			// Console input — no-op stubs (browser has no console input)
 			input:         (_ptr) => writeString(''),
 			input_integer: (_ptr) => 0,
@@ -1395,6 +1421,179 @@
 
 		}
 	};
+
+	// --- §14: Client-Side Navigation ---
+
+	async function navigate(path, replaceState) {
+		const main = document.querySelector('main') || document.querySelector('#app');
+		if (!main) {
+			window.location.href = path;
+			return;
+		}
+
+		if (main.hasAttribute('data-cl-transition') || document.querySelector('[cl-transition]')) {
+			main.classList.add('cl-leaving');
+		}
+
+		let html;
+		try {
+			const res = await fetch(path, { headers: { 'X-Clean-Navigate': '1' } });
+			if (!res.ok) {
+				window.location.href = path;
+				return;
+			}
+			html = await res.text();
+		} catch (_) {
+			window.location.href = path;
+			return;
+		}
+
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(html, 'text/html');
+		const newMain = doc.querySelector('main') || doc.querySelector('#app');
+
+		if (!newMain) {
+			window.location.href = path;
+			return;
+		}
+
+		if (replaceState) {
+			window.history.replaceState({}, '', path);
+		} else {
+			window.history.pushState({}, '', path);
+		}
+
+		const tmp = document.createElement('div');
+		tmp.innerHTML = newMain.innerHTML;
+		patchNode(main, tmp);
+
+		main.classList.remove('cl-leaving');
+		main.classList.add('cl-entering');
+		setTimeout(() => { main.classList.remove('cl-entering'); }, 150);
+
+		window.scrollTo(0, 0);
+
+		initStreamElements(main);
+		initPreviewIframes(main);
+		initNavigation();
+		initErrorBoundaries(main);
+	}
+
+	function initNavigation() {
+		if (window.__cleanNavInitialized) return;
+		window.__cleanNavInitialized = true;
+
+		document.addEventListener('click', (e) => {
+			let el = e.target;
+			while (el && el.tagName !== 'A') {
+				el = el.parentElement;
+			}
+			if (!el) return;
+			if (el.tagName !== 'A') return;
+			if (el.target) return;
+			if (el.hasAttribute('download')) return;
+			if (el.hasAttribute('cl-external')) return;
+
+			const href = el.getAttribute('href');
+			if (!href) return;
+			if (href.startsWith('#')) return;
+			if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
+
+			let url;
+			try {
+				url = new URL(href, window.location.href);
+			} catch (_) {
+				return;
+			}
+
+			if (url.origin !== window.location.origin) return;
+
+			e.preventDefault();
+			navigate(url.pathname + url.search + url.hash, false);
+		});
+
+		window.addEventListener('popstate', () => {
+			navigate(window.location.pathname + window.location.search, true);
+		});
+	}
+
+	// --- §16: Error Boundary ---
+
+	function initErrorBoundaries(root) {
+		const scope = root || document;
+		scope.querySelectorAll('[data-fallback]').forEach(el => {
+			el.addEventListener('cl-error', (e) => {
+				renderBoundaryFallback(el, e.detail && e.detail.message ? e.detail.message : String(e.detail || ''));
+			});
+		});
+	}
+
+	function renderBoundaryFallback(el, errorMessage) {
+		const componentName = el.getAttribute('data-component') || 'unknown';
+		const fallback = el.getAttribute('data-fallback') || '';
+		console.error('[Clean Error Boundary] ' + componentName + ': ' + errorMessage);
+		el.innerHTML = fallback;
+		el.classList.add('cl-error');
+	}
+
+	function findBoundary(el) {
+		let cursor = el;
+		while (cursor) {
+			if (cursor.hasAttribute && cursor.hasAttribute('data-fallback')) return cursor;
+			cursor = cursor.parentElement;
+		}
+		return null;
+	}
+
+	// --- §FEXT-4: cl-stream initialization (extracted for reuse by navigation) ---
+
+	function initStreamElements(root) {
+		const scope = root || document;
+		scope.querySelectorAll('[data-cl-stream]').forEach(el => {
+			if (el.__cleanEventSource) return;
+			const url = el.getAttribute('data-cl-stream');
+			if (!url) return;
+			const es = new EventSource(url);
+			es.onmessage = (ev) => { el.innerHTML = ev.data; };
+			es.addEventListener('message', (ev) => { el.innerHTML = ev.data; });
+			es.onerror = () => {};
+			el.__cleanEventSource = es;
+			const origAddListener = es.addEventListener.bind(es);
+			es.addEventListener = (type, handler, opts) => {
+				if (type !== 'message' && type !== 'error' && type !== 'open') {
+					origAddListener(type, (ev) => {
+						el.dispatchEvent(new CustomEvent(type, { detail: ev.data, bubbles: true }));
+					}, opts);
+				} else {
+					origAddListener(type, handler, opts);
+				}
+			};
+		});
+	}
+
+	// --- §FEXT-3: cl-preview initialization (extracted for reuse by navigation) ---
+
+	function initPreviewIframes(root) {
+		const scope = root || document;
+		scope.querySelectorAll('iframe[data-cl-preview]').forEach(iframe => {
+			if (iframe.__cleanPreviewInjected) return;
+			iframe.__cleanPreviewInjected = true;
+			const inject = () => {
+				try {
+					if (iframe.contentDocument) {
+						const script = iframe.contentDocument.createElement('script');
+						script.textContent = IFRAME_PREVIEW_SCRIPT;
+						(iframe.contentDocument.head || iframe.contentDocument.documentElement).appendChild(script);
+					}
+				} catch (_) {}
+			};
+			if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+				inject();
+			} else {
+				iframe.addEventListener('load', inject);
+			}
+		});
+	}
 
 	function dismissToast(id) {
 		if (!window.__cleanToasts) return;
@@ -1449,57 +1648,37 @@
 
 		checkMemoryGrowth();
 
-		// Call _start — registers event handlers via _ui_on_event
-		if (instance.exports._start) {
-			instance.exports._start();
-		} else if (instance.exports.start) {
-			instance.exports.start();
+		// Call _start — registers event handlers via _ui_on_event.
+		// Wrapped in try/catch so an error during startup triggers the error boundary
+		// for any component boundary element that is already in the DOM.
+		try {
+			if (instance.exports._start) {
+				instance.exports._start();
+			} else if (instance.exports.start) {
+				instance.exports.start();
+			}
+		} catch (startErr) {
+			const boundary = findBoundary(document.body);
+			if (boundary) {
+				renderBoundaryFallback(boundary, startErr.message || String(startErr));
+			} else {
+				console.error('[Clean Error Boundary] start: ' + (startErr.message || String(startErr)));
+			}
 		}
 
 		checkMemoryGrowth();
 
 		// §FEXT-4: cl-stream — open EventSource connections for elements with data-cl-stream.
-		// The Clean plugin converts cl-stream="/url" to data-cl-stream="/url" during SSR.
-		document.querySelectorAll('[data-cl-stream]').forEach(el => {
-			const url = el.getAttribute('data-cl-stream');
-			if (!url) return;
-			const es = new EventSource(url);
-			es.onmessage = (e) => { el.innerHTML = e.data; };
-			es.addEventListener('message', (e) => { el.innerHTML = e.data; });
-			// Named events fire as CustomEvents on the element
-			es.onerror = () => {};
-			el.__cleanEventSource = es;
-			// Mirror named SSE events as CustomEvents
-			const origAddListener = es.addEventListener.bind(es);
-			es.addEventListener = (type, handler, opts) => {
-				if (type !== 'message' && type !== 'error' && type !== 'open') {
-					origAddListener(type, (e) => {
-						el.dispatchEvent(new CustomEvent(type, { detail: e.data, bubbles: true }));
-					}, opts);
-				} else {
-					origAddListener(type, handler, opts);
-				}
-			};
-		});
+		initStreamElements(document);
 
 		// §FEXT-3: cl-preview — inject selection runtime script into preview iframes.
-		// The plugin marks preview iframes with data-cl-preview="true" during SSR.
-		document.querySelectorAll('iframe[data-cl-preview]').forEach(iframe => {
-			const inject = () => {
-				try {
-					if (iframe.contentDocument) {
-						const script = iframe.contentDocument.createElement('script');
-						script.textContent = IFRAME_PREVIEW_SCRIPT;
-						(iframe.contentDocument.head || iframe.contentDocument.documentElement).appendChild(script);
-					}
-				} catch (_) {}
-			};
-			if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
-				inject();
-			} else {
-				iframe.addEventListener('load', inject);
-			}
-		});
+		initPreviewIframes(document);
+
+		// §14: Client-side navigation — intercept same-origin link clicks.
+		initNavigation();
+
+		// §16: Error boundaries — attach cl-error listeners to data-fallback elements.
+		initErrorBoundaries(document);
 
 	} catch (err) {
 		console.error('Frame UI Loader Error:', err);

@@ -1,0 +1,103 @@
+// frame.i18n plugin - Internationalization DSL
+// Provides: locale block for BCP 47 locale configuration, t() and tc() translation functions,
+//           i18n.formatNumber, i18n.formatCurrency, i18n.formatDate helpers
+// Version: 1.0.0
+// Implements: Frame i18n Specification §16
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
+
+functions:
+	string expand(string block_name, string attributes, string body)
+		if block_name == "locale"
+			return expand_locale(body)
+		return body
+
+	string get_keywords()
+		return "[\"locale\", \"t\", \"tc\", \"i18n.locale\", \"i18n.setLocale\", \"i18n.formatNumber\", \"i18n.formatCurrency\", \"i18n.formatDate\"]"
+
+// ============================================================================
+// LOCALE BLOCK EXPANSION
+// ============================================================================
+
+functions:
+	// Expand locale: block into a start: fragment that loads translation files
+	// and sets the active locale at server/browser startup.
+	//
+	// Supported fields:
+	//   default   = "en"        — active locale BCP 47 tag (default: "en")
+	//   fallback  = "en"        — fallback locale when key is missing (default: "en")
+	//   detection = "header"    — detection strategy: header|cookie|query|manual
+	//   path      = "app/i18n"  — filesystem path to translation JSON files
+	//
+	// Generates:
+	//   start:
+	//       _i18n_load("en", "app/i18n/en.json")
+	//       _i18n_set_locale("en")
+	string expand_locale(string body)
+		string default_locale = "en"
+		string fallback_locale = "en"
+		string i18n_path = "app/i18n"
+
+		string lines = body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end)
+			string trimmed = line.trim()
+
+			if trimmed.startsWith("default")
+				string val = extract_field_value(trimmed, "default")
+				if val.length() > 0
+					default_locale = val
+
+			if trimmed.startsWith("fallback")
+				string val = extract_field_value(trimmed, "fallback")
+				if val.length() > 0
+					fallback_locale = val
+
+			if trimmed.startsWith("path")
+				string val = extract_field_value(trimmed, "path")
+				if val.length() > 0
+					i18n_path = val
+
+			line_start = line_end + 1
+
+		string result = "start:\n"
+		result = result + "\t_i18n_load(\"" + default_locale + "\", \"" + i18n_path + "/" + default_locale + ".json\")\n"
+
+		// Load fallback locale separately when it differs from the default
+		if fallback_locale != default_locale
+			result = result + "\t_i18n_load(\"" + fallback_locale + "\", \"" + i18n_path + "/" + fallback_locale + ".json\")\n"
+
+		result = result + "\t_i18n_set_locale(\"" + default_locale + "\")"
+
+		return result
+
+	// Extract the value from a field line of the form:
+	//   key = "value"   → value (without quotes)
+	//   key = value     → value (bare)
+	// Returns empty string when the field name or separator is missing.
+	string extract_field_value(string trimmed, string field_name)
+		integer eq_pos = trimmed.indexOf("=")
+		if eq_pos == -1
+			return ""
+
+		// Verify the text before "=" starts with the expected field name
+		string key_part = trimmed.substring(0, eq_pos).trim()
+		if key_part != field_name
+			return ""
+
+		string raw = trimmed.substring(eq_pos + 1, trimmed.length()).trim()
+
+		// Strip surrounding double-quotes if present
+		if raw.startsWith("\"") and raw.length() > 1
+			if raw.endsWith("\"")
+				return raw.substring(1, raw.length() - 1)
+
+		return raw

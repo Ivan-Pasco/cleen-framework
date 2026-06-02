@@ -29,7 +29,7 @@ functions:
 		return ""
 
 	string get_keywords()
-		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\"]"
+		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"httpHeader\", \"render\", \"renderWith\", \"error\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\", \"WEBSOCKET\", \"ws.send\", \"ws.broadcast\", \"ws.close\", \"ws.clientId\", \"ws.message\", \"ws.roomJoin\", \"ws.roomLeave\", \"ws.roomBroadcast\", \"ws.onMessage\", \"ws.onClose\"]"
 
 // ============================================================================
 // RESPONSE HELPERS — emitted for every file that loads frame.server
@@ -251,6 +251,8 @@ functions:
 			integer patch_pos = find_method_pos(remaining, "PATCH")
 			// §FEXT-4: STREAM routes are SSE endpoints (GET at HTTP level, keeps connection open)
 			integer stream_pos = find_method_pos(remaining, "STREAM")
+			// §15: WEBSOCKET routes upgrade the connection to WebSocket protocol
+			integer websocket_pos = find_method_pos(remaining, "WEBSOCKET")
 
 			integer method_pos = -1
 			string method = ""
@@ -273,6 +275,9 @@ functions:
 			if stream_pos >= 0 and (method_pos == -1 or stream_pos < method_pos)
 				method_pos = stream_pos
 				method = "STREAM"
+			if websocket_pos >= 0 and (method_pos == -1 or websocket_pos < method_pos)
+				method_pos = websocket_pos
+				method = "WEBSOCKET"
 
 			if method_pos == -1
 				keep_going = false
@@ -323,38 +328,69 @@ functions:
 
 				// Extract handler body (after route ':' newline, up to next route)
 				string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
-				string handler_code = extract_handler_body(endpoint_body)
 
-				// Emit handler function
-				result = result + "\tstring __route_handler_" + handler_idx.toString() + "()\n"
+				// §15: WEBSOCKET routes split their body into three handler functions
+				if method == "WEBSOCKET"
+					string ws_connect = extract_ws_connect_body(endpoint_body)
+					string ws_message = extract_ws_message_body(endpoint_body)
+					string ws_close = extract_ws_close_body(endpoint_body)
+					string connect_name = "__ws_connect_" + handler_idx.toString()
+					string message_name = "__ws_message_" + handler_idx.toString()
+					string close_name = "__ws_close_" + handler_idx.toString()
 
-				// Guard: check roles, short-circuit with 401 if none match
-				if guard_roles.length() > 0
-					result = result + generate_guard_code(guard_roles)
+					result = result + "\tvoid " + connect_name + "()\n"
+					if guard_roles.length() > 0
+						result = result + generate_guard_void_code(guard_roles)
+					if ws_connect.length() > 0
+						result = result + ws_connect
+					result = result + "\n"
 
-				// Cache: emit Cache-Control header
-				if cache_arg.length() > 0
-					result = result + generate_cache_code(cache_arg)
+					result = result + "\tvoid " + message_name + "()\n"
+					if ws_message.length() > 0
+						result = result + ws_message
+					result = result + "\n"
 
-				// Middleware: call each in order, short-circuit on non-empty result
-				if mw_list.length() > 0
-					result = result + generate_middleware_code(mw_list)
+					result = result + "\tvoid " + close_name + "()\n"
+					if ws_close.length() > 0
+						result = result + ws_close
+					result = result + "\n"
 
-				// Handler body
-				if handler_code.length() > 0
-					result = result + handler_code
+					route_calls = route_calls + "\t_http_ws_route(\"GET\", \"" + path + "\", \"" + connect_name + "\", \"" + message_name + "\", \"" + close_name + "\")\n"
+					handler_idx = handler_idx + 1
+					remaining = from_method.substring(abs_colon + 1, from_method.length())
 				else
-					result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
-				result = result + "\n"
+					string handler_code = extract_handler_body(endpoint_body)
 
-				// §FEXT-4: STREAM routes use _http_sse_route which sets text/event-stream headers
-				// and keeps the connection open. Regular routes use _http_route.
-				if method == "STREAM"
-					route_calls = route_calls + "\t_http_sse_route(\"GET\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
-				else
-					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
-				handler_idx = handler_idx + 1
-				remaining = from_method.substring(abs_colon + 1, from_method.length())
+					// Emit handler function
+					result = result + "\tstring __route_handler_" + handler_idx.toString() + "()\n"
+
+					// Guard: check roles, short-circuit with 401 if none match
+					if guard_roles.length() > 0
+						result = result + generate_guard_code(guard_roles)
+
+					// Cache: emit Cache-Control header
+					if cache_arg.length() > 0
+						result = result + generate_cache_code(cache_arg)
+
+					// Middleware: call each in order, short-circuit on non-empty result
+					if mw_list.length() > 0
+						result = result + generate_middleware_code(mw_list)
+
+					// Handler body
+					if handler_code.length() > 0
+						result = result + handler_code
+					else
+						result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
+					result = result + "\n"
+
+					// §FEXT-4: STREAM routes use _http_sse_route which sets text/event-stream headers
+					// and keeps the connection open. Regular routes use _http_route.
+					if method == "STREAM"
+						route_calls = route_calls + "\t_http_sse_route(\"GET\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
+					else
+						route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
+					handler_idx = handler_idx + 1
+					remaining = from_method.substring(abs_colon + 1, from_method.length())
 
 		result = result + "start:\n"
 		result = result + route_calls
@@ -494,6 +530,8 @@ functions:
 		integer next_put = find_method_pos(endpoint_body, "PUT")
 		integer next_delete = find_method_pos(endpoint_body, "DELETE")
 		integer next_patch = find_method_pos(endpoint_body, "PATCH")
+		integer next_stream = find_method_pos(endpoint_body, "STREAM")
+		integer next_ws = find_method_pos(endpoint_body, "WEBSOCKET")
 
 		if next_get >= 0 and next_get < end_pos
 			end_pos = next_get
@@ -505,6 +543,10 @@ functions:
 			end_pos = next_delete
 		if next_patch >= 0 and next_patch < end_pos
 			end_pos = next_patch
+		if next_stream >= 0 and next_stream < end_pos
+			end_pos = next_stream
+		if next_ws >= 0 and next_ws < end_pos
+			end_pos = next_ws
 
 		string handler_code = endpoint_body.substring(0, end_pos)
 
@@ -558,6 +600,163 @@ functions:
 					d = d + 1
 				result = result + indent + trimmed + "\n"
 
+		return result
+
+// ============================================================================
+// WEBSOCKET HANDLER BODY EXTRACTION
+// ============================================================================
+// §15: Split a WEBSOCKET route body into three sections:
+//   onConnect  — everything before ws.onMessage: label
+//   onMessage  — content of ws.onMessage: block
+//   onClose    — content of ws.onClose: block
+//
+// Each section is re-indented to \t\t base.
+
+functions:
+	// Extract the onConnect section: all lines before the first ws.onMessage: label.
+	string extract_ws_connect_body(string endpoint_body)
+		string raw = extract_ws_raw_section(endpoint_body)
+		integer msg_pos = raw.indexOf("\tws.onMessage:")
+		if msg_pos == -1
+			msg_pos = raw.indexOf("ws.onMessage:")
+		integer section_end = raw.length()
+		if msg_pos >= 0
+			section_end = msg_pos
+		string section = raw.substring(0, section_end)
+		return reindent_ws_section(section)
+
+	// Extract the onMessage section: content inside ws.onMessage: block.
+	string extract_ws_message_body(string endpoint_body)
+		string raw = extract_ws_raw_section(endpoint_body)
+		integer label_pos = raw.indexOf("ws.onMessage:")
+		if label_pos == -1
+			return ""
+		// Skip past the label and its newline
+		integer after_label = label_pos + 13
+		integer nl = raw.indexOf("\n", after_label)
+		if nl == -1
+			return ""
+		string block_start = raw.substring(nl + 1, raw.length())
+		// Find ws.onClose: or end of section
+		integer close_label = block_start.indexOf("ws.onClose:")
+		integer section_end = block_start.length()
+		if close_label >= 0
+			section_end = close_label
+		string section = block_start.substring(0, section_end)
+		return reindent_ws_section(section)
+
+	// Extract the onClose section: content inside ws.onClose: block.
+	string extract_ws_close_body(string endpoint_body)
+		string raw = extract_ws_raw_section(endpoint_body)
+		integer label_pos = raw.indexOf("ws.onClose:")
+		if label_pos == -1
+			return ""
+		// Skip past the label and its newline
+		integer after_label = label_pos + 11
+		integer nl = raw.indexOf("\n", after_label)
+		if nl == -1
+			return ""
+		string section = raw.substring(nl + 1, raw.length())
+		return reindent_ws_section(section)
+
+	// Extract the raw body of a WEBSOCKET route handler — up to the next route boundary.
+	// Uses the same boundary detection as extract_handler_body.
+	string extract_ws_raw_section(string endpoint_body)
+		integer end_pos = endpoint_body.length()
+		integer next_get = find_method_pos(endpoint_body, "GET")
+		integer next_post = find_method_pos(endpoint_body, "POST")
+		integer next_put = find_method_pos(endpoint_body, "PUT")
+		integer next_delete = find_method_pos(endpoint_body, "DELETE")
+		integer next_patch = find_method_pos(endpoint_body, "PATCH")
+		integer next_stream = find_method_pos(endpoint_body, "STREAM")
+		integer next_ws = find_method_pos(endpoint_body, "WEBSOCKET")
+		if next_get >= 0 and next_get < end_pos
+			end_pos = next_get
+		if next_post >= 0 and next_post < end_pos
+			end_pos = next_post
+		if next_put >= 0 and next_put < end_pos
+			end_pos = next_put
+		if next_delete >= 0 and next_delete < end_pos
+			end_pos = next_delete
+		if next_patch >= 0 and next_patch < end_pos
+			end_pos = next_patch
+		if next_stream >= 0 and next_stream < end_pos
+			end_pos = next_stream
+		if next_ws >= 0 and next_ws < end_pos
+			end_pos = next_ws
+		return endpoint_body.substring(0, end_pos)
+
+	// Re-indent a section of handler code to \t\t base (same algorithm as extract_handler_body).
+	string reindent_ws_section(string section)
+		integer min_tabs = 99
+		string scan = section
+		integer scan_safety = 0
+		while scan_safety < 200 and scan.length() > 0
+			scan_safety = scan_safety + 1
+			integer snl = scan.indexOf("\n")
+			string sline = ""
+			if snl == -1
+				sline = scan
+				scan = ""
+			else
+				sline = scan.substring(0, snl)
+				scan = scan.substring(snl + 1, scan.length())
+			if sline.trim().length() > 0
+				integer tabs = 0
+				while tabs < sline.length() and sline.substring(tabs, tabs + 1) == "\t"
+					tabs = tabs + 1
+				if tabs < min_tabs
+					min_tabs = tabs
+		if min_tabs == 99
+			min_tabs = 0
+		string result = ""
+		string rem = section
+		integer safety = 0
+		while safety < 200 and rem.length() > 0
+			safety = safety + 1
+			integer nl = rem.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = rem
+				rem = ""
+			else
+				line = rem.substring(0, nl)
+				rem = rem.substring(nl + 1, rem.length())
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				integer orig_tabs = 0
+				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
+					orig_tabs = orig_tabs + 1
+				integer rel_depth = orig_tabs - min_tabs
+				string indent = "\t\t"
+				integer d = 0
+				while d < rel_depth
+					indent = indent + "\t"
+					d = d + 1
+				result = result + indent + trimmed + "\n"
+		return result
+
+	// Guard for void WS handlers: emit role checks without returning a value.
+	string generate_guard_void_code(string roles)
+		string result = "\t\tboolean __auth_ok = false\n"
+		string remaining = roles
+		integer safety = 0
+		while safety < 20 and remaining.length() > 0
+			safety = safety + 1
+			integer comma = remaining.indexOf(",")
+			string role = ""
+			if comma == -1
+				role = remaining.trim()
+				remaining = ""
+			else
+				role = remaining.substring(0, comma).trim()
+				remaining = remaining.substring(comma + 1, remaining.length())
+			if role.length() > 0
+				result = result + "\t\tif _auth_require_role(\"" + role + "\") == 1\n"
+				result = result + "\t\t\t__auth_ok = true\n"
+		result = result + "\t\tif not __auth_ok\n"
+		result = result + "\t\t\t_ws_close(_ws_client_id())\n"
+		result = result + "\t\t\treturn\n"
 		return result
 
 // ============================================================================

@@ -1,0 +1,92 @@
+[plugin]
+name = "frame.jobs"
+version = "1.0.0"
+description = "Background job queue with retry, scheduling, and monitoring"
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.15.0"
+
+[handles]
+blocks = ["jobs"]
+expressions = ["queue.enqueue", "queue.schedule"]
+
+[exports]
+expand = "expand"
+get_keywords = "get_keywords"
+
+[bridge]
+functions = [
+  { name = "_job_enqueue", params = ["string", "string"], returns = "string", expand_strings = true },
+  { name = "_job_enqueue_at", params = ["string", "string", "number"], returns = "string", expand_strings = true },
+  { name = "_job_cancel", params = ["string"], returns = "boolean", expand_strings = true },
+  { name = "_job_status", params = ["string"], returns = "string", expand_strings = true },
+  { name = "_job_result", params = ["string"], returns = "string", expand_strings = true },
+  { name = "_job_current_id", params = [], returns = "string" },
+  { name = "_job_current_args", params = [], returns = "string" },
+  { name = "_job_current_attempt", params = [], returns = "integer" },
+  { name = "_job_retry_after", params = ["integer"], returns = "void" },
+  { name = "_job_fail", params = ["string"], returns = "void", expand_strings = true },
+  { name = "_job_succeed", params = ["string"], returns = "void", expand_strings = true },
+  { name = "_schedule_cron", params = ["string", "string", "string"], returns = "string", expand_strings = true },
+  { name = "_schedule_cancel", params = ["string"], returns = "boolean", expand_strings = true },
+  { name = "_job_register", params = ["string", "string", "integer", "string", "integer", "integer", "string"], returns = "void", expand_strings = true },
+]
+
+[language]
+blocks = ["jobs"]
+keywords = [
+  { name = "jobs", description = "Job handler block", context = "top-level" },
+  { name = "schedule", description = "Cron-style recurring job", context = "jobs" },
+  { name = "retry", description = "Retry configuration", context = "jobs" },
+  { name = "maxAttempts", description = "Maximum retry attempts", context = "retry" },
+  { name = "backoff", description = "Retry backoff strategy: fixed|exponential", context = "retry" },
+  { name = "delay", description = "Initial retry delay in seconds", context = "retry" },
+  { name = "timeout", description = "Job timeout in seconds", context = "jobs" },
+  { name = "queue", description = "Queue name for job routing", context = "jobs" },
+]
+types = [
+  { name = "Job", description = "Job instance with id, status, args, attempt" },
+  { name = "JobStatus", description = "pending|running|succeeded|failed|cancelled" },
+]
+functions = [
+  { name = "queue.enqueue", signature = "queue.enqueue(jobName, argsJson) -> string", description = "Enqueue a job immediately. Returns job ID." },
+  { name = "queue.enqueueAt", signature = "queue.enqueueAt(jobName, argsJson, timestamp) -> string", description = "Schedule a job for a future time. Returns job ID." },
+  { name = "queue.cancel", signature = "queue.cancel(jobId) -> boolean", description = "Cancel a pending job." },
+  { name = "queue.status", signature = "queue.status(jobId) -> string", description = "Get job status JSON." },
+  { name = "queue.result", signature = "queue.result(jobId) -> string", description = "Get job result payload." },
+  { name = "job.id", signature = "job.id() -> string", description = "Current job ID (inside handler)." },
+  { name = "job.args", signature = "job.args() -> string", description = "Current job args JSON (inside handler)." },
+  { name = "job.attempt", signature = "job.attempt() -> integer", description = "Current attempt number, 1-based (inside handler)." },
+  { name = "job.retryAfter", signature = "job.retryAfter(seconds)", description = "Request retry after N seconds." },
+  { name = "job.fail", signature = "job.fail(reason)", description = "Mark job failed with reason." },
+  { name = "job.succeed", signature = "job.succeed(resultJson)", description = "Mark job succeeded with result." },
+]
+completions = [
+  { trigger = "jobs:", insert = "jobs:\n\t${1:JobName}:\n\t\tretry:\n\t\t\tmaxAttempts: ${2:3}\n\t\t\tbackoff: exponential\n\t\t\tdelay: ${3:5}\n\t\t${4:// handler body}" },
+  { trigger = "queue.", insert = "queue.enqueue(\"${1:JobName}\", json.encode(${2:args}))" },
+]
+
+[paths]
+owns = ["app/jobs"]
+auto_create = true
+patterns = ["*.cln"]
+implicit_import = true
+
+[aliases]
+functions = [
+  { clean_name = "queue.enqueue", bridge_name = "_job_enqueue" },
+  { clean_name = "queue.enqueueAt", bridge_name = "_job_enqueue_at" },
+  { clean_name = "queue.cancel", bridge_name = "_job_cancel" },
+  { clean_name = "queue.status", bridge_name = "_job_status" },
+  { clean_name = "queue.result", bridge_name = "_job_result" },
+  { clean_name = "job.id", bridge_name = "_job_current_id" },
+  { clean_name = "job.args", bridge_name = "_job_current_args" },
+  { clean_name = "job.attempt", bridge_name = "_job_current_attempt" },
+  { clean_name = "job.retryAfter", bridge_name = "_job_retry_after" },
+  { clean_name = "job.fail", bridge_name = "_job_fail" },
+  { clean_name = "job.succeed", bridge_name = "_job_succeed" },
+  { clean_name = "schedule.cron", bridge_name = "_schedule_cron" },
+  { clean_name = "schedule.cancel", bridge_name = "_schedule_cancel" },
+]

@@ -1,0 +1,306 @@
+// frame.jobs plugin - Background Job Queue DSL
+// Provides: jobs block with named handlers, retry config, scheduling, and monitoring
+// Version: 1.0.0
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
+
+functions:
+	string expand(string block_name, string attributes, string body)
+		if block_name == "jobs"
+			return expand_jobs(body)
+		return body
+
+	string get_keywords()
+		return "[\"jobs\", \"schedule\", \"retry\", \"maxAttempts\", \"backoff\", \"delay\", \"timeout\", \"queue\", \"job.id\", \"job.args\", \"job.attempt\", \"job.retryAfter\", \"job.fail\", \"job.succeed\", \"queue.enqueue\", \"queue.enqueueAt\", \"queue.cancel\", \"queue.status\", \"queue.result\", \"schedule.cron\", \"schedule.cancel\"]"
+
+// ============================================================================
+// JOBS BLOCK EXPANSION
+// ============================================================================
+//
+// Parses a jobs: block containing named job handlers and schedule entries.
+//
+// Supported handler sub-blocks:
+//   retry:
+//     maxAttempts: 3
+//     backoff: exponential
+//     delay: 5
+//   timeout: 30
+//   queue: "email"
+//
+// Supported top-level entry:
+//   schedule JobName "cron expression":
+//     ... handler body ...
+//
+// Each named handler becomes a generated function __job_handler_<Name>.
+// Regular jobs emit _job_register(...) in start:.
+// Schedule entries emit _schedule_cron(...) in start:.
+
+functions:
+	string expand_jobs(string body)
+		string fn_block = "functions:\n"
+		string start_block = "start:\n"
+		integer handler_count = 0
+
+		string remaining = body
+		integer safety = 0
+
+		while safety < 200 and remaining.length() > 0
+			safety = safety + 1
+
+			// Skip blank lines
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+
+			string trimmed = line.trim()
+			if trimmed.length() == 0
+				continue
+
+			// Detect "schedule JobName "cron" :" entry
+			if trimmed.startsWith("schedule ")
+				string after_schedule = trimmed.substring(9, trimmed.length()).trim()
+				string sched_name = ""
+				string cron_expr = ""
+
+				// Extract job name (first non-quoted token)
+				integer space_in_after = after_schedule.indexOf(" ")
+				if space_in_after == -1
+					continue
+				sched_name = after_schedule.substring(0, space_in_after).trim()
+				string rest_sched = after_schedule.substring(space_in_after + 1, after_schedule.length()).trim()
+
+				// Extract cron expression (quoted string)
+				if rest_sched.startsWith("\"")
+					integer cron_close = rest_sched.indexOf("\"", 1)
+					if cron_close == -1
+						continue
+					cron_expr = rest_sched.substring(1, cron_close)
+				else
+					continue
+
+				// Collect handler body — all indented lines following this entry
+				string handler_body = collect_handler_body(remaining)
+				// Advance remaining past the consumed body
+				remaining = skip_handler_body(remaining)
+
+				string func_name = "__job_handler_" + sched_name
+				fn_block = fn_block + "\tvoid " + func_name + "()\n"
+				string body_code = reindent_job_body(handler_body)
+				if body_code.length() > 0
+					fn_block = fn_block + body_code
+				fn_block = fn_block + "\n"
+
+				start_block = start_block + "\t_schedule_cron(\"" + sched_name + "\", \"" + cron_expr + "\", \"" + func_name + "\")\n"
+				handler_count = handler_count + 1
+				continue
+
+			// Detect named job handler: identifier followed by optional ":" on same line
+			// A named job starts with an unindented non-keyword identifier
+			boolean is_job_name = is_valid_identifier(trimmed.replace(":", "").trim())
+			if is_job_name and not trimmed.startsWith("retry") and not trimmed.startsWith("maxAttempts") and not trimmed.startsWith("backoff") and not trimmed.startsWith("delay") and not trimmed.startsWith("timeout") and not trimmed.startsWith("queue")
+				string job_name = trimmed
+				if job_name.endsWith(":")
+					job_name = job_name.substring(0, job_name.length() - 1).trim()
+
+				// Parse sub-block: collect everything indented under this job name
+				string job_section = collect_handler_body(remaining)
+				remaining = skip_handler_body(remaining)
+
+				// Extract retry/timeout/queue config and handler body from job_section
+				integer max_attempts = 3
+				string backoff = "fixed"
+				integer delay_secs = 5
+				integer timeout_secs = 0
+				string queue_name = "default"
+				string handler_lines = ""
+
+				string section_rem = job_section
+				boolean in_retry = false
+				integer sec_safety = 0
+
+				while sec_safety < 300 and section_rem.length() > 0
+					sec_safety = sec_safety + 1
+					integer sec_nl = section_rem.indexOf("\n")
+					string sec_line = ""
+					if sec_nl == -1
+						sec_line = section_rem
+						section_rem = ""
+					else
+						sec_line = section_rem.substring(0, sec_nl)
+						section_rem = section_rem.substring(sec_nl + 1, section_rem.length())
+
+					string sec_trimmed = sec_line.trim()
+					if sec_trimmed.length() == 0
+						continue
+
+					// Detect retry: sub-block start
+					if sec_trimmed == "retry:"
+						in_retry = true
+						continue
+
+					// Inside retry: block — indented lines are retry fields
+					if in_retry
+						if sec_line.startsWith("\t\t") or sec_line.startsWith("    ")
+							if sec_trimmed.startsWith("maxAttempts:")
+								string val = sec_trimmed.substring(12, sec_trimmed.length()).trim()
+								max_attempts = val.toInteger()
+							if sec_trimmed.startsWith("backoff:")
+								backoff = sec_trimmed.substring(8, sec_trimmed.length()).trim()
+							if sec_trimmed.startsWith("delay:")
+								string val = sec_trimmed.substring(6, sec_trimmed.length()).trim()
+								delay_secs = val.toInteger()
+							continue
+						else
+							// End of retry block — fall through to check other keywords
+							in_retry = false
+
+					// Top-level job config fields
+					if sec_trimmed.startsWith("timeout:")
+						string val = sec_trimmed.substring(8, sec_trimmed.length()).trim()
+						timeout_secs = val.toInteger()
+						continue
+
+					if sec_trimmed.startsWith("queue:")
+						string val = sec_trimmed.substring(6, sec_trimmed.length()).trim()
+						if val.startsWith("\"") and val.endsWith("\"")
+							queue_name = val.substring(1, val.length() - 1)
+						else
+							queue_name = val
+						continue
+
+					// Everything else is handler body code
+					handler_lines = handler_lines + sec_line + "\n"
+
+				string func_name = "__job_handler_" + job_name
+				fn_block = fn_block + "\tvoid " + func_name + "()\n"
+				string body_code = reindent_job_body(handler_lines)
+				if body_code.length() > 0
+					fn_block = fn_block + body_code
+				fn_block = fn_block + "\n"
+
+				start_block = start_block + "\t_job_register(\"" + job_name + "\", \"" + func_name + "\", " + max_attempts.toString() + ", \"" + backoff + "\", " + delay_secs.toString() + ", " + timeout_secs.toString() + ", \"" + queue_name + "\")\n"
+				handler_count = handler_count + 1
+
+		if handler_count == 0
+			return ""
+
+		string result = fn_block
+		result = result + start_block
+		return result
+
+	// Collect all lines that are more indented than the base level (the handler body).
+	// Returns raw lines without consuming them from the source — call skip_handler_body after.
+	string collect_handler_body(string text)
+		string result = ""
+		string rem = text
+		integer safety = 0
+		while safety < 300 and rem.length() > 0
+			safety = safety + 1
+			integer nl = rem.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = rem
+				rem = ""
+			else
+				line = rem.substring(0, nl)
+				rem = rem.substring(nl + 1, rem.length())
+			// A line that starts with a tab or spaces is part of the body
+			if line.startsWith("\t") or line.startsWith("    ") or line.trim().length() == 0
+				result = result + line + "\n"
+			else
+				// Non-indented, non-empty line = next job or end of block
+				return result
+		return result
+
+	// Advance past the handler body lines in text (mirror of collect_handler_body).
+	string skip_handler_body(string text)
+		string rem = text
+		integer safety = 0
+		while safety < 300 and rem.length() > 0
+			safety = safety + 1
+			integer nl = rem.indexOf("\n")
+			string line = ""
+			if nl == -1
+				// Last line — consume it, return empty
+				return ""
+			else
+				line = rem.substring(0, nl)
+				if line.startsWith("\t") or line.startsWith("    ") or line.trim().length() == 0
+					rem = rem.substring(nl + 1, rem.length())
+				else
+					return rem
+		return rem
+
+	// Re-indent handler body lines to \t\t base.
+	string reindent_job_body(string section)
+		integer min_tabs = 99
+		string scan = section
+		integer scan_safety = 0
+		while scan_safety < 300 and scan.length() > 0
+			scan_safety = scan_safety + 1
+			integer snl = scan.indexOf("\n")
+			string sline = ""
+			if snl == -1
+				sline = scan
+				scan = ""
+			else
+				sline = scan.substring(0, snl)
+				scan = scan.substring(snl + 1, scan.length())
+			if sline.trim().length() > 0
+				integer tabs = 0
+				while tabs < sline.length() and sline.substring(tabs, tabs + 1) == "\t"
+					tabs = tabs + 1
+				if tabs < min_tabs
+					min_tabs = tabs
+		if min_tabs == 99
+			min_tabs = 0
+		string result = ""
+		string rem = section
+		integer safety = 0
+		while safety < 300 and rem.length() > 0
+			safety = safety + 1
+			integer nl = rem.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = rem
+				rem = ""
+			else
+				line = rem.substring(0, nl)
+				rem = rem.substring(nl + 1, rem.length())
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				integer orig_tabs = 0
+				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
+					orig_tabs = orig_tabs + 1
+				integer rel_depth = orig_tabs - min_tabs
+				string indent = "\t\t"
+				integer d = 0
+				while d < rel_depth
+					indent = indent + "\t"
+					d = d + 1
+				result = result + indent + trimmed + "\n"
+		return result
+
+	// Returns true if the string looks like a valid Clean Language identifier.
+	boolean is_valid_identifier(string s)
+		if s.length() == 0
+			return false
+		string first = s.substring(0, 1)
+		boolean first_ok = (first >= "a" and first <= "z") or (first >= "A" and first <= "Z") or first == "_"
+		if not first_ok
+			return false
+		integer i = 1
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			boolean ch_ok = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "_"
+			if not ch_ok
+				return false
+			i = i + 1
+		return true

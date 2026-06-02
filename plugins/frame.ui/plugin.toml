@@ -43,7 +43,7 @@ blocks = ["component", "screen", "page", "html", "styles", "ui"]
 extensions = [".html"]
 
 # Directives recognized in HTML
-directives = ["cl-if", "cl-else", "cl-iterate", "cl-bind", "cl-client", "cl-slot", "cl-show", "cl-validate", "cl-preview", "cl-stream"]
+directives = ["cl-if", "cl-else", "cl-iterate", "cl-bind", "cl-client", "cl-slot", "cl-show", "cl-validate", "cl-preview", "cl-stream", "cl-transition", "cl-boundary"]
 
 # Event attributes recognized (with modifiers like .prevent, .stop)
 # Extended in §FEXT-1: added drag, pointer, wheel, scroll, and additional mouse events
@@ -62,7 +62,9 @@ events = [
   # Wheel / Scroll (§FEXT-1)
   "onwheel", "onscroll",
   # Context menu
-  "oncontextmenu"
+  "oncontextmenu",
+  # Error boundary
+  "onerror"
 ]
 
 # Event modifiers
@@ -207,6 +209,14 @@ functions = [
   { name = "_ui_toast", params = ["string", "string", "integer", "string"], returns = "integer", description = "Show toast notification: text, variant (success|error|warning|info), duration ms (0=permanent), position; returns toast ID", expand_strings = true },
   { name = "_ui_toast_dismiss", params = ["integer"], returns = "void", description = "Dismiss toast by ID with exit animation" },
   { name = "_ui_toast_dismiss_all", params = [], returns = "void", description = "Dismiss all visible toasts" },
+
+  # --- §14: Client-Side Navigation and History API ---
+  { name = "_ui_navigate", params = ["string"], returns = "void", description = "Navigate to path using soft routing (no full reload)", expand_strings = true },
+  { name = "_ui_history_push", params = ["string", "string"], returns = "void", description = "Push a new entry onto the history stack: path, title", expand_strings = true },
+  { name = "_ui_history_replace", params = ["string", "string"], returns = "void", description = "Replace the current history entry: path, title", expand_strings = true },
+  { name = "_ui_history_back", params = [], returns = "void", description = "Navigate back in history (window.history.back)" },
+  { name = "_ui_history_forward", params = [], returns = "void", description = "Navigate forward in history (window.history.forward)" },
+  { name = "_ui_current_path", params = [], returns = "string", description = "Return the current URL pathname + search string" },
 ]
 
 [language]
@@ -366,6 +376,14 @@ functions = [
   { name = "toast.error", signature = "toast.error(text, variant, durationMs, position) -> integer", description = "Show error toast (pass variant='error')", maps_to = "_ui_toast" },
   { name = "toast.warning", signature = "toast.warning(text, variant, durationMs, position) -> integer", description = "Show warning toast (pass variant='warning')", maps_to = "_ui_toast" },
   { name = "toast.info", signature = "toast.info(text, variant, durationMs, position) -> integer", description = "Show info toast (pass variant='info')", maps_to = "_ui_toast" },
+
+  # --- §14: Client-Side Navigation ---
+  { name = "ui.navigate", signature = "ui.navigate(path)", description = "Soft-navigate to path without a full page reload", maps_to = "_ui_navigate" },
+  { name = "ui.historyPush", signature = "ui.historyPush(path, title)", description = "Push a new entry onto the browser history stack", maps_to = "_ui_history_push" },
+  { name = "ui.historyReplace", signature = "ui.historyReplace(path, title)", description = "Replace the current browser history entry", maps_to = "_ui_history_replace" },
+  { name = "ui.historyBack", signature = "ui.historyBack()", description = "Navigate back in browser history", maps_to = "_ui_history_back" },
+  { name = "ui.historyForward", signature = "ui.historyForward()", description = "Navigate forward in browser history", maps_to = "_ui_history_forward" },
+  { name = "ui.currentPath", signature = "ui.currentPath() -> string", description = "Get the current URL pathname and query string", maps_to = "_ui_current_path" },
 ]
 
 # Auto-completion suggestions

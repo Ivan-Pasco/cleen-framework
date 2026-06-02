@@ -1734,4 +1734,133 @@ events:
 
 ---
 
+## 29. Client-Side Navigation
+
+Frame UI provides a client-side router that intercepts link clicks and performs soft navigation — updating the page without a full browser reload.
+
+### 29.1 Link Interception
+
+All `<a>` elements whose `href` starts with `/` are intercepted by the router at runtime. When clicked, the router:
+
+1. Pushes the target path onto the History API stack.
+2. Sends a `GET` request to the target URL with the `X-Clean-Navigate: 1` header.
+3. Replaces the current page's content with the server response.
+
+To opt out of interception on a specific link, add `data-reload`:
+```html
+<a href="/full-reload-page" data-reload>Force full reload</a>
+```
+
+### 29.2 Programmatic Navigation
+
+```clean
+// Navigate to a path (triggers router render)
+ui.navigate("/dashboard")
+
+// Push to history without rendering (for redirect tracking)
+ui.historyPush("/checkout/step-2", "Checkout — Step 2")
+
+// Replace current history entry (no Back button entry)
+ui.historyReplace("/login", "Sign In")
+
+// Browser Back / Forward
+ui.historyBack()
+ui.historyForward()
+
+// Read current path
+string path = ui.currentPath()
+```
+
+### 29.3 View Transition Animations
+
+Elements marked with `cl-transition` participate in the View Transitions API when navigating between pages. The value becomes the element's `view-transition-name` CSS property.
+
+```html
+<!-- Page A -->
+<img src="/hero.jpg" cl-transition="hero-image">
+
+<!-- Page B — same cl-transition value creates a morphing animation -->
+<img src="/hero-detail.jpg" cl-transition="hero-image">
+```
+
+The router wraps each navigation in `document.startViewTransition()`. If the browser does not support the API, navigation proceeds without animation.
+
+### 29.4 Server-Side Handling
+
+Server handlers can detect soft navigation and return a partial response:
+
+```clean
+endpoints:
+    GET "/dashboard" :
+        boolean isNav = req.header("X-Clean-Navigate") == "1"
+        if isNav
+            return json({ partial: true, title: "Dashboard", html: renderWith("dashboard", data) })
+        return render("dashboard")
+```
+
+---
+
+## 30. Error Boundaries
+
+Error boundaries catch runtime errors thrown inside a component subtree and display a fallback UI instead of crashing the entire page.
+
+### 30.1 Declaring a Boundary
+
+Add `cl-boundary` to any element to make it the boundary for its subtree:
+
+```html
+<div cl-boundary>
+    <user-widget></user-widget>
+</div>
+```
+
+When a runtime error is thrown inside `<user-widget>`, the `<div cl-boundary>` catches it. The component's `fallback:` section is rendered inside the boundary element.
+
+### 30.2 Component Fallback Section
+
+Components declare their fallback UI in a `fallback:` section:
+
+```clean
+component UserWidget:
+    state:
+        string userId = ""
+
+    fallback:
+        html:
+            <div class="cl-error">
+                <p>Could not load user information.</p>
+                <button onclick="retry">Try again</button>
+            </div>
+
+    html:
+        <div>
+            <h2>{{ user.name }}</h2>
+        </div>
+```
+
+### 30.3 CSS Class
+
+When a boundary catches an error, the `cl-error` CSS class is added to the boundary element:
+
+```css
+.cl-error {
+    border: 1px solid #f00;
+    padding: 1rem;
+    background: #fff5f5;
+}
+```
+
+This class is removed when the component is successfully re-rendered (e.g. after a `retry` call).
+
+### 30.4 Error Logging
+
+Caught errors are logged to the browser console in the format:
+
+```
+[frame.ui] Error boundary caught in <ComponentName>: <error message>
+  at <stack trace>
+```
+
+---
+
 **End of Document 05**
