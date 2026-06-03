@@ -4237,7 +4237,16 @@ functions:
 					string url = derive_url_path(file_path)
 					string html_path = derive_html_path(file_path)
 					route_fns = route_fns + "\tstring " + module_name + "_render()\n"
-					route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n\n"
+					if has_guard
+						route_fns = route_fns + "\t\tany __g = " + module_name + "_guard(null)\n"
+						route_fns = route_fns + "\t\tif __g != null\n"
+						route_fns = route_fns + "\t\t\treturn __g\n"
+					if has_load
+						route_fns = route_fns + "\t\tany __d = " + module_name + "_load(null)\n"
+						route_fns = route_fns + "\t\tstring __j = json.encode(__d)\n"
+						route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", __j)\n\n"
+					else
+						route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n\n"
 					route_registrations = route_registrations + "\t_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
 
 			fi = fi + 1
