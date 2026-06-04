@@ -21,6 +21,9 @@ process_html = "process_html"
 # Component block expansion (for .cln component definitions)
 expand = "expand_block"
 
+# Block-level validation for component/page/layout (returns error message or "")
+validate = "validate_block"
+
 # HTML validation against component registry
 validate_html = "validate_html"
 
@@ -84,15 +87,15 @@ hydration_modes = ["off", "on", "visible", "idle", "only"]
 [bridge]
 functions = [
   # HTML Rendering
-  { name = "_html_escape", params = ["string"], returns = "string", description = "Escape HTML entities in string", expand_strings = true, signature = "_html_escape(text) -> string" },
-  { name = "_html_raw", params = ["string"], returns = "string", description = "Return raw HTML without escaping", expand_strings = true, signature = "_html_raw(html) -> string" },
+  { name = "_html_escape", params = ["string"], returns = "ptr", description = "Escape HTML entities in string", expand_strings = true, signature = "_html_escape(text) -> string" },
+  { name = "_html_raw", params = ["string"], returns = "ptr", description = "Return raw HTML without escaping", expand_strings = true, signature = "_html_raw(html) -> string" },
 
   # Component Registry
   { name = "_ui_register_component", params = ["string", "string"], returns = "integer", description = "Register component: tag name, class name", expand_strings = true, signature = "_ui_register_component(tagName, className)" },
   { name = "_ui_get_component", params = ["string"], returns = "string", description = "Get component class by tag name", expand_strings = true, signature = "_ui_get_component(tagName) -> string" },
 
   # Layout Loading
-  { name = "_ui_load_layout", params = ["string"], returns = "string", description = "Load layout HTML template by name from app/web/layouts/", expand_strings = true, signature = "_ui_load_layout(name) -> string" },
+  { name = "_ui_load_layout", params = ["string"], returns = "ptr", description = "Load layout HTML template by name from app/web/layouts/", expand_strings = true, signature = "_ui_load_layout(name) -> string" },
 
   # Slot Management
   { name = "_ui_set_slot", params = ["string", "string"], returns = "integer", description = "Set slot content: slot name, content", expand_strings = true, signature = "_ui_set_slot(name, content)" },
@@ -153,8 +156,8 @@ functions = [
   { name = "_ui_set_timeout", params = ["string", "integer"], returns = "integer", description = "Call exported handler function by name after delay ms: handler name, delay_ms", expand_strings = true, signature = "_ui_set_timeout(handlerName, delayMs)" },
 
   # Theming
-  { name = "_ui_inject_head_css", params = ["string"], returns = "integer", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true, signature = "_ui_inject_head_css(css)" },
-  { name = "_ui_inject_head_link", params = ["string"], returns = "integer", description = "Inject <link rel=stylesheet href=...> into page <head>; deduplicated by href", expand_strings = true, signature = "_ui_inject_head_link(href)" },
+  { name = "_ui_inject_head_css", params = ["string"], returns = "i32", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true, signature = "_ui_inject_head_css(css)" },
+  { name = "_ui_inject_head_link", params = ["string"], returns = "i32", description = "Inject <link rel=stylesheet href=...> into page <head>; deduplicated by href", expand_strings = true, signature = "_ui_inject_head_link(href)" },
 
   # Form Helpers
   { name = "_ui_input_value", params = ["string"], returns = "string", description = "Get value of input/textarea/select matching selector", expand_strings = true, signature = "_ui_input_value(selector) -> string" },

@@ -39,13 +39,13 @@ expressions = [
 # Database functions provided by clean-server host bridge
 functions = [
   # Query and Execute - strings passed as (ptr, len) pairs at WASM level
-  { name = "_db_query", params = ["string", "string"], returns = "string", description = "Execute SELECT query, returns JSON result with rows", expand_strings = true },
-  { name = "_db_execute", params = ["string", "string"], returns = "integer", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
+  { name = "_db_query", params = ["string", "string"], returns = "ptr", description = "Execute SELECT query, returns JSON result with rows", expand_strings = true },
+  { name = "_db_execute", params = ["string", "string"], returns = "i32", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
 
   # Transactions
-  { name = "_db_begin", params = [], returns = "string", description = "Begin a database transaction; returns transaction ID string" },
-  { name = "_db_commit", params = ["string"], returns = "integer", description = "Commit a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
-  { name = "_db_rollback", params = ["string"], returns = "integer", description = "Rollback a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
+  { name = "_db_begin", params = [], returns = "i32", description = "Begin a database transaction; returns transaction ID string" },
+  { name = "_db_commit", params = ["string"], returns = "i32", description = "Commit a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
+  { name = "_db_rollback", params = ["string"], returns = "i32", description = "Rollback a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
 
   # Configuration - called once at startup from a data: config block
   # Parameter: JSON object with keys: engine, host, port, database, user, password, pool_max, pool_idle_timeout_ms
@@ -54,7 +54,7 @@ functions = [
   # Migration System
   # Register a named migration for version tracking; the runtime records it in the
   # schema_migrations table with a pending status until it is applied.
-  { name = "_db_register_migration", params = ["string", "string", "string"], returns = "integer", description = "Register a migration (name, up_sql, down_sql) for version tracking; the runtime executes up_sql before first request if not already applied; returns 1 on success, 0 on error", expand_strings = true },
+  { name = "_db_register_migration", params = ["string", "string", "string"], returns = "i32", description = "Register a migration (name, up_sql, down_sql) for version tracking; the runtime executes up_sql before first request if not already applied; returns 1 on success, 0 on error", expand_strings = true },
 
   # Compare the declared field definitions for a table against the live database
   # schema and return the ALTER TABLE SQL needed to reconcile the difference.

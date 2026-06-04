@@ -20,56 +20,56 @@ blocks = ["auth", "protected", "login", "roles"]
 [bridge]
 functions = [
   # Environment - Secrets
-  { name = "_env_get", params = ["string"], returns = "string", description = "Get environment variable (for JWT_SECRET, etc.)", expand_strings = true },
+  { name = "_env_get", params = ["string"], returns = "ptr", description = "Get environment variable (for JWT_SECRET, etc.)", expand_strings = true },
 
   # Time - Token expiry
-  { name = "_time_now", params = [], returns = "integer", description = "Get current Unix timestamp in seconds" },
+  { name = "_time_now", params = [], returns = "i64", description = "Get current Unix timestamp in seconds" },
 
   # Crypto - Random
-  { name = "_crypto_random_hex", params = ["integer"], returns = "string", description = "Generate random hex string of specified byte length" },
-  { name = "_crypto_random_bytes", params = ["integer"], returns = "string", description = "Generate random bytes (base64 encoded)" },
+  { name = "_crypto_random_hex", params = ["i32"], returns = "ptr", description = "Generate random hex string of specified byte length" },
+  { name = "_crypto_random_bytes", params = ["i32"], returns = "ptr", description = "Generate random bytes (base64 encoded)" },
 
   # Crypto - Password Hashing (Argon2/bcrypt)
-  { name = "_crypto_hash_password", params = ["string"], returns = "string", description = "Hash password using Argon2id", expand_strings = true },
-  { name = "_crypto_verify_password", params = ["string", "string"], returns = "integer", description = "Verify password against hash (1=match, 0=no match)", expand_strings = true },
+  { name = "_crypto_hash_password", params = ["string"], returns = "ptr", description = "Hash password using Argon2id", expand_strings = true },
+  { name = "_crypto_verify_password", params = ["string", "string"], returns = "boolean", description = "Verify password against hash (1=match, 0=no match)", expand_strings = true },
 
   # Crypto - General Hashing
-  { name = "_crypto_hash_sha256", params = ["string"], returns = "string", description = "SHA-256 hash", expand_strings = true },
-  { name = "_crypto_hash_sha512", params = ["string"], returns = "string", description = "SHA-512 hash", expand_strings = true },
-  { name = "_crypto_hmac", params = ["string", "string", "string"], returns = "string", description = "HMAC: data, key, algorithm", expand_strings = true },
+  { name = "_crypto_hash_sha256", params = ["string"], returns = "ptr", description = "SHA-256 hash", expand_strings = true },
+  { name = "_crypto_hash_sha512", params = ["string"], returns = "ptr", description = "SHA-512 hash", expand_strings = true },
+  { name = "_crypto_hmac", params = ["string", "string", "string"], returns = "ptr", description = "HMAC: data, key, algorithm", expand_strings = true },
 
   # JWT - Token operations
-  { name = "_jwt_sign", params = ["string", "string", "string"], returns = "string", description = "Sign JWT: payload, secret, algorithm", expand_strings = true },
-  { name = "_jwt_verify", params = ["string", "string", "string"], returns = "string", description = "Verify JWT: token, secret, algorithm - returns payload or empty", expand_strings = true },
-  { name = "_jwt_decode", params = ["string"], returns = "string", description = "Decode JWT without verification (for debugging)", expand_strings = true },
+  { name = "_jwt_sign", params = ["string", "string", "string"], returns = "ptr", description = "Sign JWT: payload, secret, algorithm", expand_strings = true },
+  { name = "_jwt_verify", params = ["string", "string", "string"], returns = "ptr", description = "Verify JWT: token, secret, algorithm - returns payload or empty", expand_strings = true },
+  { name = "_jwt_decode", params = ["string"], returns = "ptr", description = "Decode JWT without verification (for debugging)", expand_strings = true },
 
   # Session - Storage
-  { name = "_session_store", params = ["string", "string"], returns = "integer", description = "Store session: sessionId, data - returns 1 on success", expand_strings = true },
-  { name = "_session_get", params = ["string"], returns = "string", description = "Get session data by ID", expand_strings = true },
-  { name = "_session_delete", params = ["string"], returns = "integer", description = "Delete session by ID - returns 1 on success", expand_strings = true },
-  { name = "_session_exists", params = ["string"], returns = "integer", description = "Check if session exists (1=yes, 0=no)", expand_strings = true },
+  { name = "_session_store", params = ["string", "string"], returns = "boolean", description = "Store session: sessionId, data - returns 1 on success", expand_strings = true },
+  { name = "_session_get", params = ["string"], returns = "ptr", description = "Get session data by ID", expand_strings = true },
+  { name = "_session_delete", params = ["string"], returns = "boolean", description = "Delete session by ID - returns 1 on success", expand_strings = true },
+  { name = "_session_exists", params = ["string"], returns = "boolean", description = "Check if session exists (1=yes, 0=no)", expand_strings = true },
 
   # Session - CSRF
-  { name = "_session_set_csrf", params = ["string"], returns = "integer", description = "Store CSRF token in current session", expand_strings = true },
-  { name = "_session_get_csrf", params = [], returns = "string", description = "Get CSRF token from current session" },
+  { name = "_session_set_csrf", params = ["string"], returns = "boolean", description = "Store CSRF token in current session", expand_strings = true },
+  { name = "_session_get_csrf", params = [], returns = "ptr", description = "Get CSRF token from current session" },
 
   # Cookies
-  { name = "_req_cookie", params = ["string"], returns = "string", description = "Get cookie value by name", expand_strings = true },
-  { name = "_http_set_cookie", params = ["string", "string", "string"], returns = "string", description = "Set cookie: name, value, options", expand_strings = true },
+  { name = "_req_cookie", params = ["string"], returns = "ptr", description = "Get cookie value by name", expand_strings = true },
+  { name = "_http_set_cookie", params = ["string", "string", "string"], returns = "boolean", description = "Set cookie: name, value, options", expand_strings = true },
 
   # Roles - Registration and checking
-  { name = "_roles_register", params = ["string"], returns = "integer", description = "Register roles configuration (JSON)", expand_strings = true },
-  { name = "_role_has_permission", params = ["string", "string"], returns = "integer", description = "Check if role has permission (1=yes, 0=no)", expand_strings = true },
-  { name = "_role_get_permissions", params = ["string"], returns = "string", description = "Get all permissions for role (JSON array)", expand_strings = true },
+  { name = "_roles_register", params = ["string"], returns = "boolean", description = "Register roles configuration (JSON)", expand_strings = true },
+  { name = "_role_has_permission", params = ["string", "string"], returns = "boolean", description = "Check if role has permission (1=yes, 0=no)", expand_strings = true },
+  { name = "_role_get_permissions", params = ["string"], returns = "ptr", description = "Get all permissions for role (JSON array)", expand_strings = true },
 
   # Auth - Session Management
-  { name = "_auth_set_session", params = ["string"], returns = "integer", description = "Create session from JSON with user_id, role, claims; sets session cookie on response (1=success, 0=fail)", expand_strings = true },
-  { name = "_auth_clear_session", params = [], returns = "integer", description = "Destroy current user session and clear session cookie (1=success, 0=no session)" },
-  { name = "_auth_user_id", params = [], returns = "integer", description = "Get current authenticated user ID; returns 0 if not authenticated" },
-  { name = "_auth_user_role", params = [], returns = "string", description = "Get current authenticated user role; returns empty string if unauthenticated" },
+  { name = "_auth_set_session", params = ["string"], returns = "boolean", description = "Create session from JSON with user_id, role, claims; sets session cookie on response (1=success, 0=fail)", expand_strings = true },
+  { name = "_auth_clear_session", params = [], returns = "boolean", description = "Destroy current user session and clear session cookie (1=success, 0=no session)" },
+  { name = "_auth_user_id", params = [], returns = "i32", description = "Get current authenticated user ID; returns 0 if not authenticated" },
+  { name = "_auth_user_role", params = [], returns = "ptr", description = "Get current authenticated user role; returns empty string if unauthenticated" },
 
   # JSON helpers
-  { name = "_json_get", params = ["string", "string"], returns = "string", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true },
+  { name = "_json_get", params = ["string", "string"], returns = "ptr", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true },
 ]
 
 [language]

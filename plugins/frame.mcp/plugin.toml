@@ -24,12 +24,12 @@ blocks = ["mcp"]
 # String params use (ptr i32, len i32) pairs when expand_strings = true.
 [bridge]
 functions = [
-  { name = "_mcp_stdio_read",  params = [],                    returns = "string",  description = "Read one newline-delimited JSON-RPC 2.0 message from stdin. Blocks until a complete message is available. Returns empty string on EOF." },
-  { name = "_mcp_stdio_write", params = ["string"],            returns = "integer", description = "Write one newline-terminated JSON-RPC 2.0 message to stdout.", expand_strings = true },
-  { name = "_mcp_http_serve",  params = ["integer", "string"], returns = "integer", description = "Bind and start HTTP+SSE listener on the given port and host. Blocks until the server stops.", expand_strings = true },
-  { name = "_mcp_http_accept", params = [],                    returns = "string",  description = "Wait for the next HTTP request; returns it as a JSON string containing method, headers, and body." },
-  { name = "_mcp_sse_send",    params = ["string", "string"],  returns = "integer", description = "Send an SSE event to a connected client identified by clientId.", expand_strings = true },
-  { name = "_mcp_log",         params = ["string", "string"],  returns = "integer", description = "Write a structured log entry to stderr (never pollutes the stdio transport). level is debug, info, warn, or error.", expand_strings = true },
+  { name = "_mcp_stdio_read",  params = [],                    returns = "ptr",  description = "Read one newline-delimited JSON-RPC 2.0 message from stdin. Blocks until a complete message is available. Returns empty string on EOF." },
+  { name = "_mcp_stdio_write", params = ["string"],            returns = "i32", description = "Write one newline-terminated JSON-RPC 2.0 message to stdout.", expand_strings = true },
+  { name = "_mcp_http_serve",  params = ["i32", "string"], returns = "i32", description = "Bind and start HTTP+SSE listener on the given port and host. Blocks until the server stops.", expand_strings = true },
+  { name = "_mcp_http_accept", params = [],                    returns = "ptr",  description = "Wait for the next HTTP request; returns it as a JSON string containing method, headers, and body." },
+  { name = "_mcp_sse_send",    params = ["string", "string"],  returns = "i32", description = "Send an SSE event to a connected client identified by clientId.", expand_strings = true },
+  { name = "_mcp_log",         params = ["string", "string"],  returns = "i32", description = "Write a structured log entry to stderr (never pollutes the stdio transport). level is debug, info, warn, or error.", expand_strings = true },
 ]
 
 [language]
