@@ -2484,12 +2484,15 @@ functions:
 			// Extract the string content and unescape it
 			string raw_value = json.substring(value_start + 1, end_pos)
 			// Unescape JSON escape sequences - order matters!
+			// Protect \\ first (placeholder), process \n/\t/\r, then restore \\ last.
+			// If placeholder is restored before \n/\t/\r, a JSON \\n (literal \n) gets
+			// corrupted into a real newline because the restored \ is then matched by \n.
 			string result = raw_value.replace("\\\\", "\x01")
 			result = result.replace("\\\"", "\"")
-			result = result.replace("\x01", "\\")
 			result = result.replace("\\n", "\n")
 			result = result.replace("\\t", "\t")
 			result = result.replace("\\r", "\r")
+			result = result.replace("\x01", "\\")
 			return result
 
 		// Check for array ([ = 91)

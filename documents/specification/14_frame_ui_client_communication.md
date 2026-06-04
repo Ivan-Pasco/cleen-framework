@@ -1,7 +1,7 @@
 # Frame Client Communication Specification (14)
 
 **Project:** Frame -- Full-Stack Framework for Clean Language
-**Version:** 2.1
+**Version:** 2.2
 **Status:** Specification
 **Location:** `/documents/specification/14_frame_ui_client_communication.md`
 
@@ -9,13 +9,14 @@
 
 ## 1. Overview
 
-This specification defines **frame.client** -- the plugin for all client-side communication between the browser and the server. It provides three namespaces:
+This specification defines **frame.client** -- the plugin for all client-side communication between the browser and the server. It provides three namespaces and one declarative block:
 
-| Namespace | Protocol | What it does |
-|-----------|----------|-------------|
+| Namespace / Block | Protocol | What it does |
+|-------------------|----------|-------------|
 | `api.*` | HTTP | Call APIs, submit forms, read responses |
 | `live.*` | WebSocket | Bidirectional real-time connections |
 | `feed.*` | SSE | Server-push event streams |
+| `load:` | HTTP | Declarative data fetching inside components — sugar over `api.*` |
 
 It also specifies form-reading helpers added to **frame.ui**.
 
@@ -27,7 +28,7 @@ It also specifies form-reading helpers added to **frame.ui**.
 
 ```
 frame.ui      → What you SEE       (DOM, events, components, state, timers)
-frame.client  → What you SEND      (api, live, feed -- all client-server communication)
+frame.client  → What you SEND      (api, live, feed, load: -- all client-server communication)
 frame.server  → What you SERVE     (endpoints, request context, response helpers)
 frame.data    → What you STORE     (models, queries, migrations)
 frame.auth    → What you SECURE    (login, sessions, roles)
@@ -625,23 +626,181 @@ component: tag="dashboard"
 
 ---
 
-## 9. Security
+## 9. Declarative Client Data Fetching (`load:` Block)
 
-### 9.1 CORS
+The `load:` block is a declarative shorthand over `api.*` that lives inside `component:` definitions. The framework handles the fetch, JSON parsing, loading state, error state, and reactive re-fetching when inputs change — eliminating the `state:` + `onLoad` boilerplate pattern.
+
+Requires `client="on"` (or another active hydration mode).
+
+### 9.1 Syntax
+
+```
+load:
+    <name> from "<url>" [at "<json-path>"] [on error: "<handler>"]
+    ...
+```
+
+| Part | Required | Description |
+|------|----------|-------------|
+| `<name>` | yes | Variable name for the parsed response data |
+| `from "<url>"` | yes | URL to fetch. May interpolate `{inputs.*}` values. |
+| `at "<json-path>"` | no | Dot-notation path to extract from the JSON body. Omit to use the full body. |
+| `on error: "<handler>"` | no | Name of an `events:` function to call on failure. |
+
+### 9.2 What It Replaces
+
+**Before:**
+```clean
+component: tag="user-profile" client="on"
+    inputs:
+        integer userId
+
+    state:
+        any user = null
+        boolean loading = true
+        string error = ""
+
+    events:
+        onLoad:
+            later result = api.get("/api/users/" + inputs.userId.toString())
+            if result.ok
+                state.user = result.json("data")
+            else
+                state.error = result.json("message")
+            state.loading = false
+
+    html:
+        <div cl-if="state.loading">Loading...</div>
+        <div cl-if="state.error != ''">{state.error}</div>
+        <h1 cl-if="not state.loading and state.error == ''">{state.user.name}</h1>
+```
+
+**After:**
+```clean
+component: tag="user-profile" client="on"
+    inputs:
+        integer userId
+
+    load:
+        user from "/api/users/{inputs.userId}" at "data"
+
+    html:
+        <div cl-if="load.loading">Loading...</div>
+        <div cl-if="load.error != ''">{load.error}</div>
+        <h1 cl-if="not load.loading">{user.name}</h1>
+```
+
+### 9.3 Generated State
+
+The `load:` block auto-generates these variables in the component scope. Declaring them manually in `state:` is a compile error.
+
+| Auto-variable | Type | Value |
+|---------------|------|-------|
+| `<name>` | `any` | Parsed JSON response (or extracted path). `null` until first fetch completes. |
+| `load.loading` | `boolean` | `true` while any declaration in the block is pending |
+| `load.error` | `string` | Error message from the last failed request. `""` on success. |
+
+Loading/error state lives on the `load.` namespace to avoid conflicts with response data fields (a response may itself contain a `loading` key).
+
+### 9.4 Reactive Re-Fetching
+
+If the URL references `{inputs.*}` values, the block re-runs automatically when those inputs change.
+
+```clean
+component: tag="post-list" client="on"
+    inputs:
+        string category
+
+    load:
+        posts from "/api/posts?category={inputs.category}" at "items"
+
+    // Re-fetches automatically when inputs.category changes
+    html:
+        <div cl-if="load.loading">Loading...</div>
+        <li cl-iterate="post in posts">{post.title}</li>
+```
+
+### 9.5 Multiple Declarations
+
+```clean
+component: tag="user-dashboard" client="on"
+    inputs:
+        integer userId
+
+    load:
+        user from "/api/users/{inputs.userId}"
+        posts from "/api/users/{inputs.userId}/posts" at "items"
+        stats from "/api/users/{inputs.userId}/stats"
+
+    html:
+        <div cl-if="load.loading">Loading...</div>
+        <h1 cl-if="not load.loading">{user.name}</h1>
+        <p>Posts: {posts.length} — Score: {stats.score}</p>
+```
+
+`load.loading` is `true` until all declarations complete. `load.error` holds the message from the first failure.
+
+### 9.6 Custom Error Handling
+
+```clean
+load:
+    products from "/api/products" at "data" on error: "onProductsFailed"
+
+events:
+    onProductsFailed:
+        toast.error("Could not load products — try refreshing")
+```
+
+### 9.7 Constraints
+
+| Rule | Why |
+|------|-----|
+| Requires `client="on"` or active hydration mode | Fetch runs in the browser, not on the server |
+| GET only | Mutations belong in `events:` with `api.post/put/patch/delete` |
+| URL interpolation limited to `{inputs.*}` | Only inputs trigger reactive re-fetch; `{state.*}` in URLs is a compile error |
+| Auto-generated variables cannot be declared in `state:` | Prevents double-declaration |
+
+### 9.8 Escape Hatch
+
+When `load:` is not flexible enough (conditional fetches, chained requests, non-GET operations), use `events:` + `api.*` directly. Both can coexist in the same component.
+
+```clean
+component: tag="search-results" client="on"
+    inputs:
+        string query
+
+    load:
+        featured from "/api/featured" at "items"
+
+    state:
+        any results = null
+
+    events:
+        onSearch:
+            later r = api.get("/api/search?q=" + inputs.query)
+            if r.ok
+                state.results = r.json("hits")
+```
+
+---
+
+## 10. Security
+
+### 10.1 CORS
 Browser CORS policy applies. Server must send `Access-Control-Allow-*` headers for cross-origin requests.
 
-### 9.2 Credentials
+### 10.2 Credentials
 - `api.auth()` stores in JS memory. Cleared on page unload or `api.clearAuth()`.
 - Auth applied automatically to all `api.*` calls.
 - `api.header()` sets per-request only, no auto-auth.
 - Cookies follow default `credentials: 'same-origin'`.
 
-### 9.3 WebSocket/SSE
+### 10.3 WebSocket/SSE
 Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 10. Context Isolation
+## 11. Context Isolation
 
 | Context | Available When |
 |---------|----------------|
@@ -654,7 +813,7 @@ Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 11. Function Summary
+## 12. Function Summary
 
 ### frame.ui additions: 5 functions
 
@@ -666,15 +825,16 @@ Server-side origin validation is the developer's responsibility.
 | `ui.checked(selector)` | Checkbox state |
 | `ui.setInput(selector, value)` | Set input value |
 
-### frame.client: 27 functions
+### frame.client: 27 functions + 1 block
 
-| Namespace | Count | Functions |
-|-----------|-------|-----------|
+| Namespace / Block | Count | Functions / Keywords |
+|-------------------|-------|----------------------|
 | `api.*` requests | 5 | get, post, put, patch, delete |
 | `api.*` config | 4 | header, timeout, auth, clearAuth |
 | `api.*` convenience | 1 | submit |
 | `live.*` | 9 | open, send, close, state, message, connId, closeCode, closeReason, error |
 | `feed.*` | 7 | open, on, close, data, eventType, lastId, connId |
+| `load:` block | — | Declarative; generates `load.loading`, `load.error`, and named data variables. See §9. |
 
 **ApiResponse** — returned by all `api.*` request functions, read via `later result = api.*`:
 
@@ -688,17 +848,18 @@ Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 12. Implementation Priority
+## 13. Implementation Priority
 
 | Phase | What | Count | Rationale |
 |-------|------|-------|-----------|
 | **Phase 1** | Form helpers (frame.ui) + API (frame.client) | 15 | Unblocks 80% of use cases |
 | **Phase 2** | Live / WebSocket | 9 | Real-time communication |
 | **Phase 3** | Feed / SSE | 7 | Server push |
+| **Phase 4** | `load:` block | — | Declarative sugar over Phase 1 API; requires Phase 1 complete |
 
 ---
 
-## 13. Files
+## 14. Files
 
 | Action | File |
 |--------|------|
@@ -713,6 +874,7 @@ Server-side origin validation is the developer's responsibility.
 |-----------|--------|
 | Build system | Merge plugin runtimes into unified loader.js |
 | Compiler | `later` keyword support for `Future<T>` return values from bridge functions |
+| Compiler | `load:` block expansion — parse block, generate `api.get()` + state management + reactive re-fetch on inputs change |
 
 ---
 
