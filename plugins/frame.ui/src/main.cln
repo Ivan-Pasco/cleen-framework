@@ -66,6 +66,50 @@ functions:
 
 		return body
 
+	// Validate block attributes and body. Returns error message or "" if valid.
+	// Per spec 05_frame_ui.md: component requires name + render(); page requires path;
+	// layout requires name; client hydration mode must be off/on/visible/idle/only.
+	string validate_block(string block_name, string attributes, string body)
+		if block_name == "component"
+			string name = extract_json_field(attributes, "name")
+			if name.length() == 0
+				return "component: name attribute is required"
+
+			string client = extract_json_field(attributes, "client")
+			if client.length() > 0
+				boolean is_valid = false
+				if client == "off"
+					is_valid = true
+				if client == "on"
+					is_valid = true
+				if client == "visible"
+					is_valid = true
+				if client == "idle"
+					is_valid = true
+				if client == "only"
+					is_valid = true
+				if not is_valid
+					return "component: client must be one of off, on, visible, idle, only"
+
+			if body.indexOf("render(") == -1
+				return "component: render() block is required"
+
+			return ""
+
+		if block_name == "page"
+			string path = extract_json_field(attributes, "path")
+			if path.length() == 0
+				return "page: path attribute is required"
+			return ""
+
+		if block_name == "layout"
+			string layout_name = extract_json_field(attributes, "name")
+			if layout_name.length() == 0
+				return "layout: name attribute is required"
+			return ""
+
+		return ""
+
 	// Validate HTML page against component registry
 	string validate_html(string html, string registry_json)
 		string errors = ""
@@ -4194,6 +4238,77 @@ functions:
 //               "transformed_sources":[{"path":"...","content":"..."},...]}
 
 functions:
+	// Scan HTML for <screen name="X" client="Y"> tags and return accumulated
+	// "name=mode\n" entries. Screens without a client attribute default to "off"
+	// (rendered, not hydrated). The runtime uses this to decide which screens
+	// to instantiate as interactive islands.
+	string collect_screens_from_html(string html)
+		string entries = ""
+		string remaining = html
+		integer safety = 0
+		while remaining.indexOf("<screen") != -1 and safety < 1000
+			safety = safety + 1
+			integer screen_start = remaining.indexOf("<screen")
+			integer screen_end = remaining.indexOf(">", screen_start)
+			if screen_end == -1
+				return entries
+
+			string screen_tag = remaining.substring(screen_start, screen_end + 1)
+			string name = extract_attr_value(screen_tag, "name")
+			string mode = extract_attr_value(screen_tag, "client")
+
+			if name.length() > 0
+				if mode.length() == 0
+					mode = "off"
+				entries = entries + name + "=" + mode + "\n"
+
+			remaining = remaining.substring(screen_end + 1, remaining.length())
+
+		return entries
+
+	// Convert accumulated "name=mode\n" entries into a JSON object
+	// {"Counter":"on","Timer":"visible"}. Deduplicates by name (last wins).
+	string entries_to_screens_json(string entries)
+		string result = "{"
+		string seen = ""
+		boolean first = true
+
+		string lines = entries
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer eq_pos = line.indexOf("=")
+				if eq_pos != -1
+					string name = line.substring(0, eq_pos)
+					string mode = line.substring(eq_pos + 1, line.length())
+					string seen_key = "|" + name + "|"
+					if seen.indexOf(seen_key) == -1
+						seen = seen + seen_key
+						if not first
+							result = result + ","
+						first = false
+						result = result + "\"" + name + "\":\"" + mode + "\""
+
+			line_start = line_end + 1
+
+		result = result + "}"
+		return result
+
+	// Emit a virtual Clean module that exposes _ui_hydration_manifest() returning
+	// the manifest JSON. Runtime can call this once at startup and serve at
+	// /_hydration/manifest.json (per spec 05_frame_ui.md §14.1).
+	string build_hydration_manifest_module(string screens_json)
+		string module = "// Auto-generated hydration manifest (frame.ui)\n"
+		module = module + "functions:\n"
+		module = module + "\tstring _ui_hydration_manifest()\n"
+		module = module + "\t\treturn \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
+		return module
+
 	string assemble(string input_json)
 		boolean has_server = input_json.indexOf("\"has_frame_server\":true") != -1
 
@@ -4203,6 +4318,7 @@ functions:
 		string route_fns = ""
 		string route_registrations = ""
 		boolean first_transformed = true
+		string hydration_entries = ""
 
 		integer fi = 0
 		while fi < source_files.length()
@@ -4213,6 +4329,10 @@ functions:
 			boolean in_pages = file_path.indexOf("pages/") != -1
 			boolean has_load = file_content.indexOf("any load(") != -1
 			boolean has_guard = file_content.indexOf("any guard(") != -1
+			boolean is_html = file_path.endsWith(".html")
+
+			if is_html
+				hydration_entries = hydration_entries + collect_screens_from_html(file_content)
 
 			if in_pages and (has_load or has_guard)
 				string module_name = derive_module_name(file_path)
@@ -4259,9 +4379,21 @@ functions:
 			fi = fi + 1
 
 		string injected_json = ""
+		boolean first_injected = true
 		if has_server and route_fns.length() > 0
 			string module_content = "// Auto-generated page routes\nstart:\n" + route_registrations + "\nfunctions:\n" + route_fns
-			injected_json = "{\"virtual_path\":\"__page_routes_generated.cln\",\"content\":\"" + escape_json_string(module_content) + "\"}"
+			injected_json = injected_json + "{\"virtual_path\":\"__page_routes_generated.cln\",\"content\":\"" + escape_json_string(module_content) + "\"}"
+			first_injected = false
+
+		// Emit the hydration manifest module whenever screens were found, even
+		// if has_frame_server is false — pure-client builds may still want to
+		// query the manifest for selective hydration.
+		if hydration_entries.length() > 0
+			string screens_json = entries_to_screens_json(hydration_entries)
+			string manifest_module = build_hydration_manifest_module(screens_json)
+			if not first_injected
+				injected_json = injected_json + ","
+			injected_json = injected_json + "{\"virtual_path\":\"__hydration_manifest.cln\",\"content\":\"" + escape_json_string(manifest_module) + "\"}"
 
 		return "{\"injected_sources\":[" + injected_json + "],\"transformed_sources\":[" + transformed_json + "]}"
 

@@ -43,9 +43,9 @@ functions = [
   { name = "_db_execute", params = ["string", "string"], returns = "i32", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true },
 
   # Transactions
-  { name = "_db_begin", params = [], returns = "i32", description = "Begin a database transaction; returns transaction ID string" },
-  { name = "_db_commit", params = ["string"], returns = "i32", description = "Commit a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
-  { name = "_db_rollback", params = ["string"], returns = "i32", description = "Rollback a database transaction by ID; returns 0 on success, -1 on error", expand_strings = true },
+  { name = "_db_begin", params = [], returns = "i32", description = "Begin a database transaction; returns 1 on success, 0 on error" },
+  { name = "_db_commit", params = [], returns = "i32", description = "Commit the current database transaction; returns 1 on success, 0 on error" },
+  { name = "_db_rollback", params = [], returns = "i32", description = "Rollback the current database transaction; returns 1 on success, 0 on error" },
 
   # Configuration - called once at startup from a data: config block
   # Parameter: JSON object with keys: engine, host, port, database, user, password, pool_max, pool_idle_timeout_ms

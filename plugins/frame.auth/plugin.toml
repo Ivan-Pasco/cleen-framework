@@ -44,10 +44,10 @@ functions = [
   { name = "_jwt_decode", params = ["string"], returns = "ptr", description = "Decode JWT without verification (for debugging)", expand_strings = true },
 
   # Session - Storage
-  { name = "_session_store", params = ["string", "string"], returns = "boolean", description = "Store session: sessionId, data - returns 1 on success", expand_strings = true },
-  { name = "_session_get", params = ["string"], returns = "ptr", description = "Get session data by ID", expand_strings = true },
-  { name = "_session_delete", params = ["string"], returns = "boolean", description = "Delete session by ID - returns 1 on success", expand_strings = true },
-  { name = "_session_exists", params = ["string"], returns = "boolean", description = "Check if session exists (1=yes, 0=no)", expand_strings = true },
+  { name = "_session_store", params = ["string", "string", "string", "i32", "i32"], returns = "boolean", description = "Store session: sessionId, key (empty=blob), data, ttl, flags - returns 1 on success" },
+  { name = "_session_get", params = [], returns = "ptr", description = "Get current session data from request context - returns session data or empty string" },
+  { name = "_session_delete", params = [], returns = "boolean", description = "Delete current session from request context - returns 1 if deleted, 0 if not found" },
+  { name = "_session_exists", params = ["string"], returns = "boolean", description = "Check if session exists by ID (1=yes, 0=no)", expand_strings = true },
 
   # Session - CSRF
   { name = "_session_set_csrf", params = ["string"], returns = "boolean", description = "Store CSRF token in current session", expand_strings = true },
@@ -55,7 +55,7 @@ functions = [
 
   # Cookies
   { name = "_req_cookie", params = ["string"], returns = "ptr", description = "Get cookie value by name", expand_strings = true },
-  { name = "_http_set_cookie", params = ["string", "string", "string"], returns = "boolean", description = "Set cookie: name, value, options", expand_strings = true },
+  { name = "_http_set_cookie", params = ["string", "string"], returns = "boolean", description = "Set cookie: name, value (length-prefixed ptrs); server applies Path=/ HttpOnly defaults" },
 
   # Roles - Registration and checking
   { name = "_roles_register", params = ["string"], returns = "boolean", description = "Register roles configuration (JSON)", expand_strings = true },

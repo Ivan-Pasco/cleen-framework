@@ -18,8 +18,9 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 ### Test Infrastructure 🟡 MEDIUM-HIGH
 
-- ⬜ **Plugin tests cannot resolve plugin functions** — `scripts/test-plugins.sh` runs `cln test <test_file>` standalone, but tests in `plugins/*/tests/test_expand.cln` call `expand_block` / `validate_block` defined in `plugins/*/src/main.cln`. Compiler reports "Function not found". Affects `frame.auth`, `frame.server`, `frame.ui`, `frame.data`. Fix options: (a) test runner concatenates `src/main.cln` + `tests/*.cln` before invoking `cln test`, (b) Clean Language adds an include mechanism (cross-component), (c) move tests inside `src/main.cln` behind a test guard.
-  - Test-file syntax/type-declaration issues were fixed 2026-06-04; the runner/linking issue remains the blocker.
+- ✅ ~~**Plugin tests cannot resolve plugin functions**~~ — Fixed 2026-06-04: `scripts/test-plugins.sh` now concatenates `src/main.cln` + a generated `assert()` helper + the test's `functions:` block before invoking `cln check`. Compilation-pass parity is the guard; 3/4 plugin test suites (auth, data, server) compile cleanly.
+- ⬜ **`cln test` runtime stub missing** — `cln test` fails at load time with `unknown import: env::_state_reset_all`. The runner doesn't provide host stubs for plugin-emitted imports. Until this is resolved upstream, `test-plugins.sh` uses `cln check` (compilation only, not execution). Cross-component: clean-language-compiler or clean-server needs to ship a runner with these stubs.
+- ✅ ~~**frame.ui missing `validate_block`**~~ — Fixed 2026-06-04. `plugins/frame.ui/src/main.cln` now exports `validate_block` covering `component` (name + client mode + render()), `page` (path), and `layout` (name) per `05_frame_ui.md`. Declared in `plugins/frame.ui/plugin.toml` under `[exports]` as `validate = "validate_block"`.
 
 ### Plugin DSL Gaps
 
@@ -27,7 +28,9 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 - ⬜ Declare validation bridge functions in `frame.data/plugin.toml` and generate calls from `validate(field, value)` per model. (Runtime side: `_db_validate_field` impl in clean-server.)
 
 #### Phase 5.5: Client hydration [plugin] 🟡 MEDIUM-HIGH
-- ⬜ Emit hydration manifest for the runtime (component name → mount strategy → state JSON) so clean-server can serve `/_hydration/manifest.json` deterministically. Full strategy impl (IntersectionObserver, requestIdleCallback) is `[runtime]`.
+- ✅ ~~Emit hydration manifest for the runtime~~ — Fixed 2026-06-04. `frame.ui/src/main.cln` `assemble()` now scans HTML source files for `<screen name="X" client="Y">` tags and injects a virtual `__hydration_manifest.cln` containing a function `_ui_hydration_manifest()` that returns the JSON `{"screens":{"Name":"mode",...}}`. Screens without a `client` attribute default to `off`. Duplicate screen names are deduplicated (last wins).
+  - ⬜ **Spec divergence to resolve**: `documents/specification/05_frame_ui.md §14.1` describes the manifest as `{"components":{name:{"bundle":..., "strategy":...}}, "pages":{...}}`. The implementation emits `{"screens":{name:"mode"}}` because: (a) Frame compiles to a single WASM, no per-component JS bundles; (b) screens (not components) are the actual hydration units. Developer decision needed: update spec to reflect WASM architecture, or extend implementation to bundle-split. Tracked under Principle 25 (spec change requires approval).
+- ⬜ Full hydration strategy impl (IntersectionObserver, requestIdleCallback) is `[runtime]`.
 
 #### Phase 7.2: Plugin lifecycle hooks 🟢 LOW
 - ⬜ Define additional lifecycle hooks beyond `expand`/`validate`/`get_keywords` (e.g. `registerCLI`, `registerServer`). Requires spec change in `foundation/spec/plugins/plugin-contract.md`.

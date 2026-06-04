@@ -1494,13 +1494,13 @@ functions:
 functions:
 	// Expand transaction: block
 	string expand_transaction(string body)
-		string result = "string __tx_id = _db_begin()\n"
+		string result = "_db_begin()\n"
 		result = result + "boolean __tx_success = true\n"
 		result = result + body + "\n"
-		result = result + "_db_commit(__tx_id)\n"
+		result = result + "_db_commit()\n"
 		result = result + "__tx_success = true\n"
 		result = result + "onError:\n"
-		result = result + "\t_db_rollback(__tx_id)\n"
+		result = result + "\t_db_rollback()\n"
 		result = result + "\t__tx_success = false\n"
 		result = result + "\terror(\"transaction failed\")\n"
 		return result

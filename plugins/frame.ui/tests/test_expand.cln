@@ -18,6 +18,11 @@ start:
 	test_html_block_with_var()
 	test_html_block_raw_interpolation()
 	test_html_block_doctype_no_spurious_close()
+	test_hydration_collect_screens()
+	test_hydration_default_mode_off()
+	test_hydration_entries_to_json()
+	test_hydration_entries_dedup()
+	test_hydration_manifest_module_shape()
 
 functions:
 	void test_component_expansion()
@@ -108,3 +113,42 @@ functions:
 		assert(result.contains("\"<!DOCTYPE html>\""))
 		// Must NOT contain any closing tag for DOCTYPE
 		assert(result.contains("</!DOCTYPE>") == false)
+
+	// Hydration manifest tests (spec 05_frame_ui.md §14.1)
+	void test_hydration_collect_screens()
+		string html = "<page><screen name=\"Counter\" client=\"on\"/><screen name=\"Timer\" client=\"visible\"/></page>"
+		string entries = collect_screens_from_html(html)
+		assert(entries.contains("Counter=on"))
+		assert(entries.contains("Timer=visible"))
+
+	void test_hydration_default_mode_off()
+		// Screens without client attribute default to "off" (rendered, not hydrated)
+		string html = "<screen name=\"Static\"/>"
+		string entries = collect_screens_from_html(html)
+		assert(entries.contains("Static=off"))
+
+	void test_hydration_entries_to_json()
+		string entries = "Counter=on\nTimer=visible\n"
+		string json = entries_to_screens_json(entries)
+		assert(json.contains("\"Counter\":\"on\""))
+		assert(json.contains("\"Timer\":\"visible\""))
+		assert(json.startsWith("{"))
+		assert(json.endsWith("}"))
+
+	void test_hydration_entries_dedup()
+		// Same screen name appearing twice should only produce one entry
+		string entries = "Counter=on\nCounter=on\n"
+		string json = entries_to_screens_json(entries)
+		// Should contain exactly one Counter entry (no comma between duplicates)
+		assert(json.contains("\"Counter\":\"on\""))
+		assert(json.contains(",") == false)
+
+	void test_hydration_manifest_module_shape()
+		// The injected virtual file must declare _ui_hydration_manifest() as a
+		// function returning the screens JSON. Runtime calls this at startup.
+		string screens_json = "{\"Counter\":\"on\"}"
+		string module = build_hydration_manifest_module(screens_json)
+		assert(module.contains("functions:"))
+		assert(module.contains("string _ui_hydration_manifest()"))
+		assert(module.contains("\\\"screens\\\""))
+		assert(module.contains("Counter"))
