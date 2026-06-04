@@ -1,5 +1,6 @@
 // Tests for frame.server plugin
 // Fixed: functions were declared at top level — spec (grammar.ebnf) requires functions: block
+// Fixed: added type declarations and void return types — spec requires explicit types
 
 start:
 	test_server_expansion()
@@ -12,39 +13,39 @@ start:
 	test_unknown_block_passthrough()
 
 functions:
-	test_server_expansion()
-		result = expand_block("server", "{\"port\": \"3000\"}", "// body")
+	void test_server_expansion()
+		string result = expand_block("server", "{\"port\": \"3000\"}", "// body")
 		assert(result.contains("_http_listen"))
 		assert(result.contains("3000"))
 		assert(result.contains("start:"))
 
-	test_route_expansion()
-		result = expand_block("route", "{\"method\": \"GET\", \"path\": \"/hello\"}", "return {}")
+	void test_route_expansion()
+		string result = expand_block("route", "{\"method\": \"GET\", \"path\": \"/hello\"}", "return {}")
 		assert(result.contains("_http_route"))
 		assert(result.contains("GET"))
 		assert(result.contains("/hello"))
 
-	test_middleware_expansion()
-		result = expand_block("middleware", "{}", "return next(request)")
+	void test_middleware_expansion()
+		string result = expand_block("middleware", "{}", "return next(request)")
 		assert(result.contains("_http_middleware"))
 		assert(result.contains("next"))
 
-	test_route_validation_missing_method()
-		result = validate_block("route", "{\"path\": \"/\"}", "")
+	void test_route_validation_missing_method()
+		string result = validate_block("route", "{\"path\": \"/\"}", "")
 		assert(result.contains("method attribute is required"))
 
-	test_route_validation_missing_path()
-		result = validate_block("route", "{\"method\": \"GET\"}", "")
+	void test_route_validation_missing_path()
+		string result = validate_block("route", "{\"method\": \"GET\"}", "")
 		assert(result.contains("path attribute is required"))
 
-	test_route_validation_invalid_method()
-		result = validate_block("route", "{\"method\": \"INVALID\", \"path\": \"/\"}", "")
+	void test_route_validation_invalid_method()
+		string result = validate_block("route", "{\"method\": \"INVALID\", \"path\": \"/\"}", "")
 		assert(result.contains("must be one of"))
 
-	test_server_validation_invalid_port()
-		result = validate_block("server", "{\"port\": \"99999\"}", "")
+	void test_server_validation_invalid_port()
+		string result = validate_block("server", "{\"port\": \"99999\"}", "")
 		assert(result.contains("port must be a number"))
 
-	test_unknown_block_passthrough()
-		result = expand_block("unknown", "{}", "original body")
+	void test_unknown_block_passthrough()
+		string result = expand_block("unknown", "{}", "original body")
 		assert(result == "original body")

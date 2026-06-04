@@ -2620,7 +2620,6 @@ functions:
 		return result
 
 	// Generate SSR render function for a screen
-	// This will be fully implemented in UI-05
 	string generate_ssr_render(string name, string state_json, string render_content)
 		string result = "\t\t\tstring render()\n"
 		result = result + "\t\t\t\tstring html = \"\"\n"

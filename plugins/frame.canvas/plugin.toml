@@ -245,6 +245,17 @@ functions = [
   # Drawing — layers
   { name = "on layer", signature = "on layer \"${name}\":\n\t// drawing commands", description = "Route draw calls to a named layer" },
 
+  # Drawing — immediate-mode path primitives (spec §17)
+  { name = "canvas.beginPath", signature = "canvas.beginPath", description = "Start a new immediate-mode path. Pair with canvas.fill or canvas.stroke." },
+  { name = "canvas.moveTo", signature = "canvas.moveTo x=${x} y=${y}", description = "Move pen to (x, y) without drawing" },
+  { name = "canvas.lineTo", signature = "canvas.lineTo x=${x} y=${y}", description = "Add a line segment from the current point to (x, y)" },
+  { name = "canvas.curveTo", signature = "canvas.curveTo cpX=${cpX} cpY=${cpY} x=${x} y=${y}", description = "Add a quadratic bezier curve to (x, y) using control point (cpX, cpY)" },
+  { name = "canvas.cubicTo", signature = "canvas.cubicTo cp1x=${cp1x} cp1y=${cp1y} cp2x=${cp2x} cp2y=${cp2y} x=${x} y=${y}", description = "Add a cubic bezier curve to (x, y) using two control points" },
+  { name = "canvas.arc", signature = "canvas.arc x=${x} y=${y} radius=${r} startAngle=${0} endAngle=${6.283}", description = "Add an arc; angles in radians" },
+  { name = "canvas.closePath", signature = "canvas.closePath", description = "Close the current path back to its starting point" },
+  { name = "canvas.fill", signature = "canvas.fill color=\"${color}\"", description = "Fill the current immediate-mode path with the given color" },
+  { name = "canvas.stroke", signature = "canvas.stroke color=\"${color}\" width=${1}", description = "Stroke the current immediate-mode path" },
+
   # Drawing — groups and clip regions
   { name = "canvas.group", signature = "canvas.group x=${x} y=${y} rotation=${0} scaleX=${1.0} scaleY=${1.0} alpha=${1.0}:\n\t// child drawing commands", description = "Apply shared transform to a group of draw calls; group attributes (x, y, rotation, scaleX, scaleY, alpha) can be animated with tweens" },
   { name = "canvas.clip", signature = "canvas.clip x=${x} y=${y} width=${w} height=${h}:\n\t// masked drawing commands", description = "Restrict drawing to a region; supports rect (x, y, width, height), circle (x, y, radius), or path (path=name)" },

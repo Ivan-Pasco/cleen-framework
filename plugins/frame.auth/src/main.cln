@@ -59,9 +59,23 @@ functions:
 		if tenant_config.length() > 0
 			result = result + expand_tenant_config(tenant_config)
 
+		// Parse CSRF config — defaults to enabled when csrf: block omitted
+		string csrf_config = extract_subblock(body, "csrf:")
+		result = result + expand_csrf_config(csrf_config)
+
 		// Generate auth helper object
 		result = result + generate_auth_helpers()
 
+		return result
+
+	// Expand CSRF configuration — emits __csrf_enabled constant.
+	// Empty body means csrf: block was omitted; CSRF defaults to enabled.
+	string expand_csrf_config(string config)
+		string enabled = "true"
+		if config.length() > 0
+			enabled = get_config_value(config, "enabled", "true")
+		string result = "// CSRF configuration\n"
+		result = result + "boolean __csrf_enabled = " + enabled + "\n"
 		return result
 
 	// Expand session configuration
@@ -130,15 +144,19 @@ functions:
 		result = result + "\t\t_session_store(sessionId, sessionData)\n"
 		result = result + "\t\treturn sessionId\n\n"
 
-		// auth.session.setCookie(sessionId)
-		result = result + "\tstring session_setCookie(string sessionId)\n"
+		// auth.session.setCookie(sessionId, response) — spec §5
+		// Sets the session cookie and returns `response` so the caller can chain
+		// with redirect(url) or any other response helper. Pass "" for no chained
+		// response (caller will build its own).
+		result = result + "\tstring session_setCookie(string sessionId, string response)\n"
 		result = result + "\t\tstring cookie = __session_cookie + \"=\" + sessionId + \"; Path=\" + __session_path + \"; SameSite=\" + __session_same_site\n"
 		result = result + "\t\tif __session_secure\n"
 		result = result + "\t\t\tcookie = cookie + \"; Secure\"\n"
 		result = result + "\t\tif __session_http_only\n"
 		result = result + "\t\t\tcookie = cookie + \"; HttpOnly\"\n"
 		result = result + "\t\tcookie = cookie + \"; Max-Age=\" + (__session_timeout * 60).toString()\n"
-		result = result + "\t\treturn _http_set_header(\"Set-Cookie\", cookie)\n\n"
+		result = result + "\t\t_http_set_header(\"Set-Cookie\", cookie)\n"
+		result = result + "\t\treturn response\n\n"
 
 		// auth.session.get() - retrieves and validates session, checking expiry
 		result = result + "\tstring session_get()\n"
@@ -239,8 +257,10 @@ functions:
 		result = result + "\t\t\t_session_set_csrf(token)\n"
 		result = result + "\t\treturn token\n\n"
 
-		// CSRF token validation
+		// CSRF token validation — auto-passes when csrf: enabled = false
 		result = result + "\tboolean csrf_validate(string token)\n"
+		result = result + "\t\tif __csrf_enabled == false\n"
+		result = result + "\t\t\treturn true\n"
 		result = result + "\t\tstring expected = _session_get_csrf()\n"
 		result = result + "\t\treturn expected != \"\" and expected == token\n\n"
 

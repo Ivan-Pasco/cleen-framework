@@ -65,6 +65,17 @@ functions:
 			if __m.length() > 0
 				return expand_find(__m, body)
 
+		// select: → expand_find (spec query_verb="select"; same machinery,
+		// projection is driven by the select: sub-block inside the body).
+		if __bname == "select" or __bname.endsWith(".select")
+			string __ms = ""
+			if __bname == "select"
+				__ms = extract_model_name(__battr)
+			else
+				__ms = __bname.substring(0, __bname.length() - 7)
+			if __ms.length() > 0
+				return expand_find(__ms, body)
+
 		// first: → expand_first
 		if __bname == "first" or __bname.endsWith(".first")
 			string __m = ""
@@ -912,6 +923,68 @@ functions:
 	// (heuristic: single word with an uppercase letter) a _db_valid_field guard is
 	// emitted before the query so that unknown column names fail fast with a
 	// VALIDATION_ERROR rather than reaching the database.
+	// Parse select: clause body into a SQL column projection list.
+	// Input lines like "id" / "name" / "email as email_addr" → "id, name, email AS email_addr".
+	// Empty body returns "*" (no projection — select all columns).
+	string parse_select_clause(string select_body)
+		string body = select_body.trim()
+		if body.length() == 0
+			return "*"
+		string result = ""
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string col = line.replace(" as ", " AS ")
+				if result.length() > 0
+					result = result + ", "
+				result = result + col
+			line_start = line_end + 1
+		if result.length() == 0
+			return "*"
+		return result
+
+	// Parse group: clause body into a SQL GROUP BY column list.
+	string parse_group_clause(string group_body)
+		string body = group_body.trim()
+		string result = ""
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				result = result + line
+			line_start = line_end + 1
+		return result
+
+	// Parse include: clause body into a list of relation names to eager-load
+	// via LEFT JOIN against the snake_cased plural table for each.
+	// Example body: "comments\nauthor" → " LEFT JOIN comments ON ... LEFT JOIN authors ON ..."
+	string parse_include_clause(string include_body, string parent_table)
+		string body = include_body.trim()
+		string result = ""
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string rel_table = pluralize(to_snake_case(line))
+				string fk = to_snake_case(parent_table) + "_id"
+				if fk.endsWith("s_id")
+					fk = fk.substring(0, fk.length() - 4) + "_id"
+				result = result + " LEFT JOIN " + rel_table + " ON " + rel_table + "." + fk + " = " + parent_table + ".id"
+			line_start = line_end + 1
+		return result
+
 	string expand_find(string model_name, string body)
 		string table_name = pluralize(to_snake_case(model_name))
 		string where_clause = extract_subblock(body, "where:")
@@ -919,6 +992,22 @@ functions:
 		string limit_clause = extract_subblock(body, "limit:")
 		string link_clause = extract_subblock(body, "link:")
 		string join_clause = extract_subblock(body, "join:")
+		string select_clause = extract_subblock(body, "select:")
+		string group_clause = extract_subblock(body, "group:")
+		string having_clause = extract_subblock(body, "having:")
+		string include_clause = extract_subblock(body, "include:")
+		string projection = "*"
+		if select_clause.length() > 0
+			projection = parse_select_clause(select_clause)
+		string include_join = ""
+		if include_clause.length() > 0
+			include_join = parse_include_clause(include_clause, table_name)
+		string group_sql = ""
+		if group_clause.length() > 0
+			group_sql = " GROUP BY " + parse_group_clause(group_clause)
+		string having_sql = ""
+		if having_clause.length() > 0
+			having_sql = " HAVING " + parse_where_clause(having_clause)
 		boolean has_tenant = detect_tenant_field(body)
 
 		// Dynamic order guard: emit a field validation check before the query
@@ -935,7 +1024,7 @@ functions:
 		else if link_clause.length() > 0
 			where_clause = resolve_model_refs(where_clause, model_name, link_clause)
 
-		string sql = "SELECT * FROM " + table_name
+		string sql = "SELECT " + projection + " FROM " + table_name
 
 		// Handle join: clause (inner/left/right ModelName on condition)
 		if join_clause.length() > 0
@@ -945,14 +1034,20 @@ functions:
 		if link_clause.length() > 0
 			sql = sql + " " + parse_link_clause(link_clause, table_name)
 
+		// Handle include: clause (eager-load related rows via LEFT JOIN)
+		if include_join.length() > 0
+			sql = sql + include_join
+
 		// Build WHERE clause with optional tenant isolation prefix
 		if has_tenant
 			string __tf_result = order_guard
-			__tf_result = __tf_result + "string __tf_sql = \"SELECT * FROM " + table_name
+			__tf_result = __tf_result + "string __tf_sql = \"SELECT " + projection + " FROM " + table_name
 			if join_clause.length() > 0
 				__tf_result = __tf_result + " " + parse_join_clause(join_clause, model_name)
 			if link_clause.length() > 0
 				__tf_result = __tf_result + " " + parse_link_clause(link_clause, table_name)
+			if include_join.length() > 0
+				__tf_result = __tf_result + include_join
 			__tf_result = __tf_result + "\"\n"
 			__tf_result = __tf_result + "string __tf_tenant = tenant_getId()\n"
 			__tf_result = __tf_result + "string __tf_filter = \"tenant_id = '\" + __tf_tenant + \"'\"\n"
@@ -960,6 +1055,10 @@ functions:
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" WHERE \" + __tf_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
 			else
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" WHERE \" + __tf_filter\n"
+			if group_sql.length() > 0
+				__tf_result = __tf_result + "__tf_sql = __tf_sql + \"" + group_sql + "\"\n"
+			if having_sql.length() > 0
+				__tf_result = __tf_result + "__tf_sql = __tf_sql + \"" + having_sql + "\"\n"
 			if order_clause.length() > 0
 				if is_dynamic_order(order_clause.trim())
 					__tf_result = __tf_result + "__tf_sql = __tf_sql + \" ORDER BY \" + " + order_clause.trim() + "\n"
@@ -979,15 +1078,21 @@ functions:
 		// build_where_expr, which emits inline Clean string concatenation.
 		if where_clause.length() > 0
 			// SQL prefix up to and including " WHERE " (as a string literal in the expr)
-			string __fq_prefix = "\"SELECT * FROM " + table_name
+			string __fq_prefix = "\"SELECT " + projection + " FROM " + table_name
 			if join_clause.length() > 0
 				__fq_prefix = __fq_prefix + " " + parse_join_clause(join_clause, model_name)
 			if link_clause.length() > 0
 				__fq_prefix = __fq_prefix + " " + parse_link_clause(link_clause, table_name)
+			if include_join.length() > 0
+				__fq_prefix = __fq_prefix + include_join
 			__fq_prefix = __fq_prefix + " WHERE \""
 
-			// Static suffix: ORDER BY / LIMIT / OFFSET appended as string literal
+			// Static suffix: GROUP BY / HAVING / ORDER BY / LIMIT / OFFSET appended as string literal
 			string __fq_suffix = ""
+			if group_sql.length() > 0
+				__fq_suffix = __fq_suffix + " + \"" + group_sql + "\""
+			if having_sql.length() > 0
+				__fq_suffix = __fq_suffix + " + \"" + having_sql + "\""
 			if order_clause.length() > 0
 				if is_dynamic_order(order_clause.trim())
 					__fq_suffix = __fq_suffix + " + \" ORDER BY \" + " + order_clause.trim()
@@ -1004,6 +1109,11 @@ functions:
 			return order_guard + "__parse_as_" + model_name + "(_db_query(" + __fq_sql_expr + ", \"[]\"))"
 
 		// No WHERE: static SQL string is sufficient
+		// GROUP BY / HAVING attach before ORDER BY / LIMIT / OFFSET
+		if group_sql.length() > 0
+			sql = sql + group_sql
+		if having_sql.length() > 0
+			sql = sql + having_sql
 		if order_clause.length() > 0
 			if is_dynamic_order(order_clause.trim())
 				// Dynamic order on a static-prefix SQL needs a variable block, not a single expression
@@ -1549,7 +1659,7 @@ functions:
 		integer content_start = start_pos + block_name.length()
 
 		// Find the end of this sub-block (next sub-block or end of body)
-		string subblock_markers = ",where:,order:,limit:,offset:,link:,join:,set:,sql:,params:,up:,down:,paginate:,cursor:,"
+		string subblock_markers = ",where:,order:,limit:,offset:,link:,join:,set:,sql:,params:,up:,down:,paginate:,cursor:,select:,group:,having:,include:,"
 		integer end_pos = body.length()
 
 		integer search_pos = content_start
@@ -1558,7 +1668,7 @@ functions:
 			if body.substring(search_pos, search_pos + 1) == "\n"
 				string after_newline = body.substring(search_pos + 1, body.length()).trim()
 				// Check if next line starts a new sub-block
-				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:") or after_newline.startsWith("paginate:") or after_newline.startsWith("cursor:")
+				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:") or after_newline.startsWith("paginate:") or after_newline.startsWith("cursor:") or after_newline.startsWith("select:") or after_newline.startsWith("group:") or after_newline.startsWith("having:") or after_newline.startsWith("include:")
 					end_pos = search_pos
 					break
 			search_pos = search_pos + 1

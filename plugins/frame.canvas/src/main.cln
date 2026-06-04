@@ -590,12 +590,62 @@ functions:
 			result = result + "_canvas_glow_end(" + canvas_id + ")\n"
 			return result
 
-		if cmd == "blend"
+		if cmd == "blend" or cmd == "blendMode"
 			string mode = get_attr(attrs, "mode", "normal")
 			string result = "_canvas_blend_begin(" + canvas_id + ", \"" + mode + "\")\n"
 			result = result + body + "\n"
 			result = result + "_canvas_blend_end(" + canvas_id + ")\n"
 			return result
+
+		// --- Immediate-mode path primitives — spec §17 ---
+		if cmd == "beginPath"
+			return "_canvas_begin_path(" + canvas_id + ")\n"
+
+		if cmd == "moveTo"
+			string mx = get_attr(attrs, "x", "0")
+			string my = get_attr(attrs, "y", "0")
+			return "_canvas_move_to(" + canvas_id + ", " + mx + ", " + my + ")\n"
+
+		if cmd == "lineTo"
+			string lx = get_attr(attrs, "x", "0")
+			string ly = get_attr(attrs, "y", "0")
+			return "_canvas_line_to(" + canvas_id + ", " + lx + ", " + ly + ")\n"
+
+		if cmd == "curveTo"
+			string cpx = get_attr(attrs, "cpX", "0")
+			string cpy = get_attr(attrs, "cpY", "0")
+			string cx = get_attr(attrs, "x", "0")
+			string cy = get_attr(attrs, "y", "0")
+			return "_canvas_curve_to(" + canvas_id + ", " + cpx + ", " + cpy + ", " + cx + ", " + cy + ")\n"
+
+		if cmd == "cubicTo"
+			string cp1x = get_attr(attrs, "cp1x", "0")
+			string cp1y = get_attr(attrs, "cp1y", "0")
+			string cp2x = get_attr(attrs, "cp2x", "0")
+			string cp2y = get_attr(attrs, "cp2y", "0")
+			string ux = get_attr(attrs, "x", "0")
+			string uy = get_attr(attrs, "y", "0")
+			return "_canvas_cubic_to(" + canvas_id + ", " + cp1x + ", " + cp1y + ", " + cp2x + ", " + cp2y + ", " + ux + ", " + uy + ")\n"
+
+		if cmd == "arc"
+			string ax = get_attr(attrs, "x", "0")
+			string ay = get_attr(attrs, "y", "0")
+			string ar = get_attr(attrs, "radius", "10")
+			string asa = get_attr(attrs, "startAngle", "0")
+			string aea = get_attr(attrs, "endAngle", "6.283185307179586")
+			return "_canvas_arc(" + canvas_id + ", " + ax + ", " + ay + ", " + ar + ", " + asa + ", " + aea + ")\n"
+
+		if cmd == "closePath"
+			return "_canvas_close_path(" + canvas_id + ")\n"
+
+		if cmd == "fill"
+			string fcolor = get_attr(attrs, "color", "black")
+			return "_canvas_fill_path(" + canvas_id + ", \"" + fcolor + "\")\n"
+
+		if cmd == "stroke"
+			string scolor = get_attr(attrs, "color", "black")
+			string swidth = get_attr(attrs, "width", "1")
+			return "_canvas_stroke_path(" + canvas_id + ", \"" + scolor + "\", " + swidth + ")\n"
 
 		return body
 
@@ -1802,6 +1852,7 @@ functions:
 		string result = ""
 		integer scan = 0
 		integer len = body.length()
+		string current_layer = ""
 		while scan < len
 			integer nl = body.indexOf("\n", scan)
 			string line = ""
@@ -1814,11 +1865,22 @@ functions:
 				next_scan = nl + 1
 			string t = line.trim()
 			if t.length() > 0
-				if t.startsWith("canvas.")
+				// Layer routing — spec §18: on layer "name":
+				if t.startsWith("on layer ")
+					if current_layer != ""
+						result = result + "\t\t_layer_end()\n"
+					integer q1 = t.indexOf("\"")
+					integer q2 = t.indexOf("\"", q1 + 1)
+					if q1 != -1 and q2 != -1
+						current_layer = t.substring(q1 + 1, q2)
+						result = result + "\t\t_layer_begin(\"" + current_layer + "\")\n"
+				else if t.startsWith("canvas.")
 					result = result + scene_expand_cmd(t)
 				else
 					result = result + "\t\t" + t + "\n"
 			scan = next_scan
+		if current_layer != ""
+			result = result + "\t\t_layer_end()\n"
 		return result
 
 	// Expands a body of lines for use inside start: block (1-tab indent).
