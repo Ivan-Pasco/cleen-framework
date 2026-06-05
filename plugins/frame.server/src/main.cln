@@ -242,9 +242,9 @@ functions:
 functions:
 	// expand_endpoints rewrites an endpoints: block into generated functions: + start: code.
 	//
-	// Handler naming: derived from method + sanitized path, not a sequential counter.
-	// This prevents collision when multiple files each declare an endpoints: block and
-	// their generated code is linked into a single WASM module (fixes RTE001).
+	// Handler naming: sequential integer suffix (__route_handler_0, __route_handler_1, ...).
+	// Multi-file collision is handled by the compiler's multi_file_compiler.rs which
+	// renumbers handlers across files before linking — no path-based workaround needed.
 	string expand_endpoints(string body)
 		string result = "functions:\n"
 
@@ -373,7 +373,7 @@ functions:
 					remaining = from_method.substring(abs_colon + 1, from_method.length())
 				else
 					string handler_code = extract_handler_body(endpoint_body)
-					string handler_name = "__route_handler_" + method_to_id(method) + "_" + route_id
+					string handler_name = "__route_handler_" + handler_idx.toString()
 
 					// Emit handler function
 					result = result + "\tstring " + handler_name + "()\n"
