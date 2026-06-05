@@ -1,5 +1,7 @@
-// Tests for frame.client plugin — load: block expansion
-// Verified with cln check (type-checking). Runtime testing requires full server stack.
+// Tests for frame.client plugin — load: and form: block expansion
+// These functions (expand_block, build_json_body, etc.) are defined in src/main.cln.
+// To type-check: combine this file with src/main.cln into a single file and run cln check.
+// Runtime execution requires the full server bridge stack.
 
 start:
 	test_unknown_block_passthrough()
@@ -14,6 +16,20 @@ start:
 	test_get_field()
 	test_compile_url_static()
 	test_compile_url_interpolated()
+	test_form_no_method()
+	test_form_basic_post()
+	test_form_required_guard()
+	test_form_clear_on_success()
+	test_form_emit_on_success()
+	test_form_get_no_body()
+	test_form_default_value()
+	test_form_empty_body()
+	test_build_json_body_single()
+	test_build_json_body_multi()
+	test_parse_form_method()
+	test_parse_form_url()
+	test_parse_form_field_required()
+	test_parse_form_field_default()
 
 functions:
 	void test_unknown_block_passthrough()
@@ -81,3 +97,95 @@ functions:
 		string result = compile_url("/api/posts/{query.cat}")
 		assert(result.contains("query.cat"))
 		assert(result.contains("\"/api/posts/\""))
+
+	// ========== form: block tests ==========
+
+	void test_form_no_method()
+		string result = expand_block("form", "badvalue", "title required")
+		assert(result.contains("requires method and url"))
+
+	void test_form_basic_post()
+		string result = expand_block("form", "post \"/api/tasks\"", "title required")
+		assert(result.contains("string title = \"\""))
+		assert(result.contains("boolean submitting = false"))
+		assert(result.contains("string formError = \"\""))
+		assert(result.contains("string formSuccess = \"\""))
+		assert(result.contains("void submit()"))
+		assert(result.contains("api.post(\"/api/tasks\""))
+		assert(result.contains("__body"))
+
+	void test_form_required_guard()
+		string result = expand_block("form", "post \"/api/tasks\"", "title required\ndescription")
+		assert(result.contains("if title.trim() == \"\""))
+		assert(result.contains("formError = \"title is required\""))
+		// description is not required — no guard for it
+		assert(result.contains("string description = \"\""))
+
+	void test_form_clear_on_success()
+		string result = expand_block("form", "post \"/api/tasks\"", "title required\non success: clear")
+		assert(result.contains("title = \"\""))
+		assert(result.contains("formSuccess = \"Saved\""))
+
+	void test_form_emit_on_success()
+		string result = expand_block("form", "post \"/api/tasks\"", "title required\non success: clear emit \"loadTasks\"")
+		assert(result.contains("loadTasks()"))
+
+	void test_form_get_no_body()
+		string result = expand_block("form", "get \"/api/search\"", "query required")
+		assert(result.contains("api.get(\"/api/search\")"))
+		// GET has no body — __body should not be generated
+		assert(result.contains("__body") == false)
+
+	void test_form_default_value()
+		string result = expand_block("form", "post \"/api/tasks\"", "priority default=\"medium\"")
+		assert(result.contains("string priority = \"medium\""))
+
+	void test_form_empty_body()
+		string result = expand_block("form", "post \"/api/tasks\"", "")
+		assert(result.contains("no field declarations"))
+
+	void test_build_json_body_single()
+		// Single field: should produce "{\"title\":\"" + title + "\"}"
+		string result = build_json_body("title~true~")
+		assert(result.contains("\\\"title\\\":\\\"\""))
+		assert(result.contains("+ title +"))
+		// The opening and closing quotes must bound the expression correctly
+		assert(result.substring(0, 2) == "\"{")
+		assert(result.substring(result.length() - 2, result.length()) == "}\"")
+
+	void test_build_json_body_multi()
+		// Two fields: should produce "{\"title\":\"" + title + "\",\"desc\":\"" + desc + "\"}"
+		string result = build_json_body("title~true~|desc~false~")
+		assert(result.contains("+ title +"))
+		assert(result.contains("+ desc +"))
+		assert(result.contains(",\\\"desc\\\""))
+		// Both fields must be present and the expression must open and close with quotes
+		assert(result.substring(0, 2) == "\"{")
+		assert(result.substring(result.length() - 2, result.length()) == "}\"")
+		// The comma separator between fields must appear before desc
+		integer comma_pos = result.indexOf(",\\\"desc")
+		assert(comma_pos != -1)
+
+	void test_parse_form_method()
+		assert(parse_form_method("post \"/api/\"") == "post")
+		assert(parse_form_method("PUT \"/api/\"") == "put")
+		assert(parse_form_method("PATCH \"/api/\"") == "patch")
+		assert(parse_form_method("get \"/api/\"") == "get")
+		assert(parse_form_method("DELETE \"/api/\"") == "delete")
+		assert(parse_form_method("badword \"/api/\"") == "")
+
+	void test_parse_form_url()
+		assert(parse_form_url("post \"/api/tasks\"") == "/api/tasks")
+		assert(parse_form_url("post") == "")
+
+	void test_parse_form_field_required()
+		string rec = parse_form_field("title required")
+		assert(get_field(rec, 0) == "title")
+		assert(get_field(rec, 1) == "true")
+		assert(get_field(rec, 2) == "")
+
+	void test_parse_form_field_default()
+		string rec = parse_form_field("priority default=\"medium\"")
+		assert(get_field(rec, 0) == "priority")
+		assert(get_field(rec, 1) == "false")
+		assert(get_field(rec, 2) == "medium")

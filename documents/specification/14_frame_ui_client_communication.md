@@ -684,12 +684,12 @@ any users = null
 any stats = null
 
 start:
-    later any __res_users = api.get("/api/users")
+    later __res_users = api.get("/api/users")
     if __res_users.ok
         users = __res_users.json("data")
     else
         loadError = "Failed to load users"
-    later any __res_stats = api.get("/api/stats")
+    later __res_stats = api.get("/api/stats")
     if __res_stats.ok
         stats = __res_stats.json()
     else
@@ -751,23 +751,137 @@ For data needed by a single component only, use `api.*` directly inside the comp
 
 ---
 
-## 10. Security
+## 10. Declarative Form Wiring (`form:` Block)
 
-### 10.1 CORS
+The `form:` block is a top-level block owned by **frame.client**. It lives in a companion `.cln` file alongside a page and generates all the boilerplate needed for a form submission: field state variables, a `submitting` flag, error/success strings, and a `submit()` function.
+
+### 10.1 Syntax
+
+```
+form: <method> "<url>"
+    <field> [required] [default="<value>"]
+    ...
+    [on success: [clear] [emit "<handler>"]]
+    [on error: show]
+```
+
+| Part | Required | Description |
+|------|----------|-------------|
+| `<method>` | yes | HTTP method: `post`, `put`, `patch`, `get`, or `delete` (case-insensitive). |
+| `"<url>"` | yes | Endpoint URL string literal. |
+| `<field>` | at least one | Name of a string state variable to generate. |
+| `required` | no | Validates the field is non-empty before submitting. |
+| `default="<value>"` | no | Initial value for the field (default: `""`). |
+| `on success: clear` | no | Reset all fields to their defaults after a successful submit. |
+| `on success: emit "<handler>"` | no | Call the named exported function after success. |
+| `on error: show` | no | Set `formError` from the response JSON `"error"` key (default behaviour). |
+
+### 10.2 Where It Lives
+
+`form:` belongs in a client-side companion `.cln` file:
+
+```
+app/web/pages/
+├── new-task.html            ← HTML template
+├── new-task.cln             ← server-side: guard(), load()
+└── new-task.client.cln     ← client-side: form: block (frame.client)
+```
+
+### 10.3 What It Generates
+
+```clean
+form: post "/api/tasks"
+    title required
+    description default="Enter description"
+    on success: clear emit "reloadTasks"
+```
+
+Expands to:
+
+```clean
+string title = ""
+string description = "Enter description"
+boolean submitting = false
+string formError = ""
+string formSuccess = ""
+
+void submit()
+    if submitting
+        return
+    if title.trim() == ""
+        formError = "title is required"
+        return
+    submitting = true
+    formError = ""
+    formSuccess = ""
+    string __body = "{\"title\":\"" + title + "\",\"description\":\"" + description + "\"}"
+    later __res = api.post("/api/tasks", __body)
+    if __res.ok
+        title = ""
+        description = "Enter description"
+        formSuccess = "Saved"
+        reloadTasks()
+    else
+        formError = __res.json("error")
+        if formError == ""
+            formError = "Request failed"
+    submitting = false
+```
+
+### 10.4 Generated Variables
+
+| Variable | Type | Initial value | Purpose |
+|----------|------|---------------|---------|
+| `<field>` | `string` | `""` or `default="…"` value | One variable per declared field. |
+| `submitting` | `boolean` | `false` | `true` while the request is in flight. Use to disable the submit button. |
+| `formError` | `string` | `""` | Set on validation failure or API error. |
+| `formSuccess` | `string` | `""` | Set to `"Saved"` on success. |
+
+### 10.5 Generated Function
+
+`void submit()` is generated at module level and can be called from any component on the page via `emit`. It is idempotent: if `submitting` is already `true` it returns immediately.
+
+### 10.6 Methods Without a Body
+
+For `get` and `delete`, no `__body` variable is generated and the API call omits the body argument:
+
+```clean
+form: delete "/api/tasks/{id}"
+    id required
+```
+
+Generates `api.delete("/api/tasks/{id}")` — note the `id` field is used for the URL, not sent as JSON.
+
+### 10.7 Comparison with `api.submit()`
+
+| | `form:` block | `api.submit()` |
+|---|---|---|
+| State management | Automatic | Manual |
+| Validation | Declarative (`required`) | Manual |
+| `submitting` guard | Built-in | Manual |
+| Error state | Built-in `formError` | Manual |
+| JSON body | Built-in (field variables) | Collects from DOM inputs |
+| Use when | Page-level form, fields in state | One-shot submit of an HTML form |
+
+---
+
+## 11. Security
+
+### 11.1 CORS
 Browser CORS policy applies. Server must send `Access-Control-Allow-*` headers for cross-origin requests.
 
-### 10.2 Credentials
+### 11.2 Credentials
 - `api.auth()` stores in JS memory. Cleared on page unload or `api.clearAuth()`.
 - Auth applied automatically to all `api.*` calls.
 - `api.header()` sets per-request only, no auto-auth.
 - Cookies follow default `credentials: 'same-origin'`.
 
-### 10.3 WebSocket/SSE
+### 11.3 WebSocket/SSE
 Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 11. Context Isolation
+## 12. Context Isolation
 
 | Context | Available When |
 |---------|----------------|
@@ -780,7 +894,7 @@ Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 12. Function Summary
+## 13. Function Summary
 
 ### frame.ui additions: 5 functions
 
@@ -792,7 +906,7 @@ Server-side origin validation is the developer's responsibility.
 | `ui.checked(selector)` | Checkbox state |
 | `ui.setInput(selector, value)` | Set input value |
 
-### frame.client: 27 functions + 1 block
+### frame.client: 27 functions + 2 blocks
 
 | Namespace / Block | Count | Functions / Keywords |
 |-------------------|-------|----------------------|
@@ -801,7 +915,8 @@ Server-side origin validation is the developer's responsibility.
 | `api.*` convenience | 1 | submit |
 | `live.*` | 9 | open, send, close, state, message, connId, closeCode, closeReason, error |
 | `feed.*` | 7 | open, on, close, data, eventType, lastId, connId |
-| `load:` block | — | Declarative; generates `load.loading`, `load.error`, and named data variables. See §9. |
+| `load:` block | — | Declarative page-level data fetching; generates `loading`, `loadError`, named `any` variables. See §9. |
+| `form:` block | — | Declarative form wiring; generates field variables, `submitting`, `formError`, `formSuccess`, `submit()`. See §10. |
 
 **ApiResponse** — returned by all `api.*` request functions, read via `later result = api.*`:
 
@@ -815,7 +930,7 @@ Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 13. Implementation Priority
+## 14. Implementation Priority
 
 | Phase | What | Count | Rationale |
 |-------|------|-------|-----------|
@@ -823,10 +938,11 @@ Server-side origin validation is the developer's responsibility.
 | **Phase 2** | Live / WebSocket | 9 | Real-time communication |
 | **Phase 3** | Feed / SSE | 7 | Server push |
 | **Phase 4** | `load:` block | — | Declarative sugar over Phase 1 API; requires Phase 1 complete |
+| **Phase 5** | `form:` block | — | Declarative sugar over Phase 1 API + state management |
 
 ---
 
-## 14. Files
+## 15. Files
 
 | Action | File |
 |--------|------|

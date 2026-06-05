@@ -9,7 +9,7 @@ license = "MIT"
 min_compiler_version = "0.15.0"
 
 [handles]
-blocks = ["load"]
+blocks = ["load", "form"]
 
 [exports]
 expand = "expand_block"
@@ -62,15 +62,18 @@ functions = [
 ]
 
 [language]
-blocks = ["load"]
+blocks = ["load", "form"]
 
 keywords = [
   { name = "api", description = "HTTP API client namespace", context = "namespace" },
   { name = "live", description = "WebSocket live connection namespace", context = "namespace" },
   { name = "feed", description = "Server-Sent Events feed namespace", context = "namespace" },
   { name = "load", description = "Declarative page-level client data fetching block — fetches data from APIs when the page loads in the browser", context = "block" },
+  { name = "form", description = "Declarative form wiring — generates field state, submit handler, and loading/error state", context = "block" },
   { name = "from", description = "URL source for a load: declaration", context = "load-keyword" },
   { name = "at", description = "JSON path to extract from response", context = "load-keyword" },
+  { name = "required", description = "Marks a form field as required — validated before submit", context = "form-keyword" },
+  { name = "optional", description = "Marks a form field as optional (default)", context = "form-keyword" },
 ]
 
 types = []
@@ -116,6 +119,7 @@ functions = [
 
 completions = [
   { trigger = "load:", insert = "load:\n\t${1:data} from \"${2:/api/endpoint}\" at \"${3:data}\"" },
+  { trigger = "form:", insert = "form: post \"${1:/api/endpoint}\"\n\t${2:field} required\n\ton success: clear" },
   { trigger = "api.get", insert = "later ${1:result} = api.get(\"${2:/api/}\")" },
   { trigger = "api.post", insert = "later ${1:result} = api.post(\"${2:/api/}\", ${3:body})" },
   { trigger = "api.put", insert = "later ${1:result} = api.put(\"${2:/api/}\", ${3:body})" },
@@ -130,7 +134,7 @@ completions = [
 ]
 
 [ai]
-description = "Client-side communication plugin. Use api.* with 'later result = api.get(url)' for HTTP requests, live.* for WebSocket connections, feed.* for SSE streams. Never use JavaScript fetch/XHR/WebSocket/EventSource. Use load: for declarative page-level data fetching — it generates module-level state and a start: block that fetches from APIs when the page loads."
+description = "Client-side communication plugin. Use api.* with 'later result = api.get(url)' for HTTP requests, live.* for WebSocket connections, feed.* for SSE streams. Never use JavaScript fetch/XHR/WebSocket/EventSource. Use load: for declarative page-level data fetching — it generates module-level state and a start: block that fetches from APIs when the page loads. Use form: in a .client.cln companion file for page-level form submission — it generates field state variables, a submitting flag, formError, formSuccess, and a submit() handler."
 constraints = [
   "Never use JavaScript fetch(), XMLHttpRequest, or $.ajax() — use api.* for all HTTP calls",
   "Never write <script> tags with WebSocket or EventSource — use live.* and feed.* instead",
@@ -139,6 +143,7 @@ constraints = [
   "frame.client runs in the browser WASM context — never call db.*, http.*, or any server-only functions",
   "api.auth(scheme, credential) persists for all subsequent requests — call once per session, not per request",
   "Check result.ok before reading result.json() — always handle the error case to avoid silent failures",
+  "Use form: in a .client.cln companion file for page-level form submission — it generates field state, submitting flag, formError, formSuccess, and a submit() handler",
 ]
 
 [[ai.patterns]]
