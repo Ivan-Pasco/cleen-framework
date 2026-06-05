@@ -16,7 +16,7 @@ This specification defines **frame.client** -- the plugin for all client-side co
 | `api.*` | HTTP | Call APIs, submit forms, read responses |
 | `live.*` | WebSocket | Bidirectional real-time connections |
 | `feed.*` | SSE | Server-push event streams |
-| `load:` | HTTP | Declarative data fetching inside components — sugar over `api.*` |
+| `load:` | HTTP | Declarative page-level data fetching — generates module state + start: fetch |
 
 It also specifies form-reading helpers added to **frame.ui**.
 
@@ -28,7 +28,7 @@ It also specifies form-reading helpers added to **frame.ui**.
 
 ```
 frame.ui      → What you SEE       (DOM, events, components, state, timers)
-frame.client  → What you SEND      (api, live, feed, load: -- all client-server communication)
+frame.client  → What you SEND      (api, live, feed, load: — all client-server communication)
 frame.server  → What you SERVE     (endpoints, request context, response helpers)
 frame.data    → What you STORE     (models, queries, migrations)
 frame.auth    → What you SECURE    (login, sessions, roles)
@@ -628,9 +628,11 @@ component: tag="dashboard"
 
 ## 9. Declarative Client Data Fetching (`load:` Block)
 
-The `load:` block is a declarative shorthand over `api.*` that lives inside `component:` definitions. The framework handles the fetch, JSON parsing, loading state, error state, and reactive re-fetching when inputs change — eliminating the `state:` + `onLoad` boilerplate pattern.
+The `load:` block is a top-level block owned by **frame.client**. It lives in a companion `.cln` file alongside a page (not nested inside a component) and fetches data from APIs when the page loads in the browser.
 
-Requires `client="on"` (or another active hydration mode).
+It generates module-level state variables and a `start:` block — so the fetch runs automatically when the client WASM module loads, making data available to every component on the page.
+
+This mirrors the server-side pattern: just as `load()` in a companion file provides data for SSR rendering, `load:` in a client companion file provides data for client-side rendering.
 
 ### 9.1 Syntax
 
@@ -643,144 +645,109 @@ load:
 | Part | Required | Description |
 |------|----------|-------------|
 | `<name>` | yes | Variable name for the parsed response data |
-| `from "<url>"` | yes | URL to fetch. May interpolate `{inputs.*}` values. |
+| `from "<url>"` | yes | URL to fetch. May use `{query.X}` to interpolate URL query parameters. |
 | `at "<json-path>"` | no | Dot-notation path to extract from the JSON body. Omit to use the full body. |
-| `on error: "<handler>"` | no | Name of an `events:` function to call on failure. |
+| `on error: "<handler>"` | no | Name of an exported function to call on failure. |
 
-### 9.2 What It Replaces
+### 9.2 Where It Lives
 
-**Before:**
-```clean
-component: tag="user-profile" client="on"
-    inputs:
-        integer userId
+`load:` belongs in a client-side companion `.cln` file:
 
-    state:
-        any user = null
-        boolean loading = true
-        string error = ""
-
-    events:
-        onLoad:
-            later result = api.get("/api/users/" + inputs.userId.toString())
-            if result.ok
-                state.user = result.json("data")
-            else
-                state.error = result.json("message")
-            state.loading = false
-
-    html:
-        <div cl-if="state.loading">Loading...</div>
-        <div cl-if="state.error != ''">{state.error}</div>
-        <h1 cl-if="not state.loading and state.error == ''">{state.user.name}</h1>
+```
+app/web/pages/
+├── users.html          ← HTML template
+├── users.cln           ← server-side: load(), guard()
+└── users.client.cln    ← client-side: load: block (frame.client)
 ```
 
-**After:**
-```clean
-component: tag="user-profile" client="on"
-    inputs:
-        integer userId
+Or in a standalone client file in `app/web/client/`:
 
-    load:
-        user from "/api/users/{inputs.userId}" at "data"
-
-    html:
-        <div cl-if="load.loading">Loading...</div>
-        <div cl-if="load.error != ''">{load.error}</div>
-        <h1 cl-if="not load.loading">{user.name}</h1>
+```
+app/web/client/
+└── users-data.cln      ← load: block only
 ```
 
-### 9.3 Generated State
-
-The `load:` block auto-generates these variables in the component scope. Declaring them manually in `state:` is a compile error.
-
-| Auto-variable | Type | Value |
-|---------------|------|-------|
-| `<name>` | `any` | Parsed JSON response (or extracted path). `null` until first fetch completes. |
-| `load.loading` | `boolean` | `true` while any declaration in the block is pending |
-| `load.error` | `string` | Error message from the last failed request. `""` on success. |
-
-Loading/error state lives on the `load.` namespace to avoid conflicts with response data fields (a response may itself contain a `loading` key).
-
-### 9.4 Reactive Re-Fetching
-
-If the URL references `{inputs.*}` values, the block re-runs automatically when those inputs change.
-
-```clean
-component: tag="post-list" client="on"
-    inputs:
-        string category
-
-    load:
-        posts from "/api/posts?category={inputs.category}" at "items"
-
-    // Re-fetches automatically when inputs.category changes
-    html:
-        <div cl-if="load.loading">Loading...</div>
-        <li cl-iterate="post in posts">{post.title}</li>
-```
-
-### 9.5 Multiple Declarations
-
-```clean
-component: tag="user-dashboard" client="on"
-    inputs:
-        integer userId
-
-    load:
-        user from "/api/users/{inputs.userId}"
-        posts from "/api/users/{inputs.userId}/posts" at "items"
-        stats from "/api/users/{inputs.userId}/stats"
-
-    html:
-        <div cl-if="load.loading">Loading...</div>
-        <h1 cl-if="not load.loading">{user.name}</h1>
-        <p>Posts: {posts.length} — Score: {stats.score}</p>
-```
-
-`load.loading` is `true` until all declarations complete. `load.error` holds the message from the first failure.
-
-### 9.6 Custom Error Handling
+### 9.3 What It Generates
 
 ```clean
 load:
-    products from "/api/products" at "data" on error: "onProductsFailed"
-
-events:
-    onProductsFailed:
-        toast.error("Could not load products — try refreshing")
+    users from "/api/users" at "data"
+    stats from "/api/stats"
 ```
 
-### 9.7 Constraints
-
-| Rule | Why |
-|------|-----|
-| Requires `client="on"` or active hydration mode | Fetch runs in the browser, not on the server |
-| GET only | Mutations belong in `events:` with `api.post/put/patch/delete` |
-| URL interpolation limited to `{inputs.*}` | Only inputs trigger reactive re-fetch; `{state.*}` in URLs is a compile error |
-| Auto-generated variables cannot be declared in `state:` | Prevents double-declaration |
-
-### 9.8 Escape Hatch
-
-When `load:` is not flexible enough (conditional fetches, chained requests, non-GET operations), use `events:` + `api.*` directly. Both can coexist in the same component.
+Expands to:
 
 ```clean
-component: tag="search-results" client="on"
-    inputs:
-        string query
+boolean loading = true
+string loadError = ""
+any users = null
+any stats = null
 
-    load:
-        featured from "/api/featured" at "items"
-
-    state:
-        any results = null
-
-    events:
-        onSearch:
-            later r = api.get("/api/search?q=" + inputs.query)
-            if r.ok
-                state.results = r.json("hits")
+start:
+    later any __res_users = api.get("/api/users")
+    if __res_users.ok
+        users = __res_users.json("data")
+    else
+        loadError = "Failed to load users"
+    later any __res_stats = api.get("/api/stats")
+    if __res_stats.ok
+        stats = __res_stats.json()
+    else
+        loadError = "Failed to load stats"
+    loading = false
 ```
+
+### 9.4 Generated Variables
+
+| Variable | Type | Value |
+|----------|------|-------|
+| `<name>` | `any` | Parsed JSON response (or extracted path). `null` until fetch completes. |
+| `loading` | `boolean` | `true` while any fetch is pending. `false` when all complete. |
+| `loadError` | `string` | Error message from the last failed fetch. `""` on success. |
+
+### 9.5 URL Query Parameter Interpolation
+
+Use `{query.X}` to inject URL query parameters into the fetch URL:
+
+```clean
+load:
+    posts from "/api/posts?category={query.category}" at "items"
+```
+
+The runtime reads the value of `?category=` from the current page URL and substitutes it.
+
+### 9.6 Multiple Declarations
+
+All fetches run sequentially. `loading` stays `true` until all complete.
+
+```clean
+load:
+    user from "/api/me" at "data"
+    posts from "/api/me/posts" at "items"
+    stats from "/api/me/stats"
+```
+
+`loadError` holds the message from the last failure (if any).
+
+### 9.7 Custom Error Handling
+
+```clean
+load:
+    config from "/api/config" on error: "handleConfigError"
+```
+
+`handleConfigError()` must be an exported function in the same module.
+
+### 9.8 Comparison with Component-Level Fetching
+
+For data needed by a single component only, use `api.*` directly inside the component's `onLoad` event handler. The `load:` block is for **page-level** data shared across multiple components.
+
+| | `load:` block | `api.*` in component |
+|---|---|---|
+| Scope | Whole page | One component |
+| Trigger | Page load (automatic) | Component event handler |
+| Data sharing | All components on page | Private to component |
+| Boilerplate | Zero | Manual state + fetch |
 
 ---
 

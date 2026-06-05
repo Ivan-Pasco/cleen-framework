@@ -39,7 +39,7 @@ get_keywords = "get_keywords"
 assemble = "assemble"
 
 [handles]
-blocks = ["component", "screen", "page", "html", "styles", "ui"]
+blocks = ["component", "page", "html", "ui"]
 
 [html]
 # File extensions processed as HTML pages
@@ -224,7 +224,7 @@ functions = [
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["component", "screen", "page", "styles", "html", "ui"]
+blocks = ["component", "page", "html", "ui"]
 
 # Keywords used within plugin context
 keywords = [
@@ -233,8 +233,6 @@ keywords = [
   { name = "render", description = "Component render function", context = "block" },
   { name = "events", description = "Event handlers block", context = "block" },
   { name = "computed", description = "Computed properties", context = "block" },
-  { name = "variables", description = "CSS variables declaration", context = "block" },
-  { name = "global", description = "Global CSS styles", context = "block" },
   { name = "var", description = "html: block named variable attribute (html: var=\"name\")", context = "attribute" },
   { name = "if", description = "Conditional rendering directive", context = "directive" },
   { name = "else", description = "Else clause for conditional", context = "directive" },
@@ -392,7 +390,6 @@ functions = [
 # Auto-completion suggestions
 completions = [
   { trigger = "component ", insert = "component: tag=\"${1:my-tag}\"\n\tinputs:\n\t\t${2:string} ${3:name}\n\n\thtml:\n\t\t<div>\n\t\t\t${4:content}\n\t\t</div>" },
-  { trigger = "styles ", insert = "styles ${1:Name}:\n\tvariables:\n\t\t${2:color-primary}: \"${3:#3b82f6}\"" },
   { trigger = "state:", insert = "state:\n\t${1:field}: ${2:value}" },
   { trigger = "render:", insert = "render:\n\t${1:// template}" },
   { trigger = "html:", insert = "html:\n\t<div>\n\t\t${1:content}\n\t</div>" },
@@ -429,11 +426,10 @@ required_blocks = [
 
 block_folder_rules = [
   { block = "component", allowed_in = ["app/web/components/", "app/ui/"], message = "component: blocks should be in app/web/components/ or app/ui/" },
-  { block = "screen", allowed_in = ["app/web/pages/", "app/web/components/", "app/ui/"], message = "screen: blocks should be in app/web/pages/ or app/web/components/ or app/ui/" },
 ]
 
 [ai]
-description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. Use styles: for theming. Never write inline JavaScript."
+description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. CSS goes in public/css/ files. Never write inline JavaScript."
 constraints = [
   "Pages go in app/web/pages/ as .html files — not as .cln files",
   "Reusable elements belong in component: blocks in app/web/components/ or app/ui/ for cross-platform components",

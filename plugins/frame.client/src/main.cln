@@ -1,0 +1,211 @@
+// frame.client plugin — expand_block and get_keywords
+// Handles: load: (declarative page-level client data fetching)
+
+functions:
+	// Main block expander entry point
+	string expand_block(string block_name, string attributes, string body)
+		if block_name == "load"
+			return expand_load(body)
+		return body
+
+	// Return keyword list for IDE support
+	string get_keywords()
+		return "[\"load\",\"api\",\"live\",\"feed\",\"from\",\"at\"]"
+
+	// Expand a load: block into module-level state + start: block
+	//
+	// Input body (one declaration per line):
+	//   users from "/api/users" at "data"
+	//   products from "/api/products"
+	//   stats from "/api/stats/{query.userId}" at "result"
+	//
+	// Generated output:
+	//   boolean loading = true
+	//   string loadError = ""
+	//   any users = null
+	//   ...
+	//   start:
+	//       later any __res_users = api.get("/api/users")
+	//       if __res_users.ok
+	//           users = __res_users.json("data")
+	//       else
+	//           loadError = "Failed to load users"
+	//       ...
+	//       loading = false
+	string expand_load(string body)
+		// Parse each non-empty line as a declaration
+		string decls = ""
+		integer ls = 0
+		while ls < body.length()
+			integer nl = body.indexOf("\n", ls)
+			if nl == -1
+				nl = body.length()
+			string line = body.substring(ls, nl).trim()
+			if line.length() > 0
+				string d = parse_load_decl(line)
+				if d.length() > 0
+					if decls.length() > 0
+						decls = decls + "|"
+					decls = decls + d
+			ls = nl + 1
+
+		if decls.length() == 0
+			return "// load: block had no valid declarations"
+
+		// Build output: state variables first
+		string result = "boolean loading = true\n"
+		result = result + "string loadError = \"\"\n"
+
+		// One `any` variable per declaration (pipe-separated records; each record is tilde-separated: name~url~at~onerror)
+		string rem = decls
+		integer idx = 0
+		while idx < 100
+			integer pipe = rem.indexOf("|")
+			string entry = rem
+			if pipe != -1
+				entry = rem.substring(0, pipe)
+				rem = rem.substring(pipe + 1, rem.length())
+			else
+				rem = ""
+
+			string var_name = get_field(entry, 0)
+			if var_name.length() > 0
+				result = result + "any " + var_name + " = null\n"
+
+			if pipe == -1
+				idx = 100
+			else
+				idx = idx + 1
+
+		// Build start: block
+		result = result + "\nstart:\n"
+
+		string rem2 = decls
+		integer idx2 = 0
+		while idx2 < 100
+			integer pipe2 = rem2.indexOf("|")
+			string entry2 = rem2
+			if pipe2 != -1
+				entry2 = rem2.substring(0, pipe2)
+				rem2 = rem2.substring(pipe2 + 1, rem2.length())
+			else
+				rem2 = ""
+
+			string vn = get_field(entry2, 0)
+			string url = get_field(entry2, 1)
+			string at_path = get_field(entry2, 2)
+			string on_err = get_field(entry2, 3)
+
+			if vn.length() > 0 and url.length() > 0
+				string res = "__res_" + vn
+				string url_expr = compile_url(url)
+				result = result + "\tlater any " + res + " = api.get(" + url_expr + ")\n"
+				result = result + "\tif " + res + ".ok\n"
+				if at_path.length() > 0
+					result = result + "\t\t" + vn + " = " + res + ".json(\"" + at_path + "\")\n"
+				else
+					result = result + "\t\t" + vn + " = " + res + ".json()\n"
+				result = result + "\telse\n"
+				result = result + "\t\tloadError = \"Failed to load " + vn + "\"\n"
+				if on_err.length() > 0
+					result = result + "\t\t" + on_err + "()\n"
+
+			if pipe2 == -1
+				idx2 = 100
+			else
+				idx2 = idx2 + 1
+
+		result = result + "\tloading = false\n"
+		return result
+
+	// Parse one declaration line into a tilde-separated record: name~url~at~onerror
+	// Input: "users from \"/api/users\" at \"data\" on error: \"handleErr\""
+	// Returns "" if malformed.
+	string parse_load_decl(string line)
+		integer from_pos = line.indexOf(" from ")
+		if from_pos == -1
+			return ""
+		string var_name = line.substring(0, from_pos).trim()
+
+		integer q1 = line.indexOf("\"", from_pos + 6)
+		if q1 == -1
+			return ""
+		integer q2 = line.indexOf("\"", q1 + 1)
+		if q2 == -1
+			return ""
+		string url = line.substring(q1 + 1, q2)
+
+		string at_path = ""
+		integer at_pos = line.indexOf(" at \"", q2)
+		if at_pos != -1
+			integer aq1 = at_pos + 5
+			integer aq2 = line.indexOf("\"", aq1)
+			if aq2 != -1
+				at_path = line.substring(aq1, aq2)
+
+		string on_err = ""
+		integer ep = line.indexOf(" on error: \"")
+		if ep != -1
+			integer eq1 = ep + 12
+			integer eq2 = line.indexOf("\"", eq1)
+			if eq2 != -1
+				on_err = line.substring(eq1, eq2)
+
+		return var_name + "~" + url + "~" + at_path + "~" + on_err
+
+	// Extract field N (0-based) from a tilde-separated record.
+	// get_field("name~url~at~err", 0) -> "name"
+	// get_field("name~url~at~err", 2) -> "at"
+	string get_field(string record, integer index)
+		string remaining = record
+		integer i = 0
+		while i < index
+			integer tilde = remaining.indexOf("~")
+			if tilde == -1
+				return ""
+			remaining = remaining.substring(tilde + 1, remaining.length())
+			i = i + 1
+		integer tilde = remaining.indexOf("~")
+		if tilde == -1
+			return remaining
+		return remaining.substring(0, tilde)
+
+	// Compile a URL template with {query.X} placeholders to a Clean string expression.
+	// "/api/users/{query.id}" becomes "/api/users/" + query.id + ""
+	// Static URLs are returned as a quoted string literal.
+	string compile_url(string url)
+		string open_brace = "{"
+		string needle = open_brace + "query."
+		if url.indexOf(needle) == -1
+			return "\"" + url + "\""
+
+		string result = ""
+		string rem = url
+		integer safety = 0
+		while rem.length() > 0 and safety < 50
+			safety = safety + 1
+			integer open = rem.indexOf(needle)
+			if open == -1
+				if result.length() > 0
+					result = result + " + "
+				result = result + "\"" + rem + "\""
+				rem = ""
+			else
+				if open > 0
+					if result.length() > 0
+						result = result + " + "
+					result = result + "\"" + rem.substring(0, open) + "\""
+				integer needle_len = needle.length()
+				integer close = rem.indexOf("}", open)
+				if close == -1
+					if result.length() > 0
+						result = result + " + "
+					result = result + "\"" + rem.substring(open, rem.length()) + "\""
+					rem = ""
+				else
+					string field = rem.substring(open + needle_len, close)
+					if result.length() > 0
+						result = result + " + "
+					result = result + "query." + field
+					rem = rem.substring(close + 1, rem.length())
+		return result

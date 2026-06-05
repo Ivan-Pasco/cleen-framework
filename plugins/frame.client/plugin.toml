@@ -9,9 +9,10 @@ license = "MIT"
 min_compiler_version = "0.15.0"
 
 [handles]
-blocks = []
+blocks = ["load"]
 
 [exports]
+expand = "expand_block"
 get_keywords = "get_keywords"
 
 [bridge]
@@ -61,12 +62,15 @@ functions = [
 ]
 
 [language]
-blocks = []
+blocks = ["load"]
 
 keywords = [
   { name = "api", description = "HTTP API client namespace", context = "namespace" },
   { name = "live", description = "WebSocket live connection namespace", context = "namespace" },
   { name = "feed", description = "Server-Sent Events feed namespace", context = "namespace" },
+  { name = "load", description = "Declarative page-level client data fetching block — fetches data from APIs when the page loads in the browser", context = "block" },
+  { name = "from", description = "URL source for a load: declaration", context = "load-keyword" },
+  { name = "at", description = "JSON path to extract from response", context = "load-keyword" },
 ]
 
 types = []
@@ -111,6 +115,7 @@ functions = [
 ]
 
 completions = [
+  { trigger = "load:", insert = "load:\n\t${1:data} from \"${2:/api/endpoint}\" at \"${3:data}\"" },
   { trigger = "api.get", insert = "later ${1:result} = api.get(\"${2:/api/}\")" },
   { trigger = "api.post", insert = "later ${1:result} = api.post(\"${2:/api/}\", ${3:body})" },
   { trigger = "api.put", insert = "later ${1:result} = api.put(\"${2:/api/}\", ${3:body})" },
@@ -125,7 +130,7 @@ completions = [
 ]
 
 [ai]
-description = "Client-side communication plugin. Use api.* with 'later result = api.get(url)' for HTTP requests, live.* for WebSocket connections, feed.* for SSE streams. Never use JavaScript fetch/XHR/WebSocket/EventSource."
+description = "Client-side communication plugin. Use api.* with 'later result = api.get(url)' for HTTP requests, live.* for WebSocket connections, feed.* for SSE streams. Never use JavaScript fetch/XHR/WebSocket/EventSource. Use load: for declarative page-level data fetching — it generates module-level state and a start: block that fetches from APIs when the page loads."
 constraints = [
   "Never use JavaScript fetch(), XMLHttpRequest, or $.ajax() — use api.* for all HTTP calls",
   "Never write <script> tags with WebSocket or EventSource — use live.* and feed.* instead",
@@ -167,9 +172,9 @@ anti_pattern = "ignoring result.ok and assuming success, showing the raw result.
 example = "patterns/api-error-handling.cln"
 
 [paths]
-owns = []
-auto_create = false
-patterns = []
+owns = ["app/web/client"]
+auto_create = true
+patterns = ["*.cln"]
 implicit_import = false
 
 [templates]

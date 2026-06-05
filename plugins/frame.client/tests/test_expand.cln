@@ -1,0 +1,83 @@
+// Tests for frame.client plugin — load: block expansion
+// Verified with cln check (type-checking). Runtime testing requires full server stack.
+
+start:
+	test_unknown_block_passthrough()
+	test_load_basic()
+	test_load_at_path()
+	test_load_no_at_path()
+	test_load_multiple_decls()
+	test_load_on_error()
+	test_load_url_interpolation()
+	test_load_empty_body()
+	test_parse_decl_missing_from()
+	test_get_field()
+	test_compile_url_static()
+	test_compile_url_interpolated()
+
+functions:
+	void test_unknown_block_passthrough()
+		string result = expand_block("unknown", "{}", "original body")
+		assert(result == "original body")
+
+	void test_load_basic()
+		string result = expand_block("load", "{}", "users from \"/api/users\"")
+		assert(result.contains("boolean loading = true"))
+		assert(result.contains("string loadError = \"\""))
+		assert(result.contains("any users = null"))
+		assert(result.contains("start:"))
+		assert(result.contains("__res_users"))
+		assert(result.contains("api.get(\"/api/users\")"))
+		assert(result.contains("loading = false"))
+
+	void test_load_at_path()
+		string result = expand_block("load", "{}", "items from \"/api/items\" at \"data\"")
+		assert(result.contains(".json(\"data\")"))
+
+	void test_load_no_at_path()
+		string result = expand_block("load", "{}", "raw from \"/api/raw\"")
+		assert(result.contains(".json()"))
+
+	void test_load_multiple_decls()
+		string body = "users from \"/api/users\" at \"data\"\nposts from \"/api/posts\" at \"items\""
+		string result = expand_block("load", "{}", body)
+		assert(result.contains("any users = null"))
+		assert(result.contains("any posts = null"))
+		assert(result.contains("__res_users"))
+		assert(result.contains("__res_posts"))
+		assert(result.contains("Failed to load users"))
+		assert(result.contains("Failed to load posts"))
+
+	void test_load_on_error()
+		string result = expand_block("load", "{}", "cfg from \"/api/cfg\" on error: \"handleErr\"")
+		assert(result.contains("handleErr()"))
+
+	void test_load_url_interpolation()
+		string result = expand_block("load", "{}", "posts from \"/api/posts/{query.cat}\"")
+		assert(result.contains("query.cat"))
+		assert(result.contains("\"/api/posts/\""))
+
+	void test_load_empty_body()
+		string result = expand_block("load", "{}", "")
+		assert(result.contains("no valid declarations"))
+
+	void test_parse_decl_missing_from()
+		// A line without " from " should return empty and be skipped
+		string result = expand_block("load", "{}", "not-a-declaration")
+		assert(result.contains("no valid declarations"))
+
+	void test_get_field()
+		// Directly test the tilde-separated field extractor
+		string record = "name~/api/url~path~handler"
+		assert(get_field(record, 0) == "name")
+		assert(get_field(record, 1) == "/api/url")
+		assert(get_field(record, 2) == "path")
+		assert(get_field(record, 3) == "handler")
+
+	void test_compile_url_static()
+		assert(compile_url("/api/users") == "\"/api/users\"")
+
+	void test_compile_url_interpolated()
+		string result = compile_url("/api/posts/{query.cat}")
+		assert(result.contains("query.cat"))
+		assert(result.contains("\"/api/posts/\""))

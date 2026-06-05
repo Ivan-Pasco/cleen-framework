@@ -12,8 +12,6 @@ functions:
 	string expand_block(string block_name, string attributes, string body)
 		if block_name == "auth"
 			return expand_auth_config(body)
-		if block_name == "protected"
-			return expand_protected(attributes, body)
 		if block_name == "login"
 			return expand_login(attributes, body)
 		if block_name == "roles"
@@ -28,7 +26,7 @@ functions:
 
 	// Keywords for IDE
 	string get_keywords()
-		return "[\"auth\", \"protected\", \"login\", \"roles\", \"jwt\", \"session\", \"cookie\", \"sameSite\", \"secure\", \"httpOnly\", \"timeoutMinutes\", \"secret\", \"alg\", \"ttlMinutes\", \"refreshTtlMinutes\", \"csrf\", \"tenant\", \"tenantId\"]"
+		return "[\"auth\", \"login\", \"roles\", \"jwt\", \"session\", \"cookie\", \"sameSite\", \"secure\", \"httpOnly\", \"timeoutMinutes\", \"secret\", \"alg\", \"ttlMinutes\", \"refreshTtlMinutes\", \"csrf\", \"tenant\", \"tenantId\"]"
 
 // ============================================================================
 // AUTH CONFIG EXPANSION
@@ -324,32 +322,6 @@ functions:
 		result = result + "__roles_config = __roles_config + \"}\"\n"
 		result = result + "_roles_register(__roles_config)\n\n"
 
-		return result
-
-// ============================================================================
-// PROTECTED BLOCK EXPANSION
-// ============================================================================
-
-functions:
-	// Expand protected block for route guards
-	string expand_protected(string attrs, string body)
-		string role = get_attr(attrs, "role", "")
-		string permission = get_attr(attrs, "permission", "")
-
-		string result = ""
-
-		// Generate guard check
-		if role != ""
-			result = result + "if not hasRole(\"" + role + "\")\n"
-			result = result + "\treturn forbidden()\n"
-		else if permission != ""
-			result = result + "if not can(\"" + permission + "\")\n"
-			result = result + "\treturn forbidden()\n"
-		else
-			result = result + "if not isAuthenticated()\n"
-			result = result + "\treturn unauthorized()\n"
-
-		result = result + body
 		return result
 
 // ============================================================================

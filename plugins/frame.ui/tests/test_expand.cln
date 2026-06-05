@@ -152,3 +152,4 @@ functions:
 		assert(module.contains("string _ui_hydration_manifest()"))
 		assert(module.contains("\\\"screens\\\""))
 		assert(module.contains("Counter"))
+

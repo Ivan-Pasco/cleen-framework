@@ -14,7 +14,7 @@ validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
-blocks = ["auth", "protected", "login", "roles"]
+blocks = ["auth", "login", "roles"]
 
 # Bridge function declarations - auth-specific functions provided by the runtime
 [bridge]
@@ -74,7 +74,7 @@ functions = [
 
 [language]
 # Block-level keywords that start a declaration
-blocks = ["auth", "protected", "login", "roles"]
+blocks = ["auth", "login", "roles"]
 
 # Keywords used within plugin context
 keywords = [
@@ -130,7 +130,6 @@ functions = [
 completions = [
   { trigger = "auth:", insert = "auth:\n\tsession:\n\t\tcookie = \"${1:app.sid}\"\n\t\ttimeoutMinutes = ${2:60}" },
   { trigger = "roles:", insert = "roles:\n\tadmin: [\"*\"]\n\tuser: [${1:}]\n\tguest: []" },
-  { trigger = "protected ", insert = "endpoints:\n\tGET \"${1:/path}\" :\n\t\tguard:\n\t\t\trole in [\"${2:admin}\"]" },
 ]
 
 [paths]

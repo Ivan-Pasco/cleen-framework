@@ -34,7 +34,9 @@
       "Bash(grep -c \"app/backend/\" documents/specification/07_frame_plugins.md documents/specification/09_frame_dev_guidelines.md documents/specification/10_compiler_plugins.md documents/specification/frame_internal_map.md documents/API_REFERENCE.md documents/PLUGIN_GUIDE.md documents/specification/12_frame_canvas.md)",
       "Bash(perl -i -pe 's|app/backend|app/server|g' documents/specification/02_frame_cli.md)",
       "Bash(cln test *)",
-      "mcp__clean-language__get_stack_recommendation"
+      "mcp__clean-language__get_stack_recommendation",
+      "Read(//opt/homebrew/**)",
+      "Read(//usr/local/bin/**)"
     ]
   }
 }
