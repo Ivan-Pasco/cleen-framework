@@ -240,26 +240,33 @@ functions:
 // ============================================================================
 
 functions:
+	// expand_endpoints rewrites an endpoints: block into generated functions: + start: code.
+	//
+	// Memory model: uses position-based scanning with integer offsets into the original
+	// `body` string. This avoids O(N²) substring copies that would exhaust the WASM bump
+	// allocator when there are many routes. Only small extractions (path, header_tail,
+	// handler body) are allocated per iteration.
+	//
+	// Handler naming: derived from method + sanitized path, not a sequential counter.
+	// This prevents collision when multiple files each declare an endpoints: block and
+	// their generated code is linked into a single WASM module.
 	string expand_endpoints(string body)
 		string result = "functions:\n"
-
-		// Parse endpoints
-		string remaining = body
-		integer handler_idx = 0
-		boolean keep_going = true
 		string route_calls = ""
+		integer handler_count = 0
+		integer pos = 0
 
-		while handler_idx < 30 and keep_going
-			// Find earliest HTTP method
-			integer get_pos = find_method_pos(remaining, "GET")
-			integer post_pos = find_method_pos(remaining, "POST")
-			integer put_pos = find_method_pos(remaining, "PUT")
-			integer delete_pos = find_method_pos(remaining, "DELETE")
-			integer patch_pos = find_method_pos(remaining, "PATCH")
-			// §FEXT-4: FEED routes are SSE endpoints (GET at HTTP level, keeps connection open)
-			integer stream_pos = find_method_pos(remaining, "FEED")
+		while pos < body.length() and handler_count < 1000
+			// Find earliest HTTP method from current scan position
+			integer get_pos = body.indexOf("GET \"", pos)
+			integer post_pos = body.indexOf("POST \"", pos)
+			integer put_pos = body.indexOf("PUT \"", pos)
+			integer delete_pos = body.indexOf("DELETE \"", pos)
+			integer patch_pos = body.indexOf("PATCH \"", pos)
+			// §FEXT-4: FEED routes are SSE endpoints (GET at HTTP level)
+			integer stream_pos = body.indexOf("FEED \"", pos)
 			// §15: LIVE routes upgrade the connection to WebSocket protocol
-			integer websocket_pos = find_method_pos(remaining, "LIVE")
+			integer websocket_pos = body.indexOf("LIVE \"", pos)
 
 			integer method_pos = -1
 			string method = ""
@@ -287,121 +294,230 @@ functions:
 				method = "LIVE"
 
 			if method_pos == -1
-				keep_going = false
+				pos = body.length()
+				continue
+
+			// Extract path: quoted string immediately following the method keyword
+			integer path_q_start = body.indexOf("\"", method_pos + method.length())
+			if path_q_start == -1
+				pos = body.length()
+				continue
+			integer path_q_end = body.indexOf("\"", path_q_start + 1)
+			if path_q_end == -1
+				pos = body.length()
+				continue
+			string path = body.substring(path_q_start + 1, path_q_end)
+
+			// Extract header tail: everything from after the closing path-quote to end of line
+			integer header_nl = body.indexOf("\n", path_q_end)
+			if header_nl == -1
+				header_nl = body.length()
+			string header_tail = body.substring(path_q_end + 1, header_nl)
+
+			// Route ':' is the last ':' on header_tail
+			integer colon_pos = -1
+			integer cscan = 0
+			while cscan < header_tail.length()
+				if header_tail.substring(cscan, cscan + 1) == ":"
+					colon_pos = cscan
+				cscan = cscan + 1
+
+			string modifiers = ""
+			if colon_pos > 0
+				modifiers = header_tail.substring(0, colon_pos).trim()
+
+			// Parse inline modifiers
+			string guard_roles = parse_guard_roles(modifiers)
+			string cache_arg = parse_cache_arg(modifiers)
+			string mw_list = parse_middleware_list(modifiers)
+
+			// Handler body: from after the header newline to the next route declaration
+			integer handler_start = header_nl + 1
+			integer next_boundary = find_next_route_pos(body, handler_start)
+			if next_boundary == -1
+				next_boundary = body.length()
+			string handler_raw = body.substring(handler_start, next_boundary)
+
+			// Handler names derived from method + path — unique per route across all files
+			string route_id = sanitize_route_id(path)
+
+			// §15: LIVE routes split their body into three handler functions
+			if method == "LIVE"
+				string ws_connect = extract_ws_connect_body(handler_raw)
+				string ws_message = extract_ws_message_body(handler_raw)
+				string ws_close = extract_ws_close_body(handler_raw)
+				string connect_name = "__ws_connect_" + route_id
+				string message_name = "__ws_message_" + route_id
+				string close_name = "__ws_close_" + route_id
+
+				result = result + "\tvoid " + connect_name + "()\n"
+				if guard_roles.length() > 0
+					result = result + generate_guard_void_code(guard_roles)
+				if ws_connect.length() > 0
+					result = result + ws_connect
+				result = result + "\n"
+
+				result = result + "\tvoid " + message_name + "()\n"
+				if ws_message.length() > 0
+					result = result + ws_message
+				result = result + "\n"
+
+				result = result + "\tvoid " + close_name + "()\n"
+				if ws_close.length() > 0
+					result = result + ws_close
+				result = result + "\n"
+
+				route_calls = route_calls + "\t_http_ws_route(\"GET\", \"" + path + "\", \"" + connect_name + "\", \"" + message_name + "\", \"" + close_name + "\")\n"
 			else
-				string from_method = remaining.substring(method_pos, remaining.length())
+				string handler_name = "__route_handler_" + method_to_id(method) + "_" + route_id
+				string handler_code = reindent_handler(handler_raw)
 
-				// Skip optional space between method and quoted path
-				integer path_start = method.length()
-				if from_method.substring(method.length(), method.length() + 1) == " "
-					path_start = method.length() + 1
-				string after_method = from_method.substring(path_start, from_method.length())
+				// Emit handler function
+				result = result + "\tstring " + handler_name + "()\n"
 
-				// Extract path — everything between the opening and closing quote
-				integer open_q = after_method.indexOf("\"")
-				string after_open = after_method.substring(open_q + 1, after_method.length())
-				integer close_q = after_open.indexOf("\"")
-				string path = after_open.substring(0, close_q)
+				// Guard: check roles, short-circuit with 401 if none match
+				if guard_roles.length() > 0
+					result = result + generate_guard_code(guard_roles)
 
-				// Header remainder: closing quote → route ':'
-				string after_path_raw = after_open.substring(close_q + 1, after_open.length())
-				integer first_nl = after_path_raw.indexOf("\n")
-				string header_line = ""
-				if first_nl == -1
-					header_line = after_path_raw
+				// Cache: emit Cache-Control header
+				if cache_arg.length() > 0
+					result = result + generate_cache_code(cache_arg)
+
+				// Middleware: call each in order, short-circuit on non-empty result
+				if mw_list.length() > 0
+					result = result + generate_middleware_code(mw_list)
+
+				// Handler body
+				if handler_code.length() > 0
+					result = result + handler_code
 				else
-					header_line = after_path_raw.substring(0, first_nl)
+					result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
+				result = result + "\n"
 
-				// Route ':' is the last ':' on the header line
-				// Scan from the right to find it
-				integer colon_pos = header_line.length() - 1
-				integer cscan = 0
-				while cscan < header_line.length()
-					if header_line.substring(cscan, cscan + 1) == ":"
-						colon_pos = cscan
-					cscan = cscan + 1
-
-				string modifiers = ""
-				if colon_pos > 0
-					modifiers = header_line.substring(0, colon_pos).trim()
-
-				// Absolute position of route ':' from start of from_method
-				integer abs_colon = path_start + open_q + 1 + close_q + 1 + colon_pos
-
-				// Parse inline modifiers
-				string guard_roles = parse_guard_roles(modifiers)
-				string cache_arg = parse_cache_arg(modifiers)
-				string mw_list = parse_middleware_list(modifiers)
-
-				// Extract handler body (after route ':' newline, up to next route)
-				string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
-
-				// §15: LIVE routes split their body into three handler functions
-				if method == "LIVE"
-					string ws_connect = extract_ws_connect_body(endpoint_body)
-					string ws_message = extract_ws_message_body(endpoint_body)
-					string ws_close = extract_ws_close_body(endpoint_body)
-					string connect_name = "__ws_connect_" + handler_idx.toString()
-					string message_name = "__ws_message_" + handler_idx.toString()
-					string close_name = "__ws_close_" + handler_idx.toString()
-
-					result = result + "\tvoid " + connect_name + "()\n"
-					if guard_roles.length() > 0
-						result = result + generate_guard_void_code(guard_roles)
-					if ws_connect.length() > 0
-						result = result + ws_connect
-					result = result + "\n"
-
-					result = result + "\tvoid " + message_name + "()\n"
-					if ws_message.length() > 0
-						result = result + ws_message
-					result = result + "\n"
-
-					result = result + "\tvoid " + close_name + "()\n"
-					if ws_close.length() > 0
-						result = result + ws_close
-					result = result + "\n"
-
-					route_calls = route_calls + "\t_http_ws_route(\"GET\", \"" + path + "\", \"" + connect_name + "\", \"" + message_name + "\", \"" + close_name + "\")\n"
-					handler_idx = handler_idx + 1
-					remaining = from_method.substring(abs_colon + 1, from_method.length())
+				// §FEXT-4: FEED routes use _http_sse_route; regular routes use _http_route
+				if method == "FEED"
+					route_calls = route_calls + "\t_http_sse_route(\"GET\", \"" + path + "\", \"" + handler_name + "\")\n"
 				else
-					string handler_code = extract_handler_body(endpoint_body)
+					route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"" + handler_name + "\")\n"
 
-					// Emit handler function
-					result = result + "\tstring __route_handler_" + handler_idx.toString() + "()\n"
-
-					// Guard: check roles, short-circuit with 401 if none match
-					if guard_roles.length() > 0
-						result = result + generate_guard_code(guard_roles)
-
-					// Cache: emit Cache-Control header
-					if cache_arg.length() > 0
-						result = result + generate_cache_code(cache_arg)
-
-					// Middleware: call each in order, short-circuit on non-empty result
-					if mw_list.length() > 0
-						result = result + generate_middleware_code(mw_list)
-
-					// Handler body
-					if handler_code.length() > 0
-						result = result + handler_code
-					else
-						result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
-					result = result + "\n"
-
-					// §FEXT-4: FEED routes use _http_sse_route which sets text/event-stream headers
-					// and keeps the connection open. Regular routes use _http_route.
-					if method == "FEED"
-						route_calls = route_calls + "\t_http_sse_route(\"GET\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
-					else
-						route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"__route_handler_" + handler_idx.toString() + "\")\n"
-					handler_idx = handler_idx + 1
-					remaining = from_method.substring(abs_colon + 1, from_method.length())
+			handler_count = handler_count + 1
+			pos = next_boundary
 
 		result = result + "start:\n"
 		result = result + route_calls
-		result = result + "\tprintl(\"Registered " + handler_idx.toString() + " routes\")\n"
+		result = result + "\tprintl(\"Registered " + handler_count.toString() + " routes\")\n"
+		return result
+
+	// find_next_route_pos returns the earliest position of any HTTP method declaration
+	// at or after `start_pos` in `text`, or -1 if none found.
+	integer find_next_route_pos(string text, integer start_pos)
+		integer get_p = text.indexOf("GET \"", start_pos)
+		integer post_p = text.indexOf("POST \"", start_pos)
+		integer put_p = text.indexOf("PUT \"", start_pos)
+		integer delete_p = text.indexOf("DELETE \"", start_pos)
+		integer patch_p = text.indexOf("PATCH \"", start_pos)
+		integer feed_p = text.indexOf("FEED \"", start_pos)
+		integer live_p = text.indexOf("LIVE \"", start_pos)
+
+		integer result = -1
+		if get_p >= 0 and (result == -1 or get_p < result)
+			result = get_p
+		if post_p >= 0 and (result == -1 or post_p < result)
+			result = post_p
+		if put_p >= 0 and (result == -1 or put_p < result)
+			result = put_p
+		if delete_p >= 0 and (result == -1 or delete_p < result)
+			result = delete_p
+		if patch_p >= 0 and (result == -1 or patch_p < result)
+			result = patch_p
+		if feed_p >= 0 and (result == -1 or feed_p < result)
+			result = feed_p
+		if live_p >= 0 and (result == -1 or live_p < result)
+			result = live_p
+		return result
+
+	// sanitize_route_id converts a route path to a valid identifier segment.
+	// "/api/v1/users/:id" -> "_api_v1_users__id"
+	string sanitize_route_id(string path)
+		string result = ""
+		integer i = 0
+		while i < path.length()
+			string ch = path.substring(i, i + 1)
+			boolean valid = (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9")
+			if valid
+				result = result + ch
+			else
+				result = result + "_"
+			i = i + 1
+		return result
+
+	// method_to_id converts an HTTP method name to a lowercase identifier prefix.
+	string method_to_id(string method)
+		if method == "GET"
+			return "get"
+		if method == "POST"
+			return "post"
+		if method == "PUT"
+			return "put"
+		if method == "DELETE"
+			return "delete"
+		if method == "PATCH"
+			return "patch"
+		if method == "FEED"
+			return "feed"
+		return "http"
+
+	// reindent_handler strips base indentation from handler_code and re-indents to \t\t.
+	string reindent_handler(string handler_code)
+		// Pass 1: find minimum tab depth of non-empty lines
+		integer min_tabs = 99
+		string scan = handler_code
+		integer scan_safety = 0
+		while scan_safety < 500 and scan.length() > 0
+			scan_safety = scan_safety + 1
+			integer snl = scan.indexOf("\n")
+			string sline = ""
+			if snl == -1
+				sline = scan
+				scan = ""
+			else
+				sline = scan.substring(0, snl)
+				scan = scan.substring(snl + 1, scan.length())
+			if sline.trim().length() > 0
+				integer tabs = 0
+				while tabs < sline.length() and sline.substring(tabs, tabs + 1) == "\t"
+					tabs = tabs + 1
+				if tabs < min_tabs
+					min_tabs = tabs
+		if min_tabs == 99
+			min_tabs = 0
+
+		// Pass 2: re-indent relative to \t\t base
+		string result = ""
+		string rem = handler_code
+		integer safety = 0
+		while safety < 500 and rem.length() > 0
+			safety = safety + 1
+			integer nl = rem.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = rem
+				rem = ""
+			else
+				line = rem.substring(0, nl)
+				rem = rem.substring(nl + 1, rem.length())
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				integer orig_tabs = 0
+				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
+					orig_tabs = orig_tabs + 1
+				integer rel_depth = orig_tabs - min_tabs
+				string indent = "\t\t"
+				integer d = 0
+				while d < rel_depth
+					indent = indent + "\t"
+					d = d + 1
+				result = result + indent + trimmed + "\n"
 		return result
 
 	integer find_method_pos(string text, string method)
@@ -840,12 +956,13 @@ functions:
 									if close_b != -1
 										status = after_to.substring(1, close_b).trim()
 
-								// Emit redirect handler function
-								fn_block = fn_block + "\tstring __redirect_" + idx.toString() + "()\n"
+								// Emit redirect handler function — name derived from path (no sequential index)
+								string redirect_id = sanitize_route_id(from_path)
+								fn_block = fn_block + "\tstring __redirect_" + redirect_id + "()\n"
 								fn_block = fn_block + "\t\treturn _http_redirect(" + status + ", \"" + to_path + "\")\n\n"
 
 								// Register GET route for from_path
-								route_calls = route_calls + "\t_http_route(\"GET\", \"" + from_path + "\", \"__redirect_" + idx.toString() + "\")\n"
+								route_calls = route_calls + "\t_http_route(\"GET\", \"" + from_path + "\", \"__redirect_" + redirect_id + "\")\n"
 
 								idx = idx + 1
 
