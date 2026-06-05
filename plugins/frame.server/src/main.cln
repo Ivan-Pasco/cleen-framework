@@ -876,7 +876,6 @@ functions:
 
 functions:
 	string expand_routes(string body)
-		string fn_block = "functions:\n"
 		string route_calls = ""
 		integer idx = 0
 
@@ -932,13 +931,9 @@ functions:
 									if close_b != -1
 										status = after_to.substring(1, close_b).trim()
 
-								// Emit redirect handler function — name derived from path (no sequential index)
-								string redirect_id = sanitize_route_id(from_path)
-								fn_block = fn_block + "\tstring __redirect_" + redirect_id + "()\n"
-								fn_block = fn_block + "\t\treturn _http_redirect(" + status + ", \"" + to_path + "\")\n\n"
-
-								// Register GET route for from_path
-								route_calls = route_calls + "\t_http_route(\"GET\", \"" + from_path + "\", \"__redirect_" + redirect_id + "\")\n"
+								// Register static redirect via _http_redirect_route — no WASM handler function needed.
+								// The server handles the redirect natively via redirect_destination.
+								route_calls = route_calls + "\t_http_redirect_route(\"GET\", \"" + from_path + "\", \"" + to_path + "\", " + status + ")\n"
 
 								idx = idx + 1
 
@@ -947,8 +942,6 @@ functions:
 
 		string result = "start:\n"
 		result = result + route_calls
-		result = result + "\n"
-		result = result + fn_block
 		return result
 
 	string validate_routes(string body)
