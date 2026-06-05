@@ -30,12 +30,12 @@ plugins:
 endpoints:
 	LIVE "/chat/:room" [member]:
 		live.onMessage: (msg)
-			any data = json.decode(msg)
-			string room_name = data.room
-			string from_user = data.from
-			string text = data.text
+			string room_name = _json_get(msg, "room")
+			string from_user = _json_get(msg, "from")
+			string text = _json_get(msg, "text")
 			// Broadcast to all clients in this room, including the sender
-			live.roomBroadcast(room_name, json.encode({ "from": from_user, "text": text, "room": room_name }))
+			string __reply = "{\"from\":\"" + from_user + "\",\"text\":\"" + text + "\",\"room\":\"" + room_name + "\"}"
+			live.roomBroadcast(room_name, __reply)
 		live.onClose:
 			// Stateless rooms: no cleanup needed.
 			// For presence tracking, update a presence table or cache here.
@@ -53,9 +53,11 @@ endpoints:
 	// [member] guard: only authenticated users may subscribe.
 
 	FEED "/api/events/notifications" [member]:
-		Session sess = auth.session.get()
+		string __sess = _auth_get_session()
+		string __userId = _json_get(__sess, "userId")
 		// Emit a connected confirmation so the client knows the stream is live
-		feed.emit(json.encode({ "type": "connected", "userId": sess.userId }))
+		string __evt = "{\"type\":\"connected\",\"userId\":\"" + __userId + "\"}"
+		feed.emit(__evt)
 		// Handler returns here; the server holds the connection open.
 		// Use feed.emitEvent(name, data) from any job or endpoint handler
 		// to push named events to this client by user ID.

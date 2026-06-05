@@ -2306,7 +2306,7 @@ functions:
 		result = result + "\t\tinteger __fstr_i = 0\n"
 		result = result + "\t\tstring __fstr_check = json.get(__json, \"0.id\")\n"
 		result = result + "\t\twhile __fstr_check != \"\"\n"
-		result = result + "\t\t\t__fstr_result.add(json.dataToText(json.get(__json, __fstr_i.toString())))\n"
+		result = result + "\t\t\t__fstr_result.add(json.get(__json, __fstr_i.toString()))\n"
 		result = result + "\t\t\t__fstr_i = __fstr_i + 1\n"
 		result = result + "\t\t\t__fstr_check = json.get(__json, __fstr_i.toString() + \".id\")\n"
 		result = result + "\t\treturn __fstr_result\n"

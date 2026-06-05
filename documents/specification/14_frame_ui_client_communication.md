@@ -9,7 +9,7 @@
 
 ## 1. Overview
 
-This specification defines **frame.client** -- the plugin for all client-side communication between the browser and the server. It provides three namespaces and one declarative block:
+This specification defines **frame.client** -- the plugin for all client-side communication between the browser and the server. It provides three namespaces and three declarative blocks:
 
 | Namespace / Block | Protocol | What it does |
 |-------------------|----------|-------------|
@@ -17,6 +17,8 @@ This specification defines **frame.client** -- the plugin for all client-side co
 | `live.*` | WebSocket | Bidirectional real-time connections |
 | `feed.*` | SSE | Server-push event streams |
 | `load:` | HTTP | Declarative page-level data fetching — generates module state + start: fetch |
+| `form:` | HTTP | Declarative form wiring — generates field state, `submitting`, `formError`, `formSuccess`, `submit()` |
+| `send:` | HTTP | Declarative single-action mutation — generates `<name>Pending`, `<name>Success`, `<name>Error` state + `void <name>()` |
 
 It also specifies form-reading helpers added to **frame.ui**.
 
@@ -865,23 +867,188 @@ Generates `api.delete("/api/tasks/{id}")` — note the `id` field is used for th
 
 ---
 
-## 11. Security
+## 11. Declarative Single-Action Mutations (`send:` Block)
 
-### 11.1 CORS
+The `send:` block is a top-level block owned by **frame.client**. It lives in a companion `.cln` file alongside a page and generates all the boilerplate needed for a single-action HTTP mutation: a named void function, an in-flight guard, a success flag, and an error string. It is simpler than `form:` — there are no field declarations, making it ideal for delete buttons, toggle actions, archive operations, and other one-shot mutations.
+
+### 11.1 When to Use `send:` vs `form:`
+
+Use `send:` when the action has no user-entered fields — the URL already contains all the information (usually a record ID from component scope). Use `form:` when the user fills in one or more input fields before submitting.
+
+### 11.2 Syntax
+
+```
+send: <name> <method> "<url>"
+    [on success: emit "<functionName>"]
+    [on error: emit "<functionName>"]
+```
+
+| Part | Required | Description |
+|------|----------|-------------|
+| `<name>` | yes | Identifier for the action. Prefixes all generated variables and names the generated function. |
+| `<method>` | yes | HTTP method: `get`, `post`, `put`, `patch`, or `delete` (case-insensitive). |
+| `"<url>"` | yes | Endpoint URL string literal. May contain `{varName}` placeholders (see §11.5). |
+| `on success: emit "<functionName>"` | no | Call the named exported function after a successful response. |
+| `on error: emit "<functionName>"` | no | Call the named exported function after a failed response. |
+
+### 11.3 Body Behaviour by Method
+
+| Method | Request body |
+|--------|-------------|
+| `get` | None |
+| `delete` | None |
+| `post` | `{}` (empty JSON object) |
+| `put` | `{}` (empty JSON object) |
+| `patch` | `{}` (empty JSON object) |
+
+If you need to send a non-empty body, use `api.*` directly in a component event handler instead.
+
+### 11.4 Generated State Contract
+
+For `send: deleteUser delete "/api/users/{id}"`, the following module-level variables are generated:
+
+| Variable | Type | Initial value | Description |
+|----------|------|---------------|-------------|
+| `<name>Pending` | `boolean` | `false` | `true` while the request is in-flight. Use to disable action buttons. |
+| `<name>Success` | `boolean` | `false` | `true` after the most recent request returned a 2xx response. Reset to `false` on the next call. |
+| `<name>Error` | `string` | `""` | Non-empty if the most recent request failed. Contains the `"error"` key from the JSON body, or `"Request failed"` if no such key exists. Reset to `""` on the next call. |
+
+### 11.5 URL Placeholders
+
+Use `{varName}` to interpolate a component-scope or module-scope variable into the URL. This is resolved at call time, not at declaration time.
+
+```clean
+send: deleteUser delete "/api/users/{id}"
+```
+
+At runtime, `id` is read from the current module scope. This differs from `load:`'s `{query.X}` syntax, which reads from the URL query string.
+
+### 11.6 What It Generates
+
+```clean
+send: deleteUser delete "/api/users/{id}"
+    on success: emit "reloadUsers"
+```
+
+Expands to:
+
+```clean
+boolean deleteUserPending = false
+boolean deleteUserSuccess = false
+string deleteUserError = ""
+
+void deleteUser()
+    if deleteUserPending
+        return
+    deleteUserPending = true
+    deleteUserSuccess = false
+    deleteUserError = ""
+    later __res = api.delete("/api/users/" + id)
+    if __res.ok
+        deleteUserSuccess = true
+        reloadUsers()
+    else
+        deleteUserError = __res.json("error")
+        if deleteUserError == ""
+            deleteUserError = "Request failed"
+    deleteUserPending = false
+```
+
+For `post`, `put`, or `patch` methods the call becomes `api.post(url, "{}")` (and equivalently for put/patch).
+
+### 11.7 Multiple `send:` Blocks
+
+Multiple `send:` blocks are allowed in one companion file. Each is independently prefixed by its own name, so there is no variable collision:
+
+```clean
+send: deleteUser delete "/api/users/{id}"
+    on success: emit "reloadUsers"
+
+send: archiveUser patch "/api/users/{id}/archive"
+    on success: emit "reloadUsers"
+    on error: emit "showArchiveError"
+```
+
+### 11.8 Where It Lives
+
+`send:` belongs in a client-side companion `.cln` file:
+
+```
+app/web/pages/
+├── users.html              ← HTML template
+├── users.cln               ← server-side: load(), guard()
+└── users.client.cln        ← client-side: load: / form: / send: blocks
+```
+
+### 11.9 Example — Delete Task Button
+
+```clean
+// app/web/pages/tasks.client.cln
+send: deleteTask delete "/api/tasks/{taskId}"
+    on success: emit "reloadTasks"
+```
+
+In the component, bind the generated function via `cl-on:click="deleteTask"` and read the state variables:
+
+```clean
+component: tag="task-row"
+    inputs:
+        string taskId
+        string taskTitle
+
+    html:
+        <div class="task">
+            <span>{inputs.taskTitle}</span>
+            <button
+                cl-on:click="deleteTask"
+                cl-attr:disabled="deleteTaskPending">
+                <span cl-if="deleteTaskPending">Deleting...</span>
+                <span cl-if="!deleteTaskPending">Delete</span>
+            </button>
+            <div cl-if="deleteTaskError != ''" class="error">{deleteTaskError}</div>
+        </div>
+```
+
+### 11.10 Example — Toggle Feature Flag
+
+```clean
+// app/web/pages/admin.client.cln
+send: toggleFlag patch "/api/flags/{flagName}/toggle"
+    on success: emit "reloadFlags"
+    on error: emit "showFlagError"
+```
+
+### 11.11 Comparison: `send:` vs `form:` vs `api.*` Directly
+
+| | `send:` | `form:` | `api.*` in component |
+|---|---|---|---|
+| Field declarations | None | One or more named fields | Manual variables |
+| State generated | `<name>Pending`, `<name>Success`, `<name>Error` | `submitting`, `formError`, `formSuccess`, field variables | Manual |
+| Generated function | `void <name>()` | `void submit()` | N/A — you write the handler |
+| Validation | None | Declarative `required` per field | Manual |
+| Body sent | None (`get`/`delete`) or `{}` (`post`/`put`/`patch`) | JSON of all declared fields | Any string you pass |
+| URL placeholders | `{varName}` from module scope | `{varName}` from field state | String concatenation |
+| Best for | Delete, toggle, archive — no user input | Forms with user-entered fields | Ad-hoc or complex mutations |
+
+---
+
+## 12. Security
+
+### 12.1 CORS
 Browser CORS policy applies. Server must send `Access-Control-Allow-*` headers for cross-origin requests.
 
-### 11.2 Credentials
+### 12.2 Credentials
 - `api.auth()` stores in JS memory. Cleared on page unload or `api.clearAuth()`.
 - Auth applied automatically to all `api.*` calls.
 - `api.header()` sets per-request only, no auto-auth.
 - Cookies follow default `credentials: 'same-origin'`.
 
-### 11.3 WebSocket/SSE
+### 12.3 WebSocket/SSE
 Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 12. Context Isolation
+## 13. Context Isolation
 
 | Context | Available When |
 |---------|----------------|
@@ -894,7 +1061,7 @@ Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 13. Function Summary
+## 14. Function Summary
 
 ### frame.ui additions: 5 functions
 
@@ -906,7 +1073,7 @@ Server-side origin validation is the developer's responsibility.
 | `ui.checked(selector)` | Checkbox state |
 | `ui.setInput(selector, value)` | Set input value |
 
-### frame.client: 27 functions + 2 blocks
+### frame.client: 27 functions + 3 blocks
 
 | Namespace / Block | Count | Functions / Keywords |
 |-------------------|-------|----------------------|
@@ -917,6 +1084,7 @@ Server-side origin validation is the developer's responsibility.
 | `feed.*` | 7 | open, on, close, data, eventType, lastId, connId |
 | `load:` block | — | Declarative page-level data fetching; generates `loading`, `loadError`, named `any` variables. See §9. |
 | `form:` block | — | Declarative form wiring; generates field variables, `submitting`, `formError`, `formSuccess`, `submit()`. See §10. |
+| `send:` block | — | Single-action mutation; generates `<name>Pending`, `<name>Success`, `<name>Error` state + `void <name>()`. See §11. |
 
 **ApiResponse** — returned by all `api.*` request functions, read via `later result = api.*`:
 
@@ -930,7 +1098,7 @@ Server-side origin validation is the developer's responsibility.
 
 ---
 
-## 14. Implementation Priority
+## 15. Implementation Priority
 
 | Phase | What | Count | Rationale |
 |-------|------|-------|-----------|
@@ -939,10 +1107,11 @@ Server-side origin validation is the developer's responsibility.
 | **Phase 3** | Feed / SSE | 7 | Server push |
 | **Phase 4** | `load:` block | — | Declarative sugar over Phase 1 API; requires Phase 1 complete |
 | **Phase 5** | `form:` block | — | Declarative sugar over Phase 1 API + state management |
+| **Phase 6** | `send:` block | — | Declarative sugar over Phase 1 API; no-field complement to `form:` |
 
 ---
 
-## 15. Files
+## 16. Files
 
 | Action | File |
 |--------|------|

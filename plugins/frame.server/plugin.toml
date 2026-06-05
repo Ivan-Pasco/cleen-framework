@@ -53,28 +53,28 @@ functions = [
   { name = "_http_serve_static", params = ["string", "string"], returns = "boolean", description = "Mount filesystem directory as static file server: url_prefix, dir_path. Serves files with correct MIME types.", expand_strings = true },
 
   # Request Context - Path Parameters
-  { name = "_req_param", params = ["string"], returns = "ptr", description = "Get path parameter by name (e.g., :id)", expand_strings = true },
+  { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name (e.g., :id)", expand_strings = true },
   { name = "_req_param_int", params = ["string"], returns = "i32", description = "Get path parameter as integer by name", expand_strings = true },
 
   # Request Context - Query Parameters
-  { name = "_req_query", params = ["string"], returns = "ptr", description = "Get query parameter by name", expand_strings = true },
+  { name = "_req_query", params = ["string"], returns = "string", description = "Get query parameter by name", expand_strings = true },
 
   # Request Context - Headers
-  { name = "_req_header", params = ["string"], returns = "ptr", description = "Get request header by name", expand_strings = true },
-  { name = "_req_headers", params = [], returns = "ptr", description = "Get all request headers as JSON object" },
+  { name = "_req_header", params = ["string"], returns = "string", description = "Get request header by name", expand_strings = true },
+  { name = "_req_headers", params = [], returns = "string", description = "Get all request headers as JSON object" },
 
   # Request Context - Body
-  { name = "_req_body", params = [], returns = "ptr", description = "Get request body as string" },
-  { name = "_req_body_field", params = ["string"], returns = "ptr", description = "Get form field by name from request body", expand_strings = true },
-  { name = "_req_form", params = [], returns = "ptr", description = "Get form data as JSON object" },
+  { name = "_req_body", params = [], returns = "string", description = "Get request body as string" },
+  { name = "_req_body_field", params = ["string"], returns = "string", description = "Get form field by name from request body", expand_strings = true },
+  { name = "_req_form", params = [], returns = "string", description = "Get form data as JSON object" },
 
   # Request Context - Metadata
-  { name = "_req_method", params = [], returns = "ptr", description = "Get HTTP method (GET, POST, etc.)" },
-  { name = "_req_path", params = [], returns = "ptr", description = "Get request path" },
-  { name = "_req_ip", params = [], returns = "ptr", description = "Get client IP address" },
+  { name = "_req_method", params = [], returns = "string", description = "Get HTTP method (GET, POST, etc.)" },
+  { name = "_req_path", params = [], returns = "string", description = "Get request path" },
+  { name = "_req_ip", params = [], returns = "string", description = "Get client IP address" },
 
   # Request Context - Cookies
-  { name = "_req_cookie", params = ["string"], returns = "ptr", description = "Get cookie value by name", expand_strings = true },
+  { name = "_req_cookie", params = ["string"], returns = "string", description = "Get cookie value by name", expand_strings = true },
 
   # Response - Core
   { name = "_http_respond", params = ["i32", "string", "string"], returns = "ptr", description = "Send response: status, content-type, body", expand_strings = true },
@@ -89,7 +89,7 @@ functions = [
   { name = "_res_json", params = ["string"], returns = "void", description = "Set JSON response body with Content-Type: application/json", expand_strings = true },
 
   # Authentication - Session
-  { name = "_auth_get_session", params = [], returns = "ptr", description = "Get current session as JSON" },
+  { name = "_auth_get_session", params = [], returns = "string", description = "Get current session as JSON" },
   { name = "_auth_require_auth", params = [], returns = "boolean", description = "Check if authenticated (1=yes, 0=no)" },
 
   # Authentication - Roles
@@ -107,29 +107,29 @@ functions = [
   { name = "_ui_render_page", params = ["string", "string"], returns = "ptr", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/web/pages/<name>.html", expand_strings = true },
 
   # JSON Encoding/Decoding
-  { name = "_json_encode", params = ["string"], returns = "ptr", description = "Encode value to JSON string", expand_strings = true },
-  { name = "_json_decode", params = ["string"], returns = "ptr", description = "Decode JSON string to value", expand_strings = true },
-  { name = "_json_get", params = ["string", "string"], returns = "ptr", description = "Extract value from JSON using dot-separated path (e.g., 'user.name')", expand_strings = true },
+  { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true },
+  { name = "_json_decode", params = ["string"], returns = "string", description = "Decode JSON string to value", expand_strings = true },
+  { name = "_json_get", params = ["string", "string"], returns = "string", description = "Extract value from JSON using dot-separated path (e.g., 'user.name')", expand_strings = true },
 
   # HTTP Client - Basic Methods
   # Convention: bridge names use http_client_ prefix to distinguish from server-side _http_* functions
-  { name = "http_get", params = ["string"], returns = "ptr", description = "Execute HTTP GET request to URL; returns response body", expand_strings = true },
-  { name = "http_post", params = ["string", "string"], returns = "ptr", description = "Execute HTTP POST request with raw body; returns response body", expand_strings = true },
-  { name = "http_put", params = ["string", "string"], returns = "ptr", description = "Execute HTTP PUT request with raw body; returns response body", expand_strings = true },
-  { name = "http_patch", params = ["string", "string"], returns = "ptr", description = "Execute HTTP PATCH request with raw body; returns response body", expand_strings = true },
-  { name = "http_delete", params = ["string"], returns = "ptr", description = "Execute HTTP DELETE request; returns response body", expand_strings = true },
-  { name = "http_head", params = ["string"], returns = "ptr", description = "Execute HTTP HEAD request; returns response headers as JSON", expand_strings = true },
-  { name = "http_options", params = ["string"], returns = "ptr", description = "Execute HTTP OPTIONS request; returns response body", expand_strings = true },
+  { name = "http_get", params = ["string"], returns = "string", description = "Execute HTTP GET request to URL; returns response body", expand_strings = true },
+  { name = "http_post", params = ["string", "string"], returns = "string", description = "Execute HTTP POST request with raw body; returns response body", expand_strings = true },
+  { name = "http_put", params = ["string", "string"], returns = "string", description = "Execute HTTP PUT request with raw body; returns response body", expand_strings = true },
+  { name = "http_patch", params = ["string", "string"], returns = "string", description = "Execute HTTP PATCH request with raw body; returns response body", expand_strings = true },
+  { name = "http_delete", params = ["string"], returns = "string", description = "Execute HTTP DELETE request; returns response body", expand_strings = true },
+  { name = "http_head", params = ["string"], returns = "string", description = "Execute HTTP HEAD request; returns response headers as JSON", expand_strings = true },
+  { name = "http_options", params = ["string"], returns = "string", description = "Execute HTTP OPTIONS request; returns response body", expand_strings = true },
 
   # HTTP Client - JSON Convenience
-  { name = "http_post_json", params = ["string", "string"], returns = "ptr", description = "POST with Content-Type: application/json; returns response body", expand_strings = true },
-  { name = "http_put_json", params = ["string", "string"], returns = "ptr", description = "PUT with Content-Type: application/json; returns response body", expand_strings = true },
-  { name = "http_patch_json", params = ["string", "string"], returns = "ptr", description = "PATCH with Content-Type: application/json; returns response body", expand_strings = true },
+  { name = "http_post_json", params = ["string", "string"], returns = "string", description = "POST with Content-Type: application/json; returns response body", expand_strings = true },
+  { name = "http_put_json", params = ["string", "string"], returns = "string", description = "PUT with Content-Type: application/json; returns response body", expand_strings = true },
+  { name = "http_patch_json", params = ["string", "string"], returns = "string", description = "PATCH with Content-Type: application/json; returns response body", expand_strings = true },
 
   # HTTP Client - Form & Headers
-  { name = "http_post_form", params = ["string", "string"], returns = "ptr", description = "POST form-urlencoded body; returns response body", expand_strings = true },
-  { name = "http_get_with_headers", params = ["string", "string"], returns = "ptr", description = "GET with custom headers (JSON object); returns response body", expand_strings = true },
-  { name = "http_post_with_headers", params = ["string", "string", "string"], returns = "ptr", description = "POST with body and custom headers (JSON object); returns response body", expand_strings = true },
+  { name = "http_post_form", params = ["string", "string"], returns = "string", description = "POST form-urlencoded body; returns response body", expand_strings = true },
+  { name = "http_get_with_headers", params = ["string", "string"], returns = "string", description = "GET with custom headers (JSON object); returns response body", expand_strings = true },
+  { name = "http_post_with_headers", params = ["string", "string", "string"], returns = "string", description = "POST with body and custom headers (JSON object); returns response body", expand_strings = true },
 
   # HTTP Client - Configuration
   { name = "http_set_user_agent", params = ["string"], returns = "void", description = "Set User-Agent header for subsequent requests", expand_strings = true },
@@ -142,9 +142,9 @@ functions = [
   { name = "http_get_response_headers", params = [], returns = "i32", description = "Get all headers from the last response as JSON" },
 
   # HTTP Client - URL Utilities
-  { name = "http_encode_url", params = ["string"], returns = "ptr", description = "Percent-encode a string for safe use in a URL", expand_strings = true },
-  { name = "http_decode_url", params = ["string"], returns = "ptr", description = "Decode a percent-encoded URL string", expand_strings = true },
-  { name = "http_build_query", params = ["string"], returns = "ptr", description = "Build a URL query string from a JSON object of key-value pairs", expand_strings = true },
+  { name = "http_encode_url", params = ["string"], returns = "string", description = "Percent-encode a string for safe use in a URL", expand_strings = true },
+  { name = "http_decode_url", params = ["string"], returns = "string", description = "Decode a percent-encoded URL string", expand_strings = true },
+  { name = "http_build_query", params = ["string"], returns = "string", description = "Build a URL query string from a JSON object of key-value pairs", expand_strings = true },
 
   # Response - File Download
   { name = "_res_download", params = ["string"], returns = "void", description = "Set Content-Disposition: attachment header for file download; argument is the filename sent to the client", expand_strings = true },
@@ -152,7 +152,7 @@ functions = [
   # Email - SMTP
   { name = "_email_configure", params = ["string", "integer", "boolean", "string", "string", "string"], returns = "void", description = "Configure SMTP connection: host, port, secure, username, password, from address. Called once during startup from a mail: config block.", expand_strings = true },
   { name = "_email_send", params = ["string", "string", "string", "string", "string"], returns = "boolean", description = "Send email: to, subject, html body, plain-text body, from override (empty string uses configured default). Returns true on success.", expand_strings = true },
-  { name = "_email_last_error", params = [], returns = "ptr", description = "Return the error message from the last failed _email_send call; returns empty string when the last send succeeded." },
+  { name = "_email_last_error", params = [], returns = "string", description = "Return the error message from the last failed _email_send call; returns empty string when the last send succeeded." },
 ]
 
 [language]

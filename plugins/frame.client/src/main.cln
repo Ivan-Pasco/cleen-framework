@@ -9,11 +9,13 @@ functions:
 			return expand_load(body)
 		if block_name == "form"
 			return expand_form(attributes, body)
+		if block_name == "send"
+			return expand_send(attributes, body)
 		return body
 
 	// Return keyword list for IDE support
 	string get_keywords()
-		return "[\"load\",\"form\",\"required\",\"optional\",\"api\",\"live\",\"feed\",\"from\",\"at\"]"
+		return "[\"load\",\"form\",\"send\",\"required\",\"optional\",\"api\",\"live\",\"feed\",\"from\",\"at\",\"success\",\"pending\"]"
 
 	// Expand a load: block into module-level state + start: block
 	//
@@ -494,6 +496,195 @@ functions:
 		if tilde == -1
 			return remaining
 		return remaining.substring(0, tilde)
+
+	// Expand a send: block into state variables + a named void function.
+	//
+	// Input attributes: "deleteUser delete \"/api/users/{id}\""
+	// Input body (options per line):
+	//   on success: emit "reloadUsers"
+	//   on error: emit "handleError"
+	//
+	// Generated output:
+	//   state:
+	//       boolean deleteUserPending = false
+	//       boolean deleteUserSuccess = false
+	//       string deleteUserError = ""
+	//
+	//   functions:
+	//       void deleteUser()
+	//           if deleteUserPending
+	//               return
+	//           deleteUserPending = true
+	//           deleteUserSuccess = false
+	//           deleteUserError = ""
+	//           later __res = api.delete("/api/users/" + id)
+	//           if __res.ok
+	//               deleteUserSuccess = true
+	//               reloadUsers()
+	//           else
+	//               deleteUserError = __res.json("error")
+	//               if deleteUserError == ""
+	//                   deleteUserError = "Request failed"
+	//           deleteUserPending = false
+	string expand_send(string attributes, string body)
+		string name = parse_send_name(attributes)
+		string method = parse_send_method(attributes)
+		string url = parse_send_url(attributes)
+
+		if name.length() == 0 or method.length() == 0 or url.length() == 0
+			return "// send: requires name method url (e.g. send: deleteUser delete \"/api/users/{id}\")"
+
+		string emit_success = ""
+		string emit_error = ""
+
+		integer ls = 0
+		while ls < body.length()
+			integer nl = body.indexOf("\n", ls)
+			if nl == -1
+				nl = body.length()
+			string line = body.substring(ls, nl).trim()
+			if line.length() > 0
+				integer succ_pos = line.indexOf("on success:")
+				if succ_pos != -1
+					string succ_val = line.substring(succ_pos + 11, line.length()).trim()
+					integer emit_pos = succ_val.indexOf("emit \"")
+					if emit_pos != -1
+						integer eq1 = emit_pos + 6
+						integer eq2 = succ_val.indexOf("\"", eq1)
+						if eq2 != -1
+							emit_success = succ_val.substring(eq1, eq2)
+				integer err_pos = line.indexOf("on error:")
+				if err_pos != -1
+					string err_val = line.substring(err_pos + 9, line.length()).trim()
+					integer emit_ep = err_val.indexOf("emit \"")
+					if emit_ep != -1
+						integer ee1 = emit_ep + 6
+						integer ee2 = err_val.indexOf("\"", ee1)
+						if ee2 != -1
+							emit_error = err_val.substring(ee1, ee2)
+			ls = nl + 1
+
+		string pending_var = name + "Pending"
+		string success_var = name + "Success"
+		string error_var = name + "Error"
+
+		string result = "state:\n"
+		result = result + "\tboolean " + pending_var + " = false\n"
+		result = result + "\tboolean " + success_var + " = false\n"
+		result = result + "\tstring " + error_var + " = \"\"\n"
+
+		result = result + "\nfunctions:\n"
+		result = result + "\tvoid " + name + "()\n"
+		result = result + "\t\tif " + pending_var + "\n"
+		result = result + "\t\t\treturn\n"
+		result = result + "\t\t" + pending_var + " = true\n"
+		result = result + "\t\t" + success_var + " = false\n"
+		result = result + "\t\t" + error_var + " = \"\"\n"
+
+		string url_expr = compile_send_url(url)
+		boolean has_body = method != "get" and method != "delete"
+		if has_body
+			result = result + "\t\tlater __res = api." + method + "(" + url_expr + ", \"{}\")\n"
+		else
+			result = result + "\t\tlater __res = api." + method + "(" + url_expr + ")\n"
+
+		result = result + "\t\tif __res.ok\n"
+		result = result + "\t\t\t" + success_var + " = true\n"
+		if emit_success.length() > 0
+			result = result + "\t\t\t" + emit_success + "()\n"
+
+		result = result + "\t\telse\n"
+		result = result + "\t\t\t" + error_var + " = __res.json(\"error\")\n"
+		result = result + "\t\t\tif " + error_var + " == \"\"\n"
+		result = result + "\t\t\t\t" + error_var + " = \"Request failed\"\n"
+		if emit_error.length() > 0
+			result = result + "\t\t\t" + emit_error + "()\n"
+
+		result = result + "\t\t" + pending_var + " = false\n"
+		return result
+
+	// Parse the function name from send: attributes (first word).
+	// "deleteUser delete \"/api/users/{id}\"" -> "deleteUser"
+	string parse_send_name(string attributes)
+		string attr = attributes.trim()
+		integer sp = attr.indexOf(" ")
+		if sp == -1
+			return ""
+		return attr.substring(0, sp)
+
+	// Parse the HTTP method from send: attributes (second word).
+	// "deleteUser delete \"/api/users/{id}\"" -> "delete"
+	string parse_send_method(string attributes)
+		string attr = attributes.trim()
+		integer sp1 = attr.indexOf(" ")
+		if sp1 == -1
+			return ""
+		string rest = attr.substring(sp1 + 1, attr.length()).trim()
+		integer sp2 = rest.indexOf(" ")
+		string word = rest
+		if sp2 != -1
+			word = rest.substring(0, sp2)
+		string lower = word.toLowerCase()
+		if lower == "post"
+			return "post"
+		if lower == "put"
+			return "put"
+		if lower == "patch"
+			return "patch"
+		if lower == "get"
+			return "get"
+		if lower == "delete"
+			return "delete"
+		return ""
+
+	// Parse the URL from send: attributes (first quoted string).
+	// "deleteUser delete \"/api/users/{id}\"" -> "/api/users/{id}"
+	string parse_send_url(string attributes)
+		integer q1 = attributes.indexOf("\"")
+		if q1 == -1
+			return ""
+		integer q2 = attributes.indexOf("\"", q1 + 1)
+		if q2 == -1
+			return ""
+		return attributes.substring(q1 + 1, q2)
+
+	// Compile a URL template with {varName} placeholders to a Clean string expression.
+	// "/api/users/{id}" becomes "/api/users/" + id
+	// Static URLs are returned as a quoted string literal.
+	string compile_send_url(string url)
+		string open_brace = "{"
+		if url.indexOf(open_brace) == -1
+			return "\"" + url + "\""
+
+		string result = ""
+		string rem = url
+		integer safety = 0
+		while rem.length() > 0 and safety < 50
+			safety = safety + 1
+			integer open = rem.indexOf(open_brace)
+			if open == -1
+				if result.length() > 0
+					result = result + " + "
+				result = result + "\"" + rem + "\""
+				rem = ""
+			else
+				if open > 0
+					if result.length() > 0
+						result = result + " + "
+					result = result + "\"" + rem.substring(0, open) + "\""
+				integer close = rem.indexOf("}", open)
+				if close == -1
+					if result.length() > 0
+						result = result + " + "
+					result = result + "\"" + rem.substring(open, rem.length()) + "\""
+					rem = ""
+				else
+					string field = rem.substring(open + 1, close)
+					if result.length() > 0
+						result = result + " + "
+					result = result + field
+					rem = rem.substring(close + 1, rem.length())
+		return result
 
 	// Compile a URL template with {query.X} placeholders to a Clean string expression.
 	// "/api/users/{query.id}" becomes "/api/users/" + query.id + ""
