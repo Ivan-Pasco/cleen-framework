@@ -23,10 +23,6 @@ functions:
 	//   stats from "/api/stats/{query.userId}" at "result"
 	//
 	// Generated output:
-	//   boolean loading = true
-	//   string loadError = ""
-	//   any users = null
-	//   ...
 	//   start:
 	//       later __res_users = api.get("/api/users")
 	//       if __res_users.ok
@@ -35,6 +31,12 @@ functions:
 	//           loadError = "Failed to load users"
 	//       ...
 	//       loading = false
+	//
+	//   state:
+	//       boolean loading = true
+	//       string loadError = ""
+	//       any users = null
+	//       ...
 	string expand_load(string body)
 		// Parse each non-empty line as a declaration
 		string decls = ""
@@ -55,33 +57,8 @@ functions:
 		if decls.length() == 0
 			return "// load: block had no valid declarations"
 
-		// Build output: state variables first
-		string result = "boolean loading = true\n"
-		result = result + "string loadError = \"\"\n"
-
-		// One `any` variable per declaration (pipe-separated records; each record is tilde-separated: name~url~at~onerror)
-		string rem = decls
-		integer idx = 0
-		while idx < 100
-			integer pipe = rem.indexOf("|")
-			string entry = rem
-			if pipe != -1
-				entry = rem.substring(0, pipe)
-				rem = rem.substring(pipe + 1, rem.length())
-			else
-				rem = ""
-
-			string var_name = get_field(entry, 0)
-			if var_name.length() > 0
-				result = result + "any " + var_name + " = null\n"
-
-			if pipe == -1
-				idx = 100
-			else
-				idx = idx + 1
-
-		// Build start: block
-		result = result + "\nstart:\n"
+		// Build start: block first (section order requires start: before state:)
+		string result = "start:\n"
 
 		string rem2 = decls
 		integer idx2 = 0
@@ -119,6 +96,33 @@ functions:
 				idx2 = idx2 + 1
 
 		result = result + "\tloading = false\n"
+
+		// Build state: block after start: (vars declared here are accessible from start:)
+		result = result + "\nstate:\n"
+		result = result + "\tboolean loading = true\n"
+		result = result + "\tstring loadError = \"\"\n"
+
+		// One `any` variable per declaration (pipe-separated records; each record is tilde-separated: name~url~at~onerror)
+		string rem = decls
+		integer idx = 0
+		while idx < 100
+			integer pipe = rem.indexOf("|")
+			string entry = rem
+			if pipe != -1
+				entry = rem.substring(0, pipe)
+				rem = rem.substring(pipe + 1, rem.length())
+			else
+				rem = ""
+
+			string var_name = get_field(entry, 0)
+			if var_name.length() > 0
+				result = result + "\tany " + var_name + " = null\n"
+
+			if pipe == -1
+				idx = 100
+			else
+				idx = idx + 1
+
 		return result
 
 	// Expand a form: block into module-level state variables + void submit() function.
@@ -132,35 +136,37 @@ functions:
 	//   on error: show
 	//
 	// Generated output:
-	//   string title = ""
-	//   string description = "Enter description"
-	//   string priority = ""
-	//   boolean submitting = false
-	//   string formError = ""
-	//   string formSuccess = ""
+	//   state:
+	//       string title = ""
+	//       string description = "Enter description"
+	//       string priority = ""
+	//       boolean submitting = false
+	//       string formError = ""
+	//       string formSuccess = ""
 	//
-	//   void submit()
-	//       if submitting
-	//           return
-	//       if title.trim() == ""
-	//           formError = "title is required"
-	//           return
-	//       submitting = true
-	//       formError = ""
-	//       formSuccess = ""
-	//       string __body = "{\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"priority\":\"" + priority + "\"}"
-	//       later __res = api.post("/api/tasks", __body)
-	//       if __res.ok
-	//           title = ""
-	//           description = "Enter description"
-	//           priority = ""
-	//           formSuccess = "Saved"
-	//           loadTasks()
-	//       else
-	//           formError = __res.json("error")
-	//           if formError == ""
-	//               formError = "Request failed"
-	//       submitting = false
+	//   functions:
+	//       void submit()
+	//           if submitting
+	//               return
+	//           if title.trim() == ""
+	//               formError = "title is required"
+	//               return
+	//           submitting = true
+	//           formError = ""
+	//           formSuccess = ""
+	//           string __body = "{\"title\":\"" + title + "\",\"description\":\"" + description + "\",\"priority\":\"" + priority + "\"}"
+	//           later __res = api.post("/api/tasks", __body)
+	//           if __res.ok
+	//               title = ""
+	//               description = "Enter description"
+	//               priority = ""
+	//               formSuccess = "Saved"
+	//               loadTasks()
+	//           else
+	//               formError = __res.json("error")
+	//               if formError == ""
+	//                   formError = "Request failed"
+	//           submitting = false
 	string expand_form(string attributes, string body)
 		// Parse method and URL from attributes
 		string method = parse_form_method(attributes)
@@ -211,8 +217,8 @@ functions:
 		if fields.length() == 0
 			return "// form: block has no field declarations"
 
-		// Build state variable declarations
-		string result = ""
+		// Build state: block with field variable declarations
+		string result = "state:\n"
 		string rem = fields
 		integer idx = 0
 		while idx < 100
@@ -227,21 +233,22 @@ functions:
 			string field_name = get_field(entry, 0)
 			string field_default = get_field(entry, 2)
 			if field_name.length() > 0
-				result = result + "string " + field_name + " = \"" + field_default + "\"\n"
+				result = result + "\tstring " + field_name + " = \"" + field_default + "\"\n"
 
 			if pipe == -1
 				idx = 100
 			else
 				idx = idx + 1
 
-		result = result + "boolean submitting = false\n"
-		result = result + "string formError = \"\"\n"
-		result = result + "string formSuccess = \"\"\n"
+		result = result + "\tboolean submitting = false\n"
+		result = result + "\tstring formError = \"\"\n"
+		result = result + "\tstring formSuccess = \"\"\n"
 
-		// Build submit() function
-		result = result + "\nvoid submit()\n"
-		result = result + "\tif submitting\n"
-		result = result + "\t\treturn\n"
+		// Build functions: block with submit() function
+		result = result + "\nfunctions:\n"
+		result = result + "\tvoid submit()\n"
+		result = result + "\t\tif submitting\n"
+		result = result + "\t\t\treturn\n"
 
 		// Required field guards
 		string rem2 = fields
@@ -258,33 +265,33 @@ functions:
 			string fn2 = get_field(entry2, 0)
 			string freq2 = get_field(entry2, 1)
 			if fn2.length() > 0 and freq2 == "true"
-				result = result + "\tif " + fn2 + ".trim() == \"\"\n"
-				result = result + "\t\tformError = \"" + fn2 + " is required\"\n"
-				result = result + "\t\treturn\n"
+				result = result + "\t\tif " + fn2 + ".trim() == \"\"\n"
+				result = result + "\t\t\tformError = \"" + fn2 + " is required\"\n"
+				result = result + "\t\t\treturn\n"
 
 			if pipe2 == -1
 				idx2 = 100
 			else
 				idx2 = idx2 + 1
 
-		result = result + "\tsubmitting = true\n"
-		result = result + "\tformError = \"\"\n"
-		result = result + "\tformSuccess = \"\"\n"
+		result = result + "\t\tsubmitting = true\n"
+		result = result + "\t\tformError = \"\"\n"
+		result = result + "\t\tformSuccess = \"\"\n"
 
 		// Build JSON body for methods that send a body
 		boolean has_body = method != "get" and method != "delete"
 		if has_body
 			string json_body = build_json_body(fields)
-			result = result + "\tstring __body = " + json_body + "\n"
+			result = result + "\t\tstring __body = " + json_body + "\n"
 
 		// API call
 		if has_body
-			result = result + "\tlater __res = api." + method + "(\"" + url + "\", __body)\n"
+			result = result + "\t\tlater __res = api." + method + "(\"" + url + "\", __body)\n"
 		else
-			result = result + "\tlater __res = api." + method + "(\"" + url + "\")\n"
+			result = result + "\t\tlater __res = api." + method + "(\"" + url + "\")\n"
 
 		// Success branch
-		result = result + "\tif __res.ok\n"
+		result = result + "\t\tif __res.ok\n"
 
 		// Clear fields on success if requested
 		if clear_on_success
@@ -302,26 +309,26 @@ functions:
 				string fn3 = get_field(entry3, 0)
 				string fd3 = get_field(entry3, 2)
 				if fn3.length() > 0
-					result = result + "\t\t" + fn3 + " = \"" + fd3 + "\"\n"
+					result = result + "\t\t\t" + fn3 + " = \"" + fd3 + "\"\n"
 
 				if pipe3 == -1
 					idx3 = 100
 				else
 					idx3 = idx3 + 1
 
-		result = result + "\t\tformSuccess = \"Saved\"\n"
+		result = result + "\t\t\tformSuccess = \"Saved\"\n"
 
 		// Emit callback on success if requested
 		if emit_on_success.length() > 0
-			result = result + "\t\t" + emit_on_success + "()\n"
+			result = result + "\t\t\t" + emit_on_success + "()\n"
 
 		// Error branch
-		result = result + "\telse\n"
-		result = result + "\t\tformError = __res.json(\"error\")\n"
-		result = result + "\t\tif formError == \"\"\n"
-		result = result + "\t\t\tformError = \"Request failed\"\n"
+		result = result + "\t\telse\n"
+		result = result + "\t\t\tformError = __res.json(\"error\")\n"
+		result = result + "\t\t\tif formError == \"\"\n"
+		result = result + "\t\t\t\tformError = \"Request failed\"\n"
 
-		result = result + "\tsubmitting = false\n"
+		result = result + "\t\tsubmitting = false\n"
 		return result
 
 	// Parse the HTTP method from form attributes string.
