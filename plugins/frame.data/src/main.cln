@@ -1741,8 +1741,14 @@ functions:
 
 	// Parse a single condition (e.g., "active == true" -> "active = true")
 	string parse_condition(string condition)
-		// Convert Clean operators to SQL
 		string result = condition
+		// Null comparisons must be handled before the generic == / != replacement
+		// because SQL requires IS NULL / IS NOT NULL, not = NULL / <> NULL
+		result = result.replace(" == null", " IS NULL")
+		result = result.replace(" == NULL", " IS NULL")
+		result = result.replace(" != null", " IS NOT NULL")
+		result = result.replace(" != NULL", " IS NOT NULL")
+		// Convert Clean operators to SQL
 		result = result.replace(" == ", " = ")
 		result = result.replace(" != ", " <> ")
 		result = result.replace(" and ", " AND ")
@@ -1805,6 +1811,8 @@ functions:
 		string rhs = condition.substring(op_pos + op_len, condition.length()).trim()
 
 		if rhs == "null" or rhs == "NULL"
+			if op_sql == "<>"
+				return "\"" + lhs + " IS NOT NULL\""
 			return "\"" + lhs + " IS NULL\""
 
 		if rhs == "true" or rhs == "false"
