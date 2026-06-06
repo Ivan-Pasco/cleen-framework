@@ -664,6 +664,37 @@ functions:
 		result = result + "\t\t\tinteger affected = _db_execute(sql, \"[]\")\n"
 		result = result + "\t\t\treturn affected >= 0\n"
 
+		// Static __raw_update method - executes UPDATE with dynamic SET and WHERE sql strings
+		result = result + "\n\t\tinteger __raw_update(string set_sql, string where_sql)\n"
+		result = result + "\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + set_sql\n"
+		if has_tenant
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_sql\n"
+		result = result + "\t\t\treturn _db_execute(sql, \"[]\")\n"
+
+		// Static __raw_delete method - executes DELETE with dynamic WHERE sql string
+		result = result + "\n\t\tinteger __raw_delete(string where_sql)\n"
+		if has_tenant
+			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
+			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
+			result = result + "\t\t\telse\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
+			result = result + "\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_sql\n"
+		result = result + "\t\t\treturn _db_execute(sql, \"[]\")\n"
+
 		return result
 
 	// Generate a validate() static method that checks all field validation constraints
@@ -1185,24 +1216,10 @@ functions:
 		string where_clause = extract_subblock(body, "where:")
 		boolean has_tenant = detect_tenant_field(body)
 
-		if has_tenant
-			string __te_result = "string __ex_sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
-			__te_result = __te_result + "string __ex_tenant = tenant_getId()\n"
-			__te_result = __te_result + "string __ex_filter = \"tenant_id = '\" + __ex_tenant + \"'\"\n"
-			if where_clause.length() > 0
-				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter + \" AND \" + " + build_where_expr(where_clause) + "\n"
-			else
-				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter\n"
-			__te_result = __te_result + "__ex_sql = __ex_sql + \" LIMIT 1\"\n"
-			__te_result = __te_result + "json.get(json.get(json.get(json.get(_db_query(__ex_sql, \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
-			return __te_result
-
 		if where_clause.length() > 0
-			string __ex_prefix = "\"SELECT COUNT(*) as count FROM " + table_name + " WHERE \""
-			string __ex_suffix = " + \" LIMIT 1\""
-			return "json.get(json.get(json.get(json.get(_db_query(" + __ex_prefix + " + " + build_where_expr(where_clause) + __ex_suffix + ", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
+			return model_name + ".exists(" + build_where_expr(where_clause) + ")"
 
-		return "json.get(json.get(json.get(json.get(_db_query(\"SELECT COUNT(*) as count FROM " + table_name + " LIMIT 1\", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
+		return model_name + ".exists(\"\")"
 
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
@@ -1211,26 +1228,10 @@ functions:
 		string where_clause = extract_subblock(body, "where:")
 		boolean has_tenant = detect_tenant_field(body)
 
-		if has_tenant
-			string parsed_where = ""
-			if where_clause.length() > 0
-				parsed_where = parse_where_clause(where_clause)
-			string __tc_result = "string __tc_sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
-			__tc_result = __tc_result + "string __tc_tenant = tenant_getId()\n"
-			__tc_result = __tc_result + "string __tc_filter = \"tenant_id = '\" + __tc_tenant + \"'\"\n"
-			if where_clause.length() > 0
-				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter + \" AND " + parsed_where + "\"\n"
-			else
-				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter\n"
-			__tc_result = __tc_result + "json.get(json.get(json.get(json.get(_db_query(__tc_sql, \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
-			return __tc_result
-
-		string sql = "SELECT COUNT(*) as count FROM " + table_name
-
 		if where_clause.length() > 0
-			sql = sql + " WHERE " + parse_where_clause(where_clause)
+			return model_name + ".count(" + build_where_expr(where_clause) + ")"
 
-		return "json.get(json.get(json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
+		return model_name + ".count(\"\")"
 
 	// Expand Model.insert: block.
 	// For tenant-aware models, the tenant_id column is prepended automatically
@@ -1307,22 +1308,11 @@ functions:
 		if set_clause.length() == 0
 			return "// ERROR: update requires set: block"
 
-		if has_tenant
-			string __tu_result = "string __tu_sql = \"UPDATE " + table_name + " SET \" + " + build_set_expr(set_clause) + "\n"
-			__tu_result = __tu_result + "string __tu_tenant = tenant_getId()\n"
-			__tu_result = __tu_result + "string __tu_filter = \"tenant_id = '\" + __tu_tenant + \"'\"\n"
-			if where_clause.length() > 0
-				__tu_result = __tu_result + "__tu_sql = __tu_sql + \" WHERE \" + __tu_filter + \" AND \" + " + build_where_expr(where_clause) + "\n"
-			else
-				__tu_result = __tu_result + "__tu_sql = __tu_sql + \" WHERE \" + __tu_filter\n"
-			__tu_result = __tu_result + "_db_execute(__tu_sql, \"[]\")"
-			return __tu_result
-
-		string __u_result = "string __u_sql = \"UPDATE " + table_name + " SET \" + " + build_set_expr(set_clause) + "\n"
+		string __set_expr = build_set_expr(set_clause)
 		if where_clause.length() > 0
-			__u_result = __u_result + "__u_sql = __u_sql + \" WHERE \" + " + build_where_expr(where_clause) + "\n"
-		__u_result = __u_result + "_db_execute(__u_sql, \"[]\")"
-		return __u_result
+			return model_name + ".__raw_update(" + __set_expr + ", " + build_where_expr(where_clause) + ")"
+
+		return model_name + ".__raw_update(" + __set_expr + ", \"\")"
 
 	// Expand Model.delete: block.
 	// For tenant-aware models the WHERE clause is automatically scoped to the
@@ -1332,23 +1322,10 @@ functions:
 		string where_clause = extract_subblock(body, "where:")
 		boolean has_tenant = detect_tenant_field(body)
 
-		if has_tenant
-			string __td_result = "string __td_sql = \"DELETE FROM " + table_name + "\"\n"
-			__td_result = __td_result + "string __td_tenant = tenant_getId()\n"
-			__td_result = __td_result + "string __td_filter = \"tenant_id = '\" + __td_tenant + \"'\"\n"
-			if where_clause.length() > 0
-				__td_result = __td_result + "__td_sql = __td_sql + \" WHERE \" + __td_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
-			else
-				__td_result = __td_result + "__td_sql = __td_sql + \" WHERE \" + __td_filter\n"
-			__td_result = __td_result + "_db_execute(__td_sql, \"[]\")"
-			return __td_result
-
-		string sql = "DELETE FROM " + table_name
-
 		if where_clause.length() > 0
-			sql = sql + " WHERE " + parse_where_clause(where_clause)
+			return model_name + ".__raw_delete(" + build_where_expr(where_clause) + ")"
 
-		return "_db_execute(\"" + sql + "\", \"[]\")"
+		return model_name + ".__raw_delete(\"\")"
 
 // ============================================================================
 // PAGINATION EXPANSION
@@ -1834,7 +1811,7 @@ functions:
 			return "\"" + lhs + " " + op_sql + " " + rhs + "\""
 
 		// Variable reference: generate dynamic code expression
-		return "\"" + lhs + " " + op_sql + " '\" + " + rhs + " + \"'\""
+		return "\"" + lhs + " " + op_sql + " '\" + " + rhs + ".toString() + \"'\""
 
 	// Build a Clean code expression that evaluates to the full SQL WHERE clause content.
 	// Iterates conditions, calls build_condition_expr on each, and combines with AND.
