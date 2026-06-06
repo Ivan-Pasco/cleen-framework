@@ -15,7 +15,7 @@ functions:
 
 	// Return keyword list for IDE support
 	string get_keywords()
-		return "[\"load\",\"form\",\"send\",\"required\",\"optional\",\"api\",\"live\",\"feed\",\"from\",\"at\",\"success\",\"pending\"]"
+		return "[\"load\",\"form\",\"send\",\"required\",\"optional\",\"api\",\"live\",\"feed\",\"from\",\"at\",\"success\",\"pending\",\"with\"]"
 
 	// Expand a load: block into module-level state + start: block
 	//
@@ -536,6 +536,7 @@ functions:
 
 		string emit_success = ""
 		string emit_error = ""
+		string with_fields = ""
 
 		integer ls = 0
 		while ls < body.length()
@@ -562,6 +563,22 @@ functions:
 						integer ee2 = err_val.indexOf("\"", ee1)
 						if ee2 != -1
 							emit_error = err_val.substring(ee1, ee2)
+				integer with_pos = line.indexOf("with:")
+				if with_pos != -1
+					string with_val = line.substring(with_pos + 5, line.length()).trim()
+					string rem_w = with_val
+					while rem_w.length() > 0
+						integer sp_w = rem_w.indexOf(" ")
+						string field_w = rem_w
+						if sp_w != -1
+							field_w = rem_w.substring(0, sp_w)
+							rem_w = rem_w.substring(sp_w + 1, rem_w.length()).trim()
+						else
+							rem_w = ""
+						if field_w.length() > 0
+							if with_fields.length() > 0
+								with_fields = with_fields + "|"
+							with_fields = with_fields + field_w + "~false~"
 			ls = nl + 1
 
 		string pending_var = name + "Pending"
@@ -584,7 +601,12 @@ functions:
 		string url_expr = compile_send_url(url)
 		boolean has_body = method != "get" and method != "delete"
 		if has_body
-			result = result + "\t\tlater __res = api." + method + "(" + url_expr + ", \"{}\")\n"
+			if with_fields.length() > 0
+				string json_body = build_json_body(with_fields)
+				result = result + "\t\tstring __body = " + json_body + "\n"
+				result = result + "\t\tlater __res = api." + method + "(" + url_expr + ", __body)\n"
+			else
+				result = result + "\t\tlater __res = api." + method + "(" + url_expr + ", \"{}\")\n"
 		else
 			result = result + "\t\tlater __res = api." + method + "(" + url_expr + ")\n"
 
