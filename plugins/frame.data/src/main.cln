@@ -437,8 +437,8 @@ functions:
 		if field_type == "datetime"
 			field_type = "string"
 
-		// Generate field declaration
-		string result = field_type + " " + field_name
+		// Generate field declaration — use safe identifier if name is a reserved keyword
+		string result = field_type + " " + safe_field_name(field_name)
 		if default_val.length() > 0
 			result = result + " = " + default_val
 
@@ -870,9 +870,9 @@ functions:
 					separator = ", "
 
 				if needs_quotes
-					result = result + "\t\t\tparams = params + \"" + separator + "\\\"\" + " + field + ".toString() + \"\\\"\"\n"
+					result = result + "\t\t\tparams = params + \"" + separator + "\\\"\" + " + safe_field_name(field) + ".toString() + \"\\\"\"\n"
 				else
-					result = result + "\t\t\tparams = params + \"" + separator + "\" + " + field + ".toString()\n"
+					result = result + "\t\t\tparams = params + \"" + separator + "\" + " + safe_field_name(field) + ".toString()\n"
 				first_added = true
 
 			pos = comma_pos + 1
@@ -2056,6 +2056,55 @@ functions:
 		return result
 
 // ============================================================================
+// KEYWORD SAFETY HELPERS
+// ============================================================================
+
+functions:
+	// Returns true when name is a reserved keyword in Clean Language.
+	// Field names that match a keyword cannot be used as Clean identifiers.
+	// Keep this list in sync with grammar.pest `keyword` rule.
+	boolean is_clean_keyword(string name)
+		if name == "return" or name == "if" or name == "else" or name == "then"
+			return true
+		if name == "iterate" or name == "in" or name == "to" or name == "step"
+			return true
+		if name == "tests" or name == "error" or name == "function" or name == "functions"
+			return true
+		if name == "input" or name == "description" or name == "class" or name == "constructor"
+			return true
+		if name == "is" or name == "and" or name == "or" or name == "not"
+			return true
+		if name == "true" or name == "false" or name == "none" or name == "null"
+			return true
+		if name == "default" or name == "onError" or name == "constant" or name == "private"
+			return true
+		if name == "base" or name == "list" or name == "matrix" or name == "pairs"
+			return true
+		if name == "integer" or name == "number" or name == "boolean" or name == "string"
+			return true
+		if name == "void" or name == "any" or name == "import" or name == "from"
+			return true
+		if name == "as" or name == "later" or name == "background" or name == "start"
+			return true
+		if name == "print" or name == "break" or name == "continue" or name == "while"
+			return true
+		if name == "state" or name == "watch" or name == "computed" or name == "screen"
+			return true
+		if name == "guard" or name == "reset" or name == "require" or name == "rules"
+			return true
+		if name == "spec" or name == "intent" or name == "source" or name == "build"
+			return true
+		return false
+
+	// Returns a Clean-safe identifier for a field name.
+	// When the name is a reserved keyword, prefix with "__" to avoid parse errors.
+	// The SQL column name and JSON key always use the original (unescaped) name.
+	string safe_field_name(string name)
+		if is_clean_keyword(name)
+			return "__" + name
+		return name
+
+// ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
@@ -2291,7 +2340,7 @@ functions:
 				zero_val = "false"
 			else if not is_primitive_type(ftype)
 				zero_val = ftype + "()"
-			result = result + "\t\t" + field + " = " + zero_val + "\n"
+			result = result + "\t\t" + safe_field_name(field) + " = " + zero_val + "\n"
 			fpos = comma + 1
 			tpos = tcomma + 1
 		return result
@@ -2325,7 +2374,8 @@ functions:
 			string field = fields.substring(fpos, comma).trim()
 			string ftype = types.substring(tpos, tcomma).trim()
 			if is_primitive_type(ftype)
-				string base = "\t\t\t__row." + field + " = json.get(__row_json, \"" + field + "\")"
+				// Use safe_field_name for the Clean identifier; original field name for the JSON key
+				string base = "\t\t\t__row." + safe_field_name(field) + " = json.get(__row_json, \"" + field + "\")"
 				if ftype == "integer"
 					result = result + base + ".toInteger()\n"
 				else if ftype == "number"
