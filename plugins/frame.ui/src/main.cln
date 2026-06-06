@@ -1751,6 +1751,13 @@ functions:
 		string after_html = extract_json_field(parsed, "after")
 		string fallback_html = extract_json_field(parsed, "fallback")
 
+		// Transform state: block to private _field declarations and replace state.field
+		// references throughout. This prevents dot-access assignment (state.field = value)
+		// from generating an "Assign" AST node that the compiler rejects in multi-plugin mode.
+		string state_fields = get_component_state_fields(before_html)
+		if state_fields.length() > 0
+			before_html = transform_state_in_body(before_html, state_fields)
+
 		// When a fallback: section is present, store the content as a field so
 		// render() can emit it as a data-fallback attribute on the root element.
 		if fallback_html != ""
@@ -1771,6 +1778,21 @@ functions:
 			// Generate render() function from html: block content
 			string cleaned_html = strip_block_indent(html_content)
 			string render_code = html_block_to_code(cleaned_html)
+			// Apply state field name substitution in the render code as well
+			if state_fields.length() > 0
+				string csv_rem = state_fields
+				while csv_rem.length() > 0
+					integer comma = csv_rem.indexOf(",")
+					string sfname = ""
+					if comma == -1
+						sfname = csv_rem
+						csv_rem = ""
+					else
+						sfname = csv_rem.substring(0, comma)
+						csv_rem = csv_rem.substring(comma + 1, csv_rem.length())
+					sfname = sfname.trim()
+					if sfname.length() > 0
+						render_code = render_code.replace("state." + sfname, "_" + sfname)
 
 			// When a fallback: section is present, wrap the rendered output in a
 			// data-component / data-fallback div so the error boundary runtime can
@@ -1814,7 +1836,12 @@ functions:
 					result = result + "\n\t" + after_html + "\n"
 		else
 			// No html: block - normalize handler syntax and fix per-line indentation
-			string norm_body = normalize_handlers(body)
+			// Apply state transformation to the full body before normalizing
+			string transformed_body = body
+			string body_state_fields = get_component_state_fields(body)
+			if body_state_fields.length() > 0
+				transformed_body = transform_state_in_body(body, body_state_fields)
+			string norm_body = normalize_handlers(transformed_body)
 			result = result + "\t" + norm_body.replace("\n", "\n\t") + "\n"
 
 		string ssr_body = "\t\t\treturn this.render()\n"
@@ -1857,14 +1884,243 @@ functions:
 		return attrs.substring(quote_start + 1, quote_end)
 
 	// Normalize component events: block content to valid Clean Language class syntax.
-	// Translates events: → functions:, removes void prefix, strips trailing : from function names (onMount(): → onMount()).
+	// Translates events: → functions:, strips trailing : from function names (onMount(): → onMount()).
+	// Note: void return type is intentionally preserved so the compiler sees valid method declarations.
 	string normalize_handlers(string content)
 		string result = content
 		result = result.replace("events:", "functions:")
-		result = result.replace("\tvoid ", "\t")
 		result = result.replace("):\n", ")\n")
 		if result.endsWith("):")
 			result = result.substring(0, result.length() - 1)
+		return result
+
+	// Returns a comma-separated list of field names declared in the state: section.
+	// Input: component body text (the before-html portion).
+	// Output: "view_code,view_visual" or "" when no state: section is present.
+	string get_component_state_fields(string body)
+		string fields = ""
+
+		integer state_pos = -1
+		integer search_pos = 0
+		while search_pos < body.length()
+			integer pos = body.indexOf("state:", search_pos)
+			if pos == -1
+				search_pos = body.length()
+			else
+				boolean at_boundary = false
+				if pos == 0
+					at_boundary = true
+				else
+					string cb = body.substring(pos - 1, pos)
+					if cb == "\n" or cb == "\t"
+						at_boundary = true
+				if at_boundary
+					state_pos = pos
+					search_pos = body.length()
+				else
+					search_pos = pos + 6
+
+		if state_pos == -1
+			return ""
+
+		integer content_start = body.indexOf("\n", state_pos)
+		if content_start == -1
+			return ""
+		content_start = content_start + 1
+
+		integer base_indent = 0
+		integer scan = state_pos - 1
+		while scan >= 0 and body.substring(scan, scan + 1) == "\t"
+			base_indent = base_indent + 1
+			scan = scan - 1
+
+		string block = body.substring(content_start, body.length())
+		integer line_start = 0
+
+		while line_start < block.length()
+			integer nl = block.indexOf("\n", line_start)
+			integer line_end = nl
+			if nl == -1
+				line_end = block.length()
+			string line = block.substring(line_start, line_end)
+
+			if line.trim().length() == 0
+				if nl == -1
+					line_start = block.length()
+				else
+					line_start = nl + 1
+			else
+				integer indent = 0
+				while indent < line.length() and line.substring(indent, indent + 1) == "\t"
+					indent = indent + 1
+				if indent <= base_indent
+					line_start = block.length()
+				else
+					string trimmed = line.trim()
+					integer sp = trimmed.indexOf(" ")
+					if sp != -1
+						string after_type = trimmed.substring(sp + 1, trimmed.length()).trim()
+						integer name_end = after_type.length()
+						integer sp2 = after_type.indexOf(" ")
+						integer eq = after_type.indexOf("=")
+						if sp2 != -1 and sp2 < name_end
+							name_end = sp2
+						if eq != -1 and eq < name_end
+							name_end = eq
+						string fname = after_type.substring(0, name_end).trim()
+						if fname.length() > 0
+							if fields.length() > 0
+								fields = fields + ","
+							fields = fields + fname
+					if nl == -1
+						line_start = block.length()
+					else
+						line_start = nl + 1
+
+		return fields
+
+	// Transforms the state: block in a component body and replaces state.field references.
+	// The state: block is replaced with private _field declarations at the same indent level.
+	// Every occurrence of "state.fieldname" is replaced with "_fieldname" throughout.
+	// This makes the generated class context-independent across plugin combinations.
+	// fields_csv: comma-separated list returned by get_component_state_fields.
+	string transform_state_in_body(string body, string fields_csv)
+		if fields_csv.length() == 0
+			return body
+
+		string result = body
+
+		// --- Step 1: replace state: block with private field declarations ---
+		integer state_pos = -1
+		integer sp2 = 0
+		while sp2 < result.length()
+			integer pos = result.indexOf("state:", sp2)
+			if pos == -1
+				sp2 = result.length()
+			else
+				boolean at_boundary = false
+				if pos == 0
+					at_boundary = true
+				else
+					string cb = result.substring(pos - 1, pos)
+					if cb == "\n" or cb == "\t"
+						at_boundary = true
+				if at_boundary
+					state_pos = pos
+					sp2 = result.length()
+				else
+					sp2 = pos + 6
+
+		if state_pos != -1
+			// Determine where the section starts (include leading tabs + preceding newline)
+			integer section_start = state_pos
+			integer back = state_pos - 1
+			while back >= 0 and result.substring(back, back + 1) == "\t"
+				section_start = back
+				back = back - 1
+			if section_start > 0 and result.substring(section_start - 1, section_start) == "\n"
+				section_start = section_start - 1
+
+			// Indent level of the state: keyword itself
+			integer base_indent = 0
+			integer bi = state_pos - 1
+			while bi >= 0 and result.substring(bi, bi + 1) == "\t"
+				base_indent = base_indent + 1
+				bi = bi - 1
+
+			// Find the end of the state block (first subsequent line at <= base_indent)
+			integer content_start = result.indexOf("\n", state_pos)
+			if content_start == -1
+				content_start = result.length()
+			else
+				content_start = content_start + 1
+
+			integer state_block_end = result.length()
+			string blk = result.substring(content_start, result.length())
+			integer bls = 0
+			while bls < blk.length()
+				integer bnl = blk.indexOf("\n", bls)
+				integer ble = bnl
+				if bnl == -1
+					ble = blk.length()
+				string bline = blk.substring(bls, ble)
+				if bline.trim().length() > 0
+					integer bind = 0
+					while bind < bline.length() and bline.substring(bind, bind + 1) == "\t"
+						bind = bind + 1
+					if bind <= base_indent
+						state_block_end = content_start + bls
+						bls = blk.length()
+					else
+						if bnl == -1
+							bls = blk.length()
+						else
+							bls = bnl + 1
+				else
+					if bnl == -1
+						bls = blk.length()
+					else
+						bls = bnl + 1
+
+			// Build private field declarations at base_indent tabs
+			string replacement = "\n"
+			string field_blk = result.substring(content_start, state_block_end)
+			integer fls = 0
+			while fls < field_blk.length()
+				integer fnl = field_blk.indexOf("\n", fls)
+				integer fle = fnl
+				if fnl == -1
+					fle = field_blk.length()
+				string fline = field_blk.substring(fls, fle)
+				if fline.trim().length() > 0
+					integer find = 0
+					while find < fline.length() and fline.substring(find, find + 1) == "\t"
+						find = find + 1
+					if find > base_indent
+						string tabs = ""
+						integer ti = 0
+						while ti < base_indent
+							tabs = tabs + "\t"
+							ti = ti + 1
+						string trimmed = fline.trim()
+						integer spc = trimmed.indexOf(" ")
+						if spc != -1
+							string type_part = trimmed.substring(0, spc)
+							string rest = trimmed.substring(spc + 1, trimmed.length()).trim()
+							integer ne = rest.length()
+							integer s2 = rest.indexOf(" ")
+							integer eq = rest.indexOf("=")
+							if s2 != -1 and s2 < ne
+								ne = s2
+							if eq != -1 and eq < ne
+								ne = eq
+							string fname = rest.substring(0, ne).trim()
+							string rest_after = rest.substring(ne, rest.length())
+							replacement = replacement + tabs + type_part + " _" + fname + rest_after + "\n"
+						else
+							replacement = replacement + tabs + fline.trim() + "\n"
+				if fnl == -1
+					fls = field_blk.length()
+				else
+					fls = fnl + 1
+
+			result = result.substring(0, section_start) + replacement + result.substring(state_block_end, result.length())
+
+		// --- Step 2: replace state.fieldname with _fieldname for each field ---
+		string csv_rem = fields_csv
+		while csv_rem.length() > 0
+			integer comma = csv_rem.indexOf(",")
+			string fname = ""
+			if comma == -1
+				fname = csv_rem
+				csv_rem = ""
+			else
+				fname = csv_rem.substring(0, comma)
+				csv_rem = csv_rem.substring(comma + 1, csv_rem.length())
+			fname = fname.trim()
+			if fname.length() > 0
+				result = result.replace("state." + fname, "_" + fname)
+
 		return result
 
 // ============================================================================
