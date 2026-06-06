@@ -1,6 +1,10 @@
-// Tests for frame.client plugin — load: and form: block expansion
+// Tests for frame.client plugin — load:, form:, and send: block expansion
 // These functions (expand_block, build_json_body, etc.) are defined in src/main.cln.
-// To type-check: combine this file with src/main.cln into a single file and run cln check.
+//
+// To type-check:
+//   cat tests/test_expand.cln src/main.cln > /tmp/combined.cln && cln check /tmp/combined.cln
+//
+// (test file must come first so start: appears before functions:)
 // Runtime execution requires the full server bridge stack.
 
 start:
@@ -30,8 +34,33 @@ start:
 	test_parse_form_url()
 	test_parse_form_field_required()
 	test_parse_form_field_default()
+	// send: block tests
+	test_send_missing_params()
+	test_send_generates_state_vars()
+	test_send_generates_function()
+	test_send_pending_guard()
+	test_send_delete_no_body()
+	test_send_post_empty_body()
+	test_send_patch_empty_body()
+	test_send_on_success_emit()
+	test_send_on_error_emit()
+	test_send_with_single_field()
+	test_send_with_multiple_fields()
+	test_send_url_static()
+	test_send_url_interpolated()
+	test_parse_send_name()
+	test_parse_send_method_normalises_case()
+	test_parse_send_url()
+	test_compile_send_url_static()
+	test_compile_send_url_interpolated()
+	test_compile_send_url_multiple_placeholders()
 
 functions:
+	// Minimal assert helper — prints a failure message if condition is false.
+	void assert(boolean condition)
+		if condition == false
+			print("FAIL")
+
 	void test_unknown_block_passthrough()
 		string result = expand_block("unknown", "{}", "original body")
 		assert(result == "original body")
@@ -189,3 +218,147 @@ functions:
 		assert(get_field(rec, 0) == "priority")
 		assert(get_field(rec, 1) == "false")
 		assert(get_field(rec, 2) == "medium")
+
+	// ========== send: block tests ==========
+
+	void test_send_missing_params()
+		// Missing name — returns error comment
+		string r1 = expand_block("send", "delete \"/api/tasks\"", "")
+		assert(r1.contains("requires name method url"))
+		// Missing URL — returns error comment
+		string r2 = expand_block("send", "deleteTask delete", "")
+		assert(r2.contains("requires name method url"))
+		// Invalid method — returns error comment
+		string r3 = expand_block("send", "deleteTask badverb \"/api/tasks\"", "")
+		assert(r3.contains("requires name method url"))
+
+	void test_send_generates_state_vars()
+		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", "")
+		assert(result.contains("deleteTaskPending"))
+		assert(result.contains("deleteTaskSuccess"))
+		assert(result.contains("deleteTaskError"))
+		assert(result.contains("boolean deleteTaskPending = false"))
+		assert(result.contains("boolean deleteTaskSuccess = false"))
+		assert(result.contains("string deleteTaskError = \"\""))
+
+	void test_send_generates_function()
+		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", "")
+		assert(result.contains("void deleteTask()"))
+
+	void test_send_pending_guard()
+		// The generated function must guard against concurrent calls
+		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", "")
+		assert(result.contains("if deleteTaskPending"))
+		assert(result.contains("return"))
+		assert(result.contains("deleteTaskPending = true"))
+		assert(result.contains("deleteTaskPending = false"))
+
+	void test_send_delete_no_body()
+		// DELETE must use api.delete(url) — no body argument
+		string result = expand_block("send", "removeItem delete \"/api/items\"", "")
+		assert(result.contains("api.delete("))
+		assert(result.contains("__body") == false)
+
+	void test_send_post_empty_body()
+		// POST without with: must use api.post(url, "{}") — empty JSON body
+		string result = expand_block("send", "publishItem post \"/api/items/publish\"", "")
+		assert(result.contains("api.post("))
+		assert(result.contains("\"{}\""))
+		assert(result.contains("__body") == false)
+
+	void test_send_patch_empty_body()
+		// PATCH without with: must use api.patch(url, "{}") — empty JSON body
+		string result = expand_block("send", "archiveItem patch \"/api/items/archive\"", "")
+		assert(result.contains("api.patch("))
+		assert(result.contains("\"{}\""))
+
+	void test_send_on_success_emit()
+		string body = "on success: emit \"taskDeleted\""
+		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", body)
+		assert(result.contains("taskDeleted()"))
+		// Callback must appear inside the ok branch
+		integer ok_pos = result.indexOf("if __res.ok")
+		integer cb_pos = result.indexOf("taskDeleted()")
+		assert(ok_pos != -1)
+		assert(cb_pos > ok_pos)
+
+	void test_send_on_error_emit()
+		string body = "on error: emit \"handleError\""
+		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", body)
+		assert(result.contains("handleError()"))
+		// Error callback must appear inside the else branch
+		integer else_pos = result.indexOf("\t\telse")
+		integer cb_pos = result.indexOf("handleError()")
+		assert(else_pos != -1)
+		assert(cb_pos > else_pos)
+
+	void test_send_with_single_field()
+		// with: field generates a JSON body from that module-level variable
+		string body = "with: archiveReason"
+		string result = expand_block("send", "archiveTask patch \"/api/tasks/archive\"", body)
+		assert(result.contains("__body"))
+		assert(result.contains("archiveReason"))
+		assert(result.contains("api.patch("))
+		// Must NOT use the empty body fallback
+		assert(result.contains("\"{}\"") == false)
+
+	void test_send_with_multiple_fields()
+		// with: field1 field2 generates JSON with both fields
+		string body = "with: reason assignee"
+		string result = expand_block("send", "escalateTask patch \"/api/tasks/escalate\"", body)
+		assert(result.contains("reason"))
+		assert(result.contains("assignee"))
+		assert(result.contains("__body"))
+
+	void test_send_url_static()
+		// Static URL is passed as a quoted string literal
+		string result = expand_block("send", "clearAll delete \"/api/clear\"", "")
+		assert(result.contains("\"/api/clear\""))
+
+	void test_send_url_interpolated()
+		// {taskId} placeholder resolves to the module-level variable taskId
+		string result = expand_block("send", "deleteTask delete \"/api/tasks/{taskId}\"", "")
+		assert(result.contains("taskId"))
+		// Must not contain the literal placeholder text
+		assert(result.contains("{taskId}") == false)
+
+	void test_parse_send_name()
+		assert(parse_send_name("deleteUser delete \"/api/users\"") == "deleteUser")
+		assert(parse_send_name("archivePost patch \"/api/posts/{id}/archive\"") == "archivePost")
+		// Missing method/url — still parses first word
+		assert(parse_send_name("deleteUser") == "")
+		assert(parse_send_name("") == "")
+
+	void test_parse_send_method_normalises_case()
+		assert(parse_send_method("deleteUser delete \"/api/users\"") == "delete")
+		assert(parse_send_method("archivePost patch \"/api/posts\"") == "patch")
+		assert(parse_send_method("publishItem POST \"/api/items\"") == "post")
+		assert(parse_send_method("updateItem PUT \"/api/items\"") == "put")
+		assert(parse_send_method("badMethod badverb \"/api/x\"") == "")
+
+	void test_parse_send_url()
+		assert(parse_send_url("deleteUser delete \"/api/users\"") == "/api/users")
+		assert(parse_send_url("deleteTask delete \"/api/tasks/{taskId}\"") == "/api/tasks/{taskId}")
+		// No URL present
+		assert(parse_send_url("deleteUser delete") == "")
+
+	void test_compile_send_url_static()
+		// Static URL — wrapped in quotes
+		assert(compile_send_url("/api/users") == "\"/api/users\"")
+		assert(compile_send_url("/api/clear") == "\"/api/clear\"")
+
+	void test_compile_send_url_interpolated()
+		// {varName} becomes a bare variable reference concatenated in
+		string result = compile_send_url("/api/tasks/{taskId}")
+		assert(result.contains("taskId"))
+		assert(result.contains("\"/api/tasks/\""))
+		// The literal placeholder must not appear in the output
+		assert(result.contains("{taskId}") == false)
+
+	void test_compile_send_url_multiple_placeholders()
+		// Multiple placeholders: /api/{org}/tasks/{taskId}
+		string result = compile_send_url("/api/{org}/tasks/{taskId}")
+		assert(result.contains("org"))
+		assert(result.contains("taskId"))
+		assert(result.contains("\"/api/\""))
+		assert(result.contains("\"/tasks/\""))
