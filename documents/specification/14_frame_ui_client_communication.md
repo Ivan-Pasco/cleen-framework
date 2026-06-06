@@ -887,7 +887,7 @@ send: <name> <method> "<url>"
 |------|----------|-------------|
 | `<name>` | yes | Identifier for the action. Prefixes all generated variables and names the generated function. |
 | `<method>` | yes | HTTP method: `get`, `post`, `put`, `patch`, or `delete` (case-insensitive). |
-| `"<url>"` | yes | Endpoint URL string literal. May contain `{varName}` placeholders (see §11.5). |
+| `"<url>"` | yes | Endpoint URL string literal. May contain `{varName}` placeholders (see §11.6). |
 | `on success: emit "<functionName>"` | no | Call the named exported function after a successful response. |
 | `on error: emit "<functionName>"` | no | Call the named exported function after a failed response. |
 
@@ -897,13 +897,64 @@ send: <name> <method> "<url>"
 |--------|-------------|
 | `get` | None |
 | `delete` | None |
-| `post` | `{}` (empty JSON object) |
-| `put` | `{}` (empty JSON object) |
-| `patch` | `{}` (empty JSON object) |
+| `post` | `{}` (empty JSON object) unless `with:` is present |
+| `put` | `{}` (empty JSON object) unless `with:` is present |
+| `patch` | `{}` (empty JSON object) unless `with:` is present |
 
-If you need to send a non-empty body, use `api.*` directly in a component event handler instead.
+### 11.4 `with:` — Declare JSON Body Fields
 
-### 11.4 Generated State Contract
+The `with:` option is an optional line in the `send:` block body that declares which module-scope state variables to serialize into the JSON request body for `post`, `put`, and `patch` methods.
+
+```
+send: <name> <method> "<url>"
+    [with: <var1> <var2> ...]
+    [on success: emit "<functionName>"]
+    [on error: emit "<functionName>"]
+```
+
+Variables are listed space-separated on the `with:` line. Each variable is read from the current module scope at call time and serialized into the JSON body as a string value.
+
+**Generated body expression** for `with: name email`:
+
+```clean
+string __body = "{\"name\":\"" + name + "\",\"email\":\"" + email + "\"}"
+```
+
+Variables appear in the body in the order they are listed after `with:`.
+
+**Rules:**
+
+| Rule | Detail |
+|------|--------|
+| `get` and `delete` | Ignore `with:` — these methods send no body regardless. |
+| No `with:` on `post`/`put`/`patch` | Body defaults to `{}` (empty JSON object). |
+| Variable scope | `with:` variables are read from module scope, not declared by it. No new state variables are generated. |
+| Multiple variables | All on one line, space-separated: `with: title description priority`. |
+
+**Before/after comparison:**
+
+Without `with:` (empty body):
+```clean
+send: createUser post "/api/users"
+    on success: emit "reloadUsers"
+```
+Generates `api.post("/api/users", "{}")`.
+
+With `with:` (populated body from module-scope state):
+```clean
+send: createUser post "/api/users"
+    with: name email age
+    on success: emit "reloadUsers"
+```
+Generates:
+```clean
+string __body = "{\"name\":\"" + name + "\",\"email\":\"" + email + "\",\"age\":\"" + age + "\"}"
+later __res = api.post("/api/users", __body)
+```
+
+The variables `name`, `email`, and `age` must already exist in module scope (for example, declared as state variables in the same companion file or imported from another module). `with:` does not create them.
+
+### 11.5 Generated State Contract
 
 For `send: deleteUser delete "/api/users/{id}"`, the following module-level variables are generated:
 
@@ -913,7 +964,7 @@ For `send: deleteUser delete "/api/users/{id}"`, the following module-level vari
 | `<name>Success` | `boolean` | `false` | `true` after the most recent request returned a 2xx response. Reset to `false` on the next call. |
 | `<name>Error` | `string` | `""` | Non-empty if the most recent request failed. Contains the `"error"` key from the JSON body, or `"Request failed"` if no such key exists. Reset to `""` on the next call. |
 
-### 11.5 URL Placeholders
+### 11.6 URL Placeholders
 
 Use `{varName}` to interpolate a component-scope or module-scope variable into the URL. This is resolved at call time, not at declaration time.
 
@@ -923,7 +974,7 @@ send: deleteUser delete "/api/users/{id}"
 
 At runtime, `id` is read from the current module scope. This differs from `load:`'s `{query.X}` syntax, which reads from the URL query string.
 
-### 11.6 What It Generates
+### 11.7 What It Generates
 
 ```clean
 send: deleteUser delete "/api/users/{id}"
@@ -954,9 +1005,9 @@ void deleteUser()
     deleteUserPending = false
 ```
 
-For `post`, `put`, or `patch` methods the call becomes `api.post(url, "{}")` (and equivalently for put/patch).
+For `post`, `put`, or `patch` methods without `with:`, the call becomes `api.post(url, "{}")` (and equivalently for put/patch). When `with:` is present, the body is a JSON object built from the listed state variables. See §11.4.
 
-### 11.7 Multiple `send:` Blocks
+### 11.8 Multiple `send:` Blocks
 
 Multiple `send:` blocks are allowed in one companion file. Each is independently prefixed by its own name, so there is no variable collision:
 
@@ -969,7 +1020,7 @@ send: archiveUser patch "/api/users/{id}/archive"
     on error: emit "showArchiveError"
 ```
 
-### 11.8 Where It Lives
+### 11.9 Where It Lives
 
 `send:` belongs in a client-side companion `.cln` file:
 
@@ -980,7 +1031,7 @@ app/web/pages/
 └── users.client.cln        ← client-side: load: / form: / send: blocks
 ```
 
-### 11.9 Example — Delete Task Button
+### 11.10 Example — Delete Task Button
 
 ```clean
 // app/web/pages/tasks.client.cln
@@ -1009,7 +1060,7 @@ component: tag="task-row"
         </div>
 ```
 
-### 11.10 Example — Toggle Feature Flag
+### 11.11 Example — Toggle Feature Flag
 
 ```clean
 // app/web/pages/admin.client.cln
@@ -1018,17 +1069,18 @@ send: toggleFlag patch "/api/flags/{flagName}/toggle"
     on error: emit "showFlagError"
 ```
 
-### 11.11 Comparison: `send:` vs `form:` vs `api.*` Directly
+### 11.12 Comparison: `send:` vs `form:` vs `api.*` Directly
 
-| | `send:` | `form:` | `api.*` in component |
-|---|---|---|---|
-| Field declarations | None | One or more named fields | Manual variables |
-| State generated | `<name>Pending`, `<name>Success`, `<name>Error` | `submitting`, `formError`, `formSuccess`, field variables | Manual |
-| Generated function | `void <name>()` | `void submit()` | N/A — you write the handler |
-| Validation | None | Declarative `required` per field | Manual |
-| Body sent | None (`get`/`delete`) or `{}` (`post`/`put`/`patch`) | JSON of all declared fields | Any string you pass |
-| URL placeholders | `{varName}` from module scope | `{varName}` from field state | String concatenation |
-| Best for | Delete, toggle, archive — no user input | Forms with user-entered fields | Ad-hoc or complex mutations |
+| | `send:` | `send:` with `with:` | `form:` | `api.*` in component |
+|---|---|---|---|---|
+| Field declarations | None | None (uses existing state) | One or more named fields | Manual variables |
+| State generated | `<name>Pending`, `<name>Success`, `<name>Error` | `<name>Pending`, `<name>Success`, `<name>Error` | `submitting`, `formError`, `formSuccess`, field variables | Manual |
+| Generated function | `void <name>()` | `void <name>()` | `void submit()` | N/A — you write the handler |
+| Validation | None | None | Declarative `required` per field | Manual |
+| Body sent | None (`get`/`delete`) or `{}` (`post`/`put`/`patch`) | JSON of listed state variables (`post`/`put`/`patch`) | JSON of all declared fields | Any string you pass |
+| Dynamic body fields | No | Yes — `with: var1 var2 ...` | Yes — declared in block | Yes |
+| URL placeholders | `{varName}` from module scope | `{varName}` from module scope | `{varName}` from field state | String concatenation |
+| Best for | Delete, toggle, archive — no user input | Mutations from existing state (no new field declarations needed) | Forms with user-entered fields | Ad-hoc or complex mutations |
 
 ---
 
@@ -1084,7 +1136,7 @@ Server-side origin validation is the developer's responsibility.
 | `feed.*` | 7 | open, on, close, data, eventType, lastId, connId |
 | `load:` block | — | Declarative page-level data fetching; generates `loading`, `loadError`, named `any` variables. See §9. |
 | `form:` block | — | Declarative form wiring; generates field variables, `submitting`, `formError`, `formSuccess`, `submit()`. See §10. |
-| `send:` block | — | Single-action mutation; generates `<name>Pending`, `<name>Success`, `<name>Error` state + `void <name>()`. See §11. |
+| `send:` block | — | Single-action mutation; generates `<name>Pending`, `<name>Success`, `<name>Error` state + `void <name>()`. Optional `with:` declares module-scope variables to serialize as JSON body. See §11. |
 
 **ApiResponse** — returned by all `api.*` request functions, read via `later result = api.*`:
 

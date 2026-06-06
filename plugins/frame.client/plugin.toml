@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.client"
-version = "1.0.1"
-description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, and SSE feeds"
+version = "1.2.0"
+description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, SSE feeds, and declarative blocks (load:, form:, send:)"
 author = "Clean Language Team"
 license = "MIT"
 
@@ -9,7 +9,7 @@ license = "MIT"
 min_compiler_version = "0.15.0"
 
 [handles]
-blocks = ["load", "form"]
+blocks = ["load", "form", "send"]
 
 [exports]
 expand = "expand_block"
@@ -62,7 +62,7 @@ functions = [
 ]
 
 [language]
-blocks = ["load", "form"]
+blocks = ["load", "form", "send"]
 
 keywords = [
   { name = "api", description = "HTTP API client namespace", context = "namespace" },
@@ -70,10 +70,12 @@ keywords = [
   { name = "feed", description = "Server-Sent Events feed namespace", context = "namespace" },
   { name = "load", description = "Declarative page-level client data fetching block — fetches data from APIs when the page loads in the browser", context = "block" },
   { name = "form", description = "Declarative form wiring — generates field state, submit handler, and loading/error state", context = "block" },
+  { name = "send", description = "Declarative single-action mutation block — generates <name>Pending, <name>Success, <name>Error state and a void <name>() function for delete, archive, toggle, or any fire-and-check API call", context = "block" },
   { name = "from", description = "URL source for a load: declaration", context = "load-keyword" },
   { name = "at", description = "JSON path to extract from response", context = "load-keyword" },
   { name = "required", description = "Marks a form field as required — validated before submit", context = "form-keyword" },
   { name = "optional", description = "Marks a form field as optional (default)", context = "form-keyword" },
+  { name = "with", description = "Lists module-level variables to serialize into the send: request body (post/patch only)", context = "send-keyword" },
 ]
 
 types = []
@@ -120,6 +122,7 @@ functions = [
 completions = [
   { trigger = "load:", insert = "load:\n\t${1:data} from \"${2:/api/endpoint}\" at \"${3:data}\"" },
   { trigger = "form:", insert = "form: post \"${1:/api/endpoint}\"\n\t${2:field} required\n\ton success: clear" },
+  { trigger = "send:", insert = "send: ${1:actionName} ${2:delete} \"${3:/api/endpoint}\"\n\ton success: emit \"${4:onDone}\"" },
   { trigger = "api.get", insert = "later ${1:result} = api.get(\"${2:/api/}\")" },
   { trigger = "api.post", insert = "later ${1:result} = api.post(\"${2:/api/}\", ${3:body})" },
   { trigger = "api.put", insert = "later ${1:result} = api.put(\"${2:/api/}\", ${3:body})" },
@@ -134,7 +137,7 @@ completions = [
 ]
 
 [ai]
-description = "Client-side communication plugin. Use api.* with 'later result = api.get(url)' for HTTP requests, live.* for WebSocket connections, feed.* for SSE streams. Never use JavaScript fetch/XHR/WebSocket/EventSource. Use load: for declarative page-level data fetching — it generates module-level state and a start: block that fetches from APIs when the page loads. Use form: in a .client.cln companion file for page-level form submission — it generates field state variables, a submitting flag, formError, formSuccess, and a submit() handler."
+description = "Client-side communication plugin. Use api.* with 'later result = api.get(url)' for HTTP requests, live.* for WebSocket connections, feed.* for SSE streams. Never use JavaScript fetch/XHR/WebSocket/EventSource. Use load: for declarative page-level data fetching — it generates module-level state and a start: block that fetches from APIs when the page loads. Use form: in a .client.cln companion file for page-level form submission — it generates field state variables, a submitting flag, formError, formSuccess, and a submit() handler. Use send: in a .client.cln companion file for single-action mutations (delete, archive, toggle, publish) — it generates <name>Pending, <name>Success, <name>Error state and a void <name>() function. Add 'with: field1 field2' inside a send: block to serialize module-level variables into the request body. Use {varName} in a send: URL to interpolate a module-level variable into the path."
 constraints = [
   "Never use JavaScript fetch(), XMLHttpRequest, or $.ajax() — use api.* for all HTTP calls",
   "Never write <script> tags with WebSocket or EventSource — use live.* and feed.* instead",
@@ -144,6 +147,8 @@ constraints = [
   "api.auth(scheme, credential) persists for all subsequent requests — call once per session, not per request",
   "Check result.ok before reading result.json() — always handle the error case to avoid silent failures",
   "Use form: in a .client.cln companion file for page-level form submission — it generates field state, submitting flag, formError, formSuccess, and a submit() handler",
+  "Use send: in a .client.cln companion file for single-action mutations — it generates <name>Pending, <name>Success, <name>Error and a void <name>() function; use with: to include body fields; use {varName} in the URL for path parameters",
+  "send: URL placeholders use {varName} (resolves module-level variables) — NOT {query.X} which is only for load:",
 ]
 
 [[ai.patterns]]
@@ -175,6 +180,12 @@ name = "api-error-handling"
 use_when = "any component that makes API calls and must show user-facing error messages or handle network failures"
 anti_pattern = "ignoring result.ok and assuming success, showing the raw result.body as an error message, or crashing when result.status == 0 (network error) — always check result.ok first, then branch on result.status for specific cases"
 example = "patterns/api-error-handling.cln"
+
+[[ai.patterns]]
+name = "send-mutation"
+use_when = "a button triggers a single API mutation — delete, archive, publish, toggle — and you need pending/success/error state without a full manual handler"
+anti_pattern = "writing a manual void deleteTask() handler for every button — the pending flag, double-click guard, ok check, and error string are identical every time; use send: in a .client.cln companion file instead; use with: to serialize body fields; use {varName} in the URL for path parameters"
+example = "patterns/send-mutation.cln"
 
 [paths]
 owns = ["app/web/client"]

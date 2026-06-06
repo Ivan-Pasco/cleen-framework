@@ -1,0 +1,48 @@
+// Pattern: send-mutation
+// Use when: a button triggers a single API mutation — delete, archive, publish, toggle —
+//   and you need pending/success/error state without writing a full handler.
+// Anti-pattern: DON'T call api.delete() manually for every button. The boilerplate
+//   (pending flag, double-click guard, ok check, error string) is identical every time.
+//   Use send: in a .client.cln companion file — it generates the state and function for you.
+//
+// With body fields (archive reason, publish note, etc.):
+//   Use with: to list module-level variables to serialize into the request body.
+//   send: archiveTask patch "/api/tasks/{taskId}/archive"
+//       with: archiveReason
+//   This generates {"archiveReason":"<current value>"} as the body.
+//
+// URL placeholders:
+//   {varName} in the URL resolves a module-level variable at call time.
+//   Set taskId before calling deleteTask().
+
+// app/web/pages/task-detail.client.cln
+string taskId = ""
+string archiveReason = ""
+
+send: deleteTask delete "/api/tasks/{taskId}"
+	on success: emit "taskRemoved"
+
+send: archiveTask patch "/api/tasks/{taskId}/archive"
+	with: archiveReason
+	on success: emit "taskArchived"
+
+// Generated state (one set per send: block):
+//   boolean deleteTaskPending = false
+//   boolean deleteTaskSuccess = false
+//   string  deleteTaskError   = ""
+//   void    deleteTask()      — guards double-clicks, calls api.delete, sets state
+//
+//   boolean archiveTaskPending = false
+//   boolean archiveTaskSuccess = false
+//   string  archiveTaskError   = ""
+//   void    archiveTask()
+
+// Template usage:
+// <button cl-on:click="deleteTask" cl-if="!deleteTaskPending">Delete</button>
+// <button disabled cl-if="deleteTaskPending">Deleting…</button>
+// <p cl-if="deleteTaskError != ''" class="error">{deleteTaskError}</p>
+//
+// <input cl-bind="archiveReason" placeholder="Reason…" />
+// <button cl-on:click="archiveTask" cl-if="!archiveTaskPending">Archive</button>
+// <button disabled cl-if="archiveTaskPending">Archiving…</button>
+// <p cl-if="archiveTaskError != ''" class="error">{archiveTaskError}</p>
