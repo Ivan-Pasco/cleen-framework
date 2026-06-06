@@ -1190,19 +1190,19 @@ functions:
 			__te_result = __te_result + "string __ex_tenant = tenant_getId()\n"
 			__te_result = __te_result + "string __ex_filter = \"tenant_id = '\" + __ex_tenant + \"'\"\n"
 			if where_clause.length() > 0
-				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
+				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter + \" AND \" + " + build_where_expr(where_clause) + "\n"
 			else
 				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter\n"
 			__te_result = __te_result + "__ex_sql = __ex_sql + \" LIMIT 1\"\n"
 			__te_result = __te_result + "json.get(json.get(json.get(json.get(_db_query(__ex_sql, \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
 			return __te_result
 
-		string sql = "SELECT COUNT(*) as count FROM " + table_name
 		if where_clause.length() > 0
-			sql = sql + " WHERE " + parse_where_clause(where_clause)
-		sql = sql + " LIMIT 1"
+			string __ex_prefix = "\"SELECT COUNT(*) as count FROM " + table_name + " WHERE \""
+			string __ex_suffix = " + \" LIMIT 1\""
+			return "json.get(json.get(json.get(json.get(_db_query(" + __ex_prefix + " + " + build_where_expr(where_clause) + __ex_suffix + ", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
 
-		return "json.get(json.get(json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
+		return "json.get(json.get(json.get(json.get(_db_query(\"SELECT COUNT(*) as count FROM " + table_name + " LIMIT 1\", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
 
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
@@ -1307,23 +1307,22 @@ functions:
 		if set_clause.length() == 0
 			return "// ERROR: update requires set: block"
 
-		string sql = "UPDATE " + table_name + " SET " + parse_set_clause(set_clause)
-
 		if has_tenant
-			string __tu_result = "string __tu_sql = \"" + sql + "\"\n"
+			string __tu_result = "string __tu_sql = \"UPDATE " + table_name + " SET \" + " + build_set_expr(set_clause) + "\n"
 			__tu_result = __tu_result + "string __tu_tenant = tenant_getId()\n"
 			__tu_result = __tu_result + "string __tu_filter = \"tenant_id = '\" + __tu_tenant + \"'\"\n"
 			if where_clause.length() > 0
-				__tu_result = __tu_result + "__tu_sql = __tu_sql + \" WHERE \" + __tu_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
+				__tu_result = __tu_result + "__tu_sql = __tu_sql + \" WHERE \" + __tu_filter + \" AND \" + " + build_where_expr(where_clause) + "\n"
 			else
 				__tu_result = __tu_result + "__tu_sql = __tu_sql + \" WHERE \" + __tu_filter\n"
 			__tu_result = __tu_result + "_db_execute(__tu_sql, \"[]\")"
 			return __tu_result
 
+		string __u_result = "string __u_sql = \"UPDATE " + table_name + " SET \" + " + build_set_expr(set_clause) + "\n"
 		if where_clause.length() > 0
-			sql = sql + " WHERE " + parse_where_clause(where_clause)
-
-		return "_db_execute(\"" + sql + "\", \"[]\")"
+			__u_result = __u_result + "__u_sql = __u_sql + \" WHERE \" + " + build_where_expr(where_clause) + "\n"
+		__u_result = __u_result + "_db_execute(__u_sql, \"[]\")"
+		return __u_result
 
 	// Expand Model.delete: block.
 	// For tenant-aware models the WHERE clause is automatically scoped to the
@@ -1855,6 +1854,61 @@ functions:
 		if result.length() == 0
 			return "\"\""
 
+		return result
+
+	// Build a Clean code expression that evaluates to the full SQL SET clause content.
+	// For each "column = value" assignment, detects literal vs variable RHS and generates
+	// dynamic concatenation for variable references so runtime values are substituted.
+	// Mirrors the logic of build_condition_expr for the WHERE clause.
+	string build_set_expr(string set_body)
+		string result = ""
+		string lines = set_body
+		integer line_start = 0
+
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string assign_expr = ""
+				integer eq_pos = line.indexOf(" = ")
+				if eq_pos != -1
+					string col = line.substring(0, eq_pos).trim()
+					string val = line.substring(eq_pos + 3, line.length()).trim()
+					if val == "null" or val == "NULL"
+						assign_expr = "\"" + col + " = NULL\""
+					else if val == "true" or val == "false"
+						assign_expr = "\"" + col + " = " + val + "\""
+					else if val.startsWith("\"") and val.length() >= 2
+						string inner = val.substring(1, val.length() - 1)
+						assign_expr = "\"" + col + " = '" + inner + "'\""
+					else
+						string digits_chars = "0123456789"
+						boolean val_is_num = false
+						if val.length() > 0
+							if digits_chars.indexOf(val.substring(0, 1)) != -1
+								val_is_num = true
+							if val.substring(0, 1) == "-" and val.length() > 1
+								if digits_chars.indexOf(val.substring(1, 2)) != -1
+									val_is_num = true
+						if val_is_num
+							assign_expr = "\"" + col + " = " + val + "\""
+						else
+							assign_expr = "\"" + col + " = '\" + " + val + ".toString() + \"'\""
+				else
+					assign_expr = "\"" + sql_quote_strings(line) + "\""
+
+				if result.length() == 0
+					result = assign_expr
+				else
+					result = result + " + \", \" + " + assign_expr
+
+			line_start = line_end + 1
+
+		if result.length() == 0
+			return "\"\""
 		return result
 
 	// Replace double-quoted string literals with single-quoted SQL strings.
