@@ -96,6 +96,16 @@ functions:
 			if __m.length() > 0
 				return expand_count(__m, body)
 
+		// exists: → expand_exists
+		if __bname == "exists" or __bname.endsWith(".exists")
+			string __m = ""
+			if __bname == "exists"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 7)
+			if __m.length() > 0
+				return expand_exists(__m, body)
+
 		// insert: → expand_insert
 		if __bname == "insert" or __bname.endsWith(".insert")
 			string __m = ""
@@ -1069,7 +1079,9 @@ functions:
 			string __tf_offset = extract_subblock(body, "offset:")
 			if __tf_offset.length() > 0
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" OFFSET " + __tf_offset.trim() + "\"\n"
-			__tf_result = __tf_result + "__parse_as_" + model_name + "(_db_query(__tf_sql, \"[]\"))"
+			__tf_result = __tf_result + "string __tf_raw = _db_query(__tf_sql, \"[]\")\n"
+			__tf_result = __tf_result + "string __tf_data = json.get(__tf_raw, \"data\")\n"
+			__tf_result = __tf_result + "json.get(__tf_data, \"rows\")"
 			return __tf_result
 
 		// Non-tenant path: build a single _db_query expression so the compiler
@@ -1106,7 +1118,10 @@ functions:
 
 			// Single expression: prefix + dynamic_where + suffix
 			string __fq_sql_expr = __fq_prefix + " + " + build_where_expr(where_clause) + __fq_suffix
-			return order_guard + "__parse_as_" + model_name + "(_db_query(" + __fq_sql_expr + ", \"[]\"))"
+			string __fq_code = order_guard + "string __fq_raw = _db_query(" + __fq_sql_expr + ", \"[]\")\n"
+			__fq_code = __fq_code + "string __fq_data = json.get(__fq_raw, \"data\")\n"
+			__fq_code = __fq_code + "json.get(__fq_data, \"rows\")"
+			return __fq_code
 
 		// No WHERE: static SQL string is sufficient
 		// GROUP BY / HAVING attach before ORDER BY / LIMIT / OFFSET
@@ -1125,7 +1140,9 @@ functions:
 				string __dyn_off = extract_subblock(body, "offset:")
 				if __dyn_off.length() > 0
 					__dyn_result = __dyn_result + "__find_sql = __find_sql + \" OFFSET " + __dyn_off.trim() + "\"\n"
-				__dyn_result = __dyn_result + "__parse_as_" + model_name + "(_db_query(__find_sql, \"[]\"))"
+				__dyn_result = __dyn_result + "string __dyn_raw = _db_query(__find_sql, \"[]\")\n"
+				__dyn_result = __dyn_result + "string __dyn_data = json.get(__dyn_raw, \"data\")\n"
+				__dyn_result = __dyn_result + "json.get(__dyn_data, \"rows\")"
 				return __dyn_result
 			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
 		if limit_clause.length() > 0
@@ -1133,7 +1150,10 @@ functions:
 		string offset_clause = extract_subblock(body, "offset:")
 		if offset_clause.length() > 0
 			sql = sql + " OFFSET " + offset_clause.trim()
-		return "__parse_as_" + model_name + "(_db_query(\"" + sql + "\", \"[]\"))"
+		string __fs_code = "string __fs_raw = _db_query(\"" + sql + "\", \"[]\")\n"
+		__fs_code = __fs_code + "string __fs_data = json.get(__fs_raw, \"data\")\n"
+		__fs_code = __fs_code + "json.get(__fs_data, \"rows\")"
+		return __fs_code
 
 	// Expand Model.first: block.
 	// Returns a raw JSON string from _db_query with LIMIT 1 baked in.
@@ -1156,7 +1176,10 @@ functions:
 			if order_clause.length() > 0
 				__ff_result = __ff_result + "__ff_sql = __ff_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
 			__ff_result = __ff_result + "__ff_sql = __ff_sql + \" LIMIT 1\"\n"
-			__ff_result = __ff_result + "_db_query(__ff_sql, \"[]\")"
+			__ff_result = __ff_result + "string __ff_raw = _db_query(__ff_sql, \"[]\")\n"
+			__ff_result = __ff_result + "string __ff_data = json.get(__ff_raw, \"data\")\n"
+			__ff_result = __ff_result + "string __ff_rows = json.get(__ff_data, \"rows\")\n"
+			__ff_result = __ff_result + "json.get(__ff_rows, \"0\")"
 			return __ff_result
 
 		string sql = "SELECT * FROM " + table_name
@@ -1165,7 +1188,47 @@ functions:
 		if order_clause.length() > 0
 			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
 		sql = sql + " LIMIT 1"
-		return "_db_query(\"" + sql + "\", \"[]\")"
+		string __fst_code = "string __fst_raw = _db_query(\"" + sql + "\", \"[]\")\n"
+		__fst_code = __fst_code + "string __fst_data = json.get(__fst_raw, \"data\")\n"
+		__fst_code = __fst_code + "string __fst_rows = json.get(__fst_data, \"rows\")\n"
+		__fst_code = __fst_code + "json.get(__fst_rows, \"0\")"
+		return __fst_code
+
+	// Expand Model.exists: block.
+	// Returns 1 if any matching record exists, 0 otherwise.
+	// Tenant-aware models automatically scope the query.
+	string expand_exists(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		boolean has_tenant = detect_tenant_field(body)
+
+		if has_tenant
+			string __te_result = "string __ex_sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+			__te_result = __te_result + "string __ex_tenant = tenant_getId()\n"
+			__te_result = __te_result + "string __ex_filter = \"tenant_id = '\" + __ex_tenant + \"'\"\n"
+			if where_clause.length() > 0
+				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter + \" AND " + parse_where_clause(where_clause) + "\"\n"
+			else
+				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter\n"
+			__te_result = __te_result + "__ex_sql = __ex_sql + \" LIMIT 1\"\n"
+			__te_result = __te_result + "string __ex_result = _db_query(__ex_sql, \"[]\")\n"
+			__te_result = __te_result + "string __ex_data = json.get(__ex_result, \"data\")\n"
+			__te_result = __te_result + "string __ex_rows = json.get(__ex_data, \"rows\")\n"
+			__te_result = __te_result + "string __ex_first = json.get(__ex_rows, \"0\")\n"
+			__te_result = __te_result + "json.get(__ex_first, \"count\").toInteger()"
+			return __te_result
+
+		string sql = "SELECT COUNT(*) as count FROM " + table_name
+		if where_clause.length() > 0
+			sql = sql + " WHERE " + parse_where_clause(where_clause)
+		sql = sql + " LIMIT 1"
+
+		string __xe_code = "string __ex_result = _db_query(\"" + sql + "\", \"[]\")\n"
+		__xe_code = __xe_code + "string __ex_data = json.get(__ex_result, \"data\")\n"
+		__xe_code = __xe_code + "string __ex_rows = json.get(__ex_data, \"rows\")\n"
+		__xe_code = __xe_code + "string __ex_first = json.get(__ex_rows, \"0\")\n"
+		__xe_code = __xe_code + "json.get(__ex_first, \"count\").toInteger()"
+		return __xe_code
 
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
@@ -1185,7 +1248,11 @@ functions:
 				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter + \" AND " + parsed_where + "\"\n"
 			else
 				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter\n"
-			__tc_result = __tc_result + "json.get(_db_query(__tc_sql, \"[]\"), \"0.count\").toInteger()"
+			__tc_result = __tc_result + "string __tc_raw = _db_query(__tc_sql, \"[]\")\n"
+			__tc_result = __tc_result + "string __tc_data = json.get(__tc_raw, \"data\")\n"
+			__tc_result = __tc_result + "string __tc_rows = json.get(__tc_data, \"rows\")\n"
+			__tc_result = __tc_result + "string __tc_first = json.get(__tc_rows, \"0\")\n"
+			__tc_result = __tc_result + "json.get(__tc_first, \"count\").toInteger()"
 			return __tc_result
 
 		string sql = "SELECT COUNT(*) as count FROM " + table_name
@@ -1193,7 +1260,12 @@ functions:
 		if where_clause.length() > 0
 			sql = sql + " WHERE " + parse_where_clause(where_clause)
 
-		return "json.get(_db_query(\"" + sql + "\", \"[]\"), \"0.count\").toInteger()"
+		string __ec_code = "string __ec_result = _db_query(\"" + sql + "\", \"[]\")\n"
+		__ec_code = __ec_code + "string __ec_data = json.get(__ec_result, \"data\")\n"
+		__ec_code = __ec_code + "string __ec_rows = json.get(__ec_data, \"rows\")\n"
+		__ec_code = __ec_code + "string __ec_first = json.get(__ec_rows, \"0\")\n"
+		__ec_code = __ec_code + "json.get(__ec_first, \"count\").toInteger()"
+		return __ec_code
 
 	// Expand Model.insert: block.
 	// For tenant-aware models, the tenant_id column is prepended automatically
@@ -2259,10 +2331,13 @@ functions:
 	string generate_parse_as_function(string model_name, string field_names, string field_types)
 		string result = "\tlist<" + model_name + "> __parse_as_" + model_name + "(string __json)\n"
 		result = result + "\t\tlist<" + model_name + "> __result = []\n"
+		result = result + "\t\tstring __pa_data = json.get(__json, \"data\")\n"
+		result = result + "\t\tstring __pa_rows = json.get(__pa_data, \"rows\")\n"
 		result = result + "\t\tinteger __i = 0\n"
-		result = result + "\t\tstring __check = json.get(__json, \"0.id\")\n"
+		result = result + "\t\tstring __check = json.get(__pa_rows, \"0\")\n"
 		result = result + "\t\twhile __check != \"\"\n"
 		result = result + "\t\t\t" + model_name + " __row = " + model_name + "()\n"
+		result = result + "\t\t\tstring __row_json = json.get(__pa_rows, __i.toString())\n"
 
 		string fields = field_names
 		string types = field_types
@@ -2278,7 +2353,7 @@ functions:
 			string field = fields.substring(fpos, comma).trim()
 			string ftype = types.substring(tpos, tcomma).trim()
 			if is_primitive_type(ftype)
-				string base = "\t\t\t__row." + field + " = json.get(__json, __i.toString() + \"." + field + "\")"
+				string base = "\t\t\t__row." + field + " = json.get(__row_json, \"" + field + "\")"
 				if ftype == "integer"
 					result = result + base + ".toInteger()\n"
 				else if ftype == "number"
@@ -2292,7 +2367,7 @@ functions:
 
 		result = result + "\t\t\t__result.add(__row)\n"
 		result = result + "\t\t\t__i = __i + 1\n"
-		result = result + "\t\t\t__check = json.get(__json, __i.toString() + \".id\")\n"
+		result = result + "\t\t\t__check = json.get(__pa_rows, __i.toString())\n"
 		result = result + "\t\treturn __result\n"
 		return result
 
@@ -2303,11 +2378,13 @@ functions:
 	string generate_json_rows_function(string model_name)
 		string result = "\tlist<string> __find_as_strings_" + model_name + "(string __json)\n"
 		result = result + "\t\tlist<string> __fstr_result = []\n"
+		result = result + "\t\tstring __fstr_data = json.get(__json, \"data\")\n"
+		result = result + "\t\tstring __fstr_rows = json.get(__fstr_data, \"rows\")\n"
 		result = result + "\t\tinteger __fstr_i = 0\n"
-		result = result + "\t\tstring __fstr_check = json.get(__json, \"0.id\")\n"
+		result = result + "\t\tstring __fstr_check = json.get(__fstr_rows, \"0\")\n"
 		result = result + "\t\twhile __fstr_check != \"\"\n"
-		result = result + "\t\t\t__fstr_result.add(json.get(__json, __fstr_i.toString()))\n"
+		result = result + "\t\t\t__fstr_result.add(json.get(__fstr_rows, __fstr_i.toString()))\n"
 		result = result + "\t\t\t__fstr_i = __fstr_i + 1\n"
-		result = result + "\t\t\t__fstr_check = json.get(__json, __fstr_i.toString() + \".id\")\n"
+		result = result + "\t\t\t__fstr_check = json.get(__fstr_rows, __fstr_i.toString())\n"
 		result = result + "\t\treturn __fstr_result\n"
 		return result
