@@ -1931,8 +1931,9 @@ functions:
 			if line.length() > 0
 				if result.length() > 0
 					result = result + ", "
-				// Convert "field = value" to SQL
-				result = result + line
+				// Convert "field = value" to SQL; replace "..." with '...' so string
+				// literals don't break the outer double-quoted _db_execute() argument
+				result = result + sql_quote_strings(line)
 
 			line_start = line_end + 1
 
