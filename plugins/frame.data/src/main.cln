@@ -1079,9 +1079,7 @@ functions:
 			string __tf_offset = extract_subblock(body, "offset:")
 			if __tf_offset.length() > 0
 				__tf_result = __tf_result + "__tf_sql = __tf_sql + \" OFFSET " + __tf_offset.trim() + "\"\n"
-			__tf_result = __tf_result + "string __tf_raw = _db_query(__tf_sql, \"[]\")\n"
-			__tf_result = __tf_result + "string __tf_data = json.get(__tf_raw, \"data\")\n"
-			__tf_result = __tf_result + "json.get(__tf_data, \"rows\")"
+			__tf_result = __tf_result + "json.get(json.get(_db_query(__tf_sql, \"[]\"), \"data\"), \"rows\")"
 			return __tf_result
 
 		// Non-tenant path: build a single _db_query expression so the compiler
@@ -1118,10 +1116,7 @@ functions:
 
 			// Single expression: prefix + dynamic_where + suffix
 			string __fq_sql_expr = __fq_prefix + " + " + build_where_expr(where_clause) + __fq_suffix
-			string __fq_code = order_guard + "string __fq_raw = _db_query(" + __fq_sql_expr + ", \"[]\")\n"
-			__fq_code = __fq_code + "string __fq_data = json.get(__fq_raw, \"data\")\n"
-			__fq_code = __fq_code + "json.get(__fq_data, \"rows\")"
-			return __fq_code
+			return order_guard + "json.get(json.get(_db_query(" + __fq_sql_expr + ", \"[]\"), \"data\"), \"rows\")"
 
 		// No WHERE: static SQL string is sufficient
 		// GROUP BY / HAVING attach before ORDER BY / LIMIT / OFFSET
@@ -1140,9 +1135,7 @@ functions:
 				string __dyn_off = extract_subblock(body, "offset:")
 				if __dyn_off.length() > 0
 					__dyn_result = __dyn_result + "__find_sql = __find_sql + \" OFFSET " + __dyn_off.trim() + "\"\n"
-				__dyn_result = __dyn_result + "string __dyn_raw = _db_query(__find_sql, \"[]\")\n"
-				__dyn_result = __dyn_result + "string __dyn_data = json.get(__dyn_raw, \"data\")\n"
-				__dyn_result = __dyn_result + "json.get(__dyn_data, \"rows\")"
+				__dyn_result = __dyn_result + "json.get(json.get(_db_query(__find_sql, \"[]\"), \"data\"), \"rows\")"
 				return __dyn_result
 			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
 		if limit_clause.length() > 0
@@ -1150,10 +1143,7 @@ functions:
 		string offset_clause = extract_subblock(body, "offset:")
 		if offset_clause.length() > 0
 			sql = sql + " OFFSET " + offset_clause.trim()
-		string __fs_code = "string __fs_raw = _db_query(\"" + sql + "\", \"[]\")\n"
-		__fs_code = __fs_code + "string __fs_data = json.get(__fs_raw, \"data\")\n"
-		__fs_code = __fs_code + "json.get(__fs_data, \"rows\")"
-		return __fs_code
+		return "json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\")"
 
 	// Expand Model.first: block.
 	// Returns a raw JSON string from _db_query with LIMIT 1 baked in.
@@ -1176,10 +1166,7 @@ functions:
 			if order_clause.length() > 0
 				__ff_result = __ff_result + "__ff_sql = __ff_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
 			__ff_result = __ff_result + "__ff_sql = __ff_sql + \" LIMIT 1\"\n"
-			__ff_result = __ff_result + "string __ff_raw = _db_query(__ff_sql, \"[]\")\n"
-			__ff_result = __ff_result + "string __ff_data = json.get(__ff_raw, \"data\")\n"
-			__ff_result = __ff_result + "string __ff_rows = json.get(__ff_data, \"rows\")\n"
-			__ff_result = __ff_result + "json.get(__ff_rows, \"0\")"
+			__ff_result = __ff_result + "json.get(json.get(json.get(_db_query(__ff_sql, \"[]\"), \"data\"), \"rows\"), \"0\")"
 			return __ff_result
 
 		string sql = "SELECT * FROM " + table_name
@@ -1188,11 +1175,7 @@ functions:
 		if order_clause.length() > 0
 			sql = sql + " ORDER BY " + parse_order_clause(order_clause)
 		sql = sql + " LIMIT 1"
-		string __fst_code = "string __fst_raw = _db_query(\"" + sql + "\", \"[]\")\n"
-		__fst_code = __fst_code + "string __fst_data = json.get(__fst_raw, \"data\")\n"
-		__fst_code = __fst_code + "string __fst_rows = json.get(__fst_data, \"rows\")\n"
-		__fst_code = __fst_code + "json.get(__fst_rows, \"0\")"
-		return __fst_code
+		return "json.get(json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\"), \"0\")"
 
 	// Expand Model.exists: block.
 	// Returns 1 if any matching record exists, 0 otherwise.
@@ -1211,11 +1194,7 @@ functions:
 			else
 				__te_result = __te_result + "__ex_sql = __ex_sql + \" WHERE \" + __ex_filter\n"
 			__te_result = __te_result + "__ex_sql = __ex_sql + \" LIMIT 1\"\n"
-			__te_result = __te_result + "string __ex_result = _db_query(__ex_sql, \"[]\")\n"
-			__te_result = __te_result + "string __ex_data = json.get(__ex_result, \"data\")\n"
-			__te_result = __te_result + "string __ex_rows = json.get(__ex_data, \"rows\")\n"
-			__te_result = __te_result + "string __ex_first = json.get(__ex_rows, \"0\")\n"
-			__te_result = __te_result + "json.get(__ex_first, \"count\").toInteger()"
+			__te_result = __te_result + "json.get(json.get(json.get(json.get(_db_query(__ex_sql, \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
 			return __te_result
 
 		string sql = "SELECT COUNT(*) as count FROM " + table_name
@@ -1223,12 +1202,7 @@ functions:
 			sql = sql + " WHERE " + parse_where_clause(where_clause)
 		sql = sql + " LIMIT 1"
 
-		string __xe_code = "string __ex_result = _db_query(\"" + sql + "\", \"[]\")\n"
-		__xe_code = __xe_code + "string __ex_data = json.get(__ex_result, \"data\")\n"
-		__xe_code = __xe_code + "string __ex_rows = json.get(__ex_data, \"rows\")\n"
-		__xe_code = __xe_code + "string __ex_first = json.get(__ex_rows, \"0\")\n"
-		__xe_code = __xe_code + "json.get(__ex_first, \"count\").toInteger()"
-		return __xe_code
+		return "json.get(json.get(json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
 
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
@@ -1248,11 +1222,7 @@ functions:
 				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter + \" AND " + parsed_where + "\"\n"
 			else
 				__tc_result = __tc_result + "__tc_sql = __tc_sql + \" WHERE \" + __tc_filter\n"
-			__tc_result = __tc_result + "string __tc_raw = _db_query(__tc_sql, \"[]\")\n"
-			__tc_result = __tc_result + "string __tc_data = json.get(__tc_raw, \"data\")\n"
-			__tc_result = __tc_result + "string __tc_rows = json.get(__tc_data, \"rows\")\n"
-			__tc_result = __tc_result + "string __tc_first = json.get(__tc_rows, \"0\")\n"
-			__tc_result = __tc_result + "json.get(__tc_first, \"count\").toInteger()"
+			__tc_result = __tc_result + "json.get(json.get(json.get(json.get(_db_query(__tc_sql, \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
 			return __tc_result
 
 		string sql = "SELECT COUNT(*) as count FROM " + table_name
@@ -1260,12 +1230,7 @@ functions:
 		if where_clause.length() > 0
 			sql = sql + " WHERE " + parse_where_clause(where_clause)
 
-		string __ec_code = "string __ec_result = _db_query(\"" + sql + "\", \"[]\")\n"
-		__ec_code = __ec_code + "string __ec_data = json.get(__ec_result, \"data\")\n"
-		__ec_code = __ec_code + "string __ec_rows = json.get(__ec_data, \"rows\")\n"
-		__ec_code = __ec_code + "string __ec_first = json.get(__ec_rows, \"0\")\n"
-		__ec_code = __ec_code + "json.get(__ec_first, \"count\").toInteger()"
-		return __ec_code
+		return "json.get(json.get(json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\"), \"0\"), \"count\").toInteger()"
 
 	// Expand Model.insert: block.
 	// For tenant-aware models, the tenant_id column is prepended automatically
@@ -1275,7 +1240,7 @@ functions:
 		boolean has_tenant = detect_tenant_field(body)
 		string fields = ""
 		string values = ""
-		string params = "["
+		string params_expr = ""
 		integer param_idx = 1
 
 		// For tenant-aware models, inject tenant_id as the first column/value pair.
@@ -1287,7 +1252,7 @@ functions:
 			if body.indexOf("tenantId = ") == -1 and body.indexOf("tenant_id = ") == -1
 				fields = "tenant_id"
 				values = "$1"
-				params = "[\" + tenant_getId() + \""
+				params_expr = "\"[\" + tenant_getId()"
 				param_idx = 2
 
 		// Parse field assignments from the block body
@@ -1309,19 +1274,26 @@ functions:
 					if fields.length() > 0
 						fields = fields + ", "
 						values = values + ", "
-						params = params + ", "
 
 					fields = fields + field_name
 					values = values + "$" + param_idx.toString()
-					params = params + format_param_value(field_value)
+
+					// Build params_expr as a Clean string-concatenation expression.
+					// params_expr accumulates: "[" + val1.toString() + "," + val2.toString()
+					// and is closed with + "]" after the loop.
+					if params_expr.length() == 0
+						params_expr = "\"[\" + " + field_value + ".toString()"
+					else
+						params_expr = params_expr + " + \",\" + " + field_value + ".toString()"
+
 					param_idx = param_idx + 1
 
 			line_start = line_end + 1
 
-		params = params + "]"
+		params_expr = params_expr + " + \"]\""
 
 		string sql = "INSERT INTO " + table_name + " (" + fields + ") VALUES (" + values + ") RETURNING *"
-		return "_db_query(\"" + sql + "\", " + params + ")"
+		return "_db_query(\"" + sql + "\", " + params_expr + ")"
 
 	// Expand Model.update: block.
 	// For tenant-aware models the WHERE clause is automatically scoped to the
