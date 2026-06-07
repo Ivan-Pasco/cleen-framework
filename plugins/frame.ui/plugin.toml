@@ -168,6 +168,7 @@ functions = [
   { name = "_ui_form_submit", params = ["string"], returns = "integer", description = "Programmatically submit a form (uses requestSubmit for validation): selector", expand_strings = true, signature = "_ui_form_submit(selector)" },
   { name = "_ui_get_selection", params = ["string"], returns = "string", description = "Get textarea/input selection as JSON {text, start, end}: selector", expand_strings = true, signature = "_ui_get_selection(selector) -> string" },
   { name = "_ui_insert_at_cursor", params = ["string", "string", "string"], returns = "integer", description = "Wrap selection or insert at cursor: selector, beforeMarker, afterMarker; returns new cursor position", expand_strings = true, signature = "_ui_insert_at_cursor(selector, before, after) -> integer" },
+  { name = "_ui_text_diff", params = ["string", "string", "string"], returns = "integer", description = "Word-level LCS diff between two elements rendered into a third: selectorA, selectorB, selectorOut", expand_strings = true, signature = "_ui_text_diff(selectorA, selectorB, selectorOut) -> integer" },
 
   # Keyboard shortcuts
   { name = "_ui_shortcut_register", params = ["string", "string", "string"], returns = "integer", description = "Register global keyboard shortcut: key descriptor (e.g. mod+shift+s), handler name, scope (global or CSS selector)", expand_strings = true, signature = "_ui_shortcut_register(keys, handlerName, scope)" },
@@ -275,6 +276,7 @@ functions = [
   { name = "ui.formSubmit", signature = "ui.formSubmit(selector)", description = "Programmatically submit a form (triggers validation via requestSubmit)", maps_to = "_ui_form_submit" },
   { name = "ui.getSelection", signature = "ui.getSelection(selector) -> string", description = "Get textarea/input selection as JSON {text, start, end}", maps_to = "_ui_get_selection" },
   { name = "ui.insertAtCursor", signature = "ui.insertAtCursor(selector, before, after) -> integer", description = "Wrap selection or insert at cursor; returns new cursor position", maps_to = "_ui_insert_at_cursor" },
+  { name = "ui.textDiff", signature = "ui.textDiff(selectorA, selectorB, selectorOut) -> integer", description = "Word-level diff between two elements rendered into a third; adds .diff-added/.diff-removed spans", maps_to = "_ui_text_diff" },
   { name = "ui.onEvent", signature = "ui.onEvent(selector, eventType, handlerName)", description = "Register event handler by exported function name for CSS selector and event type", maps_to = "_ui_on_event" },
   { name = "ui.toggleClass", signature = "ui.toggleClass(selector, className)", description = "Toggle CSS class on first matching element", maps_to = "_ui_toggle_class" },
   { name = "ui.addClass", signature = "ui.addClass(selector, className)", description = "Add CSS class to first matching element", maps_to = "_ui_add_class" },

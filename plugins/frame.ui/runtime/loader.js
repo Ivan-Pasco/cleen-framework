@@ -741,6 +741,46 @@
 				return newCursor;
 			},
 
+			// FRAMEUI004: Word-level text diff between two elements, rendered into a third
+			_ui_text_diff: (aPtr, aLen, bPtr, bLen, outPtr, outLen) => {
+				const elA = document.querySelector(readString(aPtr, aLen));
+				const elB = document.querySelector(readString(bPtr, bLen));
+				const elOut = document.querySelector(readString(outPtr, outLen));
+				if (!elA || !elB || !elOut) return -1;
+				const tokA = (elA.textContent || '').split(/(\s+)/);
+				const tokB = (elB.textContent || '').split(/(\s+)/);
+				const m = tokA.length, n = tokB.length;
+				// LCS table
+				const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+				for (let i = m - 1; i >= 0; i--)
+					for (let j = n - 1; j >= 0; j--)
+						dp[i][j] = tokA[i] === tokB[j] ? dp[i+1][j+1] + 1 : Math.max(dp[i+1][j], dp[i][j+1]);
+				// Trace diff
+				const frag = document.createDocumentFragment();
+				let i = 0, j = 0;
+				while (i < m || j < n) {
+					if (i < m && j < n && tokA[i] === tokB[j]) {
+						frag.appendChild(document.createTextNode(tokA[i]));
+						i++; j++;
+					} else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) {
+						const sp = document.createElement('span');
+						sp.className = 'diff-added';
+						sp.textContent = tokB[j];
+						frag.appendChild(sp);
+						j++;
+					} else {
+						const sp = document.createElement('span');
+						sp.className = 'diff-removed';
+						sp.textContent = tokA[i];
+						frag.appendChild(sp);
+						i++;
+					}
+				}
+				elOut.innerHTML = '';
+				elOut.appendChild(frag);
+				return 0;
+			},
+
 			// ========== Stdlib Bridge (compiler-emitted imports) ==========
 			// These functions are emitted as WASM imports for any program that
 			// uses string ops, float formatting, or list operations. The browser
