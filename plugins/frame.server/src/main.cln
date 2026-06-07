@@ -293,28 +293,29 @@ functions:
 			if method_pos == -1
 				keep_going = false
 			else
-				string from_method = remaining.substring(method_pos, remaining.length())
+				// Position-based scanning: track offsets into `remaining` directly.
+				// The old approach created from_method, after_method, after_open, after_path_raw,
+				// and endpoint_body — five O(remaining) allocations per route, causing O(N²) heap
+				// pressure that exhausted WASM memory at 26+ routes.
 
-				// Skip optional space between method and quoted path
-				integer path_start = method.length()
-				if from_method.substring(method.length(), method.length() + 1) == " "
-					path_start = method.length() + 1
-				string after_method = from_method.substring(path_start, from_method.length())
+				// Opening '"' of path: skip method name and optional space
+				integer path_first_pos = method_pos + method.length()
+				if remaining.substring(path_first_pos, path_first_pos + 1) == " "
+					path_first_pos = path_first_pos + 1
 
-				// Extract path — everything between the opening and closing quote
-				integer open_q = after_method.indexOf("\"")
-				string after_open = after_method.substring(open_q + 1, after_method.length())
-				integer close_q = after_open.indexOf("\"")
-				string path = after_open.substring(0, close_q)
+				// Path is between the opening '"' and the next '"'
+				integer close_q_pos = remaining.indexOf("\"", path_first_pos + 1)
+				string path = remaining.substring(path_first_pos + 1, close_q_pos)
 
-				// Header remainder: closing quote → route ':'
-				string after_path_raw = after_open.substring(close_q + 1, after_open.length())
-				integer first_nl = after_path_raw.indexOf("\n")
+				// Header line: from after the closing path quote to the first newline
+				// Contains inline modifiers ([guard], cache(), middleware()) and the route ':'
+				integer header_start_pos = close_q_pos + 1
+				integer header_nl_pos = remaining.indexOf("\n", header_start_pos)
 				string header_line = ""
-				if first_nl == -1
-					header_line = after_path_raw
+				if header_nl_pos == -1
+					header_line = remaining.substring(header_start_pos, remaining.length())
 				else
-					header_line = after_path_raw.substring(0, first_nl)
+					header_line = remaining.substring(header_start_pos, header_nl_pos)
 
 				// Route ':' is the last ':' on the header line
 				integer colon_pos = header_line.length() - 1
@@ -328,25 +329,24 @@ functions:
 				if colon_pos > 0
 					modifiers = header_line.substring(0, colon_pos).trim()
 
-				// Absolute position of route ':' from start of from_method
-				integer abs_colon = path_start + open_q + 1 + close_q + 1 + colon_pos
-
 				// Parse inline modifiers
 				string guard_roles = parse_guard_roles(modifiers)
 				string cache_arg = parse_cache_arg(modifiers)
 				string mw_list = parse_middleware_list(modifiers)
 
-				// Extract handler body (after route ':' newline, up to next route)
-				string endpoint_body = from_method.substring(abs_colon + 1, from_method.length())
+				// Advance remaining past the route ':' so it points at the handler body.
+				// This single assignment replaces the old endpoint_body allocation AND the
+				// two separate remaining resets at the bottom of each LIVE/regular branch.
+				remaining = remaining.substring(header_start_pos + colon_pos + 1, remaining.length())
 
 				// Handler name derived from method + sanitized path (globally unique)
 				string route_id = sanitize_route_id(path)
 
 				// §15: LIVE routes split their body into three handler functions
 				if method == "LIVE"
-					string ws_connect = extract_ws_connect_body(endpoint_body)
-					string ws_message = extract_ws_message_body(endpoint_body)
-					string ws_close = extract_ws_close_body(endpoint_body)
+					string ws_connect = extract_ws_connect_body(remaining)
+					string ws_message = extract_ws_message_body(remaining)
+					string ws_close = extract_ws_close_body(remaining)
 					string connect_name = "__ws_connect_" + route_id
 					string message_name = "__ws_message_" + route_id
 					string close_name = "__ws_close_" + route_id
@@ -370,9 +370,8 @@ functions:
 
 					route_calls = route_calls + "\t_http_ws_route(\"GET\", \"" + path + "\", \"" + connect_name + "\", \"" + message_name + "\", \"" + close_name + "\")\n"
 					handler_idx = handler_idx + 1
-					remaining = from_method.substring(abs_colon + 1, from_method.length())
 				else
-					string handler_code = extract_handler_body(endpoint_body)
+					string handler_code = extract_handler_body(remaining)
 					string handler_name = "__route_handler_" + handler_idx.toString()
 
 					// Emit handler function
@@ -403,7 +402,6 @@ functions:
 					else
 						route_calls = route_calls + "\t_http_route(\"" + method + "\", \"" + path + "\", \"" + handler_name + "\")\n"
 					handler_idx = handler_idx + 1
-					remaining = from_method.substring(abs_colon + 1, from_method.length())
 
 		result = result + "start:\n"
 		result = result + route_calls

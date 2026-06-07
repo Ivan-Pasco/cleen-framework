@@ -702,6 +702,45 @@
 				return 0;
 			},
 
+			// FRAMEUI002: Programmatically submit a form (needed for keyboard shortcut handlers)
+			_ui_form_submit: (selectorPtr, selectorLen) => {
+				const form = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!form) return -1;
+				form.requestSubmit ? form.requestSubmit() : form.submit();
+				return 0;
+			},
+
+			// FRAMEUI003: Get textarea selection as JSON {text, start, end}
+			_ui_get_selection: (selectorPtr, selectorLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!el) return writeString('{"text":"","start":0,"end":0}');
+				const start = el.selectionStart || 0;
+				const end = el.selectionEnd || 0;
+				const text = (el.value || '').substring(start, end);
+				return writeString(JSON.stringify({ text, start, end }));
+			},
+
+			// FRAMEUI003: Wrap selection (or insert at cursor) with before/after markers
+			// Returns the new cursor position after the inserted text
+			_ui_insert_at_cursor: (selectorPtr, selectorLen, beforePtr, beforeLen, afterPtr, afterLen) => {
+				const el = document.querySelector(readString(selectorPtr, selectorLen));
+				if (!el) return -1;
+				const before = readString(beforePtr, beforeLen);
+				const after = readString(afterPtr, afterLen);
+				const start = el.selectionStart || 0;
+				const end = el.selectionEnd || 0;
+				const val = el.value || '';
+				const selected = val.substring(start, end);
+				const newVal = val.substring(0, start) + before + selected + after + val.substring(end);
+				el.value = newVal;
+				const newCursor = start + before.length + selected.length + after.length;
+				el.selectionStart = newCursor;
+				el.selectionEnd = newCursor;
+				el.focus();
+				el.dispatchEvent(new Event('input', { bubbles: true }));
+				return newCursor;
+			},
+
 			// ========== Stdlib Bridge (compiler-emitted imports) ==========
 			// These functions are emitted as WASM imports for any program that
 			// uses string ops, float formatting, or list operations. The browser

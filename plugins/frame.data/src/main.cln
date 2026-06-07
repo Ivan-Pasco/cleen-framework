@@ -248,6 +248,7 @@ functions:
 		result = result + "\nfunctions:\n"
 		result = result + generate_parse_as_function(model_name, field_names, field_types)
 		result = result + generate_json_rows_function(model_name)
+		result = result + generate_orm_helpers(model_name, table_name, has_tenant)
 
 		return result
 
@@ -1217,9 +1218,9 @@ functions:
 		boolean has_tenant = detect_tenant_field(body)
 
 		if where_clause.length() > 0
-			return model_name + ".exists(" + build_where_expr(where_clause) + ")"
+			return "__" + model_name + "_exists(" + build_where_expr(where_clause) + ")"
 
-		return model_name + ".exists(\"\")"
+		return "__" + model_name + "_exists(\"\")"
 
 	// Expand Model.count: block.
 	// Tenant-aware models automatically scope the COUNT query.
@@ -1229,9 +1230,9 @@ functions:
 		boolean has_tenant = detect_tenant_field(body)
 
 		if where_clause.length() > 0
-			return model_name + ".count(" + build_where_expr(where_clause) + ")"
+			return "__" + model_name + "_count(" + build_where_expr(where_clause) + ")"
 
-		return model_name + ".count(\"\")"
+		return "__" + model_name + "_count(\"\")"
 
 	// Expand Model.insert: block.
 	// For tenant-aware models, the tenant_id column is prepended automatically
@@ -1310,9 +1311,9 @@ functions:
 
 		string __set_expr = build_set_expr(set_clause)
 		if where_clause.length() > 0
-			return model_name + ".__raw_update(" + __set_expr + ", " + build_where_expr(where_clause) + ")"
+			return "__" + model_name + "_raw_update(" + __set_expr + ", " + build_where_expr(where_clause) + ")"
 
-		return model_name + ".__raw_update(" + __set_expr + ", \"\")"
+		return "__" + model_name + "_raw_update(" + __set_expr + ", \"\")"
 
 	// Expand Model.delete: block.
 	// For tenant-aware models the WHERE clause is automatically scoped to the
@@ -1323,9 +1324,9 @@ functions:
 		boolean has_tenant = detect_tenant_field(body)
 
 		if where_clause.length() > 0
-			return model_name + ".__raw_delete(" + build_where_expr(where_clause) + ")"
+			return "__" + model_name + "_raw_delete(" + build_where_expr(where_clause) + ")"
 
-		return model_name + ".__raw_delete(\"\")"
+		return "__" + model_name + "_raw_delete(\"\")"
 
 // ============================================================================
 // PAGINATION EXPANSION
@@ -2449,4 +2450,97 @@ functions:
 		result = result + "\t\t\t__fstr_i = __fstr_i + 1\n"
 		result = result + "\t\t\t__fstr_check = json.get(__fstr_rows, __fstr_i.toString())\n"
 		result = result + "\t\treturn __fstr_result\n"
+		return result
+
+	// Generate top-level ORM helper functions for exists, count, update, delete.
+	// These are top-level functions (not class methods) so the compiler registers
+	// them in the function map and plugin expansions can call them correctly.
+	string generate_orm_helpers(string model_name, string table_name, boolean has_tenant)
+		string result = ""
+
+		// __ModelName_exists(where_sql) → integer (1 if found, 0 if not)
+		string fname_exists = "__" + model_name + "_exists"
+		result = result + "\tinteger " + fname_exists + "(string __where_sql)\n"
+		result = result + "\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			result = result + "\t\telse\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __where_sql\n"
+		result = result + "\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\tstring __ex_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\tstring __ex_data = json.get(__ex_result, \"data\")\n"
+		result = result + "\t\tstring __ex_rows = json.get(__ex_data, \"rows\")\n"
+		result = result + "\t\tstring __ex_row = json.get(__ex_rows, \"0\")\n"
+		result = result + "\t\tif __ex_row == \"\"\n"
+		result = result + "\t\t\treturn 0\n"
+		result = result + "\t\tif __ex_row == \"null\"\n"
+		result = result + "\t\t\treturn 0\n"
+		result = result + "\t\tstring __ex_cnt_str = json.get(__ex_row, \"count\")\n"
+		result = result + "\t\tinteger __ex_cnt = __ex_cnt_str.toInteger()\n"
+		result = result + "\t\tif __ex_cnt > 0\n"
+		result = result + "\t\t\treturn 1\n"
+		result = result + "\t\treturn 0\n"
+
+		// __ModelName_count(where_sql) → integer
+		string fname_count = "__" + model_name + "_count"
+		result = result + "\tinteger " + fname_count + "(string __where_sql)\n"
+		result = result + "\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		if has_tenant
+			result = result + "\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			result = result + "\t\telse\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __where_sql\n"
+		result = result + "\t\tstring __cnt_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\tstring __cnt_data = json.get(__cnt_result, \"data\")\n"
+		result = result + "\t\tstring __cnt_rows = json.get(__cnt_data, \"rows\")\n"
+		result = result + "\t\tstring __cnt_row = json.get(__cnt_rows, \"0\")\n"
+		result = result + "\t\tif __cnt_row == \"\"\n"
+		result = result + "\t\t\treturn 0\n"
+		result = result + "\t\tstring __cnt_str = json.get(__cnt_row, \"count\")\n"
+		result = result + "\t\treturn __cnt_str.toInteger()\n"
+
+		// __ModelName_raw_update(set_sql, where_sql) → integer (affected rows)
+		string fname_update = "__" + model_name + "_raw_update"
+		result = result + "\tinteger " + fname_update + "(string __set_sql, string __where_sql)\n"
+		result = result + "\t\tstring sql = \"UPDATE " + table_name + " SET \" + __set_sql\n"
+		if has_tenant
+			result = result + "\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			result = result + "\t\telse\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __where_sql\n"
+		result = result + "\t\treturn _db_execute(sql, \"[]\")\n"
+
+		// __ModelName_raw_delete(where_sql) → integer (affected rows)
+		string fname_delete = "__" + model_name + "_raw_delete"
+		result = result + "\tinteger " + fname_delete + "(string __where_sql)\n"
+		if has_tenant
+			result = result + "\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
+			result = result + "\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			result = result + "\t\telse\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			result = result + "\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
+			result = result + "\t\tif __where_sql.length() > 0\n"
+			result = result + "\t\t\tsql = sql + \" WHERE \" + __where_sql\n"
+		result = result + "\t\treturn _db_execute(sql, \"[]\")\n"
+
 		return result
