@@ -849,6 +849,10 @@ functions:
 
 		string result = ""
 
+		// Emit island wrapper when client hydration is requested
+		if client != "off"
+			result = result + "html = html + \"<div data-island='" + tag_name + "' data-client='" + client + "'>\"\n"
+
 		// Create component instance
 		result = result + "{\n"
 		result = result + "\t" + class_name + " _comp = " + class_name + "()\n"
@@ -883,6 +887,10 @@ functions:
 		result = result + "\thtml = html + _comp.render()\n"
 
 		result = result + "}\n"
+
+		// Close island wrapper
+		if client != "off"
+			result = result + "html = html + \"</div>\"\n"
 
 		return result
 
@@ -1713,6 +1721,14 @@ functions:
 				return true
 
 			remaining = remaining.substring(screen_end + 1, remaining.length())
+
+		// Also detect custom component tags (hyphenated) with client hydration
+		if html.indexOf("client=\"on\"") != -1
+			return true
+		if html.indexOf("client=\"visible\"") != -1
+			return true
+		if html.indexOf("client=\"idle\"") != -1
+			return true
 
 		return false
 
