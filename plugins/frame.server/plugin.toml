@@ -130,6 +130,9 @@ functions = [
   { name = "http_post_form", params = ["string", "string"], returns = "string", description = "POST form-urlencoded body; returns response body", expand_strings = true },
   { name = "http_get_with_headers", params = ["string", "string"], returns = "string", description = "GET with custom headers (JSON object); returns response body", expand_strings = true },
   { name = "http_post_with_headers", params = ["string", "string", "string"], returns = "string", description = "POST with body and custom headers (JSON object); returns response body", expand_strings = true },
+  { name = "http_put_with_headers", params = ["string", "string", "string"], returns = "string", description = "PUT with body and custom headers (JSON object); returns response body", expand_strings = true },
+  { name = "http_patch_with_headers", params = ["string", "string", "string"], returns = "string", description = "PATCH with body and custom headers (JSON object); returns response body", expand_strings = true },
+  { name = "http_delete_with_headers", params = ["string", "string"], returns = "string", description = "DELETE with custom headers (JSON object); returns response body", expand_strings = true },
 
   # HTTP Client - Configuration
   { name = "http_set_user_agent", params = ["string"], returns = "void", description = "Set User-Agent header for subsequent requests", expand_strings = true },
@@ -223,6 +226,11 @@ functions = [
   { name = "http.postJson", signature = "http.postJson(url, body)", description = "POST with Content-Type: application/json; returns response body", maps_to = "http_post_json" },
   { name = "http.putJson", signature = "http.putJson(url, body)", description = "PUT with Content-Type: application/json; returns response body", maps_to = "http_put_json" },
   { name = "http.postForm", signature = "http.postForm(url, formData)", description = "POST form-urlencoded body; returns response body", maps_to = "http_post_form" },
+  { name = "http.getWithHeaders", signature = "http.getWithHeaders(url, headers)", description = "GET with custom headers (JSON object); returns response body", maps_to = "http_get_with_headers" },
+  { name = "http.postWithHeaders", signature = "http.postWithHeaders(url, body, headers)", description = "POST with body and custom headers (JSON object); returns response body", maps_to = "http_post_with_headers" },
+  { name = "http.putWithHeaders", signature = "http.putWithHeaders(url, body, headers)", description = "PUT with body and custom headers (JSON object); returns response body", maps_to = "http_put_with_headers" },
+  { name = "http.patchWithHeaders", signature = "http.patchWithHeaders(url, body, headers)", description = "PATCH with body and custom headers (JSON object); returns response body", maps_to = "http_patch_with_headers" },
+  { name = "http.deleteWithHeaders", signature = "http.deleteWithHeaders(url, headers)", description = "DELETE with custom headers (JSON object); returns response body", maps_to = "http_delete_with_headers" },
   { name = "http.responseCode", signature = "http.responseCode()", description = "Get HTTP status code of the last outbound response", maps_to = "http_get_response_code" },
   # §FEXT-4: Server-Sent Events helpers (usable inside FEED endpoint handlers)
   { name = "feed.emit", signature = "feed.emit(data)", description = "Send data: event to the SSE client", maps_to = "_sse_emit" },
