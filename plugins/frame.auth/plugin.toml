@@ -1,12 +1,19 @@
 [plugin]
 name = "frame.auth"
-version = "2.0.0"
+version = "2.1.0"
 description = "Authentication and authorization plugin for Clean Language - provides sessions, JWT, roles/permissions, CSRF, and password hashing"
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
 min_compiler_version = "0.15.0"
+
+[lifecycle]
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
+# Tag preamble-emitted helpers (currentUser, hasRole, etc.) as BFS roots so
+# their bridge imports stay reachable when user code only reaches them
+# through plugin-generated guards. Applies to v1.0.0 __preamble output too.
+module_helpers_are_roots = true
 
 [exports]
 expand = "expand_block"
@@ -17,59 +24,62 @@ get_keywords = "get_keywords"
 blocks = ["auth", "login", "roles"]
 
 # Bridge function declarations - auth-specific functions provided by the runtime
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §2:
+#   hosts = ["all"]    — Layer 2 portable (crypto, time, pure JSON helpers)
+#   hosts = ["server"] — Layer 3 server-only (sessions, JWT secrets, cookies, role state)
 [bridge]
 functions = [
-  # Environment - Secrets
-  { name = "_env_get", params = ["string"], returns = "ptr", description = "Get environment variable (for JWT_SECRET, etc.)", expand_strings = true },
+  # Environment - Secrets (server-only; browser has no .env file)
+  { name = "_env_get", params = ["string"], returns = "ptr", description = "Get environment variable (for JWT_SECRET, etc.)", expand_strings = true, hosts = ["server"] },
 
-  # Time - Token expiry
-  { name = "_time_now", params = [], returns = "i64", description = "Get current Unix timestamp in seconds" },
+  # Time - Token expiry (portable Layer 2)
+  { name = "_time_now", params = [], returns = "i64", description = "Get current Unix timestamp in seconds", hosts = ["all"] },
 
-  # Crypto - Random
-  { name = "_crypto_random_hex", params = ["i32"], returns = "ptr", description = "Generate random hex string of specified byte length" },
-  { name = "_crypto_random_bytes", params = ["i32"], returns = "ptr", description = "Generate random bytes (base64 encoded)" },
+  # Crypto - Random (portable Layer 2; browsers have Web Crypto API)
+  { name = "_crypto_random_hex", params = ["i32"], returns = "ptr", description = "Generate random hex string of specified byte length", hosts = ["all"] },
+  { name = "_crypto_random_bytes", params = ["i32"], returns = "ptr", description = "Generate random bytes (base64 encoded)", hosts = ["all"] },
 
-  # Crypto - Password Hashing (Argon2/bcrypt)
-  { name = "_crypto_hash_password", params = ["string"], returns = "ptr", description = "Hash password using Argon2id", expand_strings = true },
-  { name = "_crypto_verify_password", params = ["string", "string"], returns = "boolean", description = "Verify password against hash (1=match, 0=no match)", expand_strings = true },
+  # Crypto - Password Hashing (Argon2/bcrypt) — portable Layer 2
+  { name = "_crypto_hash_password", params = ["string"], returns = "ptr", description = "Hash password using Argon2id", expand_strings = true, hosts = ["all"] },
+  { name = "_crypto_verify_password", params = ["string", "string"], returns = "boolean", description = "Verify password against hash (1=match, 0=no match)", expand_strings = true, hosts = ["all"] },
 
-  # Crypto - General Hashing
-  { name = "_crypto_hash_sha256", params = ["string"], returns = "ptr", description = "SHA-256 hash", expand_strings = true },
-  { name = "_crypto_hash_sha512", params = ["string"], returns = "ptr", description = "SHA-512 hash", expand_strings = true },
-  { name = "_crypto_hmac", params = ["string", "string", "string"], returns = "ptr", description = "HMAC: data, key, algorithm", expand_strings = true },
+  # Crypto - General Hashing (portable Layer 2)
+  { name = "_crypto_hash_sha256", params = ["string"], returns = "ptr", description = "SHA-256 hash", expand_strings = true, hosts = ["all"] },
+  { name = "_crypto_hash_sha512", params = ["string"], returns = "ptr", description = "SHA-512 hash", expand_strings = true, hosts = ["all"] },
+  { name = "_crypto_hmac", params = ["string", "string", "string"], returns = "ptr", description = "HMAC: data, key, algorithm", expand_strings = true, hosts = ["all"] },
 
-  # JWT - Token operations
-  { name = "_jwt_sign", params = ["string", "string", "string"], returns = "ptr", description = "Sign JWT: payload, secret, algorithm", expand_strings = true },
-  { name = "_jwt_verify", params = ["string", "string", "string"], returns = "ptr", description = "Verify JWT: token, secret, algorithm - returns payload or empty", expand_strings = true },
-  { name = "_jwt_decode", params = ["string"], returns = "ptr", description = "Decode JWT without verification (for debugging)", expand_strings = true },
+  # JWT - Token operations (server-only; signing requires the JWT_SECRET)
+  { name = "_jwt_sign", params = ["string", "string", "string"], returns = "ptr", description = "Sign JWT: payload, secret, algorithm", expand_strings = true, hosts = ["server"] },
+  { name = "_jwt_verify", params = ["string", "string", "string"], returns = "ptr", description = "Verify JWT: token, secret, algorithm - returns payload or empty", expand_strings = true, hosts = ["server"] },
+  { name = "_jwt_decode", params = ["string"], returns = "ptr", description = "Decode JWT without verification (for debugging)", expand_strings = true, hosts = ["server"] },
 
-  # Session - Storage
-  { name = "_session_store", params = ["string", "string", "string", "i32", "i32"], returns = "boolean", description = "Store session: sessionId, key (empty=blob), data, ttl, flags - returns 1 on success" },
-  { name = "_session_get", params = [], returns = "ptr", description = "Get current session data from request context - returns session data or empty string" },
-  { name = "_session_delete", params = [], returns = "boolean", description = "Delete current session from request context - returns 1 if deleted, 0 if not found" },
-  { name = "_session_exists", params = ["string"], returns = "boolean", description = "Check if session exists by ID (1=yes, 0=no)", expand_strings = true },
+  # Session - Storage (server-only; sessions live in server-side store)
+  { name = "_session_store", params = ["string", "string", "string", "i32", "i32"], returns = "boolean", description = "Store session: sessionId, key (empty=blob), data, ttl, flags - returns 1 on success", hosts = ["server"] },
+  { name = "_session_get", params = [], returns = "ptr", description = "Get current session data from request context - returns session data or empty string", hosts = ["server"] },
+  { name = "_session_delete", params = [], returns = "boolean", description = "Delete current session from request context - returns 1 if deleted, 0 if not found", hosts = ["server"] },
+  { name = "_session_exists", params = ["string"], returns = "boolean", description = "Check if session exists by ID (1=yes, 0=no)", expand_strings = true, hosts = ["server"] },
 
-  # Session - CSRF
-  { name = "_session_set_csrf", params = ["string"], returns = "boolean", description = "Store CSRF token in current session", expand_strings = true },
-  { name = "_session_get_csrf", params = [], returns = "ptr", description = "Get CSRF token from current session" },
+  # Session - CSRF (server-only)
+  { name = "_session_set_csrf", params = ["string"], returns = "boolean", description = "Store CSRF token in current session", expand_strings = true, hosts = ["server"] },
+  { name = "_session_get_csrf", params = [], returns = "ptr", description = "Get CSRF token from current session", hosts = ["server"] },
 
-  # Cookies
-  { name = "_req_cookie", params = ["string"], returns = "ptr", description = "Get cookie value by name", expand_strings = true },
-  { name = "_http_set_cookie", params = ["string", "string"], returns = "boolean", description = "Set cookie: name, value (length-prefixed ptrs); server applies Path=/ HttpOnly defaults" },
+  # Cookies (server-only; HTTP request/response context)
+  { name = "_req_cookie", params = ["string"], returns = "ptr", description = "Get cookie value by name", expand_strings = true, hosts = ["server"] },
+  { name = "_http_set_cookie", params = ["string", "string"], returns = "boolean", description = "Set cookie: name, value (length-prefixed ptrs); server applies Path=/ HttpOnly defaults", hosts = ["server"] },
 
-  # Roles - Registration and checking
-  { name = "_roles_register", params = ["string"], returns = "boolean", description = "Register roles configuration (JSON)", expand_strings = true },
-  { name = "_role_has_permission", params = ["string", "string"], returns = "boolean", description = "Check if role has permission (1=yes, 0=no)", expand_strings = true },
-  { name = "_role_get_permissions", params = ["string"], returns = "ptr", description = "Get all permissions for role (JSON array)", expand_strings = true },
+  # Roles - Registration and checking (server-only; role state held on server)
+  { name = "_roles_register", params = ["string"], returns = "boolean", description = "Register roles configuration (JSON)", expand_strings = true, hosts = ["server"] },
+  { name = "_role_has_permission", params = ["string", "string"], returns = "boolean", description = "Check if role has permission (1=yes, 0=no)", expand_strings = true, hosts = ["server"] },
+  { name = "_role_get_permissions", params = ["string"], returns = "ptr", description = "Get all permissions for role (JSON array)", expand_strings = true, hosts = ["server"] },
 
-  # Auth - Session Management
-  { name = "_auth_set_session", params = ["string"], returns = "boolean", description = "Create session from JSON with user_id, role, claims; sets session cookie on response (1=success, 0=fail)", expand_strings = true },
-  { name = "_auth_clear_session", params = [], returns = "boolean", description = "Destroy current user session and clear session cookie (1=success, 0=no session)" },
-  { name = "_auth_user_id", params = [], returns = "i32", description = "Get current authenticated user ID; returns 0 if not authenticated" },
-  { name = "_auth_user_role", params = [], returns = "ptr", description = "Get current authenticated user role; returns empty string if unauthenticated" },
+  # Auth - Session Management (server-only)
+  { name = "_auth_set_session", params = ["string"], returns = "boolean", description = "Create session from JSON with user_id, role, claims; sets session cookie on response (1=success, 0=fail)", expand_strings = true, hosts = ["server"] },
+  { name = "_auth_clear_session", params = [], returns = "boolean", description = "Destroy current user session and clear session cookie (1=success, 0=no session)", hosts = ["server"] },
+  { name = "_auth_user_id", params = [], returns = "i32", description = "Get current authenticated user ID; returns 0 if not authenticated", hosts = ["server"] },
+  { name = "_auth_user_role", params = [], returns = "ptr", description = "Get current authenticated user role; returns empty string if unauthenticated", hosts = ["server"] },
 
-  # JSON helpers
-  { name = "_json_get", params = ["string", "string"], returns = "ptr", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true },
+  # JSON helpers (pure compute — portable Layer 2)
+  { name = "_json_get", params = ["string", "string"], returns = "ptr", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true, hosts = ["all"] },
 ]
 
 [language]
