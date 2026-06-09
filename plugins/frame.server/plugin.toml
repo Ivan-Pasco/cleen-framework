@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.4.1"
+version = "2.5.0"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -8,6 +8,15 @@ license = "MIT"
 [compatibility]
 min_compiler_version = "0.15.0"
 requires = "clean-server"
+
+[lifecycle]
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
+# Tells the compiler's import-minimality BFS to treat preamble-emitted
+# helpers (redirect, json, error response builders) as roots. Without this,
+# bridge imports those helpers reference get tree-shaken when user code
+# only calls them through plugin-generated route handler code.
+# Closes GEN003.
+module_helpers_are_roots = true
 
 [handles]
 blocks = ["endpoints", "middleware", "routes", "server"]
