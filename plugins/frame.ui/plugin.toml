@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.9.0"
+version = "2.9.1"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -16,33 +16,15 @@ min_compiler_version = "0.15.0"
 # Added in v2.10.138 alongside the move of _ui_render_page from frame.server.
 module_helpers_are_roots = true
 
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.3.
-# Client-mode build: the compiler invokes this slot once and splices the
-# returned statements into the synthetic client `_start` body. For each
-# component class with `client != "off"`, the slot emits an instantiation
-# call and an onMount() invocation. Closes HYDRATE_AUTO.
-# Added in v2.10.139.
-client_init = "emit_ui_client_init"
-
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/artifacts.md §4.1.
-# Declares `frontend.wasm` as a side-channel build artifact. Produced only
-# when at least one plugin declares `client_init` (predicate match), which
-# this plugin does above. The compiler triggers a nested client-only build
-# via from_module = "client_only_build" and writes the bytes to
-# {output_dir}/frontend.wasm. Hosts read build-manifest.json to locate it
-# (clean-server still uses the CWD probe fallback during Phase B; see
-# server-read-build-manifest-for-artifact-lookup.md).
-# Replaces the legacy `if source.contains("events:")` detection in the
-# compiler's main.rs (still present as Phase B fallback for plugins that
-# haven't migrated to v2 [[artifacts]] yet).
-[[artifacts]]
-name            = "frontend.wasm"
-purpose         = "client_hydration"
-emit            = { from_module = "client_only_build" }
-output_relative = "{output_dir}/frontend.wasm"
-required_when   = "has_client_init"
-public          = true
-content_type    = "application/wasm"
+# NOTE: client_init lifecycle slot and [[artifacts]] for frontend.wasm were
+# added in v2.10.139 and reverted in v2.10.140. The Clean `external:` block
+# emits LP-pointer string params (i32, i32) but the compiler's host adapter
+# at clean-language-compiler/src/plugins/wasm_adapter.rs:195 expects raw
+# (ptr, len) quartets (i32, i32, i32, i32) for _build_state_set. No
+# plugin-side workaround; needs compiler fix. See:
+#   foundation/management/cross-component-prompts/compiler-build-state-bridge-signature-mismatch.md
+# Re-introduce both sections after the compiler accepts LP-pointer-style
+# bridges OR provides a Clean syntax for raw bridge signatures.
 
 # SSR HTML rendering can exhaust the 32 MB standard tier on large pages.
 # Honored by compiler >= 0.30.57; older compilers silently use target defaults.
@@ -122,16 +104,8 @@ hydration_modes = ["off", "on", "visible", "idle", "only"]
 # e.g. ui.toggleClass → _ui_toggle_class
 [bridge]
 functions = [
-  # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §2.5.
-  # Build-state keystore bridges, provided by the compiler's plugin sandbox
-  # (clean-language-compiler/src/plugins/wasm_adapter.rs). The plugin writes
-  # discovered state during expand_block (e.g. each registered component)
-  # and reads it back during lifecycle slots (emit_ui_client_init reads the
-  # components list to emit hydration calls). hosts = ["all"] is correct —
-  # the keystore exists in every host that loads plugins, which today is
-  # only the compiler itself. Added in v2.10.139.
-  { name = "_build_state_set", params = ["string", "string"], returns = "void", description = "Persist a key-value pair into the compiler-owned build_state keystore. Snapshotted into the BuildContext passed to every lifecycle slot.", expand_strings = true, hosts = ["all"] },
-  { name = "_build_state_get", params = ["string"], returns = "string", description = "Read a key from the compiler-owned build_state keystore. Returns the empty string when the key is absent.", expand_strings = true, hosts = ["all"] },
+  # NOTE: _build_state_set / _build_state_get bridge declarations were added
+  # in v2.10.139 and reverted in v2.10.140 — see [lifecycle] section comment.
 
   # HTML Page Rendering (SSR)
   # Renders app/web/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).

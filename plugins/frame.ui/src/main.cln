@@ -3,18 +3,6 @@
 // Version: 2.6.9
 
 // ============================================================================
-// EXTERNAL BRIDGES — provided by the compiler's plugin sandbox
-// ============================================================================
-// Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §2.5.
-// build_state keystore bridges. The compiler's WasmPluginAdapter registers
-// these as host imports for every plugin WASM it loads. The implementation
-// lives at clean-language-compiler/src/plugins/wasm_adapter.rs.
-
-external:
-	void _build_state_set(string key, string value)
-	string _build_state_get(string key)
-
-// ============================================================================
 // MAIN ENTRY POINTS
 // ============================================================================
 
@@ -84,63 +72,6 @@ functions:
 		result = result + "\tstring renderWith(string name, string data)\n"
 		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", data)\n\n"
 		return result
-
-	// Plugin Contracts v2 — client_init lifecycle slot.
-	// foundation/spec/plugins/contracts/lifecycle.md §3.3.
-	//
-	// Invoked by the compiler exactly once per client-mode build (target=web
-	// or target=client). The compiler passes a JSON BuildContext as the
-	// single string argument; we return Clean Language statements wrapped in
-	// the standard `{"statements": "..."}` envelope. The compiler re-parses
-	// and splices the statements into the synthetic client `_start` body.
-	//
-	// For each component that was registered during the per-file expand_block
-	// pass (and whose hydration mode is not "off"), emit an instantiation
-	// followed by an onMount() invocation. Closes HYDRATE_AUTO — the dashboard
-	// entry called out this exact code path as the missing piece.
-	string emit_ui_client_init(string context_json)
-		// Build state shape: { ..., "build_state": { "frame.ui:components": "<csv>" }, ... }
-		// where <csv> is `tag,class,hydration;tag,class,hydration;...`
-		string build_state = extract_json_field(context_json, "build_state")
-		string components_csv = extract_json_field(build_state, "frame.ui:components")
-
-		if components_csv == ""
-			return "{\"statements\": \"\"}"
-
-		string statements = ""
-		string remaining = components_csv
-		while remaining.length() > 0
-			integer sc = remaining.indexOf(";")
-			string record = ""
-			if sc == -1
-				record = remaining
-				remaining = ""
-			else
-				record = remaining.substring(0, sc)
-				remaining = remaining.substring(sc + 1, remaining.length())
-
-			// Parse `tag,class,hydration`
-			integer c1 = record.indexOf(",")
-			if c1 != -1
-				string rec_tag = record.substring(0, c1)
-				string rec_rest = record.substring(c1 + 1, record.length())
-				integer c2 = rec_rest.indexOf(",")
-				if c2 != -1
-					string rec_class = rec_rest.substring(0, c2)
-					string rec_hyd = rec_rest.substring(c2 + 1, rec_rest.length())
-					if rec_hyd != "off"
-						// Emit: <Class> instance_<tag-sanitized> = <Class>()
-						//       instance_<tag-sanitized>.onMount()
-						// Tag has hyphens; replace with underscores for the Clean identifier.
-						string instance_var = "instance_" + rec_tag.replace("-", "_")
-						statements = statements + rec_class + " " + instance_var + " = " + rec_class + "()\n"
-						statements = statements + instance_var + ".onMount()\n"
-
-		// JSON-escape the statements payload for safe transport.
-		string escaped = statements.replace("\\", "\\\\")
-		escaped = escaped.replace("\"", "\\\"")
-		escaped = escaped.replace("\n", "\\n")
-		return "{\"statements\": \"" + escaped + "\"}"
 
 	// Validate block attributes and body. Returns error message or "" if valid.
 	// Per spec 05_frame_ui.md: component requires name + render(); page requires path;
@@ -1836,21 +1767,6 @@ functions:
 
 		if name == ""
 			name = "Component"
-
-		// Plugin Contracts v2 — persist this component's identity into the
-		// compiler-owned build_state keystore so emit_ui_client_init can read
-		// it back during the client-mode build and emit per-component
-		// hydration calls. Encoding is `tag,class,hydration` with `;` as the
-		// record separator across multiple components in the project.
-		// Tags are kebab-case, class names are PascalCase — neither contains
-		// `,` or `;` so the delimited format is safe.
-		if tag != ""
-			string components_state = _build_state_get("frame.ui:components")
-			string entry = tag + "," + name + "," + client
-			if components_state == ""
-				_build_state_set("frame.ui:components", entry)
-			else
-				_build_state_set("frame.ui:components", components_state + ";" + entry)
 
 		string result = "// __frame_ui_expanded__\n"
 		result = result + "class " + name + "\n"
