@@ -34,7 +34,7 @@ functions:
 		return ""
 
 	string get_keywords()
-		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"status\", \"httpHeader\", \"render\", \"renderWith\", \"httpError\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\", \"LIVE\", \"FEED\", \"live.send\", \"live.broadcast\", \"live.close\", \"live.clientId\", \"live.message\", \"live.roomJoin\", \"live.roomLeave\", \"live.roomBroadcast\", \"live.onMessage\", \"live.onClose\"]"
+		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"status\", \"httpHeader\", \"httpError\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\", \"LIVE\", \"FEED\", \"live.send\", \"live.broadcast\", \"live.close\", \"live.clientId\", \"live.message\", \"live.roomJoin\", \"live.roomLeave\", \"live.roomBroadcast\", \"live.onMessage\", \"live.onClose\"]"
 
 // ============================================================================
 // RESPONSE HELPERS — emitted for every file that loads frame.server
@@ -79,10 +79,10 @@ functions:
 		result = result + "\t\treturn _http_respond(code, \"application/json\", body)\n\n"
 		result = result + "\tstring status(integer code, string body)\n"
 		result = result + "\t\treturn _http_respond(code, \"application/json\", body)\n\n"
-		result = result + "\tstring render(string name)\n"
-		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", \"{}\")\n\n"
-		result = result + "\tstring renderWith(string name, string data)\n"
-		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", data)\n\n"
+		// render() and renderWith() moved to frame.ui preamble — they call
+		// _ui_render_page which is declared in frame.ui's bridge. SSR-only
+		// helpers belong with the SSR plugin so server-only API apps that
+		// don't load frame.ui aren't forced to drag in SSR machinery.
 		result = result + "\tstring param(string name)\n"
 		result = result + "\t\treturn _req_param(name)\n\n"
 		result = result + "\tstring body()\n"

@@ -54,7 +54,24 @@ functions:
 		if block_name == "ui"
 			return expand_ui_config(attributes, body)
 
+		// Preamble — emit SSR helpers (render, renderWith) into every file
+		// that loads frame.ui. Moved from frame.server in v2.10.138 because
+		// SSR is frame.ui's responsibility. _ui_render_page is now declared
+		// in this plugin's [bridge].functions; module_helpers_are_roots
+		// keeps the bridge import alive even when only emitted helpers call it.
+		if block_name == "__preamble"
+			return emit_ssr_helpers()
+
 		return body
+
+	// Emit SSR response helpers as Clean Language source. Called from __preamble.
+	string emit_ssr_helpers()
+		string result = "functions:\n"
+		result = result + "\tstring render(string name)\n"
+		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", \"{}\")\n\n"
+		result = result + "\tstring renderWith(string name, string data)\n"
+		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", data)\n\n"
+		return result
 
 	// Validate block attributes and body. Returns error message or "" if valid.
 	// Per spec 05_frame_ui.md: component requires name + render(); page requires path;

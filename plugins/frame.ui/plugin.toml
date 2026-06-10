@@ -1,12 +1,20 @@
 [plugin]
 name = "frame.ui"
-version = "2.7.0"
+version = "2.8.0"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
 min_compiler_version = "0.15.0"
+
+[lifecycle]
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
+# frame.ui's preamble emits SSR helpers (render, renderWith) that call
+# _ui_render_page. Without this flag, the BFS would tree-shake the helpers
+# (and their bridge import) when user code doesn't statically call render().
+# Added in v2.10.138 alongside the move of _ui_render_page from frame.server.
+module_helpers_are_roots = true
 
 # SSR HTML rendering can exhaust the 32 MB standard tier on large pages.
 # Honored by compiler >= 0.30.57; older compilers silently use target defaults.
@@ -86,6 +94,20 @@ hydration_modes = ["off", "on", "visible", "idle", "only"]
 # e.g. ui.toggleClass → _ui_toggle_class
 [bridge]
 functions = [
+  # HTML Page Rendering (SSR)
+  # Renders app/web/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
+  # Implemented by clean-server: resolves the page template, substitutes interpolations, returns HTML.
+  # Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §4.1.
+  # SRV001 fix: clean-server's _ui_render_page implementation MUST scan the
+  # returned HTML for custom (kebab-case) tags and, for each <my-component>,
+  # call the matching `mycomponent_render` export to substitute its rendered
+  # HTML. The callback declaration is the contract — clean-server reads it
+  # at startup and installs the dispatcher. fallback=passthrough leaves the
+  # tag in place if no matching export is found.
+  # Moved from frame.server in v2.10.138 — declaration belongs with frame.ui
+  # so server-only API apps (no frame.ui) aren't forced to load it.
+  { name = "_ui_render_page", params = ["string", "string"], returns = "ptr", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/web/pages/<name>.html", expand_strings = true, hosts = ["server"], callback = { purpose = "component_tag_render", plugin_target = "frame.ui", discovery = "exports_matching", export_pattern = "{tagname}_render", fallback = "passthrough" } },
+
   # HTML Rendering
   { name = "_html_escape", params = ["string"], returns = "ptr", description = "Escape HTML entities in string", expand_strings = true, signature = "_html_escape(text) -> string", hosts = ["server"] },
   { name = "_html_raw", params = ["string"], returns = "ptr", description = "Return raw HTML without escaping", expand_strings = true, signature = "_html_raw(html) -> string", hosts = ["server"] },
@@ -264,6 +286,10 @@ types = [
 
 # Built-in functions/expressions
 functions = [
+  # SSR response helpers — emitted by frame.ui's preamble. Moved from frame.server
+  # in v2.10.138 because SSR is frame.ui's responsibility.
+  { name = "render", signature = "render(name)", description = "Render HTML page from app/web/pages/<name>.html and return as 200 text/html response" },
+  { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page from app/web/pages/<name>.html with JSON data string for {{ key }} template substitution" },
   { name = "rawHtml", signature = "rawHtml(content)", description = "Render unescaped HTML (use with caution)" },
   { name = "escape", signature = "escape(text)", description = "Escape HTML entities" },
   { name = "slot", signature = "slot(name?)", description = "Render slot content" },

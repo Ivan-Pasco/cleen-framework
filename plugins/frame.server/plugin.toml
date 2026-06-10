@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.6.0"
+version = "2.7.0"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -110,17 +110,11 @@ functions = [
   { name = "_http_set_cache", params = ["i32"], returns = "boolean", description = "Set Cache-Control max-age header" },
   { name = "_http_no_cache", params = [], returns = "boolean", description = "Set no-cache headers" },
 
-  # HTML Page Rendering (SSR)
-  # Renders app/web/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
-  # Implemented by clean-server: resolves the page template, substitutes interpolations, returns HTML.
-  # Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §4.1.
-  # SRV001 fix: clean-server's _ui_render_page implementation MUST scan the
-  # returned HTML for custom (kebab-case) tags and, for each <my-component>,
-  # call the matching `mycomponent_render` export to substitute its rendered
-  # HTML. The callback declaration is the contract — clean-server reads it
-  # at startup and installs the dispatcher. fallback=passthrough leaves the
-  # tag in place if no matching export is found.
-  { name = "_ui_render_page", params = ["string", "string"], returns = "ptr", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/web/pages/<name>.html", expand_strings = true, hosts = ["server"], callback = { purpose = "component_tag_render", plugin_target = "frame.ui", discovery = "exports_matching", export_pattern = "{tagname}_render", fallback = "passthrough" } },
+  # HTML Page Rendering (SSR) — declaration MOVED to frame.ui plugin.toml.
+  # _ui_render_page is part of frame.ui's SSR responsibility; declaring it
+  # here forced server-only API apps (no frame.ui) to fail at plugin-registry
+  # validation because the callback's plugin_target = "frame.ui" was missing.
+  # See contracts/bridge-host-classes.md §4.1.
 
   # JSON Encoding/Decoding
   { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true },
@@ -210,8 +204,7 @@ functions = [
   # Response helpers — generated as Clean Language wrapper functions via preamble injection.
   # maps_to entries allow the compiler to register them as externals for type-checking
   # when they are referenced before the preamble is expanded (e.g. in functions: blocks).
-  { name = "render", signature = "render(name)", description = "Render HTML page from app/web/pages/<name>.html and return as 200 text/html response" },
-  { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page from app/web/pages/<name>.html with JSON data string for {{ key }} template substitution" },
+  # render() and renderWith() moved to frame.ui (SSR is frame.ui's responsibility).
   { name = "json", signature = "json(data)", description = "Return JSON response with Content-Type: application/json", maps_to = "_res_json" },
   { name = "html", signature = "html(content)", description = "Return HTML response" },
   { name = "redirect", signature = "redirect(url, status)", description = "Redirect to URL (default 302)", maps_to = "_res_redirect" },
