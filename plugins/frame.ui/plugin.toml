@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.11.0"
+version = "2.11.1"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -16,36 +16,16 @@ min_compiler_version = "0.15.0"
 # Added in v2.10.138 alongside the move of _ui_render_page from frame.server.
 module_helpers_are_roots = true
 
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.3.
-# Client-mode build: the compiler invokes this slot once and splices the
-# returned statements into the synthetic client `_start` body. For each
-# component class with `client != "off"`, the slot emits an instantiation
-# call and an onMount() invocation. Closes HYDRATE_AUTO.
-#
-# History:
-#   v2.10.139 — first attempt; reverted (compiler param-convention mismatch).
-#   v2.10.141 — second attempt; reverted (compiler return-type mismatch).
-#   v2.10.143 — third attempt, this version. Both signature bugs fixed in
-#               compiler 0.30.260 (lifecycle.md §2.5.1 documents the
-#               (result i32) import shape).
-client_init = "emit_ui_client_init"
-
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/artifacts.md §4.1.
-# Declares `frontend.wasm` as a side-channel build artifact. Produced only
-# when at least one plugin declares `client_init` (predicate match), which
-# this plugin does above. The compiler triggers a nested client-only build
-# via from_module = "client_only_build" and writes the bytes to
-# {output_dir}/frontend.wasm. Hosts read build-manifest.json to locate it
-# (clean-server still uses the CWD probe fallback during Phase B; see
-# server-read-build-manifest-for-artifact-lookup.md).
-[[artifacts]]
-name            = "frontend.wasm"
-purpose         = "client_hydration"
-emit            = { from_module = "client_only_build" }
-output_relative = "{output_dir}/frontend.wasm"
-required_when   = "has_client_init"
-public          = true
-content_type    = "application/wasm"
+# NOTE: client_init lifecycle slot and [[artifacts]] for frontend.wasm have
+# been a story of three compiler bugs (so far):
+#   v2.10.139 — first attempt; reverted (param-convention mismatch).
+#   v2.10.141 — second attempt; reverted (return-type mismatch).
+#   v2.10.143 — third attempt; signatures align but plugin WASM TRAPS at
+#               runtime during expand_component's first _build_state_get
+#               call. Stack trace: <wasm function 276> ← <wasm function 228>.
+#               Reverted in v2.10.144.
+# Filed compiler-build-state-bridge-runtime-trap.md for the third bug.
+# Re-introduce after the trap is fixed.
 
 # SSR HTML rendering can exhaust the 32 MB standard tier on large pages.
 # Honored by compiler >= 0.30.57; older compilers silently use target defaults.
@@ -125,16 +105,8 @@ hydration_modes = ["off", "on", "visible", "idle", "only"]
 # e.g. ui.toggleClass → _ui_toggle_class
 [bridge]
 functions = [
-  # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §2.5.
-  # Build-state keystore bridges, provided by the compiler's plugin sandbox
-  # (clean-language-compiler/src/plugins/wasm_adapter.rs). The plugin writes
-  # discovered state during expand_block (e.g. each registered component)
-  # and reads it back during lifecycle slots (emit_ui_client_init reads the
-  # components list to emit hydration calls). hosts = ["all"] — the keystore
-  # exists in every host that loads plugins (today: only the compiler).
-  # See lifecycle.md §2.5.1 for the (result i32) import-shape convention.
-  { name = "_build_state_set", params = ["string", "string"], returns = "void", description = "Persist a key-value pair into the compiler-owned build_state keystore. Snapshotted into the BuildContext passed to every lifecycle slot.", expand_strings = true, hosts = ["all"] },
-  { name = "_build_state_get", params = ["string"], returns = "string", description = "Read a key from the compiler-owned build_state keystore. Returns the empty string when the key is absent.", expand_strings = true, hosts = ["all"] },
+  # NOTE: _build_state_set / _build_state_get bridge declarations reverted in
+  # v2.10.144 — see [lifecycle] section comment for the bug story.
 
   # HTML Page Rendering (SSR)
   # Renders app/web/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
