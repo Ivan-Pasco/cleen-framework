@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.6.12"
+version = "2.7.0"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -87,143 +87,143 @@ hydration_modes = ["off", "on", "visible", "idle", "only"]
 [bridge]
 functions = [
   # HTML Rendering
-  { name = "_html_escape", params = ["string"], returns = "ptr", description = "Escape HTML entities in string", expand_strings = true, signature = "_html_escape(text) -> string" },
-  { name = "_html_raw", params = ["string"], returns = "ptr", description = "Return raw HTML without escaping", expand_strings = true, signature = "_html_raw(html) -> string" },
+  { name = "_html_escape", params = ["string"], returns = "ptr", description = "Escape HTML entities in string", expand_strings = true, signature = "_html_escape(text) -> string", hosts = ["server"] },
+  { name = "_html_raw", params = ["string"], returns = "ptr", description = "Return raw HTML without escaping", expand_strings = true, signature = "_html_raw(html) -> string", hosts = ["server"] },
 
   # Component Registry
-  { name = "_ui_register_component", params = ["string", "string"], returns = "integer", description = "Register component: tag name, class name", expand_strings = true, signature = "_ui_register_component(tagName, className)" },
-  { name = "_ui_get_component", params = ["string"], returns = "string", description = "Get component class by tag name", expand_strings = true, signature = "_ui_get_component(tagName) -> string" },
+  { name = "_ui_register_component", params = ["string", "string"], returns = "integer", description = "Register component: tag name, class name", expand_strings = true, signature = "_ui_register_component(tagName, className)", hosts = ["server"] },
+  { name = "_ui_get_component", params = ["string"], returns = "string", description = "Get component class by tag name", expand_strings = true, signature = "_ui_get_component(tagName) -> string", hosts = ["server"] },
 
   # Layout Loading
-  { name = "_ui_load_layout", params = ["string"], returns = "ptr", description = "Load layout HTML template by name from app/web/layouts/", expand_strings = true, signature = "_ui_load_layout(name) -> string" },
+  { name = "_ui_load_layout", params = ["string"], returns = "ptr", description = "Load layout HTML template by name from app/web/layouts/", expand_strings = true, signature = "_ui_load_layout(name) -> string", hosts = ["server"] },
 
   # Slot Management
-  { name = "_ui_set_slot", params = ["string", "string"], returns = "integer", description = "Set slot content: slot name, content", expand_strings = true, signature = "_ui_set_slot(name, content)" },
-  { name = "_ui_get_slot", params = ["string"], returns = "string", description = "Get slot content by name", expand_strings = true, signature = "_ui_get_slot(name) -> string" },
+  { name = "_ui_set_slot", params = ["string", "string"], returns = "integer", description = "Set slot content: slot name, content", expand_strings = true, signature = "_ui_set_slot(name, content)", hosts = ["server"] },
+  { name = "_ui_get_slot", params = ["string"], returns = "string", description = "Get slot content by name", expand_strings = true, signature = "_ui_get_slot(name) -> string", hosts = ["server"] },
 
   # Event Handler Registration (for client-side hydration)
-  { name = "_ui_on_event", params = ["string", "string", "string"], returns = "integer", description = "Register event handler: selector, event type, exported handler function name", expand_strings = true, signature = "_ui_on_event(selector, eventType, handlerName)" },
+  { name = "_ui_on_event", params = ["string", "string", "string"], returns = "integer", description = "Register event handler: selector, event type, exported handler function name", expand_strings = true, signature = "_ui_on_event(selector, eventType, handlerName)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
 
   # State Management (for hydration)
-  { name = "_ui_set_state", params = ["string", "string"], returns = "integer", description = "Set component state: component id, state JSON", expand_strings = true, signature = "_ui_set_state(id, json)" },
-  { name = "_ui_get_state", params = ["string"], returns = "string", description = "Get component state by ID", expand_strings = true, signature = "_ui_get_state(id) -> string" },
+  { name = "_ui_set_state", params = ["string", "string"], returns = "integer", description = "Set component state: component id, state JSON", expand_strings = true, signature = "_ui_set_state(id, json)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_get_state", params = ["string"], returns = "string", description = "Get component state by ID", expand_strings = true, signature = "_ui_get_state(id) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
 
   # DOM Manipulation (for client-side updates)
-  { name = "_ui_update_element", params = ["string", "string"], returns = "integer", description = "Update element content: selector, new content", expand_strings = true, signature = "_ui_update_element(selector, content)" },
-  { name = "_ui_update_attr", params = ["string", "string", "string"], returns = "integer", description = "Update element attribute: selector, attr name, value", expand_strings = true, signature = "_ui_update_attr(selector, attr, value)" },
+  { name = "_ui_update_element", params = ["string", "string"], returns = "integer", description = "Update element content: selector, new content", expand_strings = true, signature = "_ui_update_element(selector, content)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_update_attr", params = ["string", "string", "string"], returns = "integer", description = "Update element attribute: selector, attr name, value", expand_strings = true, signature = "_ui_update_attr(selector, attr, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
 
   # Form Binding
-  { name = "_ui_bind_input", params = ["string", "string"], returns = "integer", description = "Bind input to state: selector, state path", expand_strings = true, signature = "_ui_bind_input(selector, statePath)" },
+  { name = "_ui_bind_input", params = ["string", "string"], returns = "integer", description = "Bind input to state: selector, state path", expand_strings = true, signature = "_ui_bind_input(selector, statePath)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
 
   # Validation
-  { name = "_ui_validate", params = ["string", "string"], returns = "string", description = "Validate value against rule: value, rule type - returns error or empty", expand_strings = true, signature = "_ui_validate(value, rule) -> string" },
+  { name = "_ui_validate", params = ["string", "string"], returns = "string", description = "Validate value against rule: value, rule type - returns error or empty", expand_strings = true, signature = "_ui_validate(value, rule) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
 
   # Event Handler Context (available during event callbacks)
-  { name = "_ui_event_attr", params = ["string"], returns = "string", description = "Get attribute value from current event target element", expand_strings = true, signature = "_ui_event_attr(attr) -> string" },
-  { name = "_ui_event_value", params = [], returns = "string", description = "Get value/textContent of current event target element", signature = "_ui_event_value() -> string" },
-  { name = "_ui_event_closest_attr", params = ["string", "string"], returns = "string", description = "Find closest ancestor matching selector, return its attribute value", expand_strings = true, signature = "_ui_event_closest_attr(selector, attr) -> string" },
-  { name = "_ui_event_type", params = [], returns = "string", description = "Get the type of the current event (click, input, etc.)", signature = "_ui_event_type() -> string" },
+  { name = "_ui_event_attr", params = ["string"], returns = "string", description = "Get attribute value from current event target element", expand_strings = true, signature = "_ui_event_attr(attr) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_event_value", params = [], returns = "string", description = "Get value/textContent of current event target element", signature = "_ui_event_value() -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_event_closest_attr", params = ["string", "string"], returns = "string", description = "Find closest ancestor matching selector, return its attribute value", expand_strings = true, signature = "_ui_event_closest_attr(selector, attr) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_event_type", params = [], returns = "string", description = "Get the type of the current event (click, input, etc.)", signature = "_ui_event_type() -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
 
   # Clipboard
-  { name = "_ui_clipboard_write", params = ["string"], returns = "integer", description = "Write text to clipboard (navigator.clipboard.writeText)", expand_strings = true, signature = "_ui_clipboard_write(text)" },
+  { name = "_ui_clipboard_write", params = ["string"], returns = "integer", description = "Write text to clipboard (navigator.clipboard.writeText)", expand_strings = true, signature = "_ui_clipboard_write(text)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
 
   # URL / Location
-  { name = "_ui_location_href", params = ["string"], returns = "integer", description = "Navigate to URL (window.location.href)", expand_strings = true, signature = "_ui_location_href(url)" },
-  { name = "_ui_location_query", params = ["string"], returns = "string", description = "Get URL query parameter value", expand_strings = true, signature = "_ui_location_query(param) -> string" },
-  { name = "_ui_location_path", params = [], returns = "string", description = "Get current URL pathname", signature = "_ui_location_path() -> string" },
+  { name = "_ui_location_href", params = ["string"], returns = "integer", description = "Navigate to URL (window.location.href)", expand_strings = true, signature = "_ui_location_href(url)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_location_query", params = ["string"], returns = "string", description = "Get URL query parameter value", expand_strings = true, signature = "_ui_location_query(param) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_location_path", params = [], returns = "string", description = "Get current URL pathname", signature = "_ui_location_path() -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
 
   # DOM Query (single element)
-  { name = "_ui_get_text", params = ["string"], returns = "string", description = "Get textContent of first element matching selector", expand_strings = true, signature = "_ui_get_text(selector) -> string" },
-  { name = "_ui_get_attr", params = ["string", "string"], returns = "string", description = "Get attribute of first element matching selector", expand_strings = true, signature = "_ui_get_attr(selector, attr) -> string" },
-  { name = "_ui_toggle_class", params = ["string", "string"], returns = "integer", description = "Toggle CSS class on first element matching selector", expand_strings = true, signature = "_ui_toggle_class(selector, className)" },
-  { name = "_ui_add_class", params = ["string", "string"], returns = "integer", description = "Add CSS class to first element matching selector", expand_strings = true, signature = "_ui_add_class(selector, className)" },
-  { name = "_ui_remove_class", params = ["string", "string"], returns = "integer", description = "Remove CSS class from first element matching selector", expand_strings = true, signature = "_ui_remove_class(selector, className)" },
-  { name = "_ui_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set inline style property on first element: selector, property, value", expand_strings = true, signature = "_ui_set_style(selector, property, value)" },
-  { name = "_ui_update_element_self", params = ["string"], returns = "integer", description = "Update textContent of the current event target element", expand_strings = true, signature = "_ui_update_element_self(content)" },
+  { name = "_ui_get_text", params = ["string"], returns = "string", description = "Get textContent of first element matching selector", expand_strings = true, signature = "_ui_get_text(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_get_attr", params = ["string", "string"], returns = "string", description = "Get attribute of first element matching selector", expand_strings = true, signature = "_ui_get_attr(selector, attr) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_toggle_class", params = ["string", "string"], returns = "integer", description = "Toggle CSS class on first element matching selector", expand_strings = true, signature = "_ui_toggle_class(selector, className)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_add_class", params = ["string", "string"], returns = "integer", description = "Add CSS class to first element matching selector", expand_strings = true, signature = "_ui_add_class(selector, className)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_remove_class", params = ["string", "string"], returns = "integer", description = "Remove CSS class from first element matching selector", expand_strings = true, signature = "_ui_remove_class(selector, className)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set inline style property on first element: selector, property, value", expand_strings = true, signature = "_ui_set_style(selector, property, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_update_element_self", params = ["string"], returns = "integer", description = "Update textContent of the current event target element", expand_strings = true, signature = "_ui_update_element_self(content)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
 
   # DOM Batch (querySelectorAll)
-  { name = "_ui_query_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set style property on ALL elements matching selector", expand_strings = true, signature = "_ui_query_set_style(selector, property, value)" },
-  { name = "_ui_query_set_attr", params = ["string", "string", "string"], returns = "integer", description = "Set attribute on ALL elements matching selector", expand_strings = true, signature = "_ui_query_set_attr(selector, attr, value)" },
-  { name = "_ui_query_add_class", params = ["string", "string"], returns = "integer", description = "Add class to ALL elements matching selector", expand_strings = true, signature = "_ui_query_add_class(selector, className)" },
-  { name = "_ui_query_remove_class", params = ["string", "string"], returns = "integer", description = "Remove class from ALL elements matching selector", expand_strings = true, signature = "_ui_query_remove_class(selector, className)" },
-  { name = "_ui_filter_by_attr", params = ["string", "string", "string"], returns = "integer", description = "Show elements where attr matches value, hide others (* for all)", expand_strings = true, signature = "_ui_filter_by_attr(selector, attr, value)" },
-  { name = "_ui_filter_by_text", params = ["string", "string", "string", "string"], returns = "integer", description = "Filter elements by text search across name and description attributes", expand_strings = true, signature = "_ui_filter_by_text(selector, nameAttr, descAttr, query)" },
+  { name = "_ui_query_set_style", params = ["string", "string", "string"], returns = "integer", description = "Set style property on ALL elements matching selector", expand_strings = true, signature = "_ui_query_set_style(selector, property, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_query_set_attr", params = ["string", "string", "string"], returns = "integer", description = "Set attribute on ALL elements matching selector", expand_strings = true, signature = "_ui_query_set_attr(selector, attr, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_query_add_class", params = ["string", "string"], returns = "integer", description = "Add class to ALL elements matching selector", expand_strings = true, signature = "_ui_query_add_class(selector, className)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_query_remove_class", params = ["string", "string"], returns = "integer", description = "Remove class from ALL elements matching selector", expand_strings = true, signature = "_ui_query_remove_class(selector, className)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_filter_by_attr", params = ["string", "string", "string"], returns = "integer", description = "Show elements where attr matches value, hide others (* for all)", expand_strings = true, signature = "_ui_filter_by_attr(selector, attr, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_filter_by_text", params = ["string", "string", "string", "string"], returns = "integer", description = "Filter elements by text search across name and description attributes", expand_strings = true, signature = "_ui_filter_by_text(selector, nameAttr, descAttr, query)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
 
   # IntersectionObserver
-  { name = "_ui_observe_visible", params = ["string", "string"], returns = "integer", description = "Add class to elements when they become visible (one-shot)", expand_strings = true, signature = "_ui_observe_visible(selector, className)" },
+  { name = "_ui_observe_visible", params = ["string", "string"], returns = "integer", description = "Add class to elements when they become visible (one-shot)", expand_strings = true, signature = "_ui_observe_visible(selector, className)", hosts = ["browser"] },
 
   # Timers
-  { name = "_ui_set_timeout", params = ["string", "integer"], returns = "integer", description = "Call exported handler function by name after delay ms: handler name, delay_ms", expand_strings = true, signature = "_ui_set_timeout(handlerName, delayMs)" },
+  { name = "_ui_set_timeout", params = ["string", "integer"], returns = "integer", description = "Call exported handler function by name after delay ms: handler name, delay_ms", expand_strings = true, signature = "_ui_set_timeout(handlerName, delayMs)", hosts = ["browser"] },
 
   # Theming
-  { name = "_ui_inject_head_css", params = ["string"], returns = "i32", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true, signature = "_ui_inject_head_css(css)" },
-  { name = "_ui_inject_head_link", params = ["string"], returns = "i32", description = "Inject <link rel=stylesheet href=...> into page <head>; deduplicated by href", expand_strings = true, signature = "_ui_inject_head_link(href)" },
+  { name = "_ui_inject_head_css", params = ["string"], returns = "i32", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true, signature = "_ui_inject_head_css(css)", hosts = ["browser"] },
+  { name = "_ui_inject_head_link", params = ["string"], returns = "i32", description = "Inject <link rel=stylesheet href=...> into page <head>; deduplicated by href", expand_strings = true, signature = "_ui_inject_head_link(href)", hosts = ["browser"] },
 
   # Form Helpers
-  { name = "_ui_input_value", params = ["string"], returns = "string", description = "Get value of input/textarea/select matching selector", expand_strings = true, signature = "_ui_input_value(selector) -> string" },
-  { name = "_ui_form_json", params = ["string"], returns = "string", description = "Collect all named inputs in form as JSON object string", expand_strings = true, signature = "_ui_form_json(selector) -> string" },
-  { name = "_ui_form_data", params = ["string"], returns = "string", description = "Collect all named inputs as URL-encoded key=value string", expand_strings = true, signature = "_ui_form_data(selector) -> string" },
-  { name = "_ui_checked", params = ["string"], returns = "integer", description = "Get checkbox checked state (0=unchecked, 1=checked)", expand_strings = true, signature = "_ui_checked(selector)" },
-  { name = "_ui_set_input", params = ["string", "string"], returns = "integer", description = "Set value of input/textarea/select", expand_strings = true, signature = "_ui_set_input(selector, value)" },
-  { name = "_ui_form_submit", params = ["string"], returns = "integer", description = "Programmatically submit a form (uses requestSubmit for validation): selector", expand_strings = true, signature = "_ui_form_submit(selector)" },
-  { name = "_ui_get_selection", params = ["string"], returns = "string", description = "Get textarea/input selection as JSON {text, start, end}: selector", expand_strings = true, signature = "_ui_get_selection(selector) -> string" },
-  { name = "_ui_insert_at_cursor", params = ["string", "string", "string"], returns = "integer", description = "Wrap selection or insert at cursor: selector, beforeMarker, afterMarker; returns new cursor position", expand_strings = true, signature = "_ui_insert_at_cursor(selector, before, after) -> integer" },
-  { name = "_ui_text_diff", params = ["string", "string", "string"], returns = "integer", description = "Word-level LCS diff between two elements rendered into a third: selectorA, selectorB, selectorOut", expand_strings = true, signature = "_ui_text_diff(selectorA, selectorB, selectorOut) -> integer" },
+  { name = "_ui_input_value", params = ["string"], returns = "string", description = "Get value of input/textarea/select matching selector", expand_strings = true, signature = "_ui_input_value(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_form_json", params = ["string"], returns = "string", description = "Collect all named inputs in form as JSON object string", expand_strings = true, signature = "_ui_form_json(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_form_data", params = ["string"], returns = "string", description = "Collect all named inputs as URL-encoded key=value string", expand_strings = true, signature = "_ui_form_data(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_checked", params = ["string"], returns = "integer", description = "Get checkbox checked state (0=unchecked, 1=checked)", expand_strings = true, signature = "_ui_checked(selector)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_set_input", params = ["string", "string"], returns = "integer", description = "Set value of input/textarea/select", expand_strings = true, signature = "_ui_set_input(selector, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_form_submit", params = ["string"], returns = "integer", description = "Programmatically submit a form (uses requestSubmit for validation): selector", expand_strings = true, signature = "_ui_form_submit(selector)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_get_selection", params = ["string"], returns = "string", description = "Get textarea/input selection as JSON {text, start, end}: selector", expand_strings = true, signature = "_ui_get_selection(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_insert_at_cursor", params = ["string", "string", "string"], returns = "integer", description = "Wrap selection or insert at cursor: selector, beforeMarker, afterMarker; returns new cursor position", expand_strings = true, signature = "_ui_insert_at_cursor(selector, before, after) -> integer", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_text_diff", params = ["string", "string", "string"], returns = "integer", description = "Word-level LCS diff between two elements rendered into a third: selectorA, selectorB, selectorOut", expand_strings = true, signature = "_ui_text_diff(selectorA, selectorB, selectorOut) -> integer", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
 
   # Keyboard shortcuts
-  { name = "_ui_shortcut_register", params = ["string", "string", "string"], returns = "integer", description = "Register global keyboard shortcut: key descriptor (e.g. mod+shift+s), handler name, scope (global or CSS selector)", expand_strings = true, signature = "_ui_shortcut_register(keys, handlerName, scope)" },
-  { name = "_ui_shortcut_remove", params = ["integer"], returns = "void", description = "Remove keyboard shortcut by ID", signature = "_ui_shortcut_remove(id)" },
-  { name = "_ui_shortcut_clear", params = [], returns = "void", description = "Remove all keyboard shortcuts registered by this WASM instance", signature = "_ui_shortcut_clear()" },
+  { name = "_ui_shortcut_register", params = ["string", "string", "string"], returns = "integer", description = "Register global keyboard shortcut: key descriptor (e.g. mod+shift+s), handler name, scope (global or CSS selector)", expand_strings = true, signature = "_ui_shortcut_register(keys, handlerName, scope)", hosts = ["browser"] },
+  { name = "_ui_shortcut_remove", params = ["integer"], returns = "void", description = "Remove keyboard shortcut by ID", signature = "_ui_shortcut_remove(id)", hosts = ["browser"] },
+  { name = "_ui_shortcut_clear", params = [], returns = "void", description = "Remove all keyboard shortcuts registered by this WASM instance", signature = "_ui_shortcut_clear()", hosts = ["browser"] },
 
   # CSS variable runtime manipulation
-  { name = "_ui_set_css_var", params = ["string", "string"], returns = "void", description = "Set CSS custom property on :root: name, value", expand_strings = true, signature = "_ui_set_css_var(name, value)" },
-  { name = "_ui_set_css_var_on", params = ["string", "string", "string"], returns = "void", description = "Set CSS custom property on element matching selector: selector, name, value", expand_strings = true, signature = "_ui_set_css_var_on(selector, name, value)" },
-  { name = "_ui_get_css_var", params = ["string"], returns = "string", description = "Get computed value of CSS custom property from :root", expand_strings = true, signature = "_ui_get_css_var(name) -> string" },
-  { name = "_ui_apply_css_vars", params = ["string"], returns = "void", description = "Apply JSON object of CSS variable name→value pairs to :root", expand_strings = true, signature = "_ui_apply_css_vars(tokensJson)" },
+  { name = "_ui_set_css_var", params = ["string", "string"], returns = "void", description = "Set CSS custom property on :root: name, value", expand_strings = true, signature = "_ui_set_css_var(name, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_ui_set_css_var_on", params = ["string", "string", "string"], returns = "void", description = "Set CSS custom property on element matching selector: selector, name, value", expand_strings = true, signature = "_ui_set_css_var_on(selector, name, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_ui_get_css_var", params = ["string"], returns = "string", description = "Get computed value of CSS custom property from :root", expand_strings = true, signature = "_ui_get_css_var(name) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_apply_css_vars", params = ["string"], returns = "void", description = "Apply JSON object of CSS variable name→value pairs to :root", expand_strings = true, signature = "_ui_apply_css_vars(tokensJson)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
 
   # Focus management
-  { name = "_ui_focus", params = ["string"], returns = "void", description = "Call focus() on first element matching selector", expand_strings = true, signature = "_ui_focus(selector)" },
-  { name = "_ui_blur", params = ["string"], returns = "void", description = "Call blur() on first element matching selector", expand_strings = true, signature = "_ui_blur(selector)" },
-  { name = "_ui_get_focus", params = [], returns = "string", description = "Return CSS selector path of currently focused element, or empty string if body", signature = "_ui_get_focus() -> string" },
-  { name = "_ui_focus_trap", params = ["string"], returns = "integer", description = "Trap Tab/Shift+Tab focus within container matching selector; returns trap ID", expand_strings = true, signature = "_ui_focus_trap(selector)" },
-  { name = "_ui_focus_trap_release", params = ["integer"], returns = "void", description = "Release focus trap by ID and restore previously focused element", signature = "_ui_focus_trap_release(id)" },
+  { name = "_ui_focus", params = ["string"], returns = "void", description = "Call focus() on first element matching selector", expand_strings = true, signature = "_ui_focus(selector)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_ui_blur", params = ["string"], returns = "void", description = "Call blur() on first element matching selector", expand_strings = true, signature = "_ui_blur(selector)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_ui_get_focus", params = [], returns = "string", description = "Return CSS selector path of currently focused element, or empty string if body", signature = "_ui_get_focus() -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_focus_trap", params = ["string"], returns = "integer", description = "Trap Tab/Shift+Tab focus within container matching selector; returns trap ID", expand_strings = true, signature = "_ui_focus_trap(selector)", hosts = ["browser"] },
+  { name = "_ui_focus_trap_release", params = ["integer"], returns = "void", description = "Release focus trap by ID and restore previously focused element", signature = "_ui_focus_trap_release(id)", hosts = ["browser"] },
 
   # Browser storage
-  { name = "_storage_local_get", params = ["string"], returns = "string", description = "Get value from localStorage by key", expand_strings = true, signature = "_storage_local_get(key) -> string" },
-  { name = "_storage_local_set", params = ["string", "string"], returns = "void", description = "Set key-value pair in localStorage", expand_strings = true, signature = "_storage_local_set(key, value)" },
-  { name = "_storage_local_remove", params = ["string"], returns = "void", description = "Remove key from localStorage", expand_strings = true, signature = "_storage_local_remove(key)" },
-  { name = "_storage_local_clear", params = [], returns = "void", description = "Clear all entries in localStorage", signature = "_storage_local_clear()" },
-  { name = "_storage_session_get", params = ["string"], returns = "string", description = "Get value from sessionStorage by key", expand_strings = true, signature = "_storage_session_get(key) -> string" },
-  { name = "_storage_session_set", params = ["string", "string"], returns = "void", description = "Set key-value pair in sessionStorage", expand_strings = true, signature = "_storage_session_set(key, value)" },
-  { name = "_storage_session_remove", params = ["string"], returns = "void", description = "Remove key from sessionStorage", expand_strings = true, signature = "_storage_session_remove(key)" },
-  { name = "_storage_session_clear", params = [], returns = "void", description = "Clear all entries in sessionStorage", signature = "_storage_session_clear()" },
+  { name = "_storage_local_get", params = ["string"], returns = "string", description = "Get value from localStorage by key", expand_strings = true, signature = "_storage_local_get(key) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_storage_local_set", params = ["string", "string"], returns = "void", description = "Set key-value pair in localStorage", expand_strings = true, signature = "_storage_local_set(key, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_storage_local_remove", params = ["string"], returns = "void", description = "Remove key from localStorage", expand_strings = true, signature = "_storage_local_remove(key)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_storage_local_clear", params = [], returns = "void", description = "Clear all entries in localStorage", signature = "_storage_local_clear()", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_storage_session_get", params = ["string"], returns = "string", description = "Get value from sessionStorage by key", expand_strings = true, signature = "_storage_session_get(key) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_storage_session_set", params = ["string", "string"], returns = "void", description = "Set key-value pair in sessionStorage", expand_strings = true, signature = "_storage_session_set(key, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_storage_session_remove", params = ["string"], returns = "void", description = "Remove key from sessionStorage", expand_strings = true, signature = "_storage_session_remove(key)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
+  { name = "_storage_session_clear", params = [], returns = "void", description = "Clear all entries in sessionStorage", signature = "_storage_session_clear()", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub" },
 
   # File download trigger (client-side only)
-  { name = "_ui_download_text", params = ["string", "string", "string"], returns = "void", description = "Trigger browser download of text content: filename, content, mimeType", expand_strings = true, signature = "_ui_download_text(filename, content, mimeType)" },
-  { name = "_ui_download_url", params = ["string", "string"], returns = "void", description = "Trigger browser download from URL: url, filename", expand_strings = true, signature = "_ui_download_url(url, filename)" },
+  { name = "_ui_download_text", params = ["string", "string", "string"], returns = "void", description = "Trigger browser download of text content: filename, content, mimeType", expand_strings = true, signature = "_ui_download_text(filename, content, mimeType)", hosts = ["browser"] },
+  { name = "_ui_download_url", params = ["string", "string"], returns = "void", description = "Trigger browser download from URL: url, filename", expand_strings = true, signature = "_ui_download_url(url, filename)", hosts = ["browser"] },
 
   # Clipboard API (async with callbacks)
-  { name = "_ui_clipboard_write_cb", params = ["string", "string", "string"], returns = "void", description = "Write text to clipboard with callbacks: text, onSuccessHandler, onErrorHandler (empty string = no callback)", expand_strings = true, signature = "_ui_clipboard_write_cb(text, onSuccess, onError)" },
-  { name = "_ui_clipboard_read_cb", params = ["string", "string"], returns = "void", description = "Read text from clipboard with callbacks: onSuccessHandler, onErrorHandler", expand_strings = true, signature = "_ui_clipboard_read_cb(onSuccess, onError)" },
+  { name = "_ui_clipboard_write_cb", params = ["string", "string", "string"], returns = "void", description = "Write text to clipboard with callbacks: text, onSuccessHandler, onErrorHandler (empty string = no callback)", expand_strings = true, signature = "_ui_clipboard_write_cb(text, onSuccess, onError)", hosts = ["browser"] },
+  { name = "_ui_clipboard_read_cb", params = ["string", "string"], returns = "void", description = "Read text from clipboard with callbacks: onSuccessHandler, onErrorHandler", expand_strings = true, signature = "_ui_clipboard_read_cb(onSuccess, onError)", hosts = ["browser"] },
 
   # Resize and Intersection Observers
-  { name = "_ui_resize_observe", params = ["string", "string"], returns = "integer", description = "Observe element resize: selector, handler name; returns observer ID", expand_strings = true, signature = "_ui_resize_observe(selector, handlerName)" },
-  { name = "_ui_resize_unobserve", params = ["integer"], returns = "void", description = "Stop resize observation by ID", signature = "_ui_resize_unobserve(id)" },
-  { name = "_ui_intersect_observe", params = ["string", "string", "number"], returns = "integer", description = "Observe element intersection: selector, handler name, threshold (0.0–1.0); returns observer ID", expand_strings = true, signature = "_ui_intersect_observe(selector, handlerName, threshold)" },
-  { name = "_ui_intersect_unobserve", params = ["integer"], returns = "void", description = "Stop intersection observation by ID", signature = "_ui_intersect_unobserve(id)" },
+  { name = "_ui_resize_observe", params = ["string", "string"], returns = "integer", description = "Observe element resize: selector, handler name; returns observer ID", expand_strings = true, signature = "_ui_resize_observe(selector, handlerName)", hosts = ["browser"] },
+  { name = "_ui_resize_unobserve", params = ["integer"], returns = "void", description = "Stop resize observation by ID", signature = "_ui_resize_unobserve(id)", hosts = ["browser"] },
+  { name = "_ui_intersect_observe", params = ["string", "string", "number"], returns = "integer", description = "Observe element intersection: selector, handler name, threshold (0.0–1.0); returns observer ID", expand_strings = true, signature = "_ui_intersect_observe(selector, handlerName, threshold)", hosts = ["browser"] },
+  { name = "_ui_intersect_unobserve", params = ["integer"], returns = "void", description = "Stop intersection observation by ID", signature = "_ui_intersect_unobserve(id)", hosts = ["browser"] },
 
   # Toast / notification system
-  { name = "_ui_toast", params = ["string", "string", "integer", "string"], returns = "integer", description = "Show toast notification: text, variant (success|error|warning|info), duration ms (0=permanent), position; returns toast ID", expand_strings = true, signature = "_ui_toast(text, variant, duration, position)" },
-  { name = "_ui_toast_dismiss", params = ["integer"], returns = "void", description = "Dismiss toast by ID with exit animation", signature = "_ui_toast_dismiss(id)" },
-  { name = "_ui_toast_dismiss_all", params = [], returns = "void", description = "Dismiss all visible toasts", signature = "_ui_toast_dismiss_all()" },
+  { name = "_ui_toast", params = ["string", "string", "integer", "string"], returns = "integer", description = "Show toast notification: text, variant (success|error|warning|info), duration ms (0=permanent), position; returns toast ID", expand_strings = true, signature = "_ui_toast(text, variant, duration, position)", hosts = ["browser"] },
+  { name = "_ui_toast_dismiss", params = ["integer"], returns = "void", description = "Dismiss toast by ID with exit animation", signature = "_ui_toast_dismiss(id)", hosts = ["browser"] },
+  { name = "_ui_toast_dismiss_all", params = [], returns = "void", description = "Dismiss all visible toasts", signature = "_ui_toast_dismiss_all()", hosts = ["browser"] },
 
   # --- §14: Client-Side Navigation and History API ---
-  { name = "_ui_navigate", params = ["string"], returns = "void", description = "Navigate to path using soft routing (no full reload)", expand_strings = true, signature = "_ui_navigate(path)" },
-  { name = "_ui_history_push", params = ["string", "string"], returns = "void", description = "Push a new entry onto the history stack: path, title", expand_strings = true, signature = "_ui_history_push(path, title)" },
-  { name = "_ui_history_replace", params = ["string", "string"], returns = "void", description = "Replace the current history entry: path, title", expand_strings = true, signature = "_ui_history_replace(path, title)" },
-  { name = "_ui_history_back", params = [], returns = "void", description = "Navigate back in history (window.history.back)", signature = "_ui_history_back()" },
-  { name = "_ui_history_forward", params = [], returns = "void", description = "Navigate forward in history (window.history.forward)", signature = "_ui_history_forward()" },
-  { name = "_ui_current_path", params = [], returns = "string", description = "Return the current URL pathname + search string", signature = "_ui_current_path() -> string" },
+  { name = "_ui_navigate", params = ["string"], returns = "void", description = "Navigate to path using soft routing (no full reload)", expand_strings = true, signature = "_ui_navigate(path)", hosts = ["browser"] },
+  { name = "_ui_history_push", params = ["string", "string"], returns = "void", description = "Push a new entry onto the history stack: path, title", expand_strings = true, signature = "_ui_history_push(path, title)", hosts = ["browser"] },
+  { name = "_ui_history_replace", params = ["string", "string"], returns = "void", description = "Replace the current history entry: path, title", expand_strings = true, signature = "_ui_history_replace(path, title)", hosts = ["browser"] },
+  { name = "_ui_history_back", params = [], returns = "void", description = "Navigate back in history (window.history.back)", signature = "_ui_history_back()", hosts = ["browser"] },
+  { name = "_ui_history_forward", params = [], returns = "void", description = "Navigate forward in history (window.history.forward)", signature = "_ui_history_forward()", hosts = ["browser"] },
+  { name = "_ui_current_path", params = [], returns = "string", description = "Return the current URL pathname + search string", signature = "_ui_current_path() -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
 ]
 
 [language]
@@ -301,18 +301,18 @@ functions = [
   { name = "ui.queryRemoveClass", signature = "ui.queryRemoveClass(selector, className)", description = "Remove class from ALL matching elements", maps_to = "_ui_query_remove_class" },
 
   # --- §FEXT-1: Drag data transfer ---
-  { name = "_ui_set_drag_data", params = ["string", "string"], returns = "integer", description = "Set drag-and-drop transfer data: key, value", expand_strings = true, signature = "_ui_set_drag_data(key, value)" },
-  { name = "_ui_get_drag_data", params = ["string"], returns = "string", description = "Get drag-and-drop transfer data by key", expand_strings = true, signature = "_ui_get_drag_data(key) -> string" },
+  { name = "_ui_set_drag_data", params = ["string", "string"], returns = "integer", description = "Set drag-and-drop transfer data: key, value", expand_strings = true, signature = "_ui_set_drag_data(key, value)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_get_drag_data", params = ["string"], returns = "string", description = "Get drag-and-drop transfer data by key", expand_strings = true, signature = "_ui_get_drag_data(key) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
   { name = "ui.setDragData", signature = "ui.setDragData(key, value)", description = "Set drag transfer data", maps_to = "_ui_set_drag_data" },
   { name = "ui.getDragData", signature = "ui.getDragData(key) -> string", description = "Get drag transfer data by key", maps_to = "_ui_get_drag_data" },
 
   # --- §FEXT-2: DOM Query bridge functions (browser-only; server stubs return "") ---
-  { name = "_ui_get_bounds", params = ["string"], returns = "string", description = "Get bounding box of element matching selector (JSON: x,y,width,height,top,left,right,bottom)", expand_strings = true, signature = "_ui_get_bounds(selector) -> string" },
-  { name = "_ui_get_offset_bounds", params = ["string"], returns = "string", description = "Get bounding box relative to offset parent (JSON)", expand_strings = true, signature = "_ui_get_offset_bounds(selector) -> string" },
-  { name = "_ui_get_scroll", params = ["string"], returns = "string", description = "Get scroll position of element (JSON: scrollX,scrollY,scrollWidth,scrollHeight)", expand_strings = true, signature = "_ui_get_scroll(selector) -> string" },
-  { name = "_ui_set_scroll", params = ["string", "number", "number"], returns = "integer", description = "Set scroll position of element: selector, x, y", expand_strings = true, signature = "_ui_set_scroll(selector, x, y)" },
-  { name = "_ui_query_all", params = ["string"], returns = "string", description = "Query all elements matching selector; returns JSON array of CSS selector paths", expand_strings = true, signature = "_ui_query_all(selector) -> string" },
-  { name = "_ui_get_computed_style", params = ["string", "string"], returns = "string", description = "Get computed CSS property value: selector, property name", expand_strings = true, signature = "_ui_get_computed_style(selector, property) -> string" },
+  { name = "_ui_get_bounds", params = ["string"], returns = "string", description = "Get bounding box of element matching selector (JSON: x,y,width,height,top,left,right,bottom)", expand_strings = true, signature = "_ui_get_bounds(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_get_offset_bounds", params = ["string"], returns = "string", description = "Get bounding box relative to offset parent (JSON)", expand_strings = true, signature = "_ui_get_offset_bounds(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_get_scroll", params = ["string"], returns = "string", description = "Get scroll position of element (JSON: scrollX,scrollY,scrollWidth,scrollHeight)", expand_strings = true, signature = "_ui_get_scroll(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_set_scroll", params = ["string", "number", "number"], returns = "integer", description = "Set scroll position of element: selector, x, y", expand_strings = true, signature = "_ui_set_scroll(selector, x, y)", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "0" } },
+  { name = "_ui_query_all", params = ["string"], returns = "string", description = "Query all elements matching selector; returns JSON array of CSS selector paths", expand_strings = true, signature = "_ui_query_all(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
+  { name = "_ui_get_computed_style", params = ["string", "string"], returns = "string", description = "Get computed CSS property value: selector, property name", expand_strings = true, signature = "_ui_get_computed_style(selector, property) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
   { name = "ui.getBounds", signature = "ui.getBounds(selector) -> BoundsResult", description = "Get element bounding box", maps_to = "_ui_get_bounds" },
   { name = "ui.getOffsetBounds", signature = "ui.getOffsetBounds(selector) -> BoundsResult", description = "Get element bounding box relative to offset parent", maps_to = "_ui_get_offset_bounds" },
   { name = "ui.getScroll", signature = "ui.getScroll(selector) -> ScrollResult", description = "Get element scroll position", maps_to = "_ui_get_scroll" },
@@ -322,17 +322,17 @@ functions = [
   { name = "ui.getComputedStyle", signature = "ui.getComputedStyle(selector, property) -> string", description = "Get computed CSS property value", maps_to = "_ui_get_computed_style" },
 
   # --- §FEXT-3: iframe communication bridge (browser-only) ---
-  { name = "_ui_iframe_send", params = ["string", "string"], returns = "integer", description = "Send postMessage to iframe: selector, message string", expand_strings = true, signature = "_ui_iframe_send(selector, message)" },
-  { name = "_ui_iframe_on_message", params = ["string"], returns = "integer", description = "Register handler for incoming iframe postMessages: handler function name", expand_strings = true, signature = "_ui_iframe_on_message(handlerName)" },
-  { name = "_ui_iframe_get_bounds", params = ["string", "string"], returns = "string", description = "Get bounds of element inside iframe: iframe selector, inner selector (100ms timeout)", expand_strings = true, signature = "_ui_iframe_get_bounds(iframeSelector, innerSelector) -> string" },
-  { name = "_ui_iframe_inject", params = ["string", "string"], returns = "integer", description = "Inject script into iframe: selector, script string (returns 1=ok, 0=threw)", expand_strings = true, signature = "_ui_iframe_inject(selector, script)" },
+  { name = "_ui_iframe_send", params = ["string", "string"], returns = "integer", description = "Send postMessage to iframe: selector, message string", expand_strings = true, signature = "_ui_iframe_send(selector, message)", hosts = ["browser"] },
+  { name = "_ui_iframe_on_message", params = ["string"], returns = "integer", description = "Register handler for incoming iframe postMessages: handler function name", expand_strings = true, signature = "_ui_iframe_on_message(handlerName)", hosts = ["browser"] },
+  { name = "_ui_iframe_get_bounds", params = ["string", "string"], returns = "string", description = "Get bounds of element inside iframe: iframe selector, inner selector (100ms timeout)", expand_strings = true, signature = "_ui_iframe_get_bounds(iframeSelector, innerSelector) -> string", hosts = ["browser"] },
+  { name = "_ui_iframe_inject", params = ["string", "string"], returns = "integer", description = "Inject script into iframe: selector, script string (returns 1=ok, 0=threw)", expand_strings = true, signature = "_ui_iframe_inject(selector, script)", hosts = ["browser"] },
   { name = "ui.iframeSend", signature = "ui.iframeSend(selector, message)", description = "Send message to iframe via postMessage", maps_to = "_ui_iframe_send" },
   { name = "ui.iframeOnMessage", signature = "ui.iframeOnMessage(handler)", description = "Register handler for messages from iframes", maps_to = "_ui_iframe_on_message" },
   { name = "ui.iframeGetBounds", signature = "ui.iframeGetBounds(iframeSelector, innerSelector) -> BoundsResult", description = "Get bounds of element inside iframe", maps_to = "_ui_iframe_get_bounds" },
   { name = "ui.iframeInject", signature = "ui.iframeInject(selector, script) -> boolean", description = "Inject script into iframe", maps_to = "_ui_iframe_inject" },
 
   # --- §FEXT-5: Incremental DOM patching (browser-only; server is a no-op) ---
-  { name = "_ui_patch", params = ["string", "string"], returns = "integer", description = "Diff and incrementally patch DOM subtree: selector, new HTML (preserves focus, scroll, selection)", expand_strings = true, signature = "_ui_patch(selector, newHtml)" },
+  { name = "_ui_patch", params = ["string", "string"], returns = "integer", description = "Diff and incrementally patch DOM subtree: selector, new HTML (preserves focus, scroll, selection)", expand_strings = true, signature = "_ui_patch(selector, newHtml)", hosts = ["browser"] },
   { name = "ui.patch", signature = "ui.patch(selector, newHtml)", description = "Incrementally patch DOM subtree without full re-render", maps_to = "_ui_patch" },
 
   # --- Keyboard shortcuts ---
