@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.0"
+version = "2.12.1"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -539,3 +539,6 @@ name = "modal-confirm"
 use_when = "any destructive action (delete, deactivate, cancel subscription) triggered by a button click"
 anti_pattern = "triggering the destructive action immediately on click — always show a confirm modal first; users click the wrong button, and destructive actions must require explicit confirmation"
 example = "patterns/modal-confirm.cln"
+
+[build]
+built_with_compiler = "0.30.268"

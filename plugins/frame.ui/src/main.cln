@@ -130,10 +130,16 @@ functions:
 					string rec_hyd = rec_rest.substring(c2 + 1, rec_rest.length())
 					if rec_hyd != "off"
 						// Emit: <Class> instance_<tag-sanitized> = <Class>()
+						//       _ui_update_element("[data-island='<tag>']", instance.render())
 						//       instance_<tag-sanitized>.onMount()
 						// Tag has hyphens; replace with underscores for the Clean identifier.
+						// The _ui_update_element call populates the SSR-emitted wrapper
+						// (see render_component at main.cln:938-940 for the wrapper shape)
+						// with the client-rendered HTML before onMount fires, per the
+						// frame.ui lifecycle contract: onMount must see its DOM in place.
 						string instance_var = "instance_" + rec_tag.replace("-", "_")
 						statements = statements + rec_class + " " + instance_var + " = " + rec_class + "()\n"
+						statements = statements + "_ui_update_element(\"[data-island='" + rec_tag + "']\", " + instance_var + ".render())\n"
 						statements = statements + instance_var + ".onMount()\n"
 
 		// JSON-escape the statements payload for safe transport.
