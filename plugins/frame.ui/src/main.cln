@@ -2017,16 +2017,23 @@ functions:
 
 		return attrs.substring(quote_start + 1, quote_end)
 
-	// Normalize component events: block content to valid Clean Language class syntax.
-	// Translates events: → functions:, strips trailing : from function names (onMount(): → onMount()).
-	// Note: void return type is intentionally preserved so the compiler sees valid method declarations.
+	// Pass-through: events: is a first-class class section per
+	// foundation/spec/plugins/frame-ui.ebnf:99 (events_section), recognized
+	// by the compiler from 0.30.271 onward.
+	//
+	// Pre-0.30.271, this function transformed `events:` → `functions:` and
+	// stripped the trailing `:` from method signatures so the compiler (which
+	// didn't know about events:) would parse it as a regular functions: block.
+	// That transform lost the events: signal, which made bare-name export of
+	// event handlers impossible without the broken shim approach (v2.12.2,
+	// rolled back due to name-resolution recursion).
+	//
+	// Compiler 0.30.271 closes Gap 2: it recognizes events: as a class section,
+	// sets attributes.exported = true on each method, and emits a top-level
+	// WASM thunk per method with the bare name as export, dispatching through
+	// the singleton state-block global declared by expand_component.
 	string normalize_handlers(string content)
-		string result = content
-		result = result.replace("events:", "functions:")
-		result = result.replace("):\n", ")\n")
-		if result.endsWith("):")
-			result = result.substring(0, result.length() - 1)
-		return result
+		return content
 
 	// Removes "state." prefix from all occurrences in the string.
 	// state.field = value  →  field = value  (eliminates dot-access Assign nodes)

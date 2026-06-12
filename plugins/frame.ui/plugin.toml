@@ -1,12 +1,18 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.3"
+version = "2.12.4"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.15.0"
+# Bumped from 0.15.0 for HYDRATE_AUTO Gap 2: requires compiler with
+# events:-as-class-section recognition + bare-name thunk emission for
+# event_handler_function methods (per foundation/spec/plugins/frame-ui.ebnf:99),
+# plus PluginExpansion state-block propagation (was silently dropped in
+# wasm_adapter.rs:3271-3277 pre-0.30.269) and receiver-class-first method
+# resolution (0.30.270). All three layers ship in 0.30.271.
+min_compiler_version = "0.30.271"
 
 [lifecycle]
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
@@ -541,4 +547,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.268"
+built_with_compiler = "0.30.271"
