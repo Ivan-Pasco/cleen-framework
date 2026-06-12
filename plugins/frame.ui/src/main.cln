@@ -1970,44 +1970,29 @@ functions:
 			result = result + "\n\t\tstring renderSSR()\n"
 			result = result + ssr_body
 
-		// HYDRATE_AUTO Gap 2 — emit module-level instance + bare-named export shims.
+		// HYDRATE_AUTO Gap 1 — emit module-level instance global.
 		//
-		// For client-hydrated components, append at module scope:
-		//   1. A state: block declaring `<Class> instance_<tag-sanitized> = <Class>()`.
-		//      Initialized once per WASM module load (per page on client, per worker
-		//      on server). emit_ui_client_init's splice dispatches against this global.
-		//   2. A functions: block with one void shim per user event handler in events:.
-		//      Bare-named functions are exported by the compiler automatically, so
-		//      _ui_on_event(_, _, "fmt_bold") at runtime resolves to wasm.exports.fmt_bold,
-		//      which delegates to instance_<tag>.fmt_bold(). Lifecycle hooks are
-		//      excluded — onMount is invoked directly by client_init.
+		// For client-hydrated components, append a state: block at module scope:
+		//   <Class> instance_<tag-sanitized> = <Class>()
 		//
-		// Trade-offs and constraints (see foundation/spec/plugins/contracts/lifecycle.md
-		// §3.3 — client_init stays "statements only", no contract change needed):
-		//   - Handler names must be unique across the project. Duplicate event-handler
-		//     names in different components produce a duplicate-export error at codegen.
-		//   - On the server, the global is allocated but unused (SSR uses a local _comp
-		//     in render_component). One extra allocation per worker startup × N components.
+		// Initialized once per WASM module load (per page on client, per worker on
+		// server). emit_ui_client_init's splice dispatches against this global — it
+		// references instance_<tag> from the spliced _start body without redeclaring
+		// it, which sidesteps the splice-time variable-scoping bug observed when the
+		// constructor and onMount() are both in the slot output.
+		//
+		// Gap 2 (bare-name export of event-block methods) is NOT addressed here.
+		// Shim functions of the form `void fmt_bold() instance.fmt_bold()` were
+		// attempted in v2.12.2 and rolled back: the resolver picks the top-level
+		// fmt_bold for instance.fmt_bold() inside the shim body, producing infinite
+		// recursion. The fix per cross-component agreement is compiler-side:
+		// compiler recognizes events: as a class section and marks its methods
+		// attributes.exported = true. This plugin will stop transforming events:
+		// → functions: in normalize_handlers once that compiler support lands.
 		if tag != "" and client != "off"
 			string instance_var = "instance_" + tag.replace("-", "_")
 			result = result + "\nstate:\n"
 			result = result + "\t" + name + " " + instance_var + " = " + name + "()\n"
-
-			string handler_csv = extract_event_handler_names(body)
-			if handler_csv != ""
-				result = result + "\nfunctions:\n"
-				string remaining_h = handler_csv
-				while remaining_h.length() > 0
-					integer hc = remaining_h.indexOf(",")
-					string mname = ""
-					if hc == -1
-						mname = remaining_h
-						remaining_h = ""
-					else
-						mname = remaining_h.substring(0, hc)
-						remaining_h = remaining_h.substring(hc + 1, remaining_h.length())
-					result = result + "\tvoid " + mname + "()\n"
-					result = result + "\t\t" + instance_var + "." + mname + "()\n"
 
 		return result
 
@@ -2031,49 +2016,6 @@ functions:
 			return default_val
 
 		return attrs.substring(quote_start + 1, quote_end)
-
-	// Extract user event handler method names from the component body's events: block.
-	// Returns a comma-separated string of identifiers. Lifecycle hooks (onMount/onUnmount/
-	// onUpdate) are excluded — those are dispatched by client_init, not via _ui_on_event.
-	// Used by expand_component to emit top-level shim functions per HYDRATE_AUTO Gap 2.
-	string extract_event_handler_names(string s)
-		string result = ""
-		string reserved = ",onMount,onUnmount,onUpdate,"
-		string padded = "\n" + s
-		integer marker = padded.indexOf("\nevents:\n")
-		if marker == -1
-			return ""
-		integer scan = marker + 9
-		integer slen = padded.length()
-		integer in_block = 1
-		while in_block == 1
-			if scan >= slen
-				in_block = 0
-			else
-				string first_char = padded.substring(scan, scan + 1)
-				if first_char != "\t"
-					in_block = 0
-				else
-					integer nl = padded.indexOf("\n", scan)
-					if nl == -1
-						nl = slen
-					string second_char = ""
-					if scan + 1 < slen
-						second_char = padded.substring(scan + 1, scan + 2)
-					// Method-decl lines are one-tab; two-tab lines are method bodies.
-					if second_char != "\t"
-						string line = padded.substring(scan + 1, nl)
-						integer paren = line.indexOf("(")
-						if paren > 0 and line.endsWith("():")
-							string method_name = line.substring(0, paren)
-							if reserved.indexOf("," + method_name + ",") == -1
-								if result.indexOf("," + method_name + ",") == -1
-									if result == ""
-										result = method_name
-									else
-										result = result + "," + method_name
-					scan = nl + 1
-		return result
 
 	// Normalize component events: block content to valid Clean Language class syntax.
 	// Translates events: → functions:, strips trailing : from function names (onMount(): → onMount()).
