@@ -1,18 +1,20 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.4"
+version = "2.12.5"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-# Bumped from 0.15.0 for HYDRATE_AUTO Gap 2: requires compiler with
-# events:-as-class-section recognition + bare-name thunk emission for
-# event_handler_function methods (per foundation/spec/plugins/frame-ui.ebnf:99),
-# plus PluginExpansion state-block propagation (was silently dropped in
-# wasm_adapter.rs:3271-3277 pre-0.30.269) and receiver-class-first method
-# resolution (0.30.270). All three layers ship in 0.30.271.
-min_compiler_version = "0.30.271"
+# Restored from v2.12.4's 0.30.271 to v2.12.3's 0.15.0 because 0.30.271 does
+# NOT actually recognize events: as a class section despite the compiler team's
+# claim. v2.12.4 (which removed the events: → functions: transform on the
+# strength of that claim) broke every hydrated-component project — the parser
+# rejected `events:` inside the class body with SYN001 "Unsupported statement
+# type: Colon". v2.12.5 restores the transform; behavior matches v2.12.3.
+# Bump back to a real events:-supporting compiler version once it actually
+# ships (verified end-to-end with a minimal fixture, not just an internal claim).
+min_compiler_version = "0.15.0"
 
 [lifecycle]
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.

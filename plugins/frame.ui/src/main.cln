@@ -2017,23 +2017,28 @@ functions:
 
 		return attrs.substring(quote_start + 1, quote_end)
 
-	// Pass-through: events: is a first-class class section per
-	// foundation/spec/plugins/frame-ui.ebnf:99 (events_section), recognized
-	// by the compiler from 0.30.271 onward.
+	// Normalize component events: block content to valid Clean Language class syntax.
+	// Translates events: → functions:, strips trailing : from function names (onMount(): → onMount()).
+	// Note: void return type is intentionally preserved so the compiler sees valid method declarations.
 	//
-	// Pre-0.30.271, this function transformed `events:` → `functions:` and
-	// stripped the trailing `:` from method signatures so the compiler (which
-	// didn't know about events:) would parse it as a regular functions: block.
-	// That transform lost the events: signal, which made bare-name export of
-	// event handlers impossible without the broken shim approach (v2.12.2,
-	// rolled back due to name-resolution recursion).
-	//
-	// Compiler 0.30.271 closes Gap 2: it recognizes events: as a class section,
-	// sets attributes.exported = true on each method, and emits a top-level
-	// WASM thunk per method with the bare name as export, dispatching through
-	// the singleton state-block global declared by expand_component.
+	// v2.12.4 attempted to remove this transform on the compiler team's claim that
+	// 0.30.271 recognized events: as a class section. End-to-end verification with
+	// a minimal fixture (single component: block with events: containing fmt_bold,
+	// fmt_italic, do_thing) compiled against 0.30.271 reproduced:
+	//   error[SYN001]: Plugin 'frame.ui' failed to expand 'component:':
+	//   Failed to parse plugin output: Syntax error: Unsupported statement type: Colon
+	//   at <plugin-output>:11:13
+	// The compiler hits `events:` inside the class body and rejects the colon —
+	// events:-section recognition is NOT shipped despite the claim. v2.12.5
+	// restores the transform so projects with hydrated components compile again.
+	// Gap 2 reopens until the compiler actually ships events: parser support.
 	string normalize_handlers(string content)
-		return content
+		string result = content
+		result = result.replace("events:", "functions:")
+		result = result.replace("):\n", ")\n")
+		if result.endsWith("):")
+			result = result.substring(0, result.length() - 1)
+		return result
 
 	// Removes "state." prefix from all occurrences in the string.
 	// state.field = value  →  field = value  (eliminates dot-access Assign nodes)
