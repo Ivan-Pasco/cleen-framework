@@ -1829,74 +1829,11 @@ functions:
 		result = result + "html = html + \"<script src='/loader.js' data-wasm='/frontend.wasm'></script>\"\n"
 		return result
 
-	// Detect YAML-style attribute usage in a component body — a line matching
-	// `<keyword>: "value"` (with optional leading whitespace). The compiler's
-	// inline-attribute extractor only reads attrs from the opening line, so
-	// such lines are silently swallowed into the body and produce confusing
-	// downstream failures (empty class names, empty build_state, no
-	// frontend.wasm). Used by expand_component to fail loudly with a clear
-	// fix suggestion instead of silently producing a generic Component.
-	boolean body_has_yaml_attr(string body, string keyword)
-		string remaining = body
-		integer safety = 0
-		while remaining.length() > 0 and safety < 500
-			safety = safety + 1
-			integer nl = remaining.indexOf("\n")
-			string line = ""
-			if nl == -1
-				line = remaining
-				remaining = ""
-			else
-				line = remaining.substring(0, nl)
-				remaining = remaining.substring(nl + 1, remaining.length())
-			integer lead = 0
-			while line.length() > 0 and lead < 100
-				string c = line.substring(0, 1)
-				if c == " " or c == "\t"
-					line = line.substring(1, line.length())
-					lead = lead + 1
-				else
-					lead = 100
-			if line.length() >= keyword.length() + 2
-				string head = line.substring(0, keyword.length())
-				if head == keyword
-					string sep = line.substring(keyword.length(), keyword.length() + 1)
-					if sep == ":"
-						string rest = line.substring(keyword.length() + 1, line.length())
-						integer rlead = 0
-						while rest.length() > 0 and rlead < 100
-							string rc = rest.substring(0, 1)
-							if rc == " " or rc == "\t"
-								rest = rest.substring(1, rest.length())
-								rlead = rlead + 1
-							else
-								rlead = 100
-						if rest.length() > 0
-							string first_char = rest.substring(0, 1)
-							if first_char == "\""
-								return true
-		return false
-
 	// Expand component block (Clean syntax for component definitions)
 	string expand_component(string attrs, string body)
 		string tag = get_attr(attrs, "tag", "")
 		string name = get_attr(attrs, "name", "")
 		string client = get_attr(attrs, "client", "off")
-
-		// DIAGNOSTIC v2.12.13: unconditional error to probe whether expand_component
-		// is being invoked at all for `component:` (no-inline) blocks. Will be
-		// reverted after the diagnostic completes.
-		return "\"FRAME_UI_DIAG_v2_12_13: expand_component reached for this block.\""
-
-		// DIAGNOSTIC v2.12.12: simplified detection. If this fires, the previous
-		// body_has_yaml_attr had a bug. If it does not fire, expand_component
-		// is not being called for `component:` (no-inline) blocks.
-		if tag == "" and body.indexOf("tag:") != -1
-			return "\"FRAME_UI_ERROR: component 'tag' must be inline on the opening line, not a sub-line. Use: component: tag=\\\"my-toolbar\\\" instead of placing tag: \\\"my-toolbar\\\" on the next line.\""
-		if name == "" and body.indexOf("name:") != -1
-			return "\"FRAME_UI_ERROR: component 'name' must be inline on the opening line, not a sub-line. Use: component: name=\\\"MyComponent\\\" instead of placing name: \\\"MyComponent\\\" on the next line.\""
-		if client == "off" and body.indexOf("client:") != -1
-			return "\"FRAME_UI_ERROR: component 'client' must be inline on the opening line, not a sub-line. Use: component: client=\\\"on\\\" instead of placing client: \\\"on\\\" on the next line.\""
 
 		// Use tag to derive name if not provided
 		if name == "" and tag != ""
