@@ -568,6 +568,65 @@ functions:
 		result = result + "\"\n"
 		return result
 
+	// True if c is a decimal digit.
+	boolean is_digit_char(string c)
+		if c == "0" or c == "1" or c == "2" or c == "3" or c == "4"
+			return true
+		if c == "5" or c == "6" or c == "7" or c == "8" or c == "9"
+			return true
+		return false
+
+	// True if s (after trimming) starts with a numeric literal — a digit, or
+	// `-` followed by a digit. Used to detect when the RHS of a cl-if/cl-show
+	// comparison is a number, so we can apply the .toInteger() unbox workaround.
+	boolean is_numeric_literal(string s)
+		string trimmed = s.trim()
+		if trimmed.length() == 0
+			return false
+		string first = trimmed.substring(0, 1)
+		if first == "-"
+			if trimmed.length() < 2
+				return false
+			return is_digit_char(trimmed.substring(1, 2))
+		return is_digit_char(first)
+
+	// Find the leftmost binary comparison operator in expr. Longer operators
+	// are checked first so `>=` does not match as `>`. Returns "" if none.
+	string find_compare_op(string expr)
+		if expr.indexOf("==") != -1
+			return "=="
+		if expr.indexOf("!=") != -1
+			return "!="
+		if expr.indexOf(">=") != -1
+			return ">="
+		if expr.indexOf("<=") != -1
+			return "<="
+		if expr.indexOf(">") != -1
+			return ">"
+		if expr.indexOf("<") != -1
+			return "<"
+		return ""
+
+	// Side-step the compiler bug where `<any>.field <op> <int_literal>`
+	// compares the boxed any-pointer to the integer literal instead of the
+	// unboxed value. Detection: expr is `<lhs> <op> <numeric_literal>`.
+	// Rewrite: insert `.toInteger()` between lhs and op so the field access
+	// goes through the explicit unbox path (which the compiler emits
+	// correctly). All other shapes (truthy checks, string equality,
+	// variable-to-variable comparisons) are left untouched.
+	string rewrite_any_int_compare(string expr)
+		string op = find_compare_op(expr)
+		if op == ""
+			return expr
+		integer pos = expr.indexOf(op)
+		string lhs = expr.substring(0, pos).trim()
+		string rhs = expr.substring(pos + op.length(), expr.length()).trim()
+		if not is_numeric_literal(rhs)
+			return expr
+		if lhs.length() == 0
+			return expr
+		return lhs + ".toInteger() " + op + " " + rhs
+
 	// Process an HTML element
 	string process_element(string tag_content, string inner_html, string registry_json, boolean has_data)
 		string tag_name = extract_tag_name(tag_content)
@@ -583,12 +642,16 @@ functions:
 
 		string result = ""
 
-		// Handle cl-if directive — prefix condition with data. when has_data
+		// Handle cl-if directive — prefix condition with data. when has_data.
+		// Closes UI-CLIF-ZERO: rewrite `<field> <op> <int_literal>` to use
+		// `.toInteger()` so the comparison goes through the unbox path
+		// instead of comparing the boxed any-pointer to the literal 0.
 		if if_attr != ""
+			string if_expr = rewrite_any_int_compare(if_attr)
 			if has_data
-				result = result + "if data." + if_attr + "\n"
+				result = result + "if data." + if_expr + "\n"
 			else
-				result = result + "if " + if_attr + "\n"
+				result = result + "if " + if_expr + "\n"
 			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 			return result
 
@@ -613,11 +676,14 @@ functions:
 				return result
 
 		// Handle cl-show directive — always renders element but controls CSS display
-		// When expr is truthy: render normally; when falsy: render with style="display:none"
+		// When expr is truthy: render normally; when falsy: render with style="display:none".
+		// Same UI-CLIF-ZERO workaround as cl-if: numeric-literal comparisons
+		// route through .toInteger() so the unboxed value is compared.
 		if show_attr != ""
-			string show_expr = show_attr
+			string show_attr_rewritten = rewrite_any_int_compare(show_attr)
+			string show_expr = show_attr_rewritten
 			if has_data
-				show_expr = "data." + show_attr
+				show_expr = "data." + show_attr_rewritten
 			result = result + "if " + show_expr + "\n"
 			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
 			result = result + "else\n"
