@@ -1883,19 +1883,14 @@ functions:
 		string name = get_attr(attrs, "name", "")
 		string client = get_attr(attrs, "client", "off")
 
-		// Detect YAML-style attribute misuse — component attrs must be inline
-		// on the opening line. Without this guard, a body containing
-		// `tag: "..."` instead of `component: tag="..."` silently produces
-		// empty attrs, an empty build_state keystore, and no frontend.wasm.
-		// Emit a top-level Clean string literal that the parser surfaces
-		// verbatim in SYN001 — the compiler doesn't yet honor the plugin
-		// contract §5.3 JSON error form, so a string-literal payload is the
-		// most legible way to surface the diagnostic today.
-		if tag == "" and body_has_yaml_attr(body, "tag")
+		// DIAGNOSTIC v2.12.12: simplified detection. If this fires, the previous
+		// body_has_yaml_attr had a bug. If it does not fire, expand_component
+		// is not being called for `component:` (no-inline) blocks.
+		if tag == "" and body.indexOf("tag:") != -1
 			return "\"FRAME_UI_ERROR: component 'tag' must be inline on the opening line, not a sub-line. Use: component: tag=\\\"my-toolbar\\\" instead of placing tag: \\\"my-toolbar\\\" on the next line.\""
-		if name == "" and body_has_yaml_attr(body, "name")
+		if name == "" and body.indexOf("name:") != -1
 			return "\"FRAME_UI_ERROR: component 'name' must be inline on the opening line, not a sub-line. Use: component: name=\\\"MyComponent\\\" instead of placing name: \\\"MyComponent\\\" on the next line.\""
-		if client == "off" and body_has_yaml_attr(body, "client")
+		if client == "off" and body.indexOf("client:") != -1
 			return "\"FRAME_UI_ERROR: component 'client' must be inline on the opening line, not a sub-line. Use: component: client=\\\"on\\\" instead of placing client: \\\"on\\\" on the next line.\""
 
 		// Use tag to derive name if not provided
