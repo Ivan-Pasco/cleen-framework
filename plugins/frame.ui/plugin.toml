@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.9"
+version = "2.12.10"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -551,4 +551,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.275"
+built_with_compiler = "0.30.277"
