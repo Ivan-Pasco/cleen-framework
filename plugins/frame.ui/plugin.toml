@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.7"
+version = "2.12.8"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -16,7 +16,7 @@ license = "MIT"
 # With this floor in place, normalize_handlers can safely pass events: through
 # to the compiler. End-to-end verified locally: 4-handler events: block produces
 # 4 bare-name exports in frontend.wasm.
-min_compiler_version = "0.30.273"
+min_compiler_version = "0.30.275"
 
 [lifecycle]
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
@@ -50,7 +50,7 @@ name            = "frontend.wasm"
 purpose         = "client_hydration"
 emit            = { from_module = "client_only_build" }
 output_relative = "{output_dir}/frontend.wasm"
-required_when   = "has_client_init"
+required_when   = "has_build_state.frame.ui:components"
 public          = true
 content_type    = "application/wasm"
 
@@ -551,4 +551,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.273"
+built_with_compiler = "0.30.275"
