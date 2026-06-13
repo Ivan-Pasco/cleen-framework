@@ -1500,15 +1500,23 @@
 
 			// ========== §SERVER-GUARD: Server-only bridge stubs ==========
 			// These functions are server-only (frame.server, frame.data, frame.auth,
-			// frame.jobs, frame.mcp, frame.locale). They appear as WASM imports when
-			// server-side modules (app/logic/, app/data/models/, app/state/) are
-			// incorrectly included in the client build due to compiler tree-shaking
-			// limitations (CLIENT_PULLS_SERVER). Providing stubs here allows
-			// WebAssembly.instantiate to succeed; if any stub is actually called at
-			// runtime, it throws a clear diagnostic error.
+			// frame.jobs, frame.mcp, frame.locale, and frame.ui SSR). They appear as
+			// WASM imports when server-side modules (app/logic/, app/data/models/,
+			// app/state/) are incorrectly included in the client build due to compiler
+			// tree-shaking limitations (CLIENT_PULLS_SERVER). Providing stubs here
+			// allows WebAssembly.instantiate to succeed; if any stub is actually called
+			// at runtime, it throws a clear diagnostic error.
 			...((() => {
 				const _sg = (n) => () => { throw new Error(`[Frame] '${n}' is server-only and cannot run in the browser. A server-side module was incorrectly included in the client WASM build (CLIENT_PULLS_SERVER).`); };
 				return {
+					// frame.ui — server-only SSR rendering (hosts = ["server"])
+					// _ui_render_page is declared in plugin.toml with hosts=["server"] and has
+					// no browser implementation. When CLIENT_PULLS_SERVER pulls the preamble
+					// SSR helpers (render/renderWith) into the client build, this import appears
+					// in frontend.wasm and causes a WebAssembly.instantiate LinkError without
+					// this stub. Fixed in v2.12.9.
+					_ui_render_page: _sg('_ui_render_page'),
+
 					// frame.server — routing & response
 					_http_listen: _sg('_http_listen'),
 					_http_route: _sg('_http_route'),
