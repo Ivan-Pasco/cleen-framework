@@ -1883,6 +1883,11 @@ functions:
 		string name = get_attr(attrs, "name", "")
 		string client = get_attr(attrs, "client", "off")
 
+		// DIAGNOSTIC v2.12.13: unconditional error to probe whether expand_component
+		// is being invoked at all for `component:` (no-inline) blocks. Will be
+		// reverted after the diagnostic completes.
+		return "\"FRAME_UI_DIAG_v2_12_13: expand_component reached for this block.\""
+
 		// DIAGNOSTIC v2.12.12: simplified detection. If this fires, the previous
 		// body_has_yaml_attr had a bug. If it does not fire, expand_component
 		// is not being called for `component:` (no-inline) blocks.
