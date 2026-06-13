@@ -1887,13 +1887,16 @@ functions:
 		// on the opening line. Without this guard, a body containing
 		// `tag: "..."` instead of `component: tag="..."` silently produces
 		// empty attrs, an empty build_state keystore, and no frontend.wasm.
-		// Surface a clear error per plugin-contract §5.3 (error JSON form).
+		// Emit a top-level Clean string literal that the parser surfaces
+		// verbatim in SYN001 — the compiler doesn't yet honor the plugin
+		// contract §5.3 JSON error form, so a string-literal payload is the
+		// most legible way to surface the diagnostic today.
 		if tag == "" and body_has_yaml_attr(body, "tag")
-			return "{\"error\": \"component: 'tag' must be inline on the opening line, not a sub-line. Use `component: tag=\\\"my-toolbar\\\"` instead of `component:` followed by `tag: \\\"my-toolbar\\\"` on the next line.\"}"
+			return "\"FRAME_UI_ERROR: component 'tag' must be inline on the opening line, not a sub-line. Use: component: tag=\\\"my-toolbar\\\" instead of placing tag: \\\"my-toolbar\\\" on the next line.\""
 		if name == "" and body_has_yaml_attr(body, "name")
-			return "{\"error\": \"component: 'name' must be inline on the opening line, not a sub-line. Use `component: name=\\\"MyComponent\\\"` instead of `component:` followed by `name: \\\"MyComponent\\\"` on the next line.\"}"
+			return "\"FRAME_UI_ERROR: component 'name' must be inline on the opening line, not a sub-line. Use: component: name=\\\"MyComponent\\\" instead of placing name: \\\"MyComponent\\\" on the next line.\""
 		if client == "off" and body_has_yaml_attr(body, "client")
-			return "{\"error\": \"component: 'client' must be inline on the opening line, not a sub-line. Use `component: client=\\\"on\\\"` instead of `component:` followed by `client: \\\"on\\\"` on the next line.\"}"
+			return "\"FRAME_UI_ERROR: component 'client' must be inline on the opening line, not a sub-line. Use: component: client=\\\"on\\\" instead of placing client: \\\"on\\\" on the next line.\""
 
 		// Use tag to derive name if not provided
 		if name == "" and tag != ""
