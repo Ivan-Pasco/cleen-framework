@@ -206,3 +206,6 @@ name = "csrf-protection"
 use_when = "any server-rendered form that mutates state (login, settings, payments)"
 anti_pattern = "no CSRF protection on POST endpoints — a third-party site can submit a form as the logged-in user; generate a token with auth.csrf.generate(), embed it in the form, and validate with auth.csrf.validate() on every mutation"
 example = "patterns/csrf-protection.cln"
+
+[build]
+built_with_compiler = "0.30.273"

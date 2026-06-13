@@ -118,3 +118,6 @@ name = "basic-tools"
 use_when = "building computation tools, greeting generators, or tools that don't need a database"
 anti_pattern = "adding unnecessary database queries just to follow a pattern — keep tool bodies simple when no data persistence is needed"
 example = "patterns/basic-tools.cln"
+
+[build]
+built_with_compiler = "0.30.273"

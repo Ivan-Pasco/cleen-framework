@@ -372,3 +372,6 @@ name = "live-feed-realtime"
 use_when = "browser needs real-time updates — two-way (LIVE) or server-push (FEED)"
 anti_pattern = "polling the server with repeated GET requests on a timer — use LIVE for two-way connections, FEED for one-way server push"
 example = "patterns/live-feed-realtime.cln"
+
+[build]
+built_with_compiler = "0.30.273"

@@ -245,3 +245,6 @@ name = "tree-structure"
 use_when = "data has a parent-child hierarchy: categories, menus, org charts, comment threads"
 anti_pattern = "recursive self-joins at query time for deep trees — use parent_id for shallow trees (≤3 levels); for deep trees use a closure table (separate ancestor/descendant pairs table)"
 example = "patterns/tree-structure.cln"
+
+[build]
+built_with_compiler = "0.30.273"

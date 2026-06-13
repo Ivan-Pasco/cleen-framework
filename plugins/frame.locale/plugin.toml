@@ -88,3 +88,6 @@ name = "locale-aware-formatting"
 use_when = "displaying prices, statistics, or dates that must match the user's regional formatting conventions"
 anti_pattern = "hardcoding number formatting (e.g. '$' + price.toString()) — different locales use different decimal separators, grouping symbols, and currency placement. Use locale.formatCurrency(), locale.formatNumber(), locale.formatDate()."
 example = "patterns/locale-aware-formatting.cln"
+
+[build]
+built_with_compiler = "0.30.273"

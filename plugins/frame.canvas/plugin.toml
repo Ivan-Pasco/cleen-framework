@@ -780,3 +780,6 @@ name = "parallax-layers"
 use_when = "a scrolling background with depth (side-scrollers, endless runners, space shooters)"
 anti_pattern = "drawing all background layers at the same scroll speed — layers at different depths must scroll at different speeds (far = slow, near = fast) to create the illusion of depth; use layers: with different scroll multipliers"
 example = "patterns/parallax-layers.cln"
+
+[build]
+built_with_compiler = "0.30.273"

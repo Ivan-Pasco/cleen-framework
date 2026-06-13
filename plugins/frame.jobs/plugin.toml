@@ -110,3 +110,6 @@ name = "scheduled-cleanup"
 use_when = "recurring maintenance tasks (expiring sessions, archiving old records, sending weekly digests)"
 anti_pattern = "triggering cleanup from a user-facing endpoint with a cron-like timer check — that ties cleanup to traffic and fails silently when the endpoint is not called. Use schedule instead."
 example = "patterns/scheduled-cleanup.cln"
+
+[build]
+built_with_compiler = "0.30.273"
