@@ -1,20 +1,22 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.5"
+version = "2.12.6"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-# Restored from v2.12.4's 0.30.271 to v2.12.3's 0.15.0 because 0.30.271 does
-# NOT actually recognize events: as a class section despite the compiler team's
-# claim. v2.12.4 (which removed the events: → functions: transform on the
-# strength of that claim) broke every hydrated-component project — the parser
-# rejected `events:` inside the class body with SYN001 "Unsupported statement
-# type: Colon". v2.12.5 restores the transform; behavior matches v2.12.3.
-# Bump back to a real events:-supporting compiler version once it actually
-# ships (verified end-to-end with a minimal fixture, not just an internal claim).
-min_compiler_version = "0.15.0"
+# Bumped to 0.30.273 for HYDRATE_AUTO Gap 2 closure. Requires the compiler to:
+#   1. Recognize events: as a class-body section (shipped in 0.30.271 — earlier
+#      claim was correct; my misread of a stale install state caused the v2.12.5
+#      rollback panic).
+#   2. Tag each events:-method's compiler-synthesized bare-name thunk with
+#      PLUGIN_OUTPUT_V2_ROOT_MARKER so it survives BFS exclusion + DCE. Shipped
+#      in 0.30.273 — the actual gap the verification protocol caught.
+# With this floor in place, normalize_handlers can safely pass events: through
+# to the compiler. End-to-end verified locally: 4-handler events: block produces
+# 4 bare-name exports in frontend.wasm.
+min_compiler_version = "0.30.273"
 
 [lifecycle]
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
@@ -549,4 +551,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.271"
+built_with_compiler = "0.30.273"

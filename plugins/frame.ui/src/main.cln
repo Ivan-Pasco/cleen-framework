@@ -2017,28 +2017,32 @@ functions:
 
 		return attrs.substring(quote_start + 1, quote_end)
 
-	// Normalize component events: block content to valid Clean Language class syntax.
-	// Translates events: → functions:, strips trailing : from function names (onMount(): → onMount()).
-	// Note: void return type is intentionally preserved so the compiler sees valid method declarations.
+	// Pass-through: events: is a first-class class section per
+	// foundation/spec/plugins/frame-ui.ebnf:99 (events_section), recognized as a
+	// class-body production by the compiler from 0.30.271 onward, with event-handler
+	// methods emitted as bare-name top-level WASM thunks from 0.30.273 onward.
 	//
-	// v2.12.4 attempted to remove this transform on the compiler team's claim that
-	// 0.30.271 recognized events: as a class section. End-to-end verification with
-	// a minimal fixture (single component: block with events: containing fmt_bold,
-	// fmt_italic, do_thing) compiled against 0.30.271 reproduced:
-	//   error[SYN001]: Plugin 'frame.ui' failed to expand 'component:':
-	//   Failed to parse plugin output: Syntax error: Unsupported statement type: Colon
-	//   at <plugin-output>:11:13
-	// The compiler hits `events:` inside the class body and rejects the colon —
-	// events:-section recognition is NOT shipped despite the claim. v2.12.5
-	// restores the transform so projects with hydrated components compile again.
-	// Gap 2 reopens until the compiler actually ships events: parser support.
+	// History:
+	//   v2.12.3 — transformed events: → functions: so the pre-0.30.271 compiler
+	//             would parse the class body. Event handlers became regular class
+	//             methods, name-mangled, not bare-exported. Gap 2 open.
+	//   v2.12.4 — first pass-through attempt. Plugin output parsed correctly under
+	//             0.30.271, but the compiler's thunk-emission step inherited the
+	//             PLUGIN_OUTPUT_MARKER from the source method's location and DCE
+	//             dropped the thunks. Net: only onMount exported (reachable from
+	//             _start via the splice). The verification we ran caught this gap.
+	//   v2.12.5 — rolled the transform back. Functionally identical to v2.12.4 on
+	//             the export-table outcome; restored only because the earlier
+	//             SYN001 observation was misread as a compilation break.
+	//   v2.12.6 — this version. Compiler 0.30.273 tags the synthesized thunks with
+	//             PLUGIN_OUTPUT_V2_ROOT_MARKER (the same explicit-root mechanism
+	//             frame.server preamble helpers use), bypassing both BFS exclusion
+	//             and DCE removal. With this plugin's pass-through, a 4-handler
+	//             events: block produces 4 bare-name exports in frontend.wasm.
+	//             Gap 2 closed end-to-end. Verified locally before tagging this
+	//             time (cln compile --plugins → wasm-objdump --section Export).
 	string normalize_handlers(string content)
-		string result = content
-		result = result.replace("events:", "functions:")
-		result = result.replace("):\n", ")\n")
-		if result.endsWith("):")
-			result = result.substring(0, result.length() - 1)
-		return result
+		return content
 
 	// Removes "state." prefix from all occurrences in the string.
 	// state.field = value  →  field = value  (eliminates dot-access Assign nodes)
