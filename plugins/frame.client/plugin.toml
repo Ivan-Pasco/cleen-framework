@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.client"
-version = "1.2.0"
+version = "1.2.1"
 description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, SSE feeds, and declarative blocks (load:, form:, send:)"
 author = "Clean Language Team"
 license = "MIT"
@@ -15,50 +15,58 @@ blocks = ["load", "form", "send"]
 expand = "expand_block"
 get_keywords = "get_keywords"
 
+# Bridge function declarations
+#
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §2.
+# Every bridge in frame.client is browser-only. The `api.*`, `live.*`, and
+# `feed.*` namespaces are explicit replacements for the browser-side primitives
+# (fetch, WebSocket, EventSource); they have no meaning on the server. Tag
+# every entry `hosts = ["browser"]` so server-mode builds that mistakenly pull
+# them in fail with a clean BRIDGE-HOST-MISMATCH instead of a runtime LinkError.
 [bridge]
 functions = [
   # ========== API: HTTP Requests ==========
-  { name = "_api_get", params = ["string", "string"], returns = "integer", description = "GET request: url, response handler name (exported function)", expand_strings = true },
-  { name = "_api_post", params = ["string", "string", "string"], returns = "integer", description = "POST request: url, body, response handler name", expand_strings = true },
-  { name = "_api_put", params = ["string", "string", "string"], returns = "integer", description = "PUT request: url, body, response handler name", expand_strings = true },
-  { name = "_api_patch", params = ["string", "string", "string"], returns = "integer", description = "PATCH request: url, body, response handler name", expand_strings = true },
-  { name = "_api_delete", params = ["string", "string"], returns = "integer", description = "DELETE request: url, response handler name", expand_strings = true },
-  { name = "_api_header", params = ["string", "string"], returns = "integer", description = "Set header for next request: name, value", expand_strings = true },
-  { name = "_api_timeout", params = ["integer"], returns = "integer", description = "Set timeout in ms for next request" },
-  { name = "_api_auth", params = ["string", "string"], returns = "integer", description = "Set auth for all requests: scheme (bearer/basic), credential", expand_strings = true },
-  { name = "_api_clearAuth", params = [], returns = "integer", description = "Clear stored auth credentials" },
-  { name = "_api_submit", params = ["string", "string", "string", "string"], returns = "integer", description = "Collect form JSON + send: form selector, url, method, response handler name", expand_strings = true },
+  { name = "_api_get", params = ["string", "string"], returns = "integer", description = "GET request: url, response handler name (exported function)", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_post", params = ["string", "string", "string"], returns = "integer", description = "POST request: url, body, response handler name", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_put", params = ["string", "string", "string"], returns = "integer", description = "PUT request: url, body, response handler name", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_patch", params = ["string", "string", "string"], returns = "integer", description = "PATCH request: url, body, response handler name", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_delete", params = ["string", "string"], returns = "integer", description = "DELETE request: url, response handler name", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_header", params = ["string", "string"], returns = "integer", description = "Set header for next request: name, value", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_timeout", params = ["integer"], returns = "integer", description = "Set timeout in ms for next request", hosts = ["browser"] },
+  { name = "_api_auth", params = ["string", "string"], returns = "integer", description = "Set auth for all requests: scheme (bearer/basic), credential", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_clearAuth", params = [], returns = "integer", description = "Clear stored auth credentials", hosts = ["browser"] },
+  { name = "_api_submit", params = ["string", "string", "string", "string"], returns = "integer", description = "Collect form JSON + send: form selector, url, method, response handler name", expand_strings = true, hosts = ["browser"] },
 
   # ========== API: Response Context ==========
-  { name = "_api_status", params = [], returns = "integer", description = "HTTP status code (0 = network error)" },
-  { name = "_api_body", params = [], returns = "string", description = "Response body as string" },
-  { name = "_api_ok", params = [], returns = "integer", description = "1 if status 200-299, 0 otherwise" },
-  { name = "_api_json", params = ["string"], returns = "string", description = "Extract value from JSON response via dot-notation path", expand_strings = true },
-  { name = "_api_responseHeader", params = ["string"], returns = "string", description = "Get response header value", expand_strings = true },
+  { name = "_api_status", params = [], returns = "integer", description = "HTTP status code (0 = network error)", hosts = ["browser"] },
+  { name = "_api_body", params = [], returns = "string", description = "Response body as string", hosts = ["browser"] },
+  { name = "_api_ok", params = [], returns = "integer", description = "1 if status 200-299, 0 otherwise", hosts = ["browser"] },
+  { name = "_api_json", params = ["string"], returns = "string", description = "Extract value from JSON response via dot-notation path", expand_strings = true, hosts = ["browser"] },
+  { name = "_api_responseHeader", params = ["string"], returns = "string", description = "Get response header value", expand_strings = true, hosts = ["browser"] },
 
   # ========== Live: WebSocket ==========
-  { name = "_live_open", params = ["string", "string", "string", "string"], returns = "integer", description = "Open WebSocket: url, onMessage handler name, onClose handler name, onError handler name. Returns connection ID.", expand_strings = true },
-  { name = "_live_send", params = ["integer", "string"], returns = "integer", description = "Send message: connId, message", expand_strings = true },
-  { name = "_live_close", params = ["integer"], returns = "integer", description = "Close connection: connId" },
-  { name = "_live_state", params = ["integer"], returns = "string", description = "Connection state: connecting, open, closing, closed" },
+  { name = "_live_open", params = ["string", "string", "string", "string"], returns = "integer", description = "Open WebSocket: url, onMessage handler name, onClose handler name, onError handler name. Returns connection ID.", expand_strings = true, hosts = ["browser"] },
+  { name = "_live_send", params = ["integer", "string"], returns = "integer", description = "Send message: connId, message", expand_strings = true, hosts = ["browser"] },
+  { name = "_live_close", params = ["integer"], returns = "integer", description = "Close connection: connId", hosts = ["browser"] },
+  { name = "_live_state", params = ["integer"], returns = "string", description = "Connection state: connecting, open, closing, closed", hosts = ["browser"] },
 
   # ========== Live: WebSocket Context ==========
-  { name = "_live_message", params = [], returns = "string", description = "Message data (in onMessage handler)" },
-  { name = "_live_connId", params = [], returns = "integer", description = "Connection ID that triggered this handler" },
-  { name = "_live_closeCode", params = [], returns = "integer", description = "Close code (in onClose handler)" },
-  { name = "_live_closeReason", params = [], returns = "string", description = "Close reason (in onClose handler)" },
-  { name = "_live_error", params = [], returns = "string", description = "Error description (in onError handler)" },
+  { name = "_live_message", params = [], returns = "string", description = "Message data (in onMessage handler)", hosts = ["browser"] },
+  { name = "_live_connId", params = [], returns = "integer", description = "Connection ID that triggered this handler", hosts = ["browser"] },
+  { name = "_live_closeCode", params = [], returns = "integer", description = "Close code (in onClose handler)", hosts = ["browser"] },
+  { name = "_live_closeReason", params = [], returns = "string", description = "Close reason (in onClose handler)", hosts = ["browser"] },
+  { name = "_live_error", params = [], returns = "string", description = "Error description (in onError handler)", hosts = ["browser"] },
 
   # ========== Feed: Server-Sent Events ==========
-  { name = "_feed_open", params = ["string", "string", "string"], returns = "integer", description = "Open SSE feed: url, onMessage handler name, onError handler name. Returns connection ID.", expand_strings = true },
-  { name = "_feed_on", params = ["integer", "string", "string"], returns = "integer", description = "Listen for named event: connId, event name, handler name", expand_strings = true },
-  { name = "_feed_close", params = ["integer"], returns = "integer", description = "Close feed: connId" },
+  { name = "_feed_open", params = ["string", "string", "string"], returns = "integer", description = "Open SSE feed: url, onMessage handler name, onError handler name. Returns connection ID.", expand_strings = true, hosts = ["browser"] },
+  { name = "_feed_on", params = ["integer", "string", "string"], returns = "integer", description = "Listen for named event: connId, event name, handler name", expand_strings = true, hosts = ["browser"] },
+  { name = "_feed_close", params = ["integer"], returns = "integer", description = "Close feed: connId", hosts = ["browser"] },
 
   # ========== Feed: SSE Context ==========
-  { name = "_feed_data", params = [], returns = "string", description = "Event data" },
-  { name = "_feed_eventType", params = [], returns = "string", description = "Event type name" },
-  { name = "_feed_lastId", params = [], returns = "string", description = "Last event ID" },
-  { name = "_feed_connId", params = [], returns = "integer", description = "Connection ID that triggered this handler" },
+  { name = "_feed_data", params = [], returns = "string", description = "Event data", hosts = ["browser"] },
+  { name = "_feed_eventType", params = [], returns = "string", description = "Event type name", hosts = ["browser"] },
+  { name = "_feed_lastId", params = [], returns = "string", description = "Last event ID", hosts = ["browser"] },
+  { name = "_feed_connId", params = [], returns = "integer", description = "Connection ID that triggered this handler", hosts = ["browser"] },
 ]
 
 [language]
@@ -203,4 +211,4 @@ required_blocks = []
 block_folder_rules = []
 
 [build]
-built_with_compiler = "0.30.275"
+built_with_compiler = "0.30.280"
