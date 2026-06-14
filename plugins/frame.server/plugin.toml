@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.0"
+version = "2.7.1"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -27,88 +27,99 @@ validate = "validate_block"
 get_keywords = "get_keywords"
 
 # Bridge function declarations - server-specific functions provided by clean-server
+#
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §2:
+#   hosts = ["all"]    — Layer 2 portable (pure compute: JSON, URL encoding)
+#   hosts = ["server"] — Layer 3 server-only (HTTP request/response context,
+#                        routing, session-based auth, server-side outbound HTTP,
+#                        SMTP, WebSocket/SSE server endpoints)
+#
+# Without `hosts` markers the compiler defaults to ["all"], which causes client
+# (browser) builds to emit unresolved imports for server-only functions like
+# `_auth_require_auth`, `_req_param`, `_http_redirect` — surfaces as
+# CLIENT_BUILD_ENTRY_LEAK at codegen time. Tag every server-only bridge.
 [bridge]
 functions = [
-  # HTTP Server - Lifecycle
-  { name = "_http_listen", params = ["i32"], returns = "i32", description = "Start HTTP server on specified port" },
+  # HTTP Server - Lifecycle (server-only; binds a socket)
+  { name = "_http_listen", params = ["i32"], returns = "i32", description = "Start HTTP server on specified port", hosts = ["server"] },
 
-  # HTTP Server - Route Registration
-  { name = "_http_route", params = ["string", "string", "string"], returns = "i32", description = "Register route: method, path, handler function name", expand_strings = true },
-  { name = "_http_redirect_route", params = ["string", "string", "string", "integer"], returns = "i32", description = "Register static redirect: method, from-path, to-path, status (301/302/…). No WASM handler needed.", expand_strings = true },
-  { name = "_http_route_protected", params = ["string", "string", "string", "string"], returns = "i32", description = "Register protected route: method, path, handler name, required role", expand_strings = true },
+  # HTTP Server - Route Registration (server-only; populates the router)
+  { name = "_http_route", params = ["string", "string", "string"], returns = "i32", description = "Register route: method, path, handler function name", expand_strings = true, hosts = ["server"] },
+  { name = "_http_redirect_route", params = ["string", "string", "string", "integer"], returns = "i32", description = "Register static redirect: method, from-path, to-path, status (301/302/…). No WASM handler needed.", expand_strings = true, hosts = ["server"] },
+  { name = "_http_route_protected", params = ["string", "string", "string", "string"], returns = "i32", description = "Register protected route: method, path, handler name, required role", expand_strings = true, hosts = ["server"] },
   # §FEXT-4: SSE route registration — sets Content-Type: text/event-stream and keeps connection open
-  { name = "_http_sse_route", params = ["string", "string", "string"], returns = "i32", description = "Register SSE (STREAM) route: method, path, handler function name", expand_strings = true },
+  { name = "_http_sse_route", params = ["string", "string", "string"], returns = "i32", description = "Register SSE (STREAM) route: method, path, handler function name", expand_strings = true, hosts = ["server"] },
   # §15: WebSocket route registration — upgrades connection and invokes named handler functions
-  { name = "_http_ws_route", params = ["string", "string", "string", "string", "string"], returns = "void", description = "Register WebSocket route: method, path, onConnect handler, onMessage handler, onClose handler", expand_strings = true },
+  { name = "_http_ws_route", params = ["string", "string", "string", "string", "string"], returns = "void", description = "Register WebSocket route: method, path, onConnect handler, onMessage handler, onClose handler", expand_strings = true, hosts = ["server"] },
 
   # §15: WebSocket bridge functions (server-only; used inside LIVE endpoint handlers)
-  { name = "_ws_send", params = ["integer", "string"], returns = "void", description = "Send message to a specific WebSocket client by ID", expand_strings = true },
-  { name = "_ws_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true },
-  { name = "_ws_close", params = ["integer"], returns = "void", description = "Close WebSocket connection for a specific client ID" },
-  { name = "_ws_client_id", params = [], returns = "integer", description = "Get the current WebSocket client ID" },
-  { name = "_ws_message", params = [], returns = "string", description = "Get the current incoming WebSocket message payload" },
-  { name = "_ws_room_join", params = ["integer", "string"], returns = "void", description = "Add a client to a named room: clientId, room", expand_strings = true },
-  { name = "_ws_room_leave", params = ["integer", "string"], returns = "void", description = "Remove a client from a named room: clientId, room", expand_strings = true },
-  { name = "_ws_room_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true },
+  { name = "_ws_send", params = ["integer", "string"], returns = "void", description = "Send message to a specific WebSocket client by ID", expand_strings = true, hosts = ["server"] },
+  { name = "_ws_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true, hosts = ["server"] },
+  { name = "_ws_close", params = ["integer"], returns = "void", description = "Close WebSocket connection for a specific client ID", hosts = ["server"] },
+  { name = "_ws_client_id", params = [], returns = "integer", description = "Get the current WebSocket client ID", hosts = ["server"] },
+  { name = "_ws_message", params = [], returns = "string", description = "Get the current incoming WebSocket message payload", hosts = ["server"] },
+  { name = "_ws_room_join", params = ["integer", "string"], returns = "void", description = "Add a client to a named room: clientId, room", expand_strings = true, hosts = ["server"] },
+  { name = "_ws_room_leave", params = ["integer", "string"], returns = "void", description = "Remove a client from a named room: clientId, room", expand_strings = true, hosts = ["server"] },
+  { name = "_ws_room_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true, hosts = ["server"] },
 
-  # §FEXT-4: Server-Sent Events bridge functions (server-only; client receives event stream)
-  { name = "_sse_emit", params = ["string"], returns = "i32", description = "Send data: event to SSE client on current connection", expand_strings = true },
-  { name = "_sse_emit_event", params = ["string", "string"], returns = "i32", description = "Send named event+data to SSE client: event name, data string", expand_strings = true },
-  { name = "_sse_close", params = [], returns = "i32", description = "Close the SSE stream; client receives final empty event" },
-  { name = "_sse_retry", params = ["i32"], returns = "i32", description = "Set client reconnect interval in milliseconds" },
-  { name = "_sse_is_connected", params = [], returns = "i32", description = "Returns 1 if SSE client is still connected, 0 if disconnected" },
+  # §FEXT-4: Server-Sent Events bridge functions (server-only; emits to the active SSE stream)
+  { name = "_sse_emit", params = ["string"], returns = "i32", description = "Send data: event to SSE client on current connection", expand_strings = true, hosts = ["server"] },
+  { name = "_sse_emit_event", params = ["string", "string"], returns = "i32", description = "Send named event+data to SSE client: event name, data string", expand_strings = true, hosts = ["server"] },
+  { name = "_sse_close", params = [], returns = "i32", description = "Close the SSE stream; client receives final empty event", hosts = ["server"] },
+  { name = "_sse_retry", params = ["i32"], returns = "i32", description = "Set client reconnect interval in milliseconds", hosts = ["server"] },
+  { name = "_sse_is_connected", params = [], returns = "i32", description = "Returns 1 if SSE client is still connected, 0 if disconnected", hosts = ["server"] },
 
-  # HTTP Server - Static Files
-  { name = "_http_serve_static", params = ["string", "string"], returns = "boolean", description = "Mount filesystem directory as static file server: url_prefix, dir_path. Serves files with correct MIME types.", expand_strings = true },
+  # HTTP Server - Static Files (server-only; mounts a filesystem directory)
+  { name = "_http_serve_static", params = ["string", "string"], returns = "boolean", description = "Mount filesystem directory as static file server: url_prefix, dir_path. Serves files with correct MIME types.", expand_strings = true, hosts = ["server"] },
 
-  # Request Context - Path Parameters
-  { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name (e.g., :id)", expand_strings = true },
-  { name = "_req_param_int", params = ["string"], returns = "i32", description = "Get path parameter as integer by name", expand_strings = true },
+  # Request Context - Path Parameters (server-only; needs an active HTTP request)
+  { name = "_req_param", params = ["string"], returns = "string", description = "Get path parameter by name (e.g., :id)", expand_strings = true, hosts = ["server"] },
+  { name = "_req_param_int", params = ["string"], returns = "i32", description = "Get path parameter as integer by name", expand_strings = true, hosts = ["server"] },
 
-  # Request Context - Query Parameters
-  { name = "_req_query", params = ["string"], returns = "string", description = "Get query parameter by name", expand_strings = true },
+  # Request Context - Query Parameters (server-only)
+  { name = "_req_query", params = ["string"], returns = "string", description = "Get query parameter by name", expand_strings = true, hosts = ["server"] },
 
-  # Request Context - Headers
-  { name = "_req_header", params = ["string"], returns = "string", description = "Get request header by name", expand_strings = true },
-  { name = "_req_headers", params = [], returns = "string", description = "Get all request headers as JSON object" },
+  # Request Context - Headers (server-only)
+  { name = "_req_header", params = ["string"], returns = "string", description = "Get request header by name", expand_strings = true, hosts = ["server"] },
+  { name = "_req_headers", params = [], returns = "string", description = "Get all request headers as JSON object", hosts = ["server"] },
 
-  # Request Context - Body
-  { name = "_req_body", params = [], returns = "string", description = "Get request body as string" },
-  { name = "_req_body_field", params = ["string"], returns = "string", description = "Get form field by name from request body", expand_strings = true },
-  { name = "_req_form", params = [], returns = "string", description = "Get form data as JSON object" },
+  # Request Context - Body (server-only)
+  { name = "_req_body", params = [], returns = "string", description = "Get request body as string", hosts = ["server"] },
+  { name = "_req_body_field", params = ["string"], returns = "string", description = "Get form field by name from request body", expand_strings = true, hosts = ["server"] },
+  { name = "_req_form", params = [], returns = "string", description = "Get form data as JSON object", hosts = ["server"] },
 
-  # Request Context - Metadata
-  { name = "_req_method", params = [], returns = "string", description = "Get HTTP method (GET, POST, etc.)" },
-  { name = "_req_path", params = [], returns = "string", description = "Get request path" },
-  { name = "_req_ip", params = [], returns = "string", description = "Get client IP address" },
+  # Request Context - Metadata (server-only)
+  { name = "_req_method", params = [], returns = "string", description = "Get HTTP method (GET, POST, etc.)", hosts = ["server"] },
+  { name = "_req_path", params = [], returns = "string", description = "Get request path", hosts = ["server"] },
+  { name = "_req_ip", params = [], returns = "string", description = "Get client IP address", hosts = ["server"] },
 
-  # Request Context - Cookies
-  { name = "_req_cookie", params = ["string"], returns = "string", description = "Get cookie value by name", expand_strings = true },
+  # Request Context - Cookies (server-only)
+  { name = "_req_cookie", params = ["string"], returns = "string", description = "Get cookie value by name", expand_strings = true, hosts = ["server"] },
 
-  # Response - Core
-  { name = "_http_respond", params = ["i32", "string", "string"], returns = "ptr", description = "Send response: status, content-type, body", expand_strings = true },
-  { name = "_http_redirect", params = ["i32", "string"], returns = "ptr", description = "Send redirect: status, url", expand_strings = true },
-  { name = "_http_set_header", params = ["string", "string"], returns = "ptr", description = "Set response header: name, value", expand_strings = true },
+  # Response - Core (server-only; writes to the active HTTP response)
+  { name = "_http_respond", params = ["i32", "string", "string"], returns = "ptr", description = "Send response: status, content-type, body", expand_strings = true, hosts = ["server"] },
+  { name = "_http_redirect", params = ["i32", "string"], returns = "ptr", description = "Send redirect: status, url", expand_strings = true, hosts = ["server"] },
+  { name = "_http_set_header", params = ["string", "string"], returns = "ptr", description = "Set response header: name, value", expand_strings = true, hosts = ["server"] },
 
-  # Response - Extended
-  { name = "_res_set_header", params = ["string", "string"], returns = "boolean", description = "Set a custom response header", expand_strings = true },
-  { name = "_res_redirect", params = ["string", "i32"], returns = "boolean", description = "Set redirect to URL with status code (301/302/303/307/308)", expand_strings = true },
-  { name = "_res_status", params = ["i32"], returns = "void", description = "Set HTTP response status code" },
-  { name = "_res_body", params = ["string"], returns = "void", description = "Set raw response body string", expand_strings = true },
-  { name = "_res_json", params = ["string"], returns = "void", description = "Set JSON response body with Content-Type: application/json", expand_strings = true },
+  # Response - Extended (server-only)
+  { name = "_res_set_header", params = ["string", "string"], returns = "boolean", description = "Set a custom response header", expand_strings = true, hosts = ["server"] },
+  { name = "_res_redirect", params = ["string", "i32"], returns = "boolean", description = "Set redirect to URL with status code (301/302/303/307/308)", expand_strings = true, hosts = ["server"] },
+  { name = "_res_status", params = ["i32"], returns = "void", description = "Set HTTP response status code", hosts = ["server"] },
+  { name = "_res_body", params = ["string"], returns = "void", description = "Set raw response body string", expand_strings = true, hosts = ["server"] },
+  { name = "_res_json", params = ["string"], returns = "void", description = "Set JSON response body with Content-Type: application/json", expand_strings = true, hosts = ["server"] },
 
-  # Authentication - Session
-  { name = "_auth_get_session", params = [], returns = "string", description = "Get current session as JSON" },
-  { name = "_auth_require_auth", params = [], returns = "boolean", description = "Check if authenticated (1=yes, 0=no)" },
+  # Authentication - Session (server-only; session state lives on the server)
+  { name = "_auth_get_session", params = [], returns = "string", description = "Get current session as JSON", hosts = ["server"] },
+  { name = "_auth_require_auth", params = [], returns = "boolean", description = "Check if authenticated (1=yes, 0=no)", hosts = ["server"] },
 
-  # Authentication - Roles
-  { name = "_auth_require_role", params = ["string"], returns = "boolean", description = "Check if user has role (1=yes, 0=no)", expand_strings = true },
-  { name = "_auth_can", params = ["string"], returns = "boolean", description = "Check if user has permission (1=yes, 0=no)", expand_strings = true },
-  { name = "_auth_has_any_role", params = ["string"], returns = "boolean", description = "Check if user has any of the roles (JSON array) (1=yes, 0=no)", expand_strings = true },
+  # Authentication - Roles (server-only; role enforcement lives on the server)
+  { name = "_auth_require_role", params = ["string"], returns = "boolean", description = "Check if user has role (1=yes, 0=no)", expand_strings = true, hosts = ["server"] },
+  { name = "_auth_can", params = ["string"], returns = "boolean", description = "Check if user has permission (1=yes, 0=no)", expand_strings = true, hosts = ["server"] },
+  { name = "_auth_has_any_role", params = ["string"], returns = "boolean", description = "Check if user has any of the roles (JSON array) (1=yes, 0=no)", expand_strings = true, hosts = ["server"] },
 
-  # Cache Headers
-  { name = "_http_set_cache", params = ["i32"], returns = "boolean", description = "Set Cache-Control max-age header" },
-  { name = "_http_no_cache", params = [], returns = "boolean", description = "Set no-cache headers" },
+  # Cache Headers (server-only; modifies response headers)
+  { name = "_http_set_cache", params = ["i32"], returns = "boolean", description = "Set Cache-Control max-age header", hosts = ["server"] },
+  { name = "_http_no_cache", params = [], returns = "boolean", description = "Set no-cache headers", hosts = ["server"] },
 
   # HTML Page Rendering (SSR) — declaration MOVED to frame.ui plugin.toml.
   # _ui_render_page is part of frame.ui's SSR responsibility; declaring it
@@ -116,56 +127,56 @@ functions = [
   # validation because the callback's plugin_target = "frame.ui" was missing.
   # See contracts/bridge-host-classes.md §4.1.
 
-  # JSON Encoding/Decoding
-  { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true },
-  { name = "_json_decode", params = ["string"], returns = "string", description = "Decode JSON string to value", expand_strings = true },
-  { name = "_json_get", params = ["string", "string"], returns = "string", description = "Extract value from JSON using dot-separated path (e.g., 'user.name')", expand_strings = true },
+  # JSON Encoding/Decoding (pure compute — portable Layer 2)
+  { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true, hosts = ["all"] },
+  { name = "_json_decode", params = ["string"], returns = "string", description = "Decode JSON string to value", expand_strings = true, hosts = ["all"] },
+  { name = "_json_get", params = ["string", "string"], returns = "string", description = "Extract value from JSON using dot-separated path (e.g., 'user.name')", expand_strings = true, hosts = ["all"] },
 
   # HTTP Client - Basic Methods
-  # Convention: bridge names use http_client_ prefix to distinguish from server-side _http_* functions
-  { name = "http_get", params = ["string"], returns = "string", description = "Execute HTTP GET request to URL; returns response body", expand_strings = true },
-  { name = "http_post", params = ["string", "string"], returns = "string", description = "Execute HTTP POST request with raw body; returns response body", expand_strings = true },
-  { name = "http_put", params = ["string", "string"], returns = "string", description = "Execute HTTP PUT request with raw body; returns response body", expand_strings = true },
-  { name = "http_patch", params = ["string", "string"], returns = "string", description = "Execute HTTP PATCH request with raw body; returns response body", expand_strings = true },
-  { name = "http_delete", params = ["string"], returns = "string", description = "Execute HTTP DELETE request; returns response body", expand_strings = true },
-  { name = "http_head", params = ["string"], returns = "string", description = "Execute HTTP HEAD request; returns response headers as JSON", expand_strings = true },
-  { name = "http_options", params = ["string"], returns = "string", description = "Execute HTTP OPTIONS request; returns response body", expand_strings = true },
+  # Server-side outbound client. Browser code uses frame.client's api.* (declared in frame.client/plugin.toml).
+  { name = "http_get", params = ["string"], returns = "string", description = "Execute HTTP GET request to URL; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_post", params = ["string", "string"], returns = "string", description = "Execute HTTP POST request with raw body; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_put", params = ["string", "string"], returns = "string", description = "Execute HTTP PUT request with raw body; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_patch", params = ["string", "string"], returns = "string", description = "Execute HTTP PATCH request with raw body; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_delete", params = ["string"], returns = "string", description = "Execute HTTP DELETE request; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_head", params = ["string"], returns = "string", description = "Execute HTTP HEAD request; returns response headers as JSON", expand_strings = true, hosts = ["server"] },
+  { name = "http_options", params = ["string"], returns = "string", description = "Execute HTTP OPTIONS request; returns response body", expand_strings = true, hosts = ["server"] },
 
-  # HTTP Client - JSON Convenience
-  { name = "http_post_json", params = ["string", "string"], returns = "string", description = "POST with Content-Type: application/json; returns response body", expand_strings = true },
-  { name = "http_put_json", params = ["string", "string"], returns = "string", description = "PUT with Content-Type: application/json; returns response body", expand_strings = true },
-  { name = "http_patch_json", params = ["string", "string"], returns = "string", description = "PATCH with Content-Type: application/json; returns response body", expand_strings = true },
+  # HTTP Client - JSON Convenience (server-only)
+  { name = "http_post_json", params = ["string", "string"], returns = "string", description = "POST with Content-Type: application/json; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_put_json", params = ["string", "string"], returns = "string", description = "PUT with Content-Type: application/json; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_patch_json", params = ["string", "string"], returns = "string", description = "PATCH with Content-Type: application/json; returns response body", expand_strings = true, hosts = ["server"] },
 
-  # HTTP Client - Form & Headers
-  { name = "http_post_form", params = ["string", "string"], returns = "string", description = "POST form-urlencoded body; returns response body", expand_strings = true },
-  { name = "http_get_with_headers", params = ["string", "string"], returns = "string", description = "GET with custom headers (JSON object); returns response body", expand_strings = true },
-  { name = "http_post_with_headers", params = ["string", "string", "string"], returns = "string", description = "POST with body and custom headers (JSON object); returns response body", expand_strings = true },
-  { name = "http_put_with_headers", params = ["string", "string", "string"], returns = "string", description = "PUT with body and custom headers (JSON object); returns response body", expand_strings = true },
-  { name = "http_patch_with_headers", params = ["string", "string", "string"], returns = "string", description = "PATCH with body and custom headers (JSON object); returns response body", expand_strings = true },
-  { name = "http_delete_with_headers", params = ["string", "string"], returns = "string", description = "DELETE with custom headers (JSON object); returns response body", expand_strings = true },
+  # HTTP Client - Form & Headers (server-only)
+  { name = "http_post_form", params = ["string", "string"], returns = "string", description = "POST form-urlencoded body; returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_get_with_headers", params = ["string", "string"], returns = "string", description = "GET with custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_post_with_headers", params = ["string", "string", "string"], returns = "string", description = "POST with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_put_with_headers", params = ["string", "string", "string"], returns = "string", description = "PUT with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_patch_with_headers", params = ["string", "string", "string"], returns = "string", description = "PATCH with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
+  { name = "http_delete_with_headers", params = ["string", "string"], returns = "string", description = "DELETE with custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
 
-  # HTTP Client - Configuration
-  { name = "http_set_user_agent", params = ["string"], returns = "void", description = "Set User-Agent header for subsequent requests", expand_strings = true },
-  { name = "http_set_timeout", params = ["i32"], returns = "void", description = "Set request timeout in milliseconds" },
-  { name = "http_set_max_redirects", params = ["i32"], returns = "void", description = "Set maximum number of redirects to follow" },
-  { name = "http_enable_cookies", params = ["boolean"], returns = "void", description = "Enable or disable cookie jar for subsequent requests (1=enable, 0=disable)" },
+  # HTTP Client - Configuration (server-only)
+  { name = "http_set_user_agent", params = ["string"], returns = "void", description = "Set User-Agent header for subsequent requests", expand_strings = true, hosts = ["server"] },
+  { name = "http_set_timeout", params = ["i32"], returns = "void", description = "Set request timeout in milliseconds", hosts = ["server"] },
+  { name = "http_set_max_redirects", params = ["i32"], returns = "void", description = "Set maximum number of redirects to follow", hosts = ["server"] },
+  { name = "http_enable_cookies", params = ["boolean"], returns = "void", description = "Enable or disable cookie jar for subsequent requests (1=enable, 0=disable)", hosts = ["server"] },
 
-  # HTTP Client - Response Inspection
-  { name = "http_get_response_code", params = [], returns = "i32", description = "Get the HTTP status code of the last response" },
-  { name = "http_get_response_headers", params = [], returns = "i32", description = "Get all headers from the last response as JSON" },
+  # HTTP Client - Response Inspection (server-only)
+  { name = "http_get_response_code", params = [], returns = "i32", description = "Get the HTTP status code of the last response", hosts = ["server"] },
+  { name = "http_get_response_headers", params = [], returns = "i32", description = "Get all headers from the last response as JSON", hosts = ["server"] },
 
-  # HTTP Client - URL Utilities
-  { name = "http_encode_url", params = ["string"], returns = "string", description = "Percent-encode a string for safe use in a URL", expand_strings = true },
-  { name = "http_decode_url", params = ["string"], returns = "string", description = "Decode a percent-encoded URL string", expand_strings = true },
-  { name = "http_build_query", params = ["string"], returns = "string", description = "Build a URL query string from a JSON object of key-value pairs", expand_strings = true },
+  # HTTP Client - URL Utilities (pure compute — portable Layer 2)
+  { name = "http_encode_url", params = ["string"], returns = "string", description = "Percent-encode a string for safe use in a URL", expand_strings = true, hosts = ["all"] },
+  { name = "http_decode_url", params = ["string"], returns = "string", description = "Decode a percent-encoded URL string", expand_strings = true, hosts = ["all"] },
+  { name = "http_build_query", params = ["string"], returns = "string", description = "Build a URL query string from a JSON object of key-value pairs", expand_strings = true, hosts = ["all"] },
 
-  # Response - File Download
-  { name = "_res_download", params = ["string"], returns = "void", description = "Set Content-Disposition: attachment header for file download; argument is the filename sent to the client", expand_strings = true },
+  # Response - File Download (server-only; sets Content-Disposition on the active response)
+  { name = "_res_download", params = ["string"], returns = "void", description = "Set Content-Disposition: attachment header for file download; argument is the filename sent to the client", expand_strings = true, hosts = ["server"] },
 
-  # Email - SMTP
-  { name = "_email_configure", params = ["string", "integer", "boolean", "string", "string", "string"], returns = "void", description = "Configure SMTP connection: host, port, secure, username, password, from address. Called once during startup from a mail: config block.", expand_strings = true },
-  { name = "_email_send", params = ["string", "string", "string", "string", "string"], returns = "boolean", description = "Send email: to, subject, html body, plain-text body, from override (empty string uses configured default). Returns true on success.", expand_strings = true },
-  { name = "_email_last_error", params = [], returns = "string", description = "Return the error message from the last failed _email_send call; returns empty string when the last send succeeded." },
+  # Email - SMTP (server-only; reaches out to an SMTP relay)
+  { name = "_email_configure", params = ["string", "integer", "boolean", "string", "string", "string"], returns = "void", description = "Configure SMTP connection: host, port, secure, username, password, from address. Called once during startup from a mail: config block.", expand_strings = true, hosts = ["server"] },
+  { name = "_email_send", params = ["string", "string", "string", "string", "string"], returns = "boolean", description = "Send email: to, subject, html body, plain-text body, from override (empty string uses configured default). Returns true on success.", expand_strings = true, hosts = ["server"] },
+  { name = "_email_last_error", params = [], returns = "string", description = "Return the error message from the last failed _email_send call; returns empty string when the last send succeeded.", hosts = ["server"] },
 ]
 
 [language]
@@ -374,4 +385,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.275"
+built_with_compiler = "0.30.279"
