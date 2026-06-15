@@ -36,7 +36,15 @@
       "Bash(cln test *)",
       "mcp__clean-language__get_stack_recommendation",
       "Read(//opt/homebrew/**)",
-      "Read(//usr/local/bin/**)"
+      "Read(//usr/local/bin/**)",
+      "Bash(rm -rf /tmp/hyd-repro)",
+      "Bash(mkdir -p /tmp/hyd-repro/app/web/pages /tmp/hyd-repro/app/web/components)",
+      "Bash(cat > *)",
+      "Bash(~/.cleen/versions/0.30.287/wasmtime_runner /tmp/repro_data_query.wasm)",
+      "Bash(rm -rf *)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
     ]
   }
 }

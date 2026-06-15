@@ -301,4 +301,78 @@ The worker auto-creates the following table on first use:
 
 ---
 
+## 12. Scheduling Semantics
+
+### 12.1 Cron expression format
+
+Standard 5-field cron syntax: `minute hour day-of-month month day-of-week`.
+
+| Field | Range | Special |
+|---|---|---|
+| minute | 0–59 | `*`, `*/n`, `a,b,c`, `a-b` |
+| hour | 0–23 | same |
+| day-of-month | 1–31 | same, `?` (any) |
+| month | 1–12 or `jan`–`dec` | same |
+| day-of-week | 0–6 or `sun`–`sat` (0 = Sunday) | same |
+
+Examples (timezone is **UTC** unless overridden):
+
+| Expression | Meaning |
+|---|---|
+| `"0 8 * * *"` | Every day at 08:00 UTC |
+| `"*/15 * * * *"` | Every 15 minutes |
+| `"0 0 * * 1"` | Mondays at midnight UTC |
+| `"30 9 1 * *"` | First of every month at 09:30 UTC |
+| `"0 12 * * mon-fri"` | Weekdays at noon UTC |
+
+### 12.2 Timezone
+
+Cron expressions are evaluated in **UTC** by default. To run in a local timezone, embed the offset in the calculation when generating the expression — frame.jobs does not currently parse timezone names. (TZ-aware cron is on the roadmap; see [13_frame_future_evolution.md](13_frame_future_evolution.md).)
+
+### 12.3 Execution guarantees
+
+| Property | Guarantee |
+|---|---|
+| Cron firing | **At-least-once**. If a worker is offline at the scheduled minute, the run is dispatched as soon as a worker comes online (up to a one-hour catch-up window). |
+| Enqueued job | **At-least-once**. Handler may run twice if a worker crashes after starting but before recording completion. Handlers must be **idempotent**. |
+| Concurrent runs | A single scheduled name has at most one in-flight run at a time. The next firing is skipped if the previous run is still active and `coalesce = false` (default). |
+| Ordering | Within a queue, jobs are dispatched in `scheduled_at` order, then `created_at`. Cross-queue ordering is not guaranteed. |
+
+### 12.4 Backoff strategies
+
+`fixed` — every retry waits exactly `delay` ms:
+
+| Attempt | Wait |
+|---|---|
+| 1 → 2 | `delay` |
+| 2 → 3 | `delay` |
+| 3 → 4 | `delay` |
+
+`exponential` — each retry doubles the previous wait:
+
+| Attempt | Wait | Example (`delay=2000`) |
+|---|---|---|
+| 1 → 2 | `delay` | 2 s |
+| 2 → 3 | `delay * 2` | 4 s |
+| 3 → 4 | `delay * 4` | 8 s |
+| 4 → 5 | `delay * 8` | 16 s |
+
+The runtime caps individual waits at 1 hour to prevent pathological backoff. `job.retryAfter(seconds)` inside a handler overrides the computed delay for the next attempt only.
+
+### 12.5 Choosing a strategy
+
+| Use case | Strategy |
+|---|---|
+| Transient network errors | `exponential`, `delay: 1000`, `maxAttempts: 5` |
+| Rate-limited APIs | `fixed`, `delay: 60000`, `maxAttempts: 10` (one retry per minute) |
+| Heavy work that may need manual intervention | `fixed`, `delay: 300000`, `maxAttempts: 2` (give an operator 5 min to react) |
+
+---
+
+## 13. Plugin Contracts v2 Integration
+
+frame.jobs **1.0.x** declares every bridge with `hosts = ["server"]` — the queue, scheduler, retry state, and cron timers all live in the long-running server process ([bridge-host-classes.md §2](../../../foundation/spec/plugins/contracts/bridge-host-classes.md#2-the-hosts-field)). A browser-mode build receives no-op stubs; enqueuing from the client must always go through an `endpoints:` route on the server.
+
+---
+
 **End of Document 15 — Frame Jobs Specification**

@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.jobs"
-version = "1.0.1"
+version = "1.0.2"
 description = "Background job queue with retry, scheduling, and monitoring"
 author = "Clean Language Team"
 license = "MIT"
@@ -32,13 +32,13 @@ functions = [
   { name = "_job_result", params = ["string"], returns = "string", expand_strings = true, hosts = ["server"] },
   { name = "_job_current_id", params = [], returns = "string", hosts = ["server"] },
   { name = "_job_current_args", params = [], returns = "string", hosts = ["server"] },
-  { name = "_job_current_attempt", params = [], returns = "integer", hosts = ["server"] },
-  { name = "_job_retry_after", params = ["integer"], returns = "void", hosts = ["server"] },
+  { name = "_job_current_attempt", params = [], returns = "i32", hosts = ["server"] },
+  { name = "_job_retry_after", params = ["i32"], returns = "void", hosts = ["server"] },
   { name = "_job_fail", params = ["string"], returns = "void", expand_strings = true, hosts = ["server"] },
   { name = "_job_succeed", params = ["string"], returns = "void", expand_strings = true, hosts = ["server"] },
   { name = "_schedule_cron", params = ["string", "string", "string"], returns = "string", expand_strings = true, hosts = ["server"] },
   { name = "_schedule_cancel", params = ["string"], returns = "boolean", expand_strings = true, hosts = ["server"] },
-  { name = "_job_register", params = ["string", "string", "integer", "string", "integer", "integer", "string"], returns = "void", expand_strings = true, hosts = ["server"] },
+  { name = "_job_register", params = ["string", "string", "i32", "string", "i32", "i32", "string"], returns = "void", expand_strings = true, hosts = ["server"] },
 ]
 
 [language]
@@ -119,4 +119,4 @@ anti_pattern = "triggering cleanup from a user-facing endpoint with a cron-like 
 example = "patterns/scheduled-cleanup.cln"
 
 [build]
-built_with_compiler = "0.30.289"
+built_with_compiler = "0.30.291"

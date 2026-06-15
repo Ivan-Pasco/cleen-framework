@@ -1,7 +1,7 @@
 // frame.mcp plugin - MCP Server DSL
 // Provides: mcp: block with tool, resource, and prompt sub-blocks
 // Version: 1.0.0
-// Implements: Frame MCP Specification v1.0 (documents/specification/15_frame_mcp.md)
+// Implements: Frame MCP Specification v1.0 (documents/specification/17_frame_mcp.md)
 //
 // expand_block("mcp", attributes, body) → valid Clean Language code string
 // that, when compiled, runs a fully compliant MCP JSON-RPC 2.0 server.

@@ -1,8 +1,8 @@
-# Frame MCP Specification (15)
+# Frame MCP Specification (17)
 
 **Project:** Frame – Full-Stack Framework for Clean Language
 **Version:** 1.0.0
-**Location (repo):** `/documents/specification/15_frame_mcp.md`
+**Location (repo):** `/documents/specification/17_frame_mcp.md`
 
 ---
 

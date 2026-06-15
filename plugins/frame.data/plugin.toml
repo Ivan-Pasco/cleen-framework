@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.data"
-version = "2.1.1"
+version = "2.1.2"
 description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
 author = "Clean Language Team"
 license = "MIT"
@@ -57,7 +57,7 @@ functions = [
 
   # Configuration - called once at startup from a data: config block
   # Parameter: JSON object with keys: engine, host, port, database, user, password, pool_max, pool_idle_timeout_ms
-  { name = "_db_configure", params = ["string"], returns = "integer", description = "Configure the database connection pool from JSON config object; returns 0 on success, -1 on error", expand_strings = true, hosts = ["server"] },
+  { name = "_db_configure", params = ["string"], returns = "i32", description = "Configure the database connection pool from JSON config object; returns 0 on success, -1 on error", expand_strings = true, hosts = ["server"] },
 
   # Migration System
   # Register a named migration for version tracking; the runtime records it in the
@@ -70,10 +70,10 @@ functions = [
   { name = "_db_migration_diff", params = ["string", "string"], returns = "string", description = "Compare declared model fields against the live database table schema; returns ALTER TABLE SQL or empty string when in sync", expand_strings = true, hosts = ["server"] },
 
   # Execute all pending registered migrations in version order.
-  { name = "_db_run_migrations", params = [], returns = "integer", description = "Run all pending registered migrations in version order; returns count of migrations applied", hosts = ["server"] },
+  { name = "_db_run_migrations", params = [], returns = "i32", description = "Run all pending registered migrations in version order; returns count of migrations applied", hosts = ["server"] },
 
   # Roll back a specific named migration by executing its down function.
-  { name = "_db_rollback_migration", params = ["string"], returns = "integer", description = "Rollback a specific migration by name; returns 0 on success, -1 on error", expand_strings = true, hosts = ["server"] },
+  { name = "_db_rollback_migration", params = ["string"], returns = "i32", description = "Rollback a specific migration by name; returns 0 on success, -1 on error", expand_strings = true, hosts = ["server"] },
 
   # Return a JSON array describing every known migration and its current status.
   # Each element has the shape: {"name":"...","applied_at":"..."|null}.
@@ -247,4 +247,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.30.289"
+built_with_compiler = "0.30.291"

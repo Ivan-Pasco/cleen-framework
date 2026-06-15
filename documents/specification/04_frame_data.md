@@ -655,5 +655,115 @@ The validation is performed at the ORM layer before any SQL is generated. The al
 
 ---
 
+## 20. Runtime Validation — `Model.validate(field, value)`
+
+Run validation rules at call sites that aren't a full `insert:` / `update:` (e.g. a "is this email available?" check before showing a form, or partial-update validation).
+
+```clean
+string error = User.validate("email", req.json("email"))
+if error.length > 0:
+    return badRequest(json({ field: "email", error: error }))
+```
+
+| Returns | Meaning |
+|---|---|
+| `""` (empty) | Value is valid for the field |
+| Non-empty string | Validation message (e.g. `"must be a valid email address"`) |
+
+The function checks the rules declared on the model field (`min`, `max`, `email`, `range`, custom validators). It does not write to the database.
+
+---
+
+## 21. Common Patterns
+
+### 21.1 Soft delete
+
+Add a nullable `deletedAt` timestamp; never `DELETE FROM`, always filter on it:
+
+```clean
+data User:
+    integer id            primary
+    string  email         unique
+    string  name
+    timestamp deletedAt?  // nullable — null means active
+```
+
+Standard query helper:
+
+```clean
+functions:
+    Array<User> activeUsers():
+        return User.find:
+            where:
+                deletedAt == null
+```
+
+Soft-delete instead of physical:
+
+```clean
+User.update:
+    where:
+        id == userId
+    set:
+        deletedAt = time.now()
+```
+
+### 21.2 Multi-tenant scoping
+
+Every tenant-scoped model carries a `tenantId` foreign key. Every query in tenant context calls `tenant_getId()` (provided by frame.auth — requires session claims with a tenant id).
+
+```clean
+data Project:
+    integer id           primary
+    integer tenantId     foreign User.tenantId
+    string  name
+    timestamp createdAt
+```
+
+Query:
+
+```clean
+Array<Project> projects = Project.find:
+    where:
+        tenantId == tenant_getId()
+    order:
+        createdAt desc
+```
+
+`tenant_getId()` returns 0 when called outside a session context (e.g. background jobs); guard accordingly. See [06_frame_auth.md §8](06_frame_auth.md#8-multi-tenant) for the underlying claims contract.
+
+### 21.3 Audit log (append-only)
+
+```clean
+data AuditEvent:
+    integer id           primary
+    integer actorId      foreign User.id
+    string  action       // "user.created", "post.deleted", ...
+    string  details      // JSON payload as string
+    timestamp at         default = time.now()
+```
+
+Never `update:` or `delete:` audit rows; only `insert:`. Add an index on `(actorId, at desc)` for actor-history queries.
+
+### 21.4 Tree (self-referential)
+
+```clean
+data Category:
+    integer id        primary
+    integer parentId? foreign Category.id   // null for roots
+    string  name
+    integer depth     // denormalized — keep in sync on insert/update
+```
+
+Self-reference requires `parentId?` to be nullable; the root has `parentId == null`.
+
+---
+
+## 22. Plugin Contracts v2 Integration
+
+frame.data **2.1.x** opts into [lifecycle.md §3.1](../../../foundation/spec/plugins/contracts/lifecycle.md#31-module_helpers) with `module_helpers_are_roots = true`. Preamble-emitted ORM helpers (`PagedResult` / `CursorResult` constructors, query builders) are reachable only through plugin-generated CRUD code, so they must be tree-shake roots. Every `_db_*` bridge declares `hosts = ["server"]` ([bridge-host-classes.md §2](../../../foundation/spec/plugins/contracts/bridge-host-classes.md#2-the-hosts-field)); the database driver only loads on hosts that ship a runtime DB connection.
+
+---
+
 **End of Document 04 — Frame Data (ORM) Specification (Unified Block Syntax)**
 

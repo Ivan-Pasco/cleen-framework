@@ -36,7 +36,10 @@ All specifications are located in `/documents/specification/`:
 11. **[11_database_plugins.md](documents/specification/11_database_plugins.md)** - Database plugin architecture, C-ABI interface, runtime drivers
 12. **[12_frame_canvas.md](documents/specification/12_frame_canvas.md)** - Canvas rendering, animation, drawing primitives, bridge functions
 13. **[13_frame_future_evolution.md](documents/specification/13_frame_future_evolution.md)** - Roadmap, research directions, versioning policy
-14. **[14_frame_ui_client_communication.md](documents/specification/14_frame_ui_client_communication.md)** - Client-side communication: frame.client plugin (api.*, live.*, feed.*)
+14. **[15_frame_jobs.md](documents/specification/15_frame_jobs.md)** - Background job queue, scheduled tasks, retry policies
+15. **[16_frame_locale.md](documents/specification/16_frame_locale.md)** - Internationalization — translations, plurals, locale-aware formatting
+16. **[17_frame_mcp.md](documents/specification/17_frame_mcp.md)** - MCP server plugin — tools, resources, prompts over stdio and HTTP+SSE
+17. **[18_frame_client.md](documents/specification/18_frame_client.md)** - Client-side communication: frame.client plugin (api.*, live.*, feed.*, `load:`/`form:`/`send:` blocks)
 
 ### Reference Documents
 

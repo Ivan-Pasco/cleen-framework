@@ -864,7 +864,7 @@ functions:
         integer s = api.post("/api/users", body, "onCreated")
 ```
 
-See [14_frame_ui_client_communication.md](14_frame_ui_client_communication.md) for implementation details.
+See [18_frame_client.md](18_frame_client.md) for implementation details.
 
 ### 9.4 Form Validation
 
@@ -1194,7 +1194,7 @@ Handler parameters are **string literals naming a top-level exported function**.
 
 All bridge functions are declared in `plugin.toml` and implemented in `loader.js`. See the Bridge Contracts specification for the complete function reference.
 
-For client-server communication (HTTP, WebSocket, SSE), see [14_frame_ui_client_communication.md](14_frame_ui_client_communication.md) -- the `frame.client` plugin.
+For client-server communication (HTTP, WebSocket, SSE), see [18_frame_client.md](18_frame_client.md) -- the `frame.client` plugin.
 
 ---
 
@@ -1860,6 +1860,101 @@ Caught errors are logged to the browser console in the format:
 [frame.ui] Error boundary caught in <ComponentName>: <error message>
   at <stack trace>
 ```
+
+---
+
+## 31. Plugin Contracts v2 Integration
+
+Since frame.ui **2.10.139**, the plugin opts into the Plugin Contracts v2 lifecycle and artifact model defined in [foundation/spec/plugins/contracts/](../../../foundation/spec/plugins/contracts/). This section documents the user-visible behavior; the contract documents are authoritative.
+
+### 31.1 The `client_init` lifecycle slot — HYDRATE_AUTO
+
+**Closes:** HYDRATE_AUTO. **Plugin.toml:** `[lifecycle] client_init = "emit_ui_client_init"`. **Contract reference:** [lifecycle.md §3.3](../../../foundation/spec/plugins/contracts/lifecycle.md#33-client_init).
+
+When the compiler emits the synthetic client `_start` body for a page, it invokes frame.ui's `emit_ui_client_init` slot once. The slot reads the registered component list from `_build_state_get("frame.ui:components")` and emits, per component with `client != "off"`:
+
+- a module-level instance variable wired to the data-island wrapper
+- a call to the component's `onMount()` lifecycle function
+
+This replaces the pre-v2 inlined hydration scaffolding. Nothing in user code changes — the auto-hydration just works once the page declares one or more `component:` blocks with non-`off` hydration.
+
+```clean
+component UserList(users: any):
+    client = "visible"          // triggers client_init emission for this component
+    state:
+        any selected = null
+    events:
+        onSelect(string id):
+            state.selected = id
+```
+
+At build time the compiler:
+1. Calls `expand_block` for each `component:`, which records the component in `_build_state_set("frame.ui:components", ...)`.
+2. After all expansions, invokes the `client_init` slot. The slot iterates the recorded list and emits hydration statements.
+3. Compiles the assembled client module into `{output_dir}/frontend.wasm` (see §31.2).
+
+### 31.2 The `frontend.wasm` artifact
+
+**Closes:** BUILD_FRONTEND, SRV004. **Plugin.toml:** `[[artifacts]] name = "frontend.wasm"`. **Contract reference:** [artifacts.md §4.1](../../../foundation/spec/plugins/contracts/artifacts.md#41-client_hydration).
+
+The plugin declares a side-channel build artifact that the compiler emits whenever at least one component is registered:
+
+```toml
+[[artifacts]]
+name            = "frontend.wasm"
+purpose         = "client_hydration"
+emit            = { from_module = "client_only_build" }
+output_relative = "{output_dir}/frontend.wasm"
+required_when   = "has_build_state.frame.ui:components"
+public          = true
+content_type    = "application/wasm"
+```
+
+Behavior:
+- `required_when = "has_build_state.frame.ui:components"` — the artifact is only emitted when the plugin has registered at least one component during expand. Server-only API apps that import `frame.server` but no UI components do not trigger a client build.
+- `emit.from_module = "client_only_build"` — the compiler triggers a nested client-mode build, applies the `client_init` lifecycle slot, and writes the resulting WASM bytes to the output path.
+- `public = true` — the asset is served to the browser by the runtime; `loader.js` fetches it during hydration.
+
+### 31.3 Server-guard stubs (v2.12.7+)
+
+In server-only builds (no client hydration), the runtime still loads `loader.js`. Bridge functions whose `hosts` field does not include `"server"` are stubbed with no-op implementations to prevent runtime traps when SSR markup references them. Examples:
+
+| Bridge | Server stub behavior |
+|--------|----------------------|
+| `_ui_render_page` | Real implementation (declares `hosts = ["server"]` with the component-tag-render callback). |
+| `_ui_toggle_class` | No-op stub (returns 0). |
+| `_ui_query_selector` | Returns empty string. |
+| All `_storage_*` | No-op (server has no localStorage/sessionStorage). |
+
+The full server/browser split for every bridge is in [bridge-host-classes.md §2](../../../foundation/spec/plugins/contracts/bridge-host-classes.md#2-the-hosts-field) and the plugin's `plugin.toml [bridge] functions` table.
+
+### 31.4 Build-state bridges (`_build_state_set` / `_build_state_get`)
+
+These bridges exist in the compiler's plugin sandbox; both declare `hosts = ["all"]`. The plugin uses them to pass the component registry from `expand_block` (called per component definition) to `emit_ui_client_init` (called once at the end of compilation). See [lifecycle.md §2.5](../../../foundation/spec/plugins/contracts/lifecycle.md#25-build-state-bridges-_build_state_set-_build_state_get).
+
+Application code never calls these bridges directly.
+
+### 31.5 `cln_signature` on language functions
+
+Every `[[language.functions]]` entry in `plugin.toml` now declares its Clean Language signature via the `signature` field (e.g. `"ui.toggleClass(selector, className)"`) and explicit `params`/`returns`. The compiler uses these to type-check call sites without hardcoded resolver entries. Users do not interact with these declarations directly — they are visible in IDE hover and completion.
+
+---
+
+## 32. Version History
+
+| Version | Notable changes |
+|---------|-----------------|
+| 2.12.15 | `cl-if`/`cl-show` route numeric-literal comparisons through `.toInteger()`. |
+| 2.12.13 | Diagnostic: probe whether `expand_component` is reached. |
+| 2.12.10 | Reject YAML-style component attrs with a clear error message. |
+| 2.12.9 | Add `_ui_render_page` server-guard stub. |
+| 2.12.8 | Gate `frontend.wasm` emission on `has_build_state.frame.ui:components`. |
+| 2.12.7 | Close CLIENT_PULLS_SERVER — add server-guard stubs to `loader.js`. |
+| 2.12.6 | Pass-through `events:` blocks to compiler 0.30.273 thunks. |
+| 2.12.0 | Module-level instance + bare-name shims for event handlers. |
+| 2.11.0 | Populate data-island wrapper before `onMount` in `client_init` splice. |
+| 2.10.145 | Re-apply v2 `client_init` + `[[artifacts]]` (closes HYDRATE_AUTO). |
+| 2.10.138 | Move `_ui_render_page` bridge from frame.server to frame.ui. |
 
 ---
 

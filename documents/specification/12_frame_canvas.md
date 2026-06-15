@@ -1076,6 +1076,53 @@ draw:
 - Drawing outside an `on layer` block goes to the default (z=0) layer
 - Layer names are case-sensitive
 
+### Parallax Layers
+
+Parallax scrolling is the canonical use case for layers — far layers move slower than near layers to create depth. Multiply the camera offset by a per-layer factor:
+
+```clean
+canvasScene: width=800 height=600 fps=60
+
+    state:
+        number cameraX = 0.0
+
+    layers:
+        layer "sky"        z=0
+        layer "mountains"  z=5
+        layer "trees"      z=10
+        layer "ground"     z=15
+        layer "characters" z=20
+
+    onFrame: param="dt"
+        cameraX = cameraX + 100.0 * dt    // scroll right
+
+    draw:
+        on layer "sky":
+            canvas.image src="sky" x=0 y=0 width=800 height=600
+
+        on layer "mountains":
+            canvas.image src="mountains" x=0 - cameraX * 0.1 y=200 width=1600 height=300
+
+        on layer "trees":
+            canvas.image src="trees" x=0 - cameraX * 0.4 y=350 width=2400 height=200
+
+        on layer "ground":
+            canvas.image src="ground" x=0 - cameraX y=500 width=3200 height=100
+
+        on layer "characters":
+            canvas.image src="player" x=400 y=460 width=32 height=48
+```
+
+| Factor | Effect |
+|---|---|
+| `0.0` | Layer is fixed (HUD, UI) |
+| `0.1`–`0.3` | Distant background (sky, mountains) |
+| `0.5` | Mid-ground |
+| `1.0` | Foreground (matches camera 1:1) |
+| `> 1.0` | Closer than the camera plane (rare; aggressive depth effect) |
+
+Repeat the source image (`width` larger than canvas) to avoid edges scrolling into view. For infinite scrolling, modulo the position by the image width.
+
 ---
 
 ## 11. Event Handlers

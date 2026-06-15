@@ -388,7 +388,7 @@ Connect an HTML element to a FEED endpoint with `cl-stream`:
 
 ---
 
-## 19. Server-Side HTTP Client  <!-- was §18 -->
+## 19. Server-Side HTTP Client
 
 The server can make outbound HTTP requests using the `http.*` bridge functions. This is separate from client-side communication (`frame.client`).
 
@@ -664,6 +664,55 @@ endpoints:
             live.roomLeave(cid, req.params.room)
             live.broadcast(req.params.room, "{\"event\":\"left\",\"id\":" + cid.toString() + "}")
 ```
+
+---
+
+## 26. Plugin Contracts v2 Integration
+
+frame.server **2.7.x** opts into the Plugin Contracts v2 lifecycle and host-class model defined in [foundation/spec/plugins/contracts/](../../../foundation/spec/plugins/contracts/).
+
+### 26.1 `module_helpers_are_roots`
+
+**Contract reference:** [lifecycle.md §3.1](../../../foundation/spec/plugins/contracts/lifecycle.md#31-module_helpers).
+
+The plugin's preamble emits response helpers (`json`, `redirect`, error builders, `notFound`, `badRequest`, `unauthorized`, etc.) that are called from generated route-handler code, not directly from application source. Without this flag, the BFS would tree-shake helpers (and the bridge imports they depend on) when user code never explicitly references them. Closes GEN003.
+
+### 26.2 Bridge host classes
+
+**Contract reference:** [bridge-host-classes.md §2](../../../foundation/spec/plugins/contracts/bridge-host-classes.md#2-the-hosts-field).
+
+Every bridge function in `frame.server/plugin.toml` declares `hosts = [...]`:
+
+| Host class | Examples | Count |
+|---|---|---|
+| `["server"]` | request context, routing, sessions, SMTP, WebSocket, SSE, file upload | majority |
+| `["all"]` | JSON helpers, URL encoding (pure-compute, no I/O) | a few |
+
+Server-only bridges are stubbed out of client builds; pure-compute bridges are shared. The plugin's `_ui_render_page` declaration also carries a `callback` block (`bridge-host-classes.md §4.1`) that tells `clean-server` to scan rendered HTML for custom component tags and invoke `{tagname}_render` exports — see [05_frame_ui.md §31.3](05_frame_ui.md#313-server-guard-stubs-v2127).
+
+### 26.3 SSE / WebSocket bridge inventory
+
+The bridges that back §18 (FEED / SSE) and §25 (LIVE / WebSocket) are declared in `plugins/frame.server/plugin.toml` under `[bridge].functions`. Surface mapping:
+
+| Surface (`live.*` / `feed.*`) | Bridge | Notes |
+|---|---|---|
+| `feed.emit(data)` | `_sse_emit(string)` | Returns 1 on success |
+| `feed.emitEvent(name, data)` | `_sse_emit_event(string, string)` | Named SSE event |
+| `feed.close()` | `_sse_close()` | Final empty event sent |
+| `feed.retry(ms)` | `_sse_retry(i32)` | Reconnect interval |
+| `feed.isConnected() -> boolean` | `_sse_is_connected()` | 1 = connected |
+| `live.send(clientId, message)` | `_ws_send(integer, string)` | Targeted |
+| `live.broadcast(room, message)` | `_ws_broadcast(string, string)` | Room broadcast |
+| `live.close(clientId)` | `_ws_close(integer)` | Normal closure (1000) |
+| `live.clientId() -> integer` | `_ws_client_id()` | Current handler's client |
+| `live.message() -> string` | `_ws_message()` | Inbound frame |
+| `live.roomJoin(cid, room)` | `_ws_room_join(integer, string)` | Add to room |
+| `live.roomLeave(cid, room)` | `_ws_room_leave(integer, string)` | Remove from room |
+| `live.roomBroadcast(room, msg)` | `_ws_room_broadcast(string, string)` | Alias of broadcast |
+
+### 26.4 Email templates — out of scope
+
+§24 currently provides SMTP-core sending only. Template rendering, queuing, and multi-provider support are deferred to a dedicated `frame.email` plugin (Tier 2). When that spec lands it will be numbered `19_frame_email.md` (the first slot reserved per [frame_internal_map.md](frame_internal_map.md)).
 
 ---
 
