@@ -15,7 +15,7 @@
 //   {varName} in the URL resolves a module-level variable at call time.
 //   Set taskId before calling deleteTask().
 
-// app/web/pages/task-detail.client.cln
+// app/ui/web/pages/task-detail.client.cln
 string taskId = ""
 string archiveReason = ""
 

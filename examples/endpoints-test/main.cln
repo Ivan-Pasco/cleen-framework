@@ -3,4 +3,4 @@ package: EndpointsTest
 
     target: web
         plugins: [frame.server]
-        entry: app/web/pages/index.html
+        entry: app/ui/web/pages/index.html

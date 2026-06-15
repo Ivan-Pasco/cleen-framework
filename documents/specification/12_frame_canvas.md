@@ -2878,7 +2878,7 @@ Canvas files connect to HTML pages through the canvas element binding. The recom
 **1. HTML page declares the canvas element:**
 
 ```html
-<!-- app/web/pages/game.html -->
+<!-- app/ui/web/pages/game.html -->
 <!DOCTYPE html>
 <html>
 <head>

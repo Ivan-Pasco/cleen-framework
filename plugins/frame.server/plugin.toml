@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.2"
+version = "2.7.3"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -336,7 +336,7 @@ block_folder_rules = [
   { block = "endpoints", allowed_in = ["app/server/"], message = "endpoints: block should be in app/server/" },
   { block = "middleware", allowed_in = ["app/server/middleware/", "app/server/"], message = "middleware: block should be in app/server/middleware/" },
   { block = "server", allowed_in = ["app/server/", "app/"], message = "server: block should be in app/server/ or app root" },
-  { block = "routes", allowed_in = ["app/web/"], message = "routes: block must be in app/web/routes.cln" },
+  { block = "routes", allowed_in = ["app/ui/web/"], message = "routes: block must be in app/ui/web/routes.cln" },
 ]
 
 [ai]
@@ -385,4 +385,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.292"
+built_with_compiler = "0.30.293"

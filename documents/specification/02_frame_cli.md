@@ -68,9 +68,9 @@ Creating project 'myapp'...
   Creating folders...
   [frame.data] Creating app/data/
   [frame.server] Creating app/server/
-  [frame.ui] Creating app/web/pages/
-  [frame.ui] Creating app/web/components/
-  [frame.ui] Creating app/web/layouts/
+  [frame.ui] Creating app/ui/web/pages/
+  [frame.ui] Creating app/ui/web/components/
+  [frame.ui] Creating app/ui/web/layouts/
   [frame.auth] Creating app/auth/
   [core] Creating app/public/css/
 
@@ -78,7 +78,7 @@ Creating project 'myapp'...
   [core] Creating main.cln
   [core] Creating project.toml
   [frame.auth] Creating app/auth/auth.cln
-  [frame.ui] Creating app/web/pages/index.html
+  [frame.ui] Creating app/ui/web/pages/index.html
   [frame.server] Creating app/server/health.cln
 
 Project created successfully!

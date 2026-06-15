@@ -3,4 +3,4 @@ package: TodoApi
 
     target: web
         plugins: [frame.data, frame.server, frame.auth]
-        entry: app/web/pages/index.html
+        entry: app/ui/web/pages/index.html

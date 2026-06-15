@@ -222,7 +222,7 @@ my-app/
 - `app/server/` and its subfolders are owned by `frame.server` (endpoints, services, middleware).
 - `app/data/` and its subfolders are owned by `frame.data`.
 - `app/auth/` is owned by `frame.auth`.
-- `app/web/pages/`, `app/web/components/`, and `app/web/layouts/` are owned by `frame.ui`.
+- `app/ui/web/pages/`, `app/ui/web/components/`, and `app/ui/web/layouts/` are owned by `frame.ui`.
 - `app/canvas/` and its subfolders are owned by `frame.canvas`.
 - All of these are **plugin-owned folders** — once a plugin is declared in `main.cln`, files placed in its owned folder are processed by that plugin without needing individual import statements.
 
@@ -252,9 +252,9 @@ Examples:
   - `app/logic/` → service layer files.
   - `app/server/middleware/` → middleware files.
 - `frame.ui` (UI/HTML plugin) owns:
-  - `app/web/pages/` → SSR page templates.
-  - `app/web/components/` → reusable UI components.
-  - `app/web/layouts/` → shared layout wrappers.
+  - `app/ui/web/pages/` → SSR page templates.
+  - `app/ui/web/components/` → reusable UI components.
+  - `app/ui/web/layouts/` → shared layout wrappers.
 - `frame.data` (ORM plugin) owns:
   - `app/data/` → data models, queries, migrations, and repositories.
   - `app/data/models/` → model definitions using the `data` keyword.
@@ -281,7 +281,7 @@ Examples:
 Because plugins are folder-aware, once a plugin is declared in `main.cln`, a developer can create files in the owned folder and they will be picked up automatically:
 
 ```text
-app/web/pages/
+app/ui/web/pages/
   home.html
   contact.html
 ```
@@ -301,7 +301,7 @@ For UI/HTML-oriented plugins, we define a special extension convention:
 - Files ending in `.html` contain **HTML with custom tags**.
 - These tags are processed **before the file is retrieved/served**.
 
-Example file: `app/web/pages/home.html`
+Example file: `app/ui/web/pages/home.html`
 
 ```html
 <html>
@@ -374,7 +374,7 @@ endpoints:
         return json(users)
 ```
 
-**`app/web/pages/home.html` (HTML + custom tags owned by `frame.ui`)**
+**`app/ui/web/pages/home.html` (HTML + custom tags owned by `frame.ui`)**
 
 ```html
 <html>
@@ -396,7 +396,7 @@ In this example:
 - `main.cln` declares the project, compiler, plugins and framework via the `plugins:` block.
 - `main.cln` defines `start`, the entrypoint block executed by the framework runtime.
 - `app/server/api/users.cln` is discovered by `frame.server` (its owned folder) and turned into real endpoint registration code.
-- `app/web/pages/home.html` is discovered by `frame.ui` (its owned folder) and compiled into a renderable page template.
+- `app/ui/web/pages/home.html` is discovered by `frame.ui` (its owned folder) and compiled into a renderable page template.
 
 Developers do not need extra boilerplate; they only need to respect the folder structure and file conventions.
 

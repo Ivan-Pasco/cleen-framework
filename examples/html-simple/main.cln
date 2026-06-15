@@ -3,4 +3,4 @@ package: HtmlSimple
 
 	target: web
 		plugins: [frame.ui]
-		entry: app/web/pages/index.html
+		entry: app/ui/web/pages/index.html

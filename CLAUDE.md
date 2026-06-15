@@ -94,7 +94,7 @@ See **[PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md)** — canonical ref
 
 #### Key Rules
 
-1. **Standard HTML for pages** — Use `.html` in `app/web/pages/`. Full editor support (Emmet, Prettier, syntax highlighting).
+1. **Standard HTML for pages** — Use `.html` in `app/ui/web/pages/`. Full editor support (Emmet, Prettier, syntax highlighting).
 
 2. **Standard CSS for styles** — Use `.css` in `public/css/`. No inline `<style>` tags. No CSS in HTML files.
 

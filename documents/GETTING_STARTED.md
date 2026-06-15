@@ -40,7 +40,7 @@ For the full folder reference, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md
 
 ## Your First Page
 
-Edit `app/web/pages/index.html`:
+Edit `app/ui/web/pages/index.html`:
 
 ```html
 <html>
@@ -60,7 +60,7 @@ Edit `app/web/pages/index.html`:
 Pages get their data from a companion `.cln` file with the same name:
 
 ```clean
-// app/web/pages/index.cln
+// app/ui/web/pages/index.cln
 functions:
 	any load(Request request)
 		return { appName: "My App" }
@@ -82,7 +82,7 @@ Open http://localhost:3000 in your browser.
 
 ## Add More Pages
 
-Create `app/web/pages/about.html`:
+Create `app/ui/web/pages/about.html`:
 
 ```html
 <html>
@@ -97,7 +97,7 @@ Rebuild and the `/about` route is automatically available.
 
 ## Dynamic Routes
 
-Create `app/web/pages/blog/[slug].html` for dynamic URLs:
+Create `app/ui/web/pages/blog/[slug].html` for dynamic URLs:
 
 ```html
 <html>
@@ -119,10 +119,10 @@ functions:
 				slug == slug
 ```
 
-Then the companion `app/web/pages/blog/[slug].cln` is a thin web adapter that just binds the URL param and calls the logic:
+Then the companion `app/ui/web/pages/blog/[slug].cln` is a thin web adapter that just binds the URL param and calls the logic:
 
 ```clean
-// app/web/pages/blog/[slug].cln
+// app/ui/web/pages/blog/[slug].cln
 import "app/logic/posts"
 
 functions:
@@ -183,15 +183,15 @@ Models are auto-discovered and available in your pages and API endpoints.
 | `app/logic/` | Business logic (.cln) | — (always compiled) |
 | `app/data/models/` | Data model definitions (.cln) | frame.data |
 | `app/data/migrations/` | Schema migrations (.cln) | frame.data |
-| `app/web/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
-| `app/web/components/` | Reusable components (.cln) | frame.ui |
-| `app/web/layouts/` | Page layouts (.html) | frame.ui |
+| `app/ui/web/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
+| `app/ui/web/components/` | Reusable components (.cln) | frame.ui |
+| `app/ui/web/layouts/` | Page layouts (.html) | frame.ui |
 | `app/auth/` | Auth configuration (.cln) | frame.auth |
 | `public/` | Static files (CSS, images) | (served as-is) |
 
 | File Pattern | Route |
 |--------------|-------|
-| `app/web/pages/index.html` | `/` |
-| `app/web/pages/about.html` | `/about` |
-| `app/web/pages/blog/[slug].html` | `/blog/:slug` |
+| `app/ui/web/pages/index.html` | `/` |
+| `app/ui/web/pages/about.html` | `/about` |
+| `app/ui/web/pages/blog/[slug].html` | `/blog/:slug` |
 | `app/server/api/users.cln` | `/api/users` |

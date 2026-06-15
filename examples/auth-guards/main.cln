@@ -3,4 +3,4 @@ package: AuthGuards
 
     target: web
         plugins: [frame.ui, frame.server, frame.auth]
-        entry: app/web/pages/index.html
+        entry: app/ui/web/pages/index.html

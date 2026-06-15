@@ -3,4 +3,4 @@ package: RegistrationForm
 
     target: web
         plugins: [frame.ui, frame.server]
-        entry: app/web/pages/index.html
+        entry: app/ui/web/pages/index.html

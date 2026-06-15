@@ -22,17 +22,19 @@ my-app/
 │   │   ├── api/                 # Endpoint handlers (endpoints: blocks)
 │   │   └── middleware/          # Request filters (.cln)
 │   │
-│   └── web/                     # Web rendering layer               → frame.ui (web)
-│       ├── pages/               # Auto-routed page files
-│       │   ├── home.cln         # Home page (/) — Clean component
-│       │   ├── about.html       # About page (/about) — HTML template
-│       │   ├── about.cln        # Web adapter: URL binding + guard for about.html
-│       │   └── blog/
-│       │       ├── [slug].html  # Dynamic route (/blog/:slug)
-│       │       └── [slug].cln   # Web adapter: URL binding + guard
-│       ├── components/          # Web-specific reusable components
-│       ├── layouts/             # Page layout wrappers (.html)
-│       └── routes.cln           # Special routing rules only (see below)
+│   └── ui/                     # UI plugin root                     → frame.ui
+│       ├── shared/             # Cross-platform components (used by every render target)
+│       └── web/                # Web rendering target
+│           ├── pages/          # Auto-routed page files
+│           │   ├── home.cln    # Home page (/) — Clean component
+│           │   ├── about.html  # About page (/about) — HTML template
+│           │   ├── about.cln   # Web adapter: URL binding + guard for about.html
+│           │   └── blog/
+│           │       ├── [slug].html  # Dynamic route (/blog/:slug)
+│           │       └── [slug].cln   # Web adapter: URL binding + guard
+│           ├── components/     # Web-specific reusable components
+│           ├── layouts/        # Page layout wrappers (.html)
+│           └── routes.cln      # Special routing rules only (see below)
 │
 └── public/
     ├── css/
@@ -52,7 +54,7 @@ package: MyApp
 
     target: web
         plugins: [frame.ui, frame.server, frame.auth]
-        entry: app/web/pages/home.cln
+        entry: app/ui/web/pages/home.cln
 ```
 
 The `shared:` block lists folders that compile for every target — web, mobile, desktop. You write the logic once and it just works everywhere. The `target:` blocks then add the platform-specific plugins on top.
@@ -61,7 +63,11 @@ The `public/` folder at the project root is served directly by the HTTP server w
 
 ## Naming Rule
 
-**Folder name = plugin name after the dot.** `frame.server` → `server/`, `frame.data` → `data/`, `frame.ui` → `ui/` and `web/`, `frame.auth` → `auth/`, `frame.canvas` → `canvas/`. No lookup table needed — the folder declares ownership.
+**Folder name = plugin name after the dot.** `frame.server` → `server/`, `frame.data` → `data/`, `frame.ui` → `ui/`, `frame.auth` → `auth/`, `frame.canvas` → `canvas/`. No exceptions, no lookup table — the folder declares ownership.
+
+Multi-target plugins nest render targets **under** their own folder rather than spreading at the project root: `frame.ui` owns `app/ui/`, with `app/ui/web/`, `app/ui/mobile/`, `app/ui/desktop/` as target subfolders and `app/ui/shared/` for code that works across targets. When a future plugin goes multi-target it follows the same pattern (e.g. `app/data/postgres/`, `app/data/sqlite/`).
+
+The compiler reads each plugin's `[paths].owns` list from its `plugin.toml`; no folder name is hardcoded in the compiler.
 
 ## Plugin Folder Ownership
 
@@ -72,8 +78,9 @@ Plugins must be declared in `main.cln` via the `target:` block. Once declared, f
 | `app/server/`, `app/server/api/`, `app/server/middleware/` | `frame.server` |
 | `app/logic/` | — (core compiler, always compiled) |
 | `app/data/`, `app/data/models/`, `app/data/migrations/`, `app/data/seeds/` | `frame.data` |
-| `app/web/pages/`, `app/web/components/`, `app/web/layouts/` | `frame.ui` |
-| `app/ui/` | `frame.ui` — only needed for multi-platform projects |
+| `app/ui/`, `app/ui/shared/` | `frame.ui` (shared, multi-platform) |
+| `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` | `frame.ui` (web target) |
+| `app/ui/web/client/` and `app/ui/web/pages/*.client.cln` | `frame.client` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/` | `frame.canvas` |
 
@@ -87,8 +94,8 @@ Each layer depends only on layers above it:
 | `app/logic/` | — | data/ |
 | `app/state/` | — | logic/, data/ |
 | `app/server/` | frame.server | logic/, data/ |
-| `app/ui/` | frame.ui | nothing — only needed for multi-platform projects |
-| `app/web/` | frame.ui | logic/, state/, ui/ |
+| `app/ui/shared/` | frame.ui | nothing — only needed for multi-platform projects |
+| `app/ui/web/` | frame.ui | logic/, state/, ui/shared/ |
 | `app/canvas/` | frame.canvas | logic/, state/ |
 
 ## Folder Reference
@@ -171,7 +178,7 @@ functions:
 
 Page companions and API endpoints call into `app/logic/` rather than querying the database directly, so the same logic can serve a web page, a mobile screen, and a REST endpoint without duplication.
 
-### `app/web/pages/`
+### `app/ui/web/pages/`
 
 Page files auto-routed by file path. Each file becomes a GET route. Owned by `frame.ui`. Accepts both `.html` templates and `.cln` components.
 
@@ -186,14 +193,14 @@ Page files auto-routed by file path. Each file becomes a GET route. Owned by `fr
 **Companion files**: Each `.html` page can have a matching `.cln` file (same name). The companion is a thin **web adapter** — it parses URL params, enforces guards, then delegates data-fetching to `app/logic/`. It never queries the database directly.
 
 ```
-app/web/pages/
+app/ui/web/pages/
 ├── about.html               # HTML template
 └── about.cln                # Web adapter: URL binding + guard for about.html
 ```
 
 **Example page:**
 ```html
-<!-- app/web/pages/blog/[slug].html -->
+<!-- app/ui/web/pages/blog/[slug].html -->
 <page layout="main"></page>
 
 <article>
@@ -204,7 +211,7 @@ app/web/pages/
 
 **Example companion** (delegates to `app/logic/posts`):
 ```clean
-// app/web/pages/blog/[slug].cln
+// app/ui/web/pages/blog/[slug].cln
 import "app/logic/posts"
 
 functions:
@@ -218,14 +225,14 @@ functions:
 - `{expression}` — HTML-escaped output (safe, default)
 - `{!expression}` — Raw HTML output (trusted content only)
 
-### `app/web/routes.cln`
+### `app/ui/web/routes.cln`
 
 Special-case routing rules that cannot be expressed as page files. Use only when needed — regular pages go in `pages/` with no routing declaration required.
 
 Handles: cross-cutting guards, URL redirects, pretty-URL rewrites, error pages.
 
 ```clean
-// app/web/routes.cln
+// app/ui/web/routes.cln
 routes:
 	redirect: "/old-about" → "/about"
 	redirect: "/blog/:slug" → "/posts/:slug"
@@ -257,7 +264,7 @@ routes:
 ```
 
 ```clean
-// app/web/pages/posts/[id].cln — room door, resource ownership only
+// app/ui/web/pages/posts/[id].cln — room door, resource ownership only
 import "app/logic/posts"
 
 functions:
@@ -277,8 +284,8 @@ functions:
 Reactive client-side state. Each file drives the same view across multiple render targets — web, mobile, desktop — without duplicating logic.
 
 ```
-app/state/dashboard.cln  ──→  app/web/pages/dashboard.cln (web)
-                          ──→  app/desktop/screens/dashboard.cln (future)
+app/state/dashboard.cln  ──→  app/ui/web/pages/dashboard.cln (web)
+                          ──→  app/ui/desktop/screens/dashboard.cln (future)
 ```
 
 State uses the `state:` block:
@@ -294,7 +301,7 @@ state:
 			return userName ?? "Guest"
 ```
 
-### `app/web/components/`
+### `app/ui/web/components/`
 
 Web-specific reusable components. PascalCase filename becomes a kebab-case tag. Owned by `frame.ui`.
 
@@ -307,7 +314,7 @@ Web-specific reusable components. PascalCase filename becomes a kebab-case tag. 
 Each component automatically links a CSS file from `public/css/components/` matching its tag name. The framework injects `<link rel="stylesheet" href="/css/components/{tag}.css">` into the page `<head>` when the component renders — deduplicated, so one link tag per tag name per page. Override with the `css=` attribute.
 
 ```
-app/web/components/
+app/ui/web/components/
     UserCard.cln     ← component definition (no styles block)
 
 public/css/components/
@@ -316,7 +323,7 @@ public/css/components/
 
 **Example component:**
 ```clean
-// app/web/components/UserCard.cln
+// app/ui/web/components/UserCard.cln
 component: tag="user-card"
 	inputs:
 		string userId
@@ -341,15 +348,15 @@ component: tag="user-card"
 component: tag="user-card" css="/css/shared/cards.css"
 ```
 
-**Going multi-platform?** When you add a second target (mobile, desktop), create `app/ui/` for components that work on all platforms. For web-only projects, keep everything in `app/web/components/` — adding `app/ui/` before you need it just creates an extra folder with nothing in it.
+**Going multi-platform?** When you add a second target (mobile, desktop), put components that work on every target in `app/ui/shared/`. For web-only projects, keep everything in `app/ui/web/components/` — adding `app/ui/shared/` before you need it just creates an extra folder with nothing in it.
 
-### `app/web/layouts/`
+### `app/ui/web/layouts/`
 
 Page layout wrappers referenced by pages via `<page layout="name">`. Owned by `frame.ui`.
 
 **Example layout:**
 ```html
-<!-- app/web/layouts/main.html -->
+<!-- app/ui/web/layouts/main.html -->
 <html>
 <head>
     <title>My Site</title>

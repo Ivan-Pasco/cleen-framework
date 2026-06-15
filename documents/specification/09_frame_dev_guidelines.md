@@ -50,7 +50,7 @@ For the canonical folder layout, see [PROJECT_STRUCTURE.md](../PROJECT_STRUCTURE
 
 | Plugin | Owned paths |
 |--------|-------------|
-| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.ui` | `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` |
 | `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |

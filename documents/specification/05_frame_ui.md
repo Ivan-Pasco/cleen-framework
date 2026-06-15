@@ -23,10 +23,10 @@
 ## 2. Architecture Overview
 
 ```
-app/web/pages/*.html      (HTML with Clean Language processing)
+app/ui/web/pages/*.html      (HTML with Clean Language processing)
         │
         ▼ parse
-app/web/components/*.cln      (Clean components define custom tags)
+app/ui/web/components/*.cln      (Clean components define custom tags)
         │
         ▼ compile
 dist/app.wasm                (SSR renderer)
@@ -41,11 +41,11 @@ HTML + loader.js             (Browser receives rendered page)
 
 | Extension | Location | Purpose |
 |-----------|----------|---------|
-| `.html` | `app/web/pages/` | All pages (both dynamic and static) — file-based routing |
-| `.cln` | `app/web/pages/` | Companion loaders for pages (`load()`, `guard()` functions) |
-| `.cln` | `app/web/components/` | Reusable UI components |
+| `.html` | `app/ui/web/pages/` | All pages (both dynamic and static) — file-based routing |
+| `.cln` | `app/ui/web/pages/` | Companion loaders for pages (`load()`, `guard()` functions) |
+| `.cln` | `app/ui/web/components/` | Reusable UI components |
 
-**All pages go in `app/web/pages/`**, whether they use Clean directives or not. This gives every page consistent file-based routing (e.g., `about.html` → `/about`).
+**All pages go in `app/ui/web/pages/`**, whether they use Clean directives or not. This gives every page consistent file-based routing (e.g., `about.html` → `/about`).
 
 The `public/` folder (at the project root) is for **assets only** (CSS, images, fonts) — not for pages.
 
@@ -106,12 +106,12 @@ cleen scan                                    # Preview discovered routes/compon
 
 ## 3. Page Structure (HTML)
 
-Pages are `.html` files in `app/web/pages/`. File paths map to URL routes.
+Pages are `.html` files in `app/ui/web/pages/`. File paths map to URL routes.
 
 ### 3.1 Basic Page
 
 ```html
-<!-- app/web/pages/index.html → / -->
+<!-- app/ui/web/pages/index.html → / -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -135,11 +135,11 @@ Pages are `.html` files in `app/web/pages/`. File paths map to URL routes.
 
 | File Path | URL Route |
 |-----------|-----------|
-| `app/web/pages/index.html` | `/` |
-| `app/web/pages/about.html` | `/about` |
-| `app/web/pages/blog/index.html` | `/blog` |
-| `app/web/pages/blog/[slug].html` | `/blog/:slug` |
-| `app/web/pages/users/[id]/posts.html` | `/users/:id/posts` |
+| `app/ui/web/pages/index.html` | `/` |
+| `app/ui/web/pages/about.html` | `/about` |
+| `app/ui/web/pages/blog/index.html` | `/blog` |
+| `app/ui/web/pages/blog/[slug].html` | `/blog/:slug` |
+| `app/ui/web/pages/users/[id]/posts.html` | `/users/:id/posts` |
 
 ### 3.3 Page Metadata
 
@@ -198,10 +198,10 @@ Custom HTML tags are defined by Clean Language components. Tags follow the Web C
 
 ### 4.2 Component Definition (Clean)
 
-Components are defined in `app/web/components/*.cln` using `html:` blocks for templates:
+Components are defined in `app/ui/web/components/*.cln` using `html:` blocks for templates:
 
 ```clean
-// app/web/components/UserCard.cln
+// app/ui/web/components/UserCard.cln
 component: tag="user-card"
     inputs:
         string userId
@@ -304,7 +304,7 @@ return __html
 
 ### 4.4 Component Registry
 
-Components are auto-discovered from `app/web/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
+Components are auto-discovered from `app/ui/web/components/`. The tag name comes from the `tag=` attribute in the component definition, or is derived from the filename (PascalCase → kebab-case).
 
 **Naming convention:**
 - File: `UserCard.cln`
@@ -315,9 +315,9 @@ Components are auto-discovered from `app/web/components/`. The tag name comes fr
 
 ```clean
 tags:
-    "app-header": "app/web/components/Header"
-    "app-footer": "app/web/components/Footer"
-    "user-card": "app/web/components/UserCard"
+    "app-header": "app/ui/web/components/Header"
+    "app-footer": "app/ui/web/components/Footer"
+    "user-card": "app/ui/web/components/UserCard"
 ```
 
 ---
@@ -348,10 +348,10 @@ There are three layers involved in serving a page:
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
 | Business logic | `app/logic/` | Data-fetching queries, shared across all targets |
-| Web adapter | `app/web/pages/name.cln` | URL params, guard, calls `app/logic/` |
+| Web adapter | `app/ui/web/pages/name.cln` | URL params, guard, calls `app/logic/` |
 | Reactive state | `app/state/` | Client-side state, drives multiple targets |
 
-**Page companion** (lives alongside the `.html` in `app/web/pages/`):
+**Page companion** (lives alongside the `.html` in `app/ui/web/pages/`):
 
 The companion is a thin **web adapter**. It handles what is web-specific — URL params, request context, access guards — then delegates data-fetching to `app/logic/`. It does not query the database directly.
 
@@ -359,7 +359,7 @@ The companion is a thin **web adapter**. It handles what is web-specific — URL
 app/logic/
 └── users.cln            # Shared: getById(), findActive(), etc.
 
-app/web/pages/
+app/ui/web/pages/
 ├── profile.html         # Template (pure HTML + { } + cl-*)
 └── profile.cln          # Web adapter: params + guard, calls app/logic/users
 ```
@@ -367,7 +367,7 @@ app/web/pages/
 **State companion** (lives in `app/state/`, drives the same view across multiple render targets):
 
 ```
-app/state/dashboard.cln  ──→  app/web/pages/dashboard.cln (web)
+app/state/dashboard.cln  ──→  app/ui/web/pages/dashboard.cln (web)
                           ──→  app/desktop/screens/dashboard.cln (future)
 ```
 
@@ -416,14 +416,14 @@ functions:
 ```
 
 ```clean
-// app/web/routes.cln — front door, handles all /dashboard/* pages at once
+// app/ui/web/routes.cln — front door, handles all /dashboard/* pages at once
 routes:
     guard: "/dashboard/*" [user]
     guard: "/admin/*" [admin]
 ```
 
 ```clean
-// app/web/pages/profile.cln — room door, resource ownership only
+// app/ui/web/pages/profile.cln — room door, resource ownership only
 import "app/logic/users"
 
 functions:
@@ -441,7 +441,7 @@ functions:
 ```
 
 ```html
-<!-- app/web/pages/profile.html -->
+<!-- app/ui/web/pages/profile.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -746,7 +746,7 @@ Page-level `client` attribute overrides component default.
 ### 8.1 Layout Definition
 
 ```html
-<!-- app/web/layouts/main.html -->
+<!-- app/ui/web/layouts/main.html -->
 <!DOCTYPE html>
 <html>
 <head>
@@ -769,7 +769,7 @@ Page-level `client` attribute overrides component default.
 ### 8.2 Using Layouts
 
 ```html
-<!-- app/web/pages/about.html -->
+<!-- app/ui/web/pages/about.html -->
 <page layout="main"></page>
 
 <h1>About Us</h1>
@@ -779,7 +779,7 @@ Page-level `client` attribute overrides component default.
 ### 8.3 Named Slots
 
 ```html
-<!-- app/web/layouts/dashboard.html -->
+<!-- app/ui/web/layouts/dashboard.html -->
 <div class="dashboard">
     <aside>
         <slot name="sidebar"></slot>
@@ -791,7 +791,7 @@ Page-level `client` attribute overrides component default.
 ```
 
 ```html
-<!-- app/web/pages/dashboard.html -->
+<!-- app/ui/web/pages/dashboard.html -->
 <page layout="dashboard"></page>
 
 <slot name="sidebar">
@@ -1203,7 +1203,7 @@ For client-server communication (HTTP, WebSocket, SSE), see [18_frame_client.md]
 ### 15.1 Simple Page
 
 ```html
-<!-- app/web/pages/index.html -->
+<!-- app/ui/web/pages/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1244,7 +1244,7 @@ functions:
 ```
 
 ```clean
-// app/web/pages/blog/[slug].cln
+// app/ui/web/pages/blog/[slug].cln
 import "app/logic/posts"
 
 functions:
@@ -1256,7 +1256,7 @@ functions:
 ```
 
 ```html
-<!-- app/web/pages/blog/[slug].html -->
+<!-- app/ui/web/pages/blog/[slug].html -->
 <page layout="main"></page>
 
 <article class="blog-post">
@@ -1286,7 +1286,7 @@ functions:
 ### 15.3 Interactive Component
 
 ```clean
-// app/web/components/CommentForm.cln
+// app/ui/web/components/CommentForm.cln
 component: tag="comment-form" client="on"
     inputs:
         string postId

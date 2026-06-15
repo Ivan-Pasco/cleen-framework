@@ -83,10 +83,10 @@ Each Frame subsystem has a clear boundary and relies on the Host Bridge as the s
 Standard paths used across all Frame-based projects. Each path is owned by the plugin whose `plugin.toml` declares it under `[paths] owns`.
 
 ```
-/app/web/pages/*.html              → SSR page templates (HTML with {{ }} and cl-* directives)  [frame.ui]
-/app/web/pages/*.cln               → Companion data loaders (paired by filename: load/guard)   [frame.ui]
-/app/web/components/*.cln          → Reusable UI components                                    [frame.ui]
-/app/web/layouts/*.html            → Page layout wrappers                                      [frame.ui]
+/app/ui/web/pages/*.html              → SSR page templates (HTML with {{ }} and cl-* directives)  [frame.ui]
+/app/ui/web/pages/*.cln               → Companion data loaders (paired by filename: load/guard)   [frame.ui]
+/app/ui/web/components/*.cln          → Reusable UI components                                    [frame.ui]
+/app/ui/web/layouts/*.html            → Page layout wrappers                                      [frame.ui]
 /app/server/*.cln             → Server entry points                                       [frame.server]
 /app/server/api/*.cln         → HTTP API endpoints                                        [frame.server]
 /app/logic/*.cln    → Business logic services                                   [core compiler — no plugin]
@@ -112,7 +112,7 @@ Standard paths used across all Frame-based projects. Each path is owned by the p
 
 | Plugin | Owned Paths |
 |--------|-------------|
-| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.ui` | `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` |
 | `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |

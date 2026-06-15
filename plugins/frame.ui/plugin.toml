@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.15"
+version = "2.12.16"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -143,7 +143,7 @@ functions = [
   { name = "_build_state_get", params = ["string"], returns = "string", description = "Read a key from the compiler-owned build_state keystore. Returns the empty string when the key is absent.", expand_strings = true, hosts = ["all"] },
 
   # HTML Page Rendering (SSR)
-  # Renders app/web/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
+  # Renders app/ui/web/pages/<name>.html with {{ key }} substitution from data_json (JSON object string).
   # Implemented by clean-server: resolves the page template, substitutes interpolations, returns HTML.
   # Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §4.1.
   # SRV001 fix: clean-server's _ui_render_page implementation MUST scan the
@@ -154,7 +154,7 @@ functions = [
   # tag in place if no matching export is found.
   # Moved from frame.server in v2.10.138 — declaration belongs with frame.ui
   # so server-only API apps (no frame.ui) aren't forced to load it.
-  { name = "_ui_render_page", params = ["string", "string"], returns = "ptr", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/web/pages/<name>.html", expand_strings = true, hosts = ["server"], callback = { purpose = "component_tag_render", plugin_target = "frame.ui", discovery = "exports_matching", export_pattern = "{tagname}_render", fallback = "passthrough" } },
+  { name = "_ui_render_page", params = ["string", "string"], returns = "ptr", description = "Render HTML page template by name with JSON data for {{ key }} substitution; resolves app/ui/web/pages/<name>.html", expand_strings = true, hosts = ["server"], callback = { purpose = "component_tag_render", plugin_target = "frame.ui", discovery = "exports_matching", export_pattern = "{tagname}_render", fallback = "passthrough" } },
 
   # HTML Rendering
   { name = "_html_escape", params = ["string"], returns = "ptr", description = "Escape HTML entities in string", expand_strings = true, signature = "_html_escape(text) -> string", hosts = ["server"] },
@@ -165,7 +165,7 @@ functions = [
   { name = "_ui_get_component", params = ["string"], returns = "string", description = "Get component class by tag name", expand_strings = true, signature = "_ui_get_component(tagName) -> string", hosts = ["server"] },
 
   # Layout Loading
-  { name = "_ui_load_layout", params = ["string"], returns = "ptr", description = "Load layout HTML template by name from app/web/layouts/", expand_strings = true, signature = "_ui_load_layout(name) -> string", hosts = ["server"] },
+  { name = "_ui_load_layout", params = ["string"], returns = "ptr", description = "Load layout HTML template by name from app/ui/web/layouts/", expand_strings = true, signature = "_ui_load_layout(name) -> string", hosts = ["server"] },
 
   # Slot Management
   { name = "_ui_set_slot", params = ["string", "string"], returns = "integer", description = "Set slot content: slot name, content", expand_strings = true, signature = "_ui_set_slot(name, content)", hosts = ["server"] },
@@ -336,8 +336,8 @@ types = [
 functions = [
   # SSR response helpers — emitted by frame.ui's preamble. Moved from frame.server
   # in v2.10.138 because SSR is frame.ui's responsibility.
-  { name = "render", signature = "render(name)", description = "Render HTML page from app/web/pages/<name>.html and return as 200 text/html response" },
-  { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page from app/web/pages/<name>.html with JSON data string for {{ key }} template substitution" },
+  { name = "render", signature = "render(name)", description = "Render HTML page from app/ui/web/pages/<name>.html and return as 200 text/html response" },
+  { name = "renderWith", signature = "renderWith(name, data_json)", description = "Render HTML page from app/ui/web/pages/<name>.html with JSON data string for {{ key }} template substitution" },
   { name = "rawHtml", signature = "rawHtml(content)", description = "Render unescaped HTML (use with caution)" },
   { name = "escape", signature = "escape(text)", description = "Escape HTML entities" },
   { name = "slot", signature = "slot(name?)", description = "Render slot content" },
@@ -479,8 +479,11 @@ completions = [
 ]
 
 [paths]
-# Folders owned by this plugin - auto-created on plugin import
-owns = ["app/ui", "app/web", "app/web/pages", "app/web/components", "app/web/layouts"]
+# Folders owned by this plugin - auto-created on plugin import.
+# Render targets nest under app/ui/ so the "folder name = plugin name after the dot"
+# rule holds: frame.ui → app/ui/, with web/, mobile/, desktop/ as target subfolders
+# and shared/ for cross-platform code.
+owns = ["app/ui", "app/ui/shared", "app/ui/web", "app/ui/web/pages", "app/ui/web/components", "app/ui/web/layouts"]
 
 # Automatically create folders when plugin is imported
 auto_create = true
@@ -494,7 +497,7 @@ implicit_import = true
 [templates]
 # Starter files created when plugin is added to a project
 files = [
-  { path = "app/web/pages/index.html", template = "index.html" },
+  { path = "app/ui/web/pages/index.html", template = "index.html" },
 ]
 
 [enforcement]
@@ -503,18 +506,18 @@ severity = "warn"
 restricted_functions = []
 
 required_blocks = [
-  { folder = "app/web/components/", block = "component", message = "Component files should contain 'component' definitions" },
+  { folder = "app/ui/web/components/", block = "component", message = "Component files should contain 'component' definitions" },
 ]
 
 block_folder_rules = [
-  { block = "component", allowed_in = ["app/web/components/", "app/ui/"], message = "component: blocks should be in app/web/components/ or app/ui/" },
+  { block = "component", allowed_in = ["app/ui/web/components/", "app/ui/shared/"], message = "component: blocks should be in app/ui/web/components/ or app/ui/shared/" },
 ]
 
 [ai]
 description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. CSS goes in public/css/ files. Never write inline JavaScript."
 constraints = [
-  "Pages go in app/web/pages/ as .html files — not as .cln files",
-  "Reusable elements belong in component: blocks in app/web/components/ or app/ui/ for cross-platform components",
+  "Pages go in app/ui/web/pages/ as .html files — not as .cln files",
+  "Reusable elements belong in component: blocks in app/ui/web/components/ or app/ui/shared/ for cross-platform components",
   "Use cl-iterate for lists — never build HTML strings by concatenation",
   "Use ui.formJson() to collect form inputs — never access DOM fields manually",
   "Event handlers must be exported Clean functions — never inline JS",
@@ -551,4 +554,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.292"
+built_with_compiler = "0.30.293"

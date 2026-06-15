@@ -594,16 +594,16 @@ load:
 `load:` belongs in a client-side companion `.cln` file:
 
 ```
-app/web/pages/
+app/ui/web/pages/
 ├── users.html          ← HTML template
 ├── users.cln           ← server-side: load(), guard()
 └── users.client.cln    ← client-side: load: block (frame.client)
 ```
 
-Or in a standalone client file in `app/web/client/`:
+Or in a standalone client file in `app/ui/web/client/`:
 
 ```
-app/web/client/
+app/ui/web/client/
 └── users-data.cln      ← load: block only
 ```
 
@@ -721,7 +721,7 @@ form: <method> "<url>"
 `form:` belongs in a client-side companion `.cln` file:
 
 ```
-app/web/pages/
+app/ui/web/pages/
 ├── new-task.html            ← HTML template
 ├── new-task.cln             ← server-side: guard(), load()
 └── new-task.client.cln     ← client-side: form: block (frame.client)
@@ -963,7 +963,7 @@ send: archiveUser patch "/api/users/{id}/archive"
 `send:` belongs in a client-side companion `.cln` file:
 
 ```
-app/web/pages/
+app/ui/web/pages/
 ├── users.html              ← HTML template
 ├── users.cln               ← server-side: load(), guard()
 └── users.client.cln        ← client-side: load: / form: / send: blocks
@@ -972,7 +972,7 @@ app/web/pages/
 ### 10.10 Example — Delete Task Button
 
 ```clean
-// app/web/pages/tasks.client.cln
+// app/ui/web/pages/tasks.client.cln
 send: deleteTask delete "/api/tasks/{taskId}"
     on success: emit "reloadTasks"
 ```
@@ -1001,7 +1001,7 @@ component: tag="task-row"
 ### 10.11 Example — Toggle Feature Flag
 
 ```clean
-// app/web/pages/admin.client.cln
+// app/ui/web/pages/admin.client.cln
 send: toggleFlag patch "/api/flags/{flagName}/toggle"
     on success: emit "reloadFlags"
     on error: emit "showFlagError"

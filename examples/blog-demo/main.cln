@@ -3,4 +3,4 @@ package: BlogDemo
 
 	target: web
 		plugins: [frame.ui, frame.server, frame.data]
-		entry: app/web/pages/index.html
+		entry: app/ui/web/pages/index.html

@@ -81,9 +81,9 @@ functions:
 	string emit_ssr_helpers()
 		string result = "functions:\n"
 		result = result + "\tstring render(string name)\n"
-		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", \"{}\")\n\n"
+		result = result + "\t\treturn _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", \"{}\")\n\n"
 		result = result + "\tstring renderWith(string name, string data)\n"
-		result = result + "\t\treturn _ui_render_page(\"app/web/pages/\" + name + \".html\", data)\n\n"
+		result = result + "\t\treturn _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", data)\n\n"
 		return result
 
 	// Plugin Contracts v2 — client_init lifecycle slot.
@@ -1825,7 +1825,7 @@ functions:
 		// content replaces the default <slot></slot>.
 		if layout != ""
 			result = result + "\t\t\tstring __page_content = html\n"
-			result = result + "\t\t\tstring __layout_html = _ui_loadLayout(\"app/web/layouts/" + layout + ".html\")\n"
+			result = result + "\t\t\tstring __layout_html = _ui_loadLayout(\"app/ui/web/layouts/" + layout + ".html\")\n"
 			result = result + "\t\t\tif __layout_html != \"\"\n"
 			// Named slot extraction loop — runs up to 10 named slots
 			result = result + "\t\t\t\tinteger __slot_i = 0\n"
@@ -3735,7 +3735,7 @@ functions:
 // Scans source_files for page companions — .cln files in any pages/ directory
 // that define any load() or any guard() — then:
 //   1. Prefixes their function names with a module name from the file path
-//      (e.g. app/web/pages/login.cln → pages_login_load / pages_login_guard)
+//      (e.g. app/ui/web/pages/login.cln → pages_login_load / pages_login_guard)
 //   2. Normalises Request parameter types to any on prefixed signatures
 //   3. When has_frame_server=true, injects __page_routes_generated.cln which
 //      registers a GET route per page using _http_route + _ui_render_page
@@ -3985,9 +3985,9 @@ functions:
 
 		return result
 
-	// "app/web/pages/login.cln"           -> "pages_login"
-	// "app/web/pages/dashboard/index.cln" -> "pages_dashboard_index"
-	// "app/web/pages/blog/[slug].cln"     -> "pages_blog_slug"
+	// "app/ui/web/pages/login.cln"           -> "pages_login"
+	// "app/ui/web/pages/dashboard/index.cln" -> "pages_dashboard_index"
+	// "app/ui/web/pages/blog/[slug].cln"     -> "pages_blog_slug"
 	string derive_module_name(string file_path)
 		integer pages_pos = file_path.indexOf("pages/")
 		string rel = file_path
@@ -4004,10 +4004,10 @@ functions:
 
 		return "pages_" + name
 
-	// "app/web/pages/login.cln"           -> "/login"
-	// "app/web/pages/index.cln"           -> "/"
-	// "app/web/pages/dashboard/index.cln" -> "/dashboard"
-	// "app/web/pages/blog/[slug].cln"     -> "/blog/:slug"
+	// "app/ui/web/pages/login.cln"           -> "/login"
+	// "app/ui/web/pages/index.cln"           -> "/"
+	// "app/ui/web/pages/dashboard/index.cln" -> "/dashboard"
+	// "app/ui/web/pages/blog/[slug].cln"     -> "/blog/:slug"
 	string derive_url_path(string file_path)
 		integer pages_pos = file_path.indexOf("pages/")
 		string rel = file_path
@@ -4035,7 +4035,7 @@ functions:
 
 		return "/" + url
 
-	// "app/web/pages/login.cln" -> "app/web/pages/login.html"
+	// "app/ui/web/pages/login.cln" -> "app/ui/web/pages/login.html"
 	string derive_html_path(string file_path)
 		if file_path.endsWith(".cln")
 			return file_path.substring(0, file_path.length() - 4) + ".html"

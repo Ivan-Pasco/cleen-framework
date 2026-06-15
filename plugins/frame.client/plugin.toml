@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.client"
-version = "1.2.1"
+version = "1.2.2"
 description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, SSE feeds, and declarative blocks (load:, form:, send:)"
 author = "Clean Language Team"
 license = "MIT"
@@ -196,7 +196,7 @@ anti_pattern = "writing a manual void deleteTask() handler for every button — 
 example = "patterns/send-mutation.cln"
 
 [paths]
-owns = ["app/web/client"]
+owns = ["app/ui/web/client"]
 auto_create = true
 patterns = ["*.cln"]
 implicit_import = false
@@ -211,4 +211,4 @@ required_blocks = []
 block_folder_rules = []
 
 [build]
-built_with_compiler = "0.30.292"
+built_with_compiler = "0.30.293"

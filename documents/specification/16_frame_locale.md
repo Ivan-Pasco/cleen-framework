@@ -249,7 +249,7 @@ Signature: `locale.formatDate(timestamp: number, style: string, locale: string) 
 Translation functions are available inside `{{ }}` interpolation in HTML pages:
 
 ```html
-<!-- app/web/pages/dashboard.html -->
+<!-- app/ui/web/pages/dashboard.html -->
 <h1>{{ t("users.greeting", params) }}</h1>
 <p>{{ tc("users.count", userCount, "{}") }}</p>
 <button>{{ t("common.save", "{}") }}</button>
@@ -258,7 +258,7 @@ Translation functions are available inside `{{ }}` interpolation in HTML pages:
 The companion `.cln` file sets up the variables:
 
 ```clean
-// app/web/pages/dashboard.cln
+// app/ui/web/pages/dashboard.cln
 functions:
     any load(Request req)
         return {
@@ -366,7 +366,7 @@ endpoints:
 ### Page with formatted price
 
 ```clean
-// app/web/pages/product.cln
+// app/ui/web/pages/product.cln
 functions:
     any load(Request req)
         string id = req.params.id
@@ -380,7 +380,7 @@ functions:
 ```
 
 ```html
-<!-- app/web/pages/product.html -->
+<!-- app/ui/web/pages/product.html -->
 <article>
     <h1>{{ product.name }}</h1>
     <p>{{ priceLabel }}</p>

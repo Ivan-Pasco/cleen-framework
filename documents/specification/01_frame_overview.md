@@ -258,7 +258,7 @@ Each plugin declares the folders it owns in its `plugin.toml` file. When a plugi
 
 | Plugin | Owned Folders |
 |--------|---------------|
-| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.ui` | `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` |
 | `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
 | `frame.auth` | `app/auth/` |
@@ -284,8 +284,8 @@ Once a plugin is declared, `implicit_import = true` in the plugin's `plugin.toml
 | `app/server/api/users.cln` | `frame.server` (declared in main.cln) | No |
 | `app/data/models/User.cln` | `frame.data` (declared in main.cln) | No |
 | `app/auth/auth.cln` | `frame.auth` (declared in main.cln) | No |
-| `app/web/pages/index.cln` | `frame.ui` (declared in main.cln) | No |
-| `app/web/components/Header.cln` | `frame.ui` (declared in main.cln) | No |
+| `app/ui/web/pages/index.cln` | `frame.ui` (declared in main.cln) | No |
+| `app/ui/web/components/Header.cln` | `frame.ui` (declared in main.cln) | No |
 | `app/canvas/scenes/main.cln` | `frame.canvas` (declared in main.cln) | No |
 
 This means a file at `app/server/api/users.cln` does not need to import `frame.server` explicitly — but the plugin must still be declared in `main.cln`.

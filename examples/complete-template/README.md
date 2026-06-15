@@ -36,12 +36,12 @@ frame serve
 
 | File | Route | Type |
 |------|-------|------|
-| `app/web/pages/index.html` | `/` | HTML |
+| `app/ui/web/pages/index.html` | `/` | HTML |
 | `app/server/api/hello.cln` | `/api/hello` | JSON |
 
 ## Customization
 
-1. **Add pages**: Create `.html` files in `app/web/pages/`
-2. **Add components**: Create `.cln` files in `app/web/components/`
+1. **Add pages**: Create `.html` files in `app/ui/web/pages/`
+2. **Add components**: Create `.cln` files in `app/ui/web/components/`
 3. **Add API routes**: Create `.cln` files in `app/server/api/`
 4. **Add styles**: Put CSS in `assets/css/`
