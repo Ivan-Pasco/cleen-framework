@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.1"
+version = "2.7.2"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -45,7 +45,7 @@ functions = [
 
   # HTTP Server - Route Registration (server-only; populates the router)
   { name = "_http_route", params = ["string", "string", "string"], returns = "i32", description = "Register route: method, path, handler function name", expand_strings = true, hosts = ["server"] },
-  { name = "_http_redirect_route", params = ["string", "string", "string", "integer"], returns = "i32", description = "Register static redirect: method, from-path, to-path, status (301/302/…). No WASM handler needed.", expand_strings = true, hosts = ["server"] },
+  { name = "_http_redirect_route", params = ["string", "string", "string", "i32"], returns = "i32", description = "Register static redirect: method, from-path, to-path, status (301/302/…). No WASM handler needed.", expand_strings = true, hosts = ["server"] },
   { name = "_http_route_protected", params = ["string", "string", "string", "string"], returns = "i32", description = "Register protected route: method, path, handler name, required role", expand_strings = true, hosts = ["server"] },
   # §FEXT-4: SSE route registration — sets Content-Type: text/event-stream and keeps connection open
   { name = "_http_sse_route", params = ["string", "string", "string"], returns = "i32", description = "Register SSE (STREAM) route: method, path, handler function name", expand_strings = true, hosts = ["server"] },
