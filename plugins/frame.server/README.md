@@ -93,3 +93,10 @@ Server-specific functions provided by clean-server:
 ```bash
 cp -r . ~/.cleen/plugins/frame.server/1.0.0/
 ```
+
+## Plugin Contracts
+
+Implements:
+
+- [`lifecycle`](../../../foundation/spec/plugins/contracts/lifecycle.md) — `module_helpers_are_roots = true` so preamble-emitted response helpers (`json`, `redirect`, error builders) survive import-minimality BFS even when only reached through plugin-generated route handler code (closes GEN003).
+- [`bridge-host-classes`](../../../foundation/spec/plugins/contracts/bridge-host-classes.md) — every bridge function is tagged `hosts = ["server"]` or `hosts = ["all"]`. Server-only bridges (request context, routing, sessions, SMTP, WebSocket/SSE) are stubbed out of client builds; pure-compute bridges (JSON, URL encoding) are shared.

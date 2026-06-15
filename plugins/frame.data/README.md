@@ -90,3 +90,10 @@ cln compile src/main.cln -o plugin.wasm
 ```bash
 cleen plugin install ./
 ```
+
+## Plugin Contracts
+
+Implements:
+
+- [`lifecycle`](../../../foundation/spec/plugins/contracts/lifecycle.md) — `module_helpers_are_roots = true` so preamble-emitted ORM helpers (PagedResult / CursorResult constructors, query builders) survive the import-minimality BFS even when only reached through plugin-generated CRUD code.
+- [`bridge-host-classes`](../../../foundation/spec/plugins/contracts/bridge-host-classes.md) — every `_db_*` bridge declares `hosts = ["server"]`; the database driver only loads on hosts that ship a runtime DB connection.

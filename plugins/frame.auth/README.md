@@ -93,3 +93,10 @@ cln compile src/main.cln -o plugin.wasm
 ```bash
 cleen plugin install ./
 ```
+
+## Plugin Contracts
+
+Implements:
+
+- [`lifecycle`](../../../foundation/spec/plugins/contracts/lifecycle.md) — `module_helpers_are_roots = true` so preamble-emitted auth helpers (`currentUser`, `hasRole`, role checks) survive the import-minimality BFS even when only reached through plugin-generated guard blocks. Applies to v1.0.0 `__preamble` output as well.
+- [`bridge-host-classes`](../../../foundation/spec/plugins/contracts/bridge-host-classes.md) — every session, JWT, and crypto bridge declares `hosts = ["server"]`; client builds receive no-op stubs so the auth boundary is enforced at link time.

@@ -110,3 +110,13 @@ cln compile src/main.cln -o plugin.wasm
 ```bash
 cleen plugin install ./
 ```
+
+## Plugin Contracts
+
+Implements:
+
+- [`lifecycle`](../../../foundation/spec/plugins/contracts/lifecycle.md) —
+  - `module_helpers_are_roots = true` keeps preamble-emitted SSR helpers (`render`, `renderWith`) and their `_ui_render_page` bridge import reachable across the BFS.
+  - `client_init = "emit_ui_client_init"` is invoked once per client-mode build; the slot emits instantiation + `onMount()` calls for every component with `client != "off"`. Closes HYDRATE_AUTO.
+- [`artifacts`](../../../foundation/spec/plugins/contracts/artifacts.md) — declares `frontend.wasm` as a side-channel build artifact emitted via `from_module = "client_only_build"`, predicated on `has_build_state.frame.ui:components`. Drives BUILD_FRONTEND.
+- [`bridge-host-classes`](../../../foundation/spec/plugins/contracts/bridge-host-classes.md) — every `_ui_*` bridge declares `hosts = [...]` (most are `["browser", "server"]` with `browser_impl = "real"` / `server_impl = "stub"`). One `callback=` entry routes `_ui_render_page` through the right host class. Closes SRV001 / SRV004.
