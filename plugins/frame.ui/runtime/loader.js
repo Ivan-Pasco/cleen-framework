@@ -1491,6 +1491,216 @@
 				return writeString(window.location.pathname + window.location.search);
 			},
 
+			// ========== frame.locale — browser i18n ==========
+			// Translation lookup, plural selection, number/currency/date formatting.
+			// Translation bundles are loaded by the SSR renderer as window.__CLEAN_I18N__
+			// = Record<localeCode, Record<key, string | {zero,one,two,few,many,other}>>.
+			// All 7 functions are hosts=["all"] — they run in both server and browser.
+			// _i18n_load (hosts=["server"]) stays in the server-guard stubs below.
+
+			_i18n_locale: () => {
+				// Returns the active locale from the document's lang attribute.
+				// Falls back to 'en' when the attribute is absent or empty.
+				const locale = document.documentElement.lang || 'en';
+				return writeString(locale);
+			},
+
+			_i18n_set_locale: (localePtr, localeLen) => {
+				// Sets the active locale on the document root element.
+				// Automatically configures LTR/RTL directionality based on the
+				// primary language tag. Fires a cl-locale-change custom event so
+				// that reactive components can re-render their translated strings.
+				const locale = readString(localePtr, localeLen);
+				const rtlTags = new Set(['ar', 'he', 'fa', 'ur', 'ku', 'dv', 'ps']);
+				const primaryTag = locale.split('-')[0].toLowerCase();
+				document.documentElement.lang = locale;
+				document.documentElement.dir = rtlTags.has(primaryTag) ? 'rtl' : 'ltr';
+				window.dispatchEvent(new CustomEvent('cl-locale-change', { detail: { locale } }));
+			},
+
+			_i18n_t: (keyPtr, keyLen, argsPtr, argsLen) => {
+				// Translates a dot-separated key using the window.__CLEAN_I18N__ bundle.
+				// Falls back: active locale → document lang → 'en' → key verbatim.
+				// argsPtr/argsLen is a JSON object string for {placeholder} substitution.
+				const key = readString(keyPtr, keyLen);
+				const argsStr = readString(argsPtr, argsLen);
+				const bundles = window.__CLEAN_I18N__ ?? {};
+				const locale = document.documentElement.lang || 'en';
+				const fallback = 'en';
+
+				const resolveKey = (bundle, dotKey) => {
+					// Walk dot-separated key path into the bundle object.
+					const parts = dotKey.split('.');
+					let node = bundle;
+					for (const part of parts) {
+						if (node == null || typeof node !== 'object') return undefined;
+						node = node[part];
+					}
+					// Accept a plain string value; reject objects (those are plural maps).
+					return typeof node === 'string' ? node : undefined;
+				};
+
+				const substitute = (template, args) => {
+					if (!args || typeof args !== 'object') return template;
+					return template.replace(/\{(\w+)\}/g, (_, k) => (k in args ? String(args[k]) : `{${k}}`));
+				};
+
+				let args = {};
+				if (argsStr && argsStr !== '{}') {
+					try { args = JSON.parse(argsStr); } catch (_) { /* malformed JSON — use empty args */ }
+				}
+
+				const template =
+					resolveKey(bundles[locale], key) ??
+					resolveKey(bundles[fallback], key) ??
+					key; // ultimate fallback: return the key verbatim
+
+				return writeString(substitute(template, args));
+			},
+
+			_i18n_t_count: (keyPtr, keyLen, count, argsPtr, argsLen) => {
+				// Selects the correct plural form from the bundle, then substitutes.
+				// Plural maps: key_zero / key_one / key_two / key_few / key_many / key_other
+				// Uses Intl.PluralRules for CLDR-accurate category selection.
+				// count is injected as {count} regardless of user-supplied args.
+				const key = readString(keyPtr, keyLen);
+				const argsStr = readString(argsPtr, argsLen);
+				const bundles = window.__CLEAN_I18N__ ?? {};
+				const locale = document.documentElement.lang || 'en';
+				const fallback = 'en';
+
+				const substitute = (template, args) => {
+					if (!args || typeof args !== 'object') return template;
+					return template.replace(/\{(\w+)\}/g, (_, k) => (k in args ? String(args[k]) : `{${k}}`));
+				};
+
+				const pickPluralKey = (bundle, baseKey, n) => {
+					// Walk to the parent node then test CLDR suffixes.
+					const parts = baseKey.split('.');
+					let parent = bundle;
+					for (const part of parts) {
+						if (parent == null || typeof parent !== 'object') return undefined;
+						parent = parent[part];
+					}
+					// parent is now the leaf — but plural keys live as siblings of the base key,
+					// using the convention <lastSegment>_<category>. Re-walk from the grandparent.
+					const grandParentParts = parts.slice(0, -1);
+					const leafName = parts[parts.length - 1];
+					let grandParent = bundle;
+					for (const part of grandParentParts) {
+						if (grandParent == null || typeof grandParent !== 'object') return undefined;
+						grandParent = grandParent[part];
+					}
+					if (grandParent == null || typeof grandParent !== 'object') return undefined;
+
+					// zero check first — explicit zero key takes priority over plural rules
+					if (n === 0 && typeof grandParent[`${leafName}_zero`] === 'string') {
+						return grandParent[`${leafName}_zero`];
+					}
+
+					let category;
+					try {
+						category = new Intl.PluralRules(locale).select(n);
+					} catch (_) {
+						category = n === 1 ? 'one' : 'other';
+					}
+
+					// Try the CLDR category, then fall back to _other.
+					return (
+						(typeof grandParent[`${leafName}_${category}`] === 'string'
+							? grandParent[`${leafName}_${category}`]
+							: undefined) ??
+						(typeof grandParent[`${leafName}_other`] === 'string'
+							? grandParent[`${leafName}_other`]
+							: undefined)
+					);
+				};
+
+				let args = {};
+				if (argsStr && argsStr !== '{}') {
+					try { args = JSON.parse(argsStr); } catch (_) { /* malformed JSON */ }
+				}
+				args.count = count; // always inject {count}
+
+				const template =
+					pickPluralKey(bundles[locale], key, count) ??
+					pickPluralKey(bundles[fallback], key, count) ??
+					key;
+
+				return writeString(substitute(template, args));
+			},
+
+			_i18n_format_number: (value, localePtr, localeLen, optionsPtr, optionsLen) => {
+				// Formats a number using Intl.NumberFormat.
+				// locale: BCP 47 string — empty string uses the document's active locale.
+				// options: JSON object string matching Intl.NumberFormat options.
+				const localeStr = readString(localePtr, localeLen) || document.documentElement.lang || 'en';
+				const optionsStr = readString(optionsPtr, optionsLen);
+				let options = {};
+				if (optionsStr && optionsStr !== '{}') {
+					try { options = JSON.parse(optionsStr); } catch (_) { /* use empty options */ }
+				}
+				try {
+					return writeString(new Intl.NumberFormat(localeStr, options).format(value));
+				} catch (_) {
+					return writeString(String(value));
+				}
+			},
+
+			_i18n_format_currency: (value, currencyPtr, currencyLen, localePtr, localeLen) => {
+				// Formats a number as a currency amount using Intl.NumberFormat.
+				// currency: ISO 4217 code (e.g. "USD", "EUR", "GBP").
+				// locale: BCP 47 string — empty string uses the document's active locale.
+				const currency = readString(currencyPtr, currencyLen);
+				const localeStr = readString(localePtr, localeLen) || document.documentElement.lang || 'en';
+				try {
+					return writeString(
+						new Intl.NumberFormat(localeStr, { style: 'currency', currency }).format(value)
+					);
+				} catch (_) {
+					// Fall back to plain number if the currency code is invalid or Intl fails.
+					return writeString(String(value));
+				}
+			},
+
+			_i18n_format_date: (timestampMs, formatPtr, formatLen, localePtr, localeLen) => {
+				// Formats a Unix-millisecond timestamp using Intl.DateTimeFormat.
+				// format: "short" | "medium" | "long" | "full"
+				//   Custom CLDR patterns are not yet supported — they fall back to "medium"
+				//   and emit a console.warn so developers know to use a named style.
+				// locale: BCP 47 string — empty string uses the document's active locale.
+				const format = readString(formatPtr, formatLen) || 'medium';
+				const localeStr = readString(localePtr, localeLen) || document.documentElement.lang || 'en';
+				const date = new Date(timestampMs);
+
+				/** @type {Record<string, Intl.DateTimeFormatOptions>} */
+				const styleMap = {
+					short:  { dateStyle: 'short' },
+					medium: { dateStyle: 'medium' },
+					long:   { dateStyle: 'long' },
+					full:   { dateStyle: 'full' },
+				};
+
+				let dtfOptions;
+				if (format in styleMap) {
+					dtfOptions = styleMap[format];
+				} else {
+					// CLDR pattern strings (e.g. "yyyy-MM-dd") are not supported by Intl.DateTimeFormat.
+					// Log a warning and fall back to "medium" so the page remains functional.
+					console.warn(
+						`[frame.locale] Custom CLDR date pattern "${format}" is not supported in the browser. ` +
+						'Use "short", "medium", "long", or "full". Falling back to "medium".'
+					);
+					dtfOptions = styleMap.medium;
+				}
+
+				try {
+					return writeString(new Intl.DateTimeFormat(localeStr, dtfOptions).format(date));
+				} catch (_) {
+					return writeString(date.toLocaleDateString());
+				}
+			},
+
 			// Console input — no-op stubs (browser has no console input)
 			input:         (_ptr) => writeString(''),
 			input_integer: (_ptr) => 0,
@@ -1500,7 +1710,7 @@
 
 			// ========== §SERVER-GUARD: Server-only bridge stubs ==========
 			// These functions are server-only (frame.server, frame.data, frame.auth,
-			// frame.jobs, frame.mcp, frame.locale, and frame.ui SSR). They appear as
+			// frame.jobs, frame.mcp, frame.locale [_i18n_load only], and frame.ui SSR). They appear as
 			// WASM imports when server-side modules (app/logic/, app/data/models/,
 			// app/state/) are incorrectly included in the client build due to compiler
 			// tree-shaking limitations (CLIENT_PULLS_SERVER). Providing stubs here
@@ -1655,15 +1865,8 @@
 					_mcp_sse_send: _sg('_mcp_sse_send'),
 					_mcp_stdio_read: _sg('_mcp_stdio_read'),
 					_mcp_stdio_write: _sg('_mcp_stdio_write'),
-					// frame.locale — i18n
+					// frame.locale — _i18n_load is server-only (reads from disk); throw on browser call
 					_i18n_load: _sg('_i18n_load'),
-					_i18n_locale: _sg('_i18n_locale'),
-					_i18n_set_locale: _sg('_i18n_set_locale'),
-					_i18n_t: _sg('_i18n_t'),
-					_i18n_t_count: _sg('_i18n_t_count'),
-					_i18n_format_date: _sg('_i18n_format_date'),
-					_i18n_format_number: _sg('_i18n_format_number'),
-					_i18n_format_currency: _sg('_i18n_format_currency'),
 				};
 			})()),
 
