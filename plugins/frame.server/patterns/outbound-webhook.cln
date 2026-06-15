@@ -26,7 +26,7 @@ data WebhookDelivery:
 functions:
 	// Queue a webhook for async delivery (call this from your event handlers)
 	integer queue_webhook(string event_type, string target_url, string payload)
-		string secret = _env_get("WEBHOOK_SECRET")
+		string secret = env.get("WEBHOOK_SECRET")
 		string signature = _crypto_hmac(payload, secret, "sha256")
 
 		integer id = WebhookDelivery.insert:

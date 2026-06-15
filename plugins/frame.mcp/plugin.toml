@@ -50,7 +50,7 @@ keywords = [
   { name = "params",    description = "Declare tool input parameters (name: type or name: type = default)", context = "block" },
   { name = "args",      description = "Declare prompt template arguments (name: type or name: type = default)", context = "block" },
   { name = "transport", description = "Configure the transport: stdio (default) or http: with port/host sub-fields", context = "config" },
-  { name = "apiKey",    description = "API key for HTTP transport Bearer authentication — use env() to read from environment", context = "config" },
+  { name = "apiKey",    description = "API key for HTTP transport Bearer authentication — use env.get(\"VAR_NAME\") to read from environment", context = "config" },
   { name = "mimeType",  description = "MIME type hint for resource content (application/json, text/plain, text/markdown, text/csv)", context = "block" },
   { name = "version",   description = "Server version string reported in the initialize handshake", context = "config" },
   { name = "description", description = "Human-readable description sent in capability negotiation", context = "config" },
