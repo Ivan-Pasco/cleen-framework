@@ -10,4 +10,4 @@ package: ApiServer
 
 	auth:
 		strategy: jwt
-		secret: env("JWT_SECRET")
+		secret: env.get("JWT_SECRET")

@@ -119,8 +119,8 @@ functions:
 	//     host:     "smtp.example.com"
 	//     port:     587              (default 587)
 	//     secure:   true             (default true)
-	//     username: env("SMTP_USER")
-	//     password: env("SMTP_PASS")
+	//     username: env.get("SMTP_USER")
+	//     password: env.get("SMTP_PASS")
 	//     from:     "noreply@example.com"
 	//
 	// Generates:
@@ -210,23 +210,18 @@ functions:
 		return result
 
 	// Resolve a config value that may be a literal string, a bare value, or an
-	// env("VAR") reference.  Mirrors expand_data_config's handling in frame.data.
+	// env.get("VAR") reference.  Mirrors expand_data_config's handling in frame.data.
 	//
 	// Input forms:
-	//   "smtp.example.com"     → "\"smtp.example.com\""  (quoted string literal)
-	//   smtp.example.com       → "\"smtp.example.com\""  (bare value → quoted literal)
-	//   env("SMTP_HOST")       → _env_get("SMTP_HOST")   (runtime env lookup)
-	//   $SMTP_HOST             → _env_get("SMTP_HOST")   (shell-style env reference)
+	//   "smtp.example.com"     → "\"smtp.example.com\""    (quoted string literal)
+	//   smtp.example.com       → "\"smtp.example.com\""    (bare value → quoted literal)
+	//   env.get("SMTP_HOST")   → _env_get("SMTP_HOST")     (runtime env lookup)
 	string resolve_server_config_value(string raw)
-		// env("VAR") form
-		if raw.startsWith("env(\"")
+		// env.get("VAR") form
+		if raw.startsWith("env.get(\"")
 			integer env_end = raw.indexOf("\")")
 			if env_end != -1
-				return "_env_get(\"" + raw.substring(5, env_end) + "\")"
-
-		// $VAR form
-		if raw.startsWith("$")
-			return "_env_get(\"" + raw.substring(1, raw.length()) + "\")"
+				return "_env_get(\"" + raw.substring(9, env_end) + "\")"
 
 		// Already a double-quoted string literal — pass through as-is
 		if raw.startsWith("\"") and raw.endsWith("\"")

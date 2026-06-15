@@ -10,7 +10,7 @@ Configures authentication for the application.
 
 **Attributes:**
 - `strategy` (optional, default: "jwt") - Authentication strategy: "jwt" or "session"
-- `secret` (required) - Secret key or environment variable (use $ENV_VAR syntax)
+- `secret` (required) - Must reference an environment variable via `env.get("VAR_NAME")`
 - `expiry` (optional, default: 3600) - Token/session expiry in seconds
 - `cookie` (optional, default: "session") - Cookie name for session strategy
 
@@ -19,7 +19,7 @@ Configures authentication for the application.
 import:
     frame.auth
 
-auth: strategy="jwt" secret="$JWT_SECRET"
+auth: strategy="jwt" secret=env.get("JWT_SECRET")
 ```
 
 ### protected

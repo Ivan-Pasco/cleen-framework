@@ -54,7 +54,7 @@ auth:
 
     jwt:
         enabled = true
-        secret = env("JWT_SECRET")
+        secret = env.get("JWT_SECRET")
         alg = "HS256"
         ttlMinutes = 60
         refreshTtlMinutes = 43200   // 30 days
@@ -299,7 +299,7 @@ When prompting an AI agent:
 
 - Config: `/app/auth/auth.cln`, `/app/auth/roles.cln`
 - Server handlers: `/app/server/api/auth/*.cln`
-- UI: gated components under `/app/web/components/` and pages in `/app/web/pages/`
+- UI: gated components under `/app/ui/web/components/` and pages in `/app/ui/web/pages/`
 - Tests: `/tests/auth/`
 
 ---

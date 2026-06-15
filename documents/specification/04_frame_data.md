@@ -256,7 +256,7 @@ data:
     port = 5432
     database = "frame_app"
     user = "admin"
-    password = env("DB_PASSWORD")
+    password = env.get("DB_PASSWORD")
     pool:
         max = 10
         idleTimeout = 30000

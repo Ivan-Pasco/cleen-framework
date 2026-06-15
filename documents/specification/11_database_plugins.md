@@ -522,7 +522,7 @@ config:
 		port = 5432
 		database = "myapp"
 		username = "user"
-		password = env("DB_PASSWORD") // Environment variable
+		password = env.get("DB_PASSWORD") // Environment variable
 		pool_size = 10
 		max_transaction_time = "30s"  // Transaction timeout
 

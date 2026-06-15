@@ -179,7 +179,7 @@ Authentication with JWT and sessions.
 import:
     frame.auth
 
-auth: strategy="jwt" secret="$JWT_SECRET"
+auth: strategy="jwt" secret=env.get("JWT_SECRET")
 
 protected:
     route: method="GET" path="/profile"

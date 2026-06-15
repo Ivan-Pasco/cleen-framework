@@ -600,7 +600,7 @@ implicit_import = true
 
 | Plugin | Owned Folders |
 |--------|---------------|
-| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` |
+| `frame.ui` | `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` |
 | `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` |
 | *(core compiler)* | `app/logic/` — always compiled, no plugin required |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` |
@@ -628,9 +628,9 @@ Creating project 'myapp'...
   [frame.server] Creating app/server/api/
   [frame.server] Creating app/server/middleware/
   [compiler] Creating app/logic/
-  [frame.ui] Creating app/web/pages/
-  [frame.ui] Creating app/web/components/
-  [frame.ui] Creating app/web/layouts/
+  [frame.ui] Creating app/ui/web/pages/
+  [frame.ui] Creating app/ui/web/components/
+  [frame.ui] Creating app/ui/web/layouts/
 
 Project created successfully!
 ```
@@ -782,7 +782,7 @@ The language server detects active plugins using these methods (in order):
    - File in `app/server/` → routed to frame.server (must be declared)
    - File in `app/auth/` → routed to frame.auth (must be declared)
    - File in `app/canvas/` → routed to frame.canvas (must be declared)
-   - File in `app/web/pages/` or `app/web/components/` → routed to frame.ui (must be declared)
+   - File in `app/ui/web/pages/` or `app/ui/web/components/` → routed to frame.ui (must be declared)
 
 ### 8.5 Caching Strategy
 
@@ -911,7 +911,7 @@ Handles authentication DSL blocks. Must be declared in `main.cln`. Files in `app
 
 auth:
     strategy: jwt
-    secret: env("JWT_SECRET")
+    secret: env.get("JWT_SECRET")
 
 roles:
     admin
@@ -921,13 +921,13 @@ roles:
 
 ### frame.ui
 
-Handles UI component DSL blocks. Must be declared in `main.cln`. Files in `app/web/pages/`, `app/web/components/`, and `app/web/layouts/` are processed by this plugin without needing per-file import statements.
+Handles UI component DSL blocks. Must be declared in `main.cln`. Files in `app/ui/web/pages/`, `app/ui/web/components/`, and `app/ui/web/layouts/` are processed by this plugin without needing per-file import statements.
 
 **Blocks:** `component`, `screen`, `page`, `html`
 
-**Usage (no import statement needed — file is in app/web/components/):**
+**Usage (no import statement needed — file is in app/ui/web/components/):**
 ```clean
-// app/web/components/Button.cln
+// app/ui/web/components/Button.cln
 // frame.ui is declared in main.cln and owns this folder
 
 component Button

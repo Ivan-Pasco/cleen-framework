@@ -96,7 +96,7 @@ keywords = [
   { name = "httpOnly", description = "Cookie HttpOnly flag (no JS access)", context = "config" },
   { name = "timeoutMinutes", description = "Session timeout in minutes", context = "config" },
   { name = "enabled", description = "Enable/disable feature", context = "config" },
-  { name = "secret", description = "JWT secret source (use $ENV_VAR)", context = "config" },
+  { name = "secret", description = "JWT secret source (use env.get(\"VAR_NAME\"))", context = "config" },
   { name = "alg", description = "JWT signing algorithm (HS256, HS384, HS512)", context = "config" },
   { name = "ttlMinutes", description = "JWT token TTL in minutes", context = "config" },
   { name = "refreshTtlMinutes", description = "JWT refresh token TTL in minutes", context = "config" },
@@ -178,7 +178,7 @@ block_folder_rules = [
 description = "Authentication and authorization plugin. Use the auth: block for configuration, guard: for route protection, and auth.* functions for session/JWT/role checks. Never implement your own password hashing or token signing."
 constraints = [
   "Always use auth.hashPassword / auth.verifyPassword — never implement your own hashing",
-  "Never sign JWTs manually — use auth.jwt.sign with the secret from $ENV",
+  "Never sign JWTs manually — use auth.jwt.sign with the secret read via env.get(\"VAR_NAME\")",
   "Role checks belong in guard: sub-blocks, not inline if statements in handlers",
   "Read tenant_id from auth.tenant.getId() — never from user-supplied body or query params",
 ]
@@ -208,4 +208,4 @@ anti_pattern = "no CSRF protection on POST endpoints — a third-party site can 
 example = "patterns/csrf-protection.cln"
 
 [build]
-built_with_compiler = "0.30.292"
+built_with_compiler = "0.30.293"

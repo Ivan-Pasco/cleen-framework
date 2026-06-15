@@ -37,11 +37,11 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 /app/server/api/*.cln    # API modules using `endpoints:`
 /app/server/middleware/  # Custom middleware
 /app/logic/              # Business logic services
-/app/web/pages/*.html    # SSR page templates (HTML)
-/app/web/pages/*.cln     # Companion data loaders (paired by filename)
-/app/web/routes.cln      # Routing file: guards, redirects, rewrites, error pages
-/app/web/components/*.cln # UI components
-/app/web/layouts/*.html  # Page layout wrappers
+/app/ui/web/pages/*.html    # SSR page templates (HTML)
+/app/ui/web/pages/*.cln     # Companion data loaders (paired by filename)
+/app/ui/web/routes.cln      # Routing file: guards, redirects, rewrites, error pages
+/app/ui/web/components/*.cln # UI components
+/app/ui/web/layouts/*.html  # Page layout wrappers
 /app/data/*.cln          # Data models / ORM
 /app/auth/*.cln          # Auth configuration (frame.auth)
 /public/*                # Static assets
@@ -222,7 +222,7 @@ cleen api:sdk    # generates Clean/TS/Swift/Kotlin clients
 ---
 
 ## 11. SSR Pipeline (UI)
-- Server renders pages from `/app/web/pages/*.html`. Data is supplied by paired companion `.cln` files.
+- Server renders pages from `/app/ui/web/pages/*.html`. Data is supplied by paired companion `.cln` files.
 - Output HTML is streamed or buffered (host adapter decides).
 - Hydration islands are scheduled according to `client="on|visible|idle|only"`.
 
@@ -299,14 +299,14 @@ endpoints:
 
 ---
 
-## 17. Routing File (`app/web/routes.cln`)
+## 17. Routing File (`app/ui/web/routes.cln`)
 
 The `routes.cln` file handles routing concerns that cannot be expressed as page files: guards, redirects, rewrites, and custom error pages. Grammar: `frame-server.ebnf §10`.
 
-**Rule:** if a page maps cleanly to a URL, use `app/web/pages/`. Use `routes.cln` only when a page file is not sufficient — guards on path patterns, permanent/temporary redirects, path rewrites with dynamic resolution, or custom error responses.
+**Rule:** if a page maps cleanly to a URL, use `app/ui/web/pages/`. Use `routes.cln` only when a page file is not sufficient — guards on path patterns, permanent/temporary redirects, path rewrites with dynamic resolution, or custom error responses.
 
 ```clean
-// app/web/routes.cln
+// app/ui/web/routes.cln
 routes:
     redirect: "/old-about" → "/about"
     guard: "/admin/*" [admin]
@@ -520,18 +520,18 @@ endpoints:
 
 ### Configuration
 
-SMTP connection settings are declared in a `mail:` block in `main.cln`. All values support `$ENV_VAR` syntax for environment variable substitution.
+SMTP connection settings are declared in a `mail:` block in `main.cln`. String values may use `env.get("VAR_NAME")` to pull values from the host environment at startup.
 
 ```clean
 server:
     port: 3000
 
 mail:
-    host     = $SMTP_HOST
+    host     = env.get("SMTP_HOST")
     port     = 587
     secure   = true
-    username = $SMTP_USER
-    password = $SMTP_PASS
+    username = env.get("SMTP_USER")
+    password = env.get("SMTP_PASS")
     from     = "no-reply@myapp.com"
 ```
 

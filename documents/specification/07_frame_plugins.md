@@ -433,7 +433,7 @@ data Post
 // app/auth/auth.cln
 // No import needed — frame.auth declared in main.cln, processes files in this folder
 
-auth: strategy="jwt" secret="$JWT_SECRET"
+auth: strategy="jwt" secret=env.get("JWT_SECRET")
 
 roles:
     admin
@@ -452,12 +452,12 @@ protected: role="user"
 
 **Source:** `plugins/frame.ui/src/main.cln`
 
-**Owned Folders:** `app/web/pages/`, `app/web/components/`, `app/web/layouts/`
+**Owned Folders:** `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/`
 
 **Usage (in an owned folder — no import statement needed in the file):**
 
 ```clean
-// app/web/components/Button.cln
+// app/ui/web/components/Button.cln
 // No import needed — frame.ui declared in main.cln, processes files in this folder
 
 component Button
@@ -537,7 +537,7 @@ Plugins can declare **folder ownership** to provide convention-over-configuratio
 
 | Plugin | Owned Folders | File Types | Purpose |
 |--------|---------------|------------|---------|
-| `frame.ui` | `app/web/pages/`, `app/web/components/`, `app/web/layouts/` | `.html`, `.cln` | Pages, components, layouts |
+| `frame.ui` | `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` | `.html`, `.cln` | Pages, components, layouts |
 | `frame.data` | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` | `.cln` | Data models, ORM, queries, migrations |
 | `frame.server` | `app/server/`, `app/server/api/`, `app/server/middleware/` | `.cln` | HTTP server, API routes, endpoints |
 | *(core compiler)* | `app/logic/` | `.cln` | Shared business logic — always compiled, no plugin needed |
@@ -625,7 +625,7 @@ The Clean Language compiler resolves which plugin processes each source file by 
 | `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/` | `frame.data` |
 | `app/auth/` | `frame.auth` |
 | `app/canvas/`, `app/canvas/scenes/`, `app/canvas/sprites/`, `app/canvas/audio/` | `frame.canvas` |
-| `app/web/pages/`, `app/web/components/`, `app/web/layouts/` | `frame.ui` |
+| `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` | `frame.ui` |
 
 **How It Works:**
 

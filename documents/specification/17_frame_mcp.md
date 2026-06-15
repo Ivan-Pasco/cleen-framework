@@ -96,7 +96,7 @@ mcp "secure-server":
     transport: http:
         port: 3001
         host: "localhost"
-    apiKey: env("MCP_API_KEY")
+    apiKey: env.get("MCP_API_KEY")
 ```
 
 ### 4.2 Top-Level Fields
@@ -424,7 +424,7 @@ mcp "secure-server":
     transport: http:
         port: 3001
         host: "0.0.0.0"
-    apiKey: env("MCP_API_KEY")
+    apiKey: env.get("MCP_API_KEY")
 ```
 
 When `apiKey:` is set, every HTTP request must include `Authorization: Bearer <key>`. Requests without a valid key receive a `401 Unauthorized` response. The API key is read from the environment at startup — it is never hardcoded.
@@ -671,7 +671,7 @@ There is no dependency between frame.server and frame.mcp. Declaring both in `ma
 
 Standard frame.auth session and JWT authentication does not apply to MCP servers, because MCP clients are AI agents, not browsers with cookies or login flows. When authentication is needed, use the `apiKey:` field in the `mcp:` block (see Section 4.1). The API key is a pre-shared secret passed in the Authorization header.
 
-If finer-grained access control is required (e.g., per-tool permissions per API key), implement it in the tool body by inspecting a database record associated with the key value retrieved from `env("MCP_API_KEY")`.
+If finer-grained access control is required (e.g., per-tool permissions per API key), implement it in the tool body by inspecting a database record associated with the key value retrieved from `env.get("MCP_API_KEY")`.
 
 ---
 

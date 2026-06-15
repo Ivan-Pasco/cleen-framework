@@ -404,9 +404,9 @@ functions:
 		if value.startsWith("\"") and value.endsWith("\"")
 			value = value.substring(1, value.length() - 1)
 
-		// Handle env() function
-		if value.startsWith("env(\"")
-			integer env_start = 5
+		// Handle env.get("VAR") function — returns just the env var name
+		if value.startsWith("env.get(\"")
+			integer env_start = 9
 			integer env_end = value.indexOf("\")")
 			return value.substring(env_start, env_end)
 
@@ -448,10 +448,9 @@ functions:
 				// Item 2 — detect hardcoded JWT secret (must reference env var)
 				string raw_secret = get_config_value(jwt_block, "secret", "")
 				if raw_secret.length() > 0
-					boolean is_env_ref = raw_secret.startsWith("$")
-					boolean is_env_call = raw_secret.startsWith("env(")
-					if not is_env_ref and not is_env_call
-						return "auth.jwt: secret must reference an environment variable (use $JWT_SECRET or env(\"JWT_SECRET\")), not a hardcoded string"
+					boolean is_env_call = raw_secret.startsWith("env.get(")
+					if not is_env_call
+						return "auth.jwt: secret must reference an environment variable (use env.get(\"JWT_SECRET\")), not a hardcoded string"
 
 		// Item 14 — sameSite=None requires secure=true
 		if body.indexOf("session:") != -1

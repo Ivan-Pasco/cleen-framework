@@ -16,7 +16,7 @@ start:
 
 functions:
 	void test_auth_jwt_expansion()
-		string result = expand_block("auth", "{\"strategy\": \"jwt\", \"secret\": \"$JWT_SECRET\"}", "")
+		string result = expand_block("auth", "{\"strategy\": \"jwt\", \"secret\": \"env.get(\\\"JWT_SECRET\\\")\"}", "")
 		assert(result.contains("_auth_create_token"))
 		assert(result.contains("_auth_verify_token"))
 		assert(result.contains("_auth_secret"))

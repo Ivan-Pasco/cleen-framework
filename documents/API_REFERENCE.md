@@ -808,11 +808,11 @@ app/server/api/users/[id].cln         → /api/users/:id
 app/server/api/posts/[id]/comments.cln → /api/posts/:id/comments
 ```
 
-Page routes from `app/web/pages/`:
+Page routes from `app/ui/web/pages/`:
 ```
-app/web/pages/index.html                   → /
-app/web/pages/about.html                   → /about
-app/web/pages/blog/[slug].html             → /blog/:slug
+app/ui/web/pages/index.html                   → /
+app/ui/web/pages/about.html                   → /about
+app/ui/web/pages/blog/[slug].html             → /blog/:slug
 ```
 
 ---
@@ -820,13 +820,13 @@ app/web/pages/blog/[slug].html             → /blog/:slug
 ## Frame UI
 
 **Plugin:** `frame.ui`
-**Owned folders:** `app/web/pages/`, `app/web/components/`, `app/web/layouts/`
+**Owned folders:** `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/`
 **Handled blocks:** `component`, `screen`, `page`, `html`
 **Spec:** [05_frame_ui.md](specification/05_frame_ui.md)
 
 ### Plugin Registration
 
-Files in `app/web/pages/`, `app/web/components/`, and `app/web/layouts/` are processed by `frame.ui` automatically. For explicit registration:
+Files in `app/ui/web/pages/`, `app/ui/web/components/`, and `app/ui/web/layouts/` are processed by `frame.ui` automatically. For explicit registration:
 
 ```clean
 plugins:
@@ -854,7 +854,7 @@ component ComponentName
         onUpdate()
 ```
 
-**Example component** (`app/web/components/UserCard.cln`):
+**Example component** (`app/ui/web/components/UserCard.cln`):
 ```clean
 component UserCard
     inputs:
@@ -874,7 +874,7 @@ component UserCard
 
 ### SSR Pages
 
-Pages are standard HTML files with Clean Language template directives (`app/web/pages/`):
+Pages are standard HTML files with Clean Language template directives (`app/ui/web/pages/`):
 
 ```html
 <!DOCTYPE html>
@@ -1008,7 +1008,7 @@ Control when and whether a component is hydrated on the client:
 
 ### Layouts
 
-Layouts wrap pages with shared structure (`app/web/layouts/`):
+Layouts wrap pages with shared structure (`app/ui/web/layouts/`):
 
 ```clean
 component MainLayout
@@ -1058,7 +1058,7 @@ plugins:
 ```clean
 auth:
     provider: session  // "session" or "jwt"
-    secret: env("AUTH_SECRET")
+    secret: env.get("AUTH_SECRET")
     sessionTtl: 86400  // 24 hours in seconds
     cookieName: "frame_session"
     secureCookie: true

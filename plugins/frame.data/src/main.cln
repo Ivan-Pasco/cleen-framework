@@ -296,7 +296,7 @@ functions:
 		return result
 
 	// Extract a named key=value from a configuration block body
-	// Handles: plain values, quoted strings, and env("VAR") references
+	// Handles: plain values, quoted strings, and env.get("VAR") references
 	string extract_config_value(string config, string key, string default_val)
 		string pattern = key + " = "
 		integer pos = config.indexOf(pattern)
@@ -314,12 +314,12 @@ functions:
 		if value.startsWith("\"") and value.endsWith("\"")
 			value = value.substring(1, value.length() - 1)
 
-		// Translate env("VAR") to a runtime env lookup
-		if value.startsWith("env(\"")
+		// Translate env.get("VAR") to a runtime env lookup
+		if value.startsWith("env.get(\"")
 			integer env_end = value.indexOf("\")")
 			if env_end == -1
 				return default_val
-			return "_env_get(\"" + value.substring(5, env_end) + "\")"
+			return "_env_get(\"" + value.substring(9, env_end) + "\")"
 
 		if value.length() == 0
 			return default_val

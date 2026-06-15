@@ -4,11 +4,11 @@ package: FullApp
 
 	target: web
 		plugins: [frame.ui, frame.server, frame.data, frame.auth]
-		entry: app/web/pages/index.html
+		entry: app/ui/web/pages/index.html
 
 	server:
 		port: 3000
 
 	auth:
 		strategy: session
-		secret: env("APP_SECRET")
+		secret: env.get("APP_SECRET")
