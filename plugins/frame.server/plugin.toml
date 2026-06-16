@@ -121,8 +121,12 @@ functions = [
   { name = "_http_set_cache", params = ["i32"], returns = "boolean", description = "Set Cache-Control max-age header", hosts = ["server"] },
   { name = "_http_no_cache", params = [], returns = "boolean", description = "Set no-cache headers", hosts = ["server"] },
 
-  # Async — Sleep (server-only; cooperative scheduling lives on the server runtime)
-  { name = "_server_sleep", params = ["i32"], returns = "void", description = "Sleep for the given number of milliseconds (yields to the server scheduler)", hosts = ["server"] },
+  # Async — Sleep (server-only; cooperative scheduling lives on the server runtime).
+  # Matches function-registry.toml: params = ["integer"] -> WASM i64. Both
+  # clean-server (|ms: i64|) and clean-node-server (ms: bigint) expect i64.
+  # The `server.sleep` language function (below) already declares integer;
+  # this bridge entry now matches.
+  { name = "_server_sleep", params = ["integer"], returns = "void", description = "Sleep for the given number of milliseconds (yields to the server scheduler)", hosts = ["server"] },
 
   # HTML Page Rendering (SSR) — declaration MOVED to frame.ui plugin.toml.
   # _ui_render_page is part of frame.ui's SSR responsibility; declaring it
