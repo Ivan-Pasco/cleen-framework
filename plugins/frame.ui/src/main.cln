@@ -1814,7 +1814,7 @@ functions:
 				result = result + "\t\t\t\treturn \"\"\n"
 
 			if companion_json.indexOf("\"has_load\":true") != -1
-				result = result + "\t\t\tany data = " + module_name + "_load()\n"
+				result = result + "\t\t\tany data = " + module_name + "_load_impl(null)\n"
 
 		result = result + "\t\t\tstring html = \"\"\n"
 		result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
@@ -3849,17 +3849,17 @@ functions:
 				// so the second replace doesn't double-match
 				string new_content = file_content
 				if has_load
-					// Rename load() to _impl suffix so we can add a json.decode wrapper.
-					// The builtin assembler calls pages_X_load(req) and then json.encode(data).
-					// json.encode on a raw string wraps it in unescaped quotes, breaking JSON
-					// parsing. The wrapper pages_X_load(p) calls pages_X_load_impl(p) and
-					// passes the raw string through json.decode so json.encode round-trips correctly.
-					// Frame.ui's own render function calls pages_X_load_impl directly to skip
-					// the unnecessary decode/encode round-trip.
-					new_content = new_content.replace("any load(Request ", "string " + module_name + "_load_impl(any ")
-					new_content = new_content.replace("any load(", "string " + module_name + "_load_impl(")
-					// Append wrapper function that makes builtin's json.encode call work correctly
-					new_content = new_content + "\n\tany " + module_name + "_load(any __p)\n\t\treturn json.decode(" + module_name + "_load_impl(__p))\n"
+					// Preserve the user's `any` return type on _impl so a body like
+					// `return { title: "hello" }` (the spec example in
+					// 05_frame_ui.md §load) type-checks as pairs/value, not string.
+					// _load wraps _impl with json.encode so callers needing a JSON
+					// string (the auto-route's _ui_render_page call below, and any
+					// other consumer that ships data over the bridge) get one.
+					// Component / layout assemblers that want the value form call
+					// _impl directly.
+					new_content = new_content.replace("any load(Request ", "any " + module_name + "_load_impl(any ")
+					new_content = new_content.replace("any load(", "any " + module_name + "_load_impl(")
+					new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn json.encode(" + module_name + "_load_impl(__p))\n"
 				if has_guard
 					new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
 					new_content = new_content.replace("any guard(", "any " + module_name + "_guard(")
@@ -3878,7 +3878,7 @@ functions:
 						route_fns = route_fns + "\t\tif __g != null\n"
 						route_fns = route_fns + "\t\t\treturn __g\n"
 					if has_load
-						route_fns = route_fns + "\t\tstring __d = " + module_name + "_load_impl(null)\n"
+						route_fns = route_fns + "\t\tstring __d = " + module_name + "_load(null)\n"
 						route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", __d)\n\n"
 					else
 						route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n\n"
