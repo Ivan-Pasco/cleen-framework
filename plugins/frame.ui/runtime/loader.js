@@ -1,6 +1,6 @@
 // Frame UI Runtime Loader
 // WASM loader with full browser API bridge
-// Version: 2.2.0
+// Version: 2.2.1
 //
 // All interactivity uses _ui_on_event delegation + targeted DOM updates.
 // WASM _start() registers handlers, handlers update DOM via bridge functions.
@@ -785,6 +785,18 @@
 			// These functions are emitted as WASM imports for any program that
 			// uses string ops, float formatting, or list operations. The browser
 			// host must provide them so the module can instantiate.
+
+			// Clean's error() builtin — emitted whenever user code or stdlib calls
+			// error(msg). Throws so the surrounding error boundary catches it.
+			error: (ptr, len) => {
+				throw new Error(readString(ptr, len));
+			},
+
+			// _server_sleep — emitted transitively when client code touches any
+			// later/background stdlib helper. Sleep has no browser semantics, so
+			// this is a no-op stub. Without it the WASM module fails to instantiate
+			// with a LinkError and the entire UI bridge silently dies.
+			_server_sleep: (_ms) => 0,
 
 			// String operations
 			string_compare: (hptr1, hptr2) => {
