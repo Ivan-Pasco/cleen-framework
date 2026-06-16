@@ -121,6 +121,9 @@ functions = [
   { name = "_http_set_cache", params = ["i32"], returns = "boolean", description = "Set Cache-Control max-age header", hosts = ["server"] },
   { name = "_http_no_cache", params = [], returns = "boolean", description = "Set no-cache headers", hosts = ["server"] },
 
+  # Async — Sleep (server-only; cooperative scheduling lives on the server runtime)
+  { name = "_server_sleep", params = ["i32"], returns = "void", description = "Sleep for the given number of milliseconds (yields to the server scheduler)", hosts = ["server"] },
+
   # HTML Page Rendering (SSR) — declaration MOVED to frame.ui plugin.toml.
   # _ui_render_page is part of frame.ui's SSR responsibility; declaring it
   # here forced server-only API apps (no frame.ui) to fail at plugin-registry
@@ -237,6 +240,16 @@ functions = [
   { name = "req.path", signature = "req.path()", description = "Get request URL path", maps_to = "_req_path", params = [], returns = "string" },
   { name = "req.ip", signature = "req.ip", description = "Get client IP address", maps_to = "_req_ip", params = [], returns = "string" },
   { name = "req.cookie", signature = "req.cookie(name)", description = "Get cookie value by name", maps_to = "_req_cookie", params = ["string"], returns = "string" },
+  # Authentication — spec-canonical aliases (foundation/spec/stdlib-reference.md §14)
+  # backed by server-owned bridges (_auth_get_session, _auth_require_auth, etc.).
+  # The richer auth.session.*, auth.jwt.* wrappers live in frame.auth.
+  { name = "auth.getSession", signature = "auth.getSession()", description = "Get current session as JSON string", maps_to = "_auth_get_session", params = [], returns = "string" },
+  { name = "auth.requireAuth", signature = "auth.requireAuth()", description = "Check if request is authenticated (true=yes, false=no)", maps_to = "_auth_require_auth", params = [], returns = "boolean" },
+  { name = "auth.requireRole", signature = "auth.requireRole(role)", description = "Check if user has given role", maps_to = "_auth_require_role", params = ["string"], returns = "boolean" },
+  { name = "auth.can", signature = "auth.can(permission)", description = "Check if user has given permission", maps_to = "_auth_can", params = ["string"], returns = "boolean" },
+  { name = "auth.hasAnyRole", signature = "auth.hasAnyRole(roles)", description = "Check if user has any of the roles (JSON array of role names)", maps_to = "_auth_has_any_role", params = ["string"], returns = "boolean" },
+  # Async — Sleep (Layer 3 server-only)
+  { name = "server.sleep", signature = "server.sleep(milliseconds)", description = "Sleep for the given number of milliseconds (yields to the server scheduler)", maps_to = "_server_sleep", params = ["integer"], returns = "void" },
   # Server-side HTTP client
   { name = "http.get", signature = "http.get(url)", description = "Execute outbound HTTP GET request; returns response body", maps_to = "http_get", params = ["string"], returns = "string" },
   { name = "http.post", signature = "http.post(url, body)", description = "Execute outbound HTTP POST request; returns response body", maps_to = "http_post", params = ["string", "string"], returns = "string" },
@@ -385,4 +398,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.293"
+built_with_compiler = "0.30.295"

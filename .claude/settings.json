@@ -41,7 +41,10 @@
       "Bash(mkdir -p /tmp/hyd-repro/app/web/pages /tmp/hyd-repro/app/web/components)",
       "Bash(cat > *)",
       "Bash(~/.cleen/versions/0.30.287/wasmtime_runner /tmp/repro_data_query.wasm)",
-      "Bash(rm -rf *)"
+      "Bash(rm -rf *)",
+      "Bash(cat VERSION)",
+      "Bash(grep -l '\"version\"' package.json)",
+      "Bash(ls Cargo.toml VERSION version.txt)"
     ],
     "additionalDirectories": [
       "/tmp"

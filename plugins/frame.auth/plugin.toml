@@ -118,13 +118,13 @@ types = [
 functions = [
   { name = "auth.session.create", signature = "auth.session.create(userId, claims)", description = "Create a new session and return session ID" },
   { name = "auth.session.setCookie", signature = "auth.session.setCookie(sessionId)", description = "Set session cookie on response" },
-  { name = "auth.session.get", signature = "auth.session.get()", description = "Get current session data (checks expiry)" },
-  { name = "auth.session.destroy", signature = "auth.session.destroy()", description = "End session and clear cookie" },
+  { name = "auth.session.get", signature = "auth.session.get()", description = "Get current session data (checks expiry)", maps_to = "_session_get", params = [], returns = "string" },
+  { name = "auth.session.destroy", signature = "auth.session.destroy()", description = "End session and clear cookie", maps_to = "_auth_clear_session", params = [], returns = "boolean" },
   { name = "auth.jwt.sign", signature = "auth.jwt.sign(claims)", description = "Sign JWT with configured secret and algorithm" },
   { name = "auth.jwt.verify", signature = "auth.jwt.verify(token)", description = "Verify JWT and return payload or empty string" },
   { name = "auth.jwt.refresh", signature = "auth.jwt.refresh(refreshToken)", description = "Refresh a JWT token" },
-  { name = "auth.hashPassword", signature = "auth.hashPassword(password)", description = "Hash password with Argon2id" },
-  { name = "auth.verifyPassword", signature = "auth.verifyPassword(password, hash)", description = "Verify password against Argon2id hash" },
+  { name = "auth.hashPassword", signature = "auth.hashPassword(password)", description = "Hash password with Argon2id", maps_to = "_crypto_hash_password", params = ["string"], returns = "string" },
+  { name = "auth.verifyPassword", signature = "auth.verifyPassword(password, hash)", description = "Verify password against Argon2id hash", maps_to = "_crypto_verify_password", params = ["string", "string"], returns = "boolean" },
   { name = "auth.can", signature = "auth.can(permission)", description = "Check if current user has permission" },
   { name = "auth.hasRole", signature = "auth.hasRole(role)", description = "Check if current user has specific role" },
   { name = "auth.getCurrentUser", signature = "auth.getCurrentUser()", description = "Get current authenticated user session data" },
@@ -134,6 +134,21 @@ functions = [
   { name = "auth.tenant.getId", signature = "auth.tenant.getId()", description = "Get current tenant ID from session claims" },
   { name = "auth.tenant.require", signature = "auth.tenant.require()", description = "Require a valid tenant context, returns tenant ID or empty string" },
   { name = "auth.tenant.matches", signature = "auth.tenant.matches(tenantId)", description = "Check if current user belongs to the given tenant" },
+
+  # Spec-canonical aliases (foundation/spec/stdlib-reference.md §14) — language-level
+  # signatures the compiler previously hardcoded in src/resolver/symbol_table.rs.
+  # These are direct one-to-one bridge aliases; the richer auth.session.*, auth.jwt.*
+  # wrappers above are preserved for application code.
+  { name = "auth.setSession", signature = "auth.setSession(json)", description = "Create session from JSON with user_id, role, claims; sets session cookie", maps_to = "_auth_set_session", params = ["string"], returns = "boolean" },
+  { name = "auth.clearSession", signature = "auth.clearSession()", description = "Destroy current user session and clear session cookie", maps_to = "_auth_clear_session", params = [], returns = "boolean" },
+  { name = "auth.userId", signature = "auth.userId()", description = "Get current authenticated user ID (0 if unauthenticated)", maps_to = "_auth_user_id", params = [], returns = "integer" },
+  { name = "auth.userRole", signature = "auth.userRole()", description = "Get current authenticated user role (empty string if unauthenticated)", maps_to = "_auth_user_role", params = [], returns = "string" },
+  { name = "session.get", signature = "session.get()", description = "Get current session data as JSON string", maps_to = "_session_get", params = [], returns = "string" },
+  { name = "session.delete", signature = "session.delete()", description = "Delete current session from request context", maps_to = "_session_delete", params = [], returns = "boolean" },
+  { name = "session.exists", signature = "session.exists(id)", description = "Check if session exists by ID", maps_to = "_session_exists", params = ["string"], returns = "boolean" },
+  { name = "jwt.sign", signature = "jwt.sign(payload, secret, algo)", description = "Sign JWT with payload (JSON), secret, and algorithm (HS256/HS384/HS512)", maps_to = "_jwt_sign", params = ["string", "string", "string"], returns = "string" },
+  { name = "jwt.verify", signature = "jwt.verify(token, secret, algo)", description = "Verify JWT and return payload as JSON string, or empty string if invalid", maps_to = "_jwt_verify", params = ["string", "string", "string"], returns = "string" },
+  { name = "jwt.decode", signature = "jwt.decode(token)", description = "Decode JWT without signature verification (for debugging); returns payload JSON", maps_to = "_jwt_decode", params = ["string"], returns = "string" },
 ]
 
 # Auto-completion suggestions
@@ -208,4 +223,4 @@ anti_pattern = "no CSRF protection on POST endpoints — a third-party site can 
 example = "patterns/csrf-protection.cln"
 
 [build]
-built_with_compiler = "0.30.293"
+built_with_compiler = "0.30.295"

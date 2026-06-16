@@ -132,6 +132,9 @@ functions = [
   { name = "transaction", signature = "transaction: block", description = "Execute block in transaction" },
   { name = "db.query", signature = "db.query: sql, params", description = "Execute raw SQL query" },
   { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model" },
+  { name = "db.begin", signature = "db.begin()", description = "Begin a database transaction; returns 1 on success, 0 on error", maps_to = "_db_begin", params = [], returns = "integer" },
+  { name = "db.commit", signature = "db.commit()", description = "Commit the current database transaction; returns 1 on success, 0 on error", maps_to = "_db_commit", params = [], returns = "integer" },
+  { name = "db.rollback", signature = "db.rollback()", description = "Rollback the current database transaction; returns 1 on success, 0 on error", maps_to = "_db_rollback", params = [], returns = "integer" },
   { name = "Model.exists", signature = "Model.exists:\n\twhere:\n\t\tcondition", description = "Check if record exists matching conditions (returns 1/0)" },
   { name = "Model.findOrFail", signature = "Model.findOrFail:\n\twhere:\n\t\tcondition", description = "Find first matching record or raise a NOT_FOUND error" },
   { name = "migrate", signature = "migrate \"name\":\n\tup:\n\t\tSQL\n\tdown:\n\t\tSQL", description = "Define a versioned schema migration" },
@@ -247,4 +250,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.30.293"
+built_with_compiler = "0.30.295"
