@@ -3999,8 +3999,8 @@ functions:
 		if dot_pos != -1
 			rel = rel.substring(0, dot_pos)
 
-		// Flatten path and strip dynamic-segment brackets
-		string name = rel.replace("/", "_").replace("[", "").replace("]", "")
+		// Flatten path, strip dynamic-segment brackets, and sanitize identifier-invalid chars (`-`, `.`)
+		string name = rel.replace("/", "_").replace("[", "").replace("]", "").replace("-", "_").replace(".", "_")
 
 		return "pages_" + name
 
