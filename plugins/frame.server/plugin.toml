@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.4"
+version = "2.7.5"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -179,6 +179,14 @@ functions = [
 
   # Response - File Download (server-only; sets Content-Disposition on the active response)
   { name = "_res_download", params = ["string"], returns = "void", description = "Set Content-Disposition: attachment header for file download; argument is the filename sent to the client", expand_strings = true, hosts = ["server"] },
+
+  # Environment Variables (server-only; browser has no env). Declared here
+  # because the env.get language function is owned by frame.server (see
+  # [language] below) and frame.server/src/main.cln expands env.get(...)
+  # references inside server config to _env_get(...) calls. Previously this
+  # declaration only existed in frame.auth, which made env.get unresolvable
+  # in any app that uses frame.server without frame.auth.
+  { name = "_env_get", params = ["string"], returns = "ptr", description = "Get environment variable by name; returns empty string if unset or denied", expand_strings = true, hosts = ["server"] },
 
   # Email - SMTP (server-only; reaches out to an SMTP relay)
   { name = "_email_configure", params = ["string", "integer", "boolean", "string", "string", "string"], returns = "void", description = "Configure SMTP connection: host, port, secure, username, password, from address. Called once during startup from a mail: config block.", expand_strings = true, hosts = ["server"] },
@@ -412,4 +420,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.297"
+built_with_compiler = "0.30.298"

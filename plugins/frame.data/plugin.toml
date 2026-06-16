@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.data"
-version = "2.1.3"
+version = "2.1.4"
 description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
 author = "Clean Language Team"
 license = "MIT"
@@ -251,4 +251,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.30.297"
+built_with_compiler = "0.30.298"

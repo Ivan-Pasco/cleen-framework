@@ -4035,9 +4035,19 @@ functions:
 
 		return "/" + url
 
-	// "app/ui/web/pages/login.cln" -> "app/ui/web/pages/login.html"
+	// Normalize a page source path to the relative html path the
+	// _ui_render_page bridge expects. The compiler hands assemble() absolute
+	// paths; the bridge resolves paths relative to the server cwd, so we strip
+	// everything up to and including `pages/` and re-anchor on the canonical
+	// `app/ui/web/pages/` prefix used by renderWith (see emit_ssr_helpers).
+	// "/abs/path/app/ui/web/pages/login.cln"  -> "app/ui/web/pages/login.html"
+	// "app/ui/web/pages/login.cln"            -> "app/ui/web/pages/login.html"
 	string derive_html_path(string file_path)
-		if file_path.endsWith(".cln")
-			return file_path.substring(0, file_path.length() - 4) + ".html"
-		return file_path
+		integer pages_pos = file_path.indexOf("pages/")
+		string rel = file_path
+		if pages_pos != -1
+			rel = file_path.substring(pages_pos + 6, file_path.length())
+		if rel.endsWith(".cln")
+			rel = rel.substring(0, rel.length() - 4) + ".html"
+		return "app/ui/web/pages/" + rel
 

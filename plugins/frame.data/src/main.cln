@@ -955,8 +955,14 @@ functions:
 
 functions:
 	// Expand Model.find: block.
-	// Returns a typed list<ModelName> via __parse_as_ModelName so callers can declare
-	// the result as list<ModelName> and access typed fields directly.
+	// Returns the rows JSON array as a string (the SELECT's "data.rows" payload
+	// from _db_query). Callers declare the result as string and access fields
+	// via json.get(rows, "0.field"). The typed list<ModelName> form documented
+	// in 04_frame_data.md is served by the static find(...) method on the model
+	// class (see generate_static_methods around line 552), which wraps the
+	// _db_query result with __parse_as_<ModelName>. The block form does NOT
+	// wrap — fixing that gap requires the model class to be in scope from the
+	// call site, which is not guaranteed for shared/imported models.
 	// When the model body declares a tenantId field or a ": tenant" constraint,
 	// the generated SQL automatically prepends a tenant_id filter so that callers
 	// never have to include it explicitly in their where: sub-blocks.
