@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.3"
+version = "2.7.4"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -254,6 +254,13 @@ functions = [
   { name = "auth.hasAnyRole", signature = "auth.hasAnyRole(roles)", description = "Check if user has any of the roles (JSON array of role names)", maps_to = "_auth_has_any_role", params = ["string"], returns = "boolean" },
   # Async — Sleep (Layer 3 server-only)
   { name = "server.sleep", signature = "server.sleep(milliseconds)", description = "Sleep for the given number of milliseconds (yields to the server scheduler)", maps_to = "_server_sleep", params = ["integer"], returns = "void" },
+  # env namespace — read-only access to host environment variables (server-only).
+  { name = "env.get", signature = "env.get(name)", description = "Get environment variable by name; returns empty string if not found or access is denied", maps_to = "_env_get", params = ["string"], returns = "string" },
+  # time namespace — Unix timestamp in seconds.
+  # `now()` is the bare alias used by frame.data plugin-generated code (e.g. createdAt defaults).
+  # _time_now returns i64 at the bridge level; the compiler emits the i64→i32 wrap.
+  { name = "time.now", signature = "time.now()", description = "Current Unix timestamp in seconds since epoch", maps_to = "_time_now", params = [], returns = "integer" },
+  { name = "now", signature = "now()", description = "Alias for time.now() — current Unix timestamp in seconds", maps_to = "_time_now", params = [], returns = "integer" },
   # Server-side HTTP client
   { name = "http.get", signature = "http.get(url)", description = "Execute outbound HTTP GET request; returns response body", maps_to = "http_get", params = ["string"], returns = "string" },
   { name = "http.post", signature = "http.post(url, body)", description = "Execute outbound HTTP POST request; returns response body", maps_to = "http_post", params = ["string", "string"], returns = "string" },
@@ -269,6 +276,9 @@ functions = [
   { name = "http.patchWithHeaders", signature = "http.patchWithHeaders(url, body, headers)", description = "PATCH with body and custom headers (JSON object); returns response body", maps_to = "http_patch_with_headers", params = ["string", "string", "string"], returns = "string" },
   { name = "http.deleteWithHeaders", signature = "http.deleteWithHeaders(url, headers)", description = "DELETE with custom headers (JSON object); returns response body", maps_to = "http_delete_with_headers", params = ["string", "string"], returns = "string" },
   { name = "http.responseCode", signature = "http.responseCode()", description = "Get HTTP status code of the last outbound response", maps_to = "http_get_response_code", params = [], returns = "integer" },
+  # Response cache headers (server-only)
+  { name = "http.setCache", signature = "http.setCache(seconds)", description = "Set Cache-Control max-age in seconds; 0 or negative sets no-cache headers", maps_to = "_http_set_cache", params = ["integer"], returns = "boolean" },
+  { name = "http.noCache",  signature = "http.noCache()",         description = "Set Cache-Control, Pragma, and Expires headers to disable all caching",     maps_to = "_http_no_cache",  params = [],          returns = "boolean" },
   # §FEXT-4: Server-Sent Events helpers (usable inside FEED endpoint handlers)
   { name = "feed.emit", signature = "feed.emit(data)", description = "Send data: event to the SSE client", maps_to = "_sse_emit", params = ["string"], returns = "integer" },
   { name = "feed.emitEvent", signature = "feed.emitEvent(name, data)", description = "Send named event+data to the SSE client", maps_to = "_sse_emit_event", params = ["string", "string"], returns = "integer" },
@@ -402,4 +412,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.296"
+built_with_compiler = "0.30.297"

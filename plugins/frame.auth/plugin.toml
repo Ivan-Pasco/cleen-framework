@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.auth"
-version = "2.1.0"
+version = "2.1.1"
 description = "Authentication and authorization plugin for Clean Language - provides sessions, JWT, roles/permissions, CSRF, and password hashing"
 author = "Clean Language Team"
 license = "MIT"
@@ -125,6 +125,16 @@ functions = [
   { name = "auth.jwt.refresh", signature = "auth.jwt.refresh(refreshToken)", description = "Refresh a JWT token" },
   { name = "auth.hashPassword", signature = "auth.hashPassword(password)", description = "Hash password with Argon2id", maps_to = "_crypto_hash_password", params = ["string"], returns = "string" },
   { name = "auth.verifyPassword", signature = "auth.verifyPassword(password, hash)", description = "Verify password against Argon2id hash", maps_to = "_crypto_verify_password", params = ["string", "string"], returns = "boolean" },
+
+  # crypto.* namespace — direct password / random / HMAC operations.
+  # Parallel to auth.hashPassword / auth.verifyPassword (which delegate to the same bridges)
+  # but exposed under the crypto.* namespace for code that does not need the auth context.
+  { name = "crypto.hashPassword",   signature = "crypto.hashPassword(password)",                  description = "Hash password with Argon2id",                                                                          maps_to = "_crypto_hash_password",   params = ["string"],                       returns = "string" },
+  { name = "crypto.verifyPassword", signature = "crypto.verifyPassword(password, hash)",          description = "Verify password against Argon2id hash",                                                                  maps_to = "_crypto_verify_password", params = ["string", "string"],             returns = "boolean" },
+  { name = "crypto.randomBytes",    signature = "crypto.randomBytes(n)",                          description = "Generate N cryptographically random bytes; returns base64-encoded result",                              maps_to = "_crypto_random_bytes",    params = ["integer"],                      returns = "string" },
+  { name = "crypto.randomHex",      signature = "crypto.randomHex(n)",                            description = "Generate N cryptographically random bytes; returns lowercase hex string (2N chars)",                    maps_to = "_crypto_random_hex",      params = ["integer"],                      returns = "string" },
+  { name = "crypto.hmac",           signature = "crypto.hmac(data, key, algo)",                   description = "Compute HMAC using 'sha256' or 'sha512'; returns hex string",                                            maps_to = "_crypto_hmac",            params = ["string", "string", "string"],   returns = "string" },
+
   { name = "auth.can", signature = "auth.can(permission)", description = "Check if current user has permission" },
   { name = "auth.hasRole", signature = "auth.hasRole(role)", description = "Check if current user has specific role" },
   { name = "auth.getCurrentUser", signature = "auth.getCurrentUser()", description = "Get current authenticated user session data" },
@@ -223,4 +233,4 @@ anti_pattern = "no CSRF protection on POST endpoints — a third-party site can 
 example = "patterns/csrf-protection.cln"
 
 [build]
-built_with_compiler = "0.30.296"
+built_with_compiler = "0.30.297"

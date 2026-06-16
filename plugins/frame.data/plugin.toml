@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.data"
-version = "2.1.2"
+version = "2.1.3"
 description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
 author = "Clean Language Team"
 license = "MIT"
@@ -130,8 +130,9 @@ types = [
 # Built-in functions/expressions
 functions = [
   { name = "transaction", signature = "transaction: block", description = "Execute block in transaction" },
-  { name = "db.query", signature = "db.query: sql, params", description = "Execute raw SQL query" },
-  { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model" },
+  { name = "db.query", signature = "db.query: sql, params", description = "Execute raw SQL query; returns JSON result object", maps_to = "_db_query", params = ["string", "string"], returns = "string" },
+  { name = "db.queryAs", signature = "db.queryAs(Model): sql, params", description = "Execute raw SQL and map to model", maps_to = "_db_query", params = ["string", "string"], returns = "string" },
+  { name = "db.execute", signature = "db.execute(sql, params)", description = "Execute INSERT/UPDATE/DELETE; returns affected row count or -1 on error", maps_to = "_db_execute", params = ["string", "string"], returns = "integer" },
   { name = "db.begin", signature = "db.begin()", description = "Begin a database transaction; returns 1 on success, 0 on error", maps_to = "_db_begin", params = [], returns = "integer" },
   { name = "db.commit", signature = "db.commit()", description = "Commit the current database transaction; returns 1 on success, 0 on error", maps_to = "_db_commit", params = [], returns = "integer" },
   { name = "db.rollback", signature = "db.rollback()", description = "Rollback the current database transaction; returns 1 on success, 0 on error", maps_to = "_db_rollback", params = [], returns = "integer" },
@@ -250,4 +251,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.30.296"
+built_with_compiler = "0.30.297"
