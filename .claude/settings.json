@@ -44,7 +44,10 @@
       "Bash(rm -rf *)",
       "Bash(cat VERSION)",
       "Bash(grep -l '\"version\"' package.json)",
-      "Bash(ls Cargo.toml VERSION version.txt)"
+      "Bash(ls Cargo.toml VERSION version.txt)",
+      "Bash(ls *.toml *.json VERSION version.txt)",
+      "Bash(git describe *)",
+      "Bash(grep -E \"^version\" plugins/frame.data/plugin.toml plugins/frame.auth/plugin.toml plugins/frame.server/plugin.toml VERSION)"
     ],
     "additionalDirectories": [
       "/tmp"

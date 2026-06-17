@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.mcp"
-version = "1.0.1"
+version = "1.0.2"
 description = "MCP server plugin — define AI-callable tools, resources, and prompts inside mcp: blocks. Handles the full MCP lifecycle: capability negotiation, JSON-RPC 2.0 dispatch, param deserialization, and stdio/HTTP+SSE transports."
 author = "Clean Language Team"
 license = "MIT"
@@ -25,17 +25,20 @@ blocks = ["mcp"]
 #
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §2.
 # MCP transports require stdin/stdout/network I/O and live in a long-running
-# server or native CLI process; they never run in a browser. Every bridge is
-# tagged hosts=["server","native"] — accepted on clean-server, clean-node-server,
-# and future native CLI runtimes; rejected on browser builds.
+# server process; they never run in a browser. Every bridge is tagged
+# hosts=["server"] to match the authoritative registry at
+# foundation/platform-architecture/function-registry.toml. The "native" host
+# class is reserved for future CLI runtimes — when one ships, the registry
+# entries for these six functions must be updated first; then this manifest
+# can add "native" to the hosts list.
 [bridge]
 functions = [
-  { name = "_mcp_stdio_read",  params = [],                    returns = "ptr",  description = "Read one newline-delimited JSON-RPC 2.0 message from stdin. Blocks until a complete message is available. Returns empty string on EOF.", hosts = ["server", "native"] },
-  { name = "_mcp_stdio_write", params = ["string"],            returns = "i32", description = "Write one newline-terminated JSON-RPC 2.0 message to stdout.", expand_strings = true, hosts = ["server", "native"] },
-  { name = "_mcp_http_serve",  params = ["i32", "string"], returns = "i32", description = "Bind and start HTTP+SSE listener on the given port and host. Blocks until the server stops.", expand_strings = true, hosts = ["server", "native"] },
-  { name = "_mcp_http_accept", params = [],                    returns = "ptr",  description = "Wait for the next HTTP request; returns it as a JSON string containing method, headers, and body.", hosts = ["server", "native"] },
-  { name = "_mcp_sse_send",    params = ["string", "string"],  returns = "i32", description = "Send an SSE event to a connected client identified by clientId.", expand_strings = true, hosts = ["server", "native"] },
-  { name = "_mcp_log",         params = ["string", "string"],  returns = "i32", description = "Write a structured log entry to stderr (never pollutes the stdio transport). level is debug, info, warn, or error.", expand_strings = true, hosts = ["server", "native"] },
+  { name = "_mcp_stdio_read",  params = [],                    returns = "ptr",  description = "Read one newline-delimited JSON-RPC 2.0 message from stdin. Blocks until a complete message is available. Returns empty string on EOF.", hosts = ["server"] },
+  { name = "_mcp_stdio_write", params = ["string"],            returns = "i32", description = "Write one newline-terminated JSON-RPC 2.0 message to stdout.", expand_strings = true, hosts = ["server"] },
+  { name = "_mcp_http_serve",  params = ["i32", "string"], returns = "i32", description = "Bind and start HTTP+SSE listener on the given port and host. Blocks until the server stops.", expand_strings = true, hosts = ["server"] },
+  { name = "_mcp_http_accept", params = [],                    returns = "ptr",  description = "Wait for the next HTTP request; returns it as a JSON string containing method, headers, and body.", hosts = ["server"] },
+  { name = "_mcp_sse_send",    params = ["string", "string"],  returns = "i32", description = "Send an SSE event to a connected client identified by clientId.", expand_strings = true, hosts = ["server"] },
+  { name = "_mcp_log",         params = ["string", "string"],  returns = "i32", description = "Write a structured log entry to stderr (never pollutes the stdio transport). level is debug, info, warn, or error.", expand_strings = true, hosts = ["server"] },
 ]
 
 [language]
@@ -126,4 +129,4 @@ anti_pattern = "adding unnecessary database queries just to follow a pattern —
 example = "patterns/basic-tools.cln"
 
 [build]
-built_with_compiler = "0.30.298"
+built_with_compiler = "0.30.307"

@@ -237,9 +237,13 @@ functions:
 functions:
 	// expand_endpoints rewrites an endpoints: block into generated functions: + start: code.
 	//
-	// Handler naming: sequential integer suffix (__route_handler_0, __route_handler_1, ...).
-	// Multi-file collision is handled by the compiler's multi_file_compiler.rs which
-	// renumbers handlers across files before linking — no path-based workaround needed.
+	// Handler naming: "__route_handler_" + method + "_" + sanitize_route_id(path).
+	// Method+path makes the symbol globally unique across files so the same name is
+	// never emitted twice when endpoints are split per Rule C (one file per resource).
+	// The previous sequential integer counter (__route_handler_0, __route_handler_1,
+	// ...) collided across files: file A's __route_handler_0 and file B's
+	// __route_handler_0 both registered, the second clobbering the first in the route
+	// table. See FRAME_SERVER_HANDLER_COLLISION.
 	string expand_endpoints(string body)
 		string result = "functions:\n"
 
@@ -367,7 +371,7 @@ functions:
 					handler_idx = handler_idx + 1
 				else
 					string handler_code = extract_handler_body(remaining)
-					string handler_name = "__route_handler_" + handler_idx.toString()
+					string handler_name = "__route_handler_" + method + "_" + route_id
 
 					// Emit handler function
 					result = result + "\tstring " + handler_name + "()\n"
