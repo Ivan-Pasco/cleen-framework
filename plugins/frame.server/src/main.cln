@@ -388,9 +388,20 @@ functions:
 					if mw_list.length() > 0
 						result = result + generate_middleware_code(mw_list)
 
-					// Handler body
+					// Handler body. FEED routes manage their own SSE stream — never
+					// wrap. For regular routes, if the user's body never calls a
+					// response-setting helper, auto-wrap each `return X` with
+					// jsonResponse(X) so X becomes the response body. Without this,
+					// `return json.encode(s)` (or any raw string) materializes as the
+					// literal "null" downstream — see
+					// FRAME-JSON-ENCODE-STRING-RESPONSE-BODY-NULL.
 					if handler_code.length() > 0
-						result = result + handler_code
+						if method == "FEED"
+							result = result + handler_code
+						else if handler_sets_response(handler_code)
+							result = result + handler_code
+						else
+							result = result + wrap_returns_with_json(handler_code)
 					else
 						result = result + "\t\treturn jsonResponse(\"" + method + " " + path + "\")\n"
 					result = result + "\n"
@@ -610,6 +621,143 @@ functions:
 				result = result + "\t\tif __mw_" + idx.toString() + ".length() > 0\n"
 				result = result + "\t\t\treturn __mw_" + idx.toString() + "\n"
 				idx = idx + 1
+		return result
+
+	// -------------------------------------------------------------------------
+	// Raw-return auto-wrap (FRAME-JSON-ENCODE-STRING-RESPONSE-BODY-NULL)
+	// -------------------------------------------------------------------------
+	// When a handler body does not call any response-setting helper, the HTTP
+	// body never gets assigned and the server materializes it as the literal
+	// 4-byte string "null". To make `return X` from an endpoints block do the
+	// intuitive thing, wrap each single-line `return <expr>` with jsonResponse
+	// so the returned string becomes the application/json response body.
+	// Handlers that already manage the response (jsonResponse, htmlResponse,
+	// redirect, _http_respond, _res_*, feed.*, live.*, etc.) are left alone.
+
+	boolean handler_sets_response(string code)
+		if code.indexOf("jsonResponse(") >= 0
+			return true
+		if code.indexOf("jsonResponseStatus(") >= 0
+			return true
+		if code.indexOf("htmlResponse(") >= 0
+			return true
+		if code.indexOf("redirectTo(") >= 0
+			return true
+		if code.indexOf("redirectToStatus(") >= 0
+			return true
+		if code.indexOf("redirect(") >= 0
+			return true
+		if code.indexOf("notFound(") >= 0
+			return true
+		if code.indexOf("notFoundMsg(") >= 0
+			return true
+		if code.indexOf("badRequest(") >= 0
+			return true
+		if code.indexOf("unauthorized(") >= 0
+			return true
+		if code.indexOf("forbidden(") >= 0
+			return true
+		if code.indexOf("httpStatus(") >= 0
+			return true
+		if code.indexOf("httpError(") >= 0
+			return true
+		if code.indexOf("httpHeader(") >= 0
+			return true
+		if code.indexOf("status(") >= 0
+			return true
+		if code.indexOf("_http_respond(") >= 0
+			return true
+		if code.indexOf("_http_redirect(") >= 0
+			return true
+		if code.indexOf("_http_set_header(") >= 0
+			return true
+		if code.indexOf("_res_json(") >= 0
+			return true
+		if code.indexOf("_res_body(") >= 0
+			return true
+		if code.indexOf("_res_redirect(") >= 0
+			return true
+		if code.indexOf("_res_status(") >= 0
+			return true
+		if code.indexOf("_res_set_header(") >= 0
+			return true
+		if code.indexOf("_res_download(") >= 0
+			return true
+		if code.indexOf("resDownload(") >= 0
+			return true
+		// Language-level response helpers from plugin.toml [language] section
+		if code.indexOf("json(") >= 0
+			return true
+		if code.indexOf("html(") >= 0
+			return true
+		if code.indexOf("error(") >= 0
+			return true
+		// SSE / WebSocket handlers manage the stream directly; never auto-wrap.
+		if code.indexOf("feed.") >= 0
+			return true
+		if code.indexOf("live.") >= 0
+			return true
+		if code.indexOf("_sse_") >= 0
+			return true
+		if code.indexOf("_ws_") >= 0
+			return true
+		return false
+
+	// Returns true when '(' and ')' counts match on the given line. Used to
+	// skip wrapping for continuation lines of a multi-line return expression.
+	boolean parens_balanced(string s)
+		integer depth = 0
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch == "("
+				depth = depth + 1
+			if ch == ")"
+				depth = depth - 1
+			i = i + 1
+		if depth == 0
+			return true
+		return false
+
+	// Rewrite each line `<tabs>return <expr>` to `<tabs>return jsonResponse(<expr>)`.
+	// Lines whose parentheses do not balance (continuation of a multi-line
+	// expression) are passed through unchanged.
+	string wrap_returns_with_json(string code)
+		string result = ""
+		string rem = code
+		integer safety = 0
+		while safety < 500 and rem.length() > 0
+			safety = safety + 1
+			integer nl = rem.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = rem
+				rem = ""
+			else
+				line = rem.substring(0, nl)
+				rem = rem.substring(nl + 1, rem.length())
+
+			integer tabs = 0
+			while tabs < line.length() and line.substring(tabs, tabs + 1) == "\t"
+				tabs = tabs + 1
+
+			string after_tabs = line.substring(tabs, line.length())
+			boolean wrapped = false
+
+			if after_tabs.indexOf("return ") == 0
+				string expr = after_tabs.substring(7, after_tabs.length()).trim()
+				if expr.length() > 0 and parens_balanced(expr)
+					string indent = ""
+					integer t = 0
+					while t < tabs
+						indent = indent + "\t"
+						t = t + 1
+					result = result + indent + "return jsonResponse(" + expr + ")\n"
+					wrapped = true
+
+			if wrapped == false
+				result = result + line + "\n"
+
 		return result
 
 	// -------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.6"
+version = "2.7.7"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -420,4 +420,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.307"
+built_with_compiler = "0.30.308"
