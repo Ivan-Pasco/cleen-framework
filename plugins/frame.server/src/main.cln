@@ -671,6 +671,18 @@ functions:
 			return true
 		if code.indexOf("_http_set_header(") >= 0
 			return true
+		// Language-level http.* aliases — same surface as their _http_* bridge
+		// forms but written the way users actually type them in handler code.
+		// Closes FRAME-SERVER-AUTO-WRAP-MISSES-HTTP-RESPOND-ALIAS: without these
+		// checks, `return http.respond(200, "application/xml", body)` got
+		// re-wrapped in jsonResponse(), producing a second _http_respond call
+		// that clobbered Content-Type back to application/json.
+		if code.indexOf("http.respond(") >= 0
+			return true
+		if code.indexOf("http.redirect(") >= 0
+			return true
+		if code.indexOf("http.setHeader(") >= 0
+			return true
 		if code.indexOf("_res_json(") >= 0
 			return true
 		if code.indexOf("_res_body(") >= 0
