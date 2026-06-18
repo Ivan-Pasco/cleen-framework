@@ -251,4 +251,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.30.308"
+built_with_compiler = "0.30.315"

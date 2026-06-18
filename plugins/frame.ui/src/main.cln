@@ -3817,6 +3817,70 @@ functions:
 		module = module + "\t\treturn \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
 		return module
 
+	// Emit a virtual Clean module that exposes _ui_normalize_load_return(any) ->
+	// string. Used by each page companion's auto-generated _load wrapper to turn
+	// an `any` load() return into the JSON-shaped string the bridge expects.
+	//
+	// Why this exists: the prior wrapper unconditionally called json.encode on
+	// the _impl return. When _impl returns a pairs/object value, that produces
+	// `{...}` — correct. When _impl returns a JSON-shaped *string* (e.g. one
+	// concatenated from db.query rows), json.encode quotes/escapes it, the
+	// bridge json.decodes that back to a STRING, and template lookups for
+	// `{var}` and `cl-iterate` find no keys (FRAME-UI-LOAD-STRING-NO-CONTEXT).
+	//
+	// The normalizer inspects the encoded form: if it already starts with `{`
+	// or `[`, return as-is; if it starts with `"{` or `"[` (a JSON-encoded
+	// string whose content is JSON), unescape one layer and return the inner
+	// JSON. Other primitives pass through unchanged.
+	string build_load_helpers_module()
+		string m = "// Auto-generated frame.ui load() return normalization\n"
+		m = m + "functions:\n"
+		m = m + "\tstring _ui_normalize_load_return(any __r)\n"
+		m = m + "\t\tstring __s = json.encode(__r)\n"
+		m = m + "\t\tif __s.length() == 0\n"
+		m = m + "\t\t\treturn \"{}\"\n"
+		m = m + "\t\tstring __first = __s.substring(0, 1)\n"
+		m = m + "\t\tif __first == \"{\" or __first == \"[\"\n"
+		m = m + "\t\t\treturn __s\n"
+		m = m + "\t\tif __s.length() >= 2 and __first == \"\\\"\"\n"
+		m = m + "\t\t\tstring __second = __s.substring(1, 2)\n"
+		m = m + "\t\t\tif __second == \"{\" or __second == \"[\"\n"
+		m = m + "\t\t\t\treturn _ui_unwrap_json_encoded_string(__s)\n"
+		m = m + "\t\treturn __s\n"
+		m = m + "\n"
+		m = m + "\tstring _ui_unwrap_json_encoded_string(string __s)\n"
+		m = m + "\t\tif __s.length() < 2\n"
+		m = m + "\t\t\treturn __s\n"
+		m = m + "\t\tinteger __n = __s.length()\n"
+		m = m + "\t\tstring __body = __s.substring(1, __n - 1)\n"
+		m = m + "\t\tstring __result = \"\"\n"
+		m = m + "\t\tinteger __i = 0\n"
+		m = m + "\t\tinteger __m = __body.length()\n"
+		m = m + "\t\twhile __i < __m\n"
+		m = m + "\t\t\tstring __ch = __body.substring(__i, __i + 1)\n"
+		m = m + "\t\t\tif __ch == \"\\\\\" and __i + 1 < __m\n"
+		m = m + "\t\t\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
+		m = m + "\t\t\t\tif __nx == \"n\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\n\"\n"
+		m = m + "\t\t\t\telse if __nx == \"t\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\t\"\n"
+		m = m + "\t\t\t\telse if __nx == \"r\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\r\"\n"
+		m = m + "\t\t\t\telse if __nx == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\\"\"\n"
+		m = m + "\t\t\t\telse if __nx == \"/\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"/\"\n"
+		m = m + "\t\t\t\telse if __nx == \"\\\\\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\\\\"\n"
+		m = m + "\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t__result = __result + __ch + __nx\n"
+		m = m + "\t\t\t\t__i = __i + 2\n"
+		m = m + "\t\t\telse\n"
+		m = m + "\t\t\t\t__result = __result + __ch\n"
+		m = m + "\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\treturn __result\n"
+		return m
+
 	string assemble(string input_json)
 		boolean has_server = input_json.indexOf("\"has_frame_server\":true") != -1
 
@@ -3827,6 +3891,7 @@ functions:
 		string route_registrations = ""
 		boolean first_transformed = true
 		string hydration_entries = ""
+		boolean has_any_load = false
 
 		integer fi = 0
 		while fi < source_files.length()
@@ -3849,20 +3914,22 @@ functions:
 				// so the second replace doesn't double-match
 				string new_content = file_content
 				if has_load
+					has_any_load = true
 					// Preserve the user's `any` return type on _impl so a body like
 					// `return { title: "hello" }` (the spec example in
 					// 05_frame_ui.md §load) type-checks as pairs/value, not string.
-					// _load wraps _impl with json.encode so the auto-route (and any
-					// other consumer that ships data over the bridge as JSON) gets
-					// a valid JSON string. Requires compiler >= 0.30.304 and
-					// clean-server >= 1.9.49 — earlier versions trap on
-					// json.encode of an any-typed object literal value (see fix
-					// chain: compiler ce3b02d0 → 7fcf9dc6 → server d8c010f7).
+					// _load wraps _impl with _ui_normalize_load_return so both
+					// pairs/object returns AND JSON-shaped string returns end up
+					// as the same canonical JSON-object/array payload the bridge
+					// (and template engine) expect. See build_load_helpers_module
+					// above for the normalization rules and the
+					// FRAME-UI-LOAD-STRING-NO-CONTEXT context.
+					// Requires compiler >= 0.30.304 and clean-server >= 1.9.49.
 					// Component / layout assemblers that want the value form call
 					// _impl directly (see generate_page_class above).
 					new_content = new_content.replace("any load(Request ", "any " + module_name + "_load_impl(any ")
 					new_content = new_content.replace("any load(", "any " + module_name + "_load_impl(")
-					new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn json.encode(" + module_name + "_load_impl(__p))\n"
+					new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn _ui_normalize_load_return(" + module_name + "_load_impl(__p))\n"
 				if has_guard
 					new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
 					new_content = new_content.replace("any guard(", "any " + module_name + "_guard(")
@@ -3905,6 +3972,16 @@ functions:
 			if not first_injected
 				injected_json = injected_json + ","
 			injected_json = injected_json + "{\"virtual_path\":\"__hydration_manifest.cln\",\"content\":\"" + escape_json_string(manifest_module) + "\"}"
+			first_injected = false
+
+		// Emit the load-return normalizer module whenever any page companion
+		// defines load(). The per-page _load wrapper above calls into it.
+		if has_any_load
+			string load_helpers_module = build_load_helpers_module()
+			if not first_injected
+				injected_json = injected_json + ","
+			injected_json = injected_json + "{\"virtual_path\":\"__ui_load_helpers.cln\",\"content\":\"" + escape_json_string(load_helpers_module) + "\"}"
+			first_injected = false
 
 		return "{\"injected_sources\":[" + injected_json + "],\"transformed_sources\":[" + transformed_json + "]}"
 
