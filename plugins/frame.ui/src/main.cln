@@ -3832,6 +3832,16 @@ functions:
 	// or `[`, return as-is; if it starts with `"{` or `"[` (a JSON-encoded
 	// string whose content is JSON), unescape one layer and return the inner
 	// JSON. Other primitives pass through unchanged.
+	//
+	// A second pass — _ui_promote_string_fields — additionally walks the
+	// resulting JSON and promotes per-field string values whose content is
+	// itself JSON-encoded (an array or object) into inline JSON. This closes
+	// FRAME-UI-CL-ITERATE-STRING-FIELD-NO-ITER: when load() returns a pairs
+	// literal where one field is typed `string` and contains a JSON-encoded
+	// array (the natural shape of raw db.query results), cl-iterate would see
+	// a non-iterable and yield zero items. Inlining the array makes it
+	// iterable by the template engine the same way a pairs<string, list<...>>
+	// field would be.
 	string build_load_helpers_module()
 		string m = "// Auto-generated frame.ui load() return normalization\n"
 		m = m + "functions:\n"
@@ -3841,11 +3851,11 @@ functions:
 		m = m + "\t\t\treturn \"{}\"\n"
 		m = m + "\t\tstring __first = __s.substring(0, 1)\n"
 		m = m + "\t\tif __first == \"{\" or __first == \"[\"\n"
-		m = m + "\t\t\treturn __s\n"
+		m = m + "\t\t\treturn _ui_promote_string_fields(__s)\n"
 		m = m + "\t\tif __s.length() >= 2 and __first == \"\\\"\"\n"
 		m = m + "\t\t\tstring __second = __s.substring(1, 2)\n"
 		m = m + "\t\t\tif __second == \"{\" or __second == \"[\"\n"
-		m = m + "\t\t\t\treturn _ui_unwrap_json_encoded_string(__s)\n"
+		m = m + "\t\t\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
 		m = m + "\t\treturn __s\n"
 		m = m + "\n"
 		m = m + "\tstring _ui_unwrap_json_encoded_string(string __s)\n"
@@ -3879,6 +3889,78 @@ functions:
 		m = m + "\t\t\t\t__result = __result + __ch\n"
 		m = m + "\t\t\t\t__i = __i + 1\n"
 		m = m + "\t\treturn __result\n"
+		m = m + "\n"
+		// Walk a JSON object/array string and promote any field value of the
+		// form `"...[...]..."` (a JSON-encoded array string) or `"...{...}..."`
+		// (a JSON-encoded object string) to inline JSON. Closes
+		// FRAME-UI-CL-ITERATE-STRING-FIELD-NO-ITER: load() returns where a
+		// field is typed `string` and holds a JSON-encoded array would
+		// otherwise render zero iterations under cl-iterate because the
+		// template engine sees a string, not a list.
+		m = m + "\tstring _ui_promote_string_fields(string __input)\n"
+		m = m + "\t\tif __input.length() < 4\n"
+		m = m + "\t\t\treturn __input\n"
+		m = m + "\t\tstring __out = \"\"\n"
+		m = m + "\t\tinteger __i = 0\n"
+		m = m + "\t\tinteger __n = __input.length()\n"
+		m = m + "\t\tboolean __in_str = false\n"
+		m = m + "\t\tboolean __escape = false\n"
+		m = m + "\t\twhile __i < __n\n"
+		m = m + "\t\t\tstring __ch = __input.substring(__i, __i + 1)\n"
+		m = m + "\t\t\tif __in_str\n"
+		m = m + "\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\tif __escape\n"
+		m = m + "\t\t\t\t\t__escape = false\n"
+		m = m + "\t\t\t\telse if __ch == \"\\\\\"\n"
+		m = m + "\t\t\t\t\t__escape = true\n"
+		m = m + "\t\t\t\telse if __ch == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t__in_str = false\n"
+		m = m + "\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\t\telse\n"
+		m = m + "\t\t\t\tif __ch == \":\"\n"
+		m = m + "\t\t\t\t\tinteger __j = __i + 1\n"
+		m = m + "\t\t\t\t\twhile __j < __n and __input.substring(__j, __j + 1) == \" \"\n"
+		m = m + "\t\t\t\t\t\t__j = __j + 1\n"
+		m = m + "\t\t\t\t\tboolean __did = false\n"
+		m = m + "\t\t\t\t\tif __j + 1 < __n and __input.substring(__j, __j + 1) == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
+		m = m + "\t\t\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
+		m = m + "\t\t\t\t\t\t\tinteger __end = __j + 1\n"
+		m = m + "\t\t\t\t\t\t\tboolean __found = false\n"
+		m = m + "\t\t\t\t\t\t\twhile __end < __n and not __found\n"
+		m = m + "\t\t\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
+		m = m + "\t\t\t\t\t\t\t\tif __c == \"\\\\\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__end = __end + 2\n"
+		m = m + "\t\t\t\t\t\t\t\telse if __c == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__found = true\n"
+		m = m + "\t\t\t\t\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__end = __end + 1\n"
+		m = m + "\t\t\t\t\t\t\tif __found\n"
+		m = m + "\t\t\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
+		m = m + "\t\t\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
+		m = m + "\t\t\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
+		m = m + "\t\t\t\t\t\t\t\tboolean __ok = false\n"
+		m = m + "\t\t\t\t\t\t\t\tif __ulen >= 2\n"
+		m = m + "\t\t\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
+		m = m + "\t\t\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
+		m = m + "\t\t\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
+		m = m + "\t\t\t\t\t\t\t\tif __ok\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__i = __end + 1\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__did = true\n"
+		m = m + "\t\t\t\t\tif not __did\n"
+		m = m + "\t\t\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\t\t\telse if __ch == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t__in_str = true\n"
+		m = m + "\t\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\treturn __out\n"
 		return m
 
 	string assemble(string input_json)

@@ -153,6 +153,13 @@ functions = [
   { name = "Model.cursor", signature = "Model.cursor:\n\twhere:\n\t\tcondition\n\tcursor:\n\t\tperPage 20\n\t\tafter \"\"\n\t\tby \"id\"", description = "Cursor-based paginated query returning CursorResult<Model> with items, nextCursor, hasPrev, count" },
   { name = "db.paginate", signature = "db.paginate(tableName, whereJson, page, perPage)", description = "Low-level offset pagination bridge; prefer Model.paginate: block", maps_to = "_db_paginate", params = ["string", "string", "integer", "integer"], returns = "string" },
   { name = "db.cursorPage", signature = "db.cursorPage(tableName, whereJson, perPage, after, byField)", description = "Low-level cursor pagination bridge; prefer Model.cursor: block", maps_to = "_db_cursor_page", params = ["string", "string", "integer", "string", "string"], returns = "string" },
+  # Raw-INSERT helper — Clean wrapper emitted via __preamble (no maps_to). Provides
+  # the working migration target requested by FRAME-DATA-NO-INSERT-RETURNING-ID-BRIDGE
+  # for apps issuing raw db.query INSERTs. Appends ` RETURNING id` to the SQL if not
+  # present and returns the inserted row's id. Engines: PostgreSQL, SQLite, MySQL
+  # 8.0.21+, MariaDB 10.5+. For older MySQL/MariaDB, use Model.save() or Model.insert:
+  # which drive the row materialisation through the engine-aware path.
+  { name = "insertReturningId", signature = "insertReturningId(sql, params)", description = "Execute an INSERT and return the new row id. Auto-appends ` RETURNING id` when the SQL doesn't already contain RETURNING. Returns 0 if the engine does not support RETURNING." },
 ]
 
 # Auto-completion suggestions

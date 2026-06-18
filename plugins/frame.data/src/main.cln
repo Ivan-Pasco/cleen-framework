@@ -156,6 +156,19 @@ functions:
 			if __m.length() > 0
 				return expand_cursor(__m, body)
 
+		// Preamble — emit raw-INSERT helpers so apps that use db.query for inserts
+		// have a working path to the new row's auto-increment id. Closes
+		// FRAME-DATA-NO-INSERT-RETURNING-ID-BRIDGE: prior to this, users issuing
+		// raw INSERTs through db.query had no way to retrieve LAST_INSERT_ID
+		// without a racy `SELECT MAX(id)` query, because the existing
+		// _db_execute bridge returns affected-row count and the LAST_INSERT_ID()
+		// SELECT returns 0 under connection-per-call (tracked upstream as the
+		// server-side f488db1d connection-pinning bug). The helper appends
+		// `RETURNING id` to the SQL if not present, calls _db_query, and parses
+		// the id out of the JSON result.
+		if block_name == "__preamble"
+			return emit_raw_insert_helpers()
+
 		return body
 
 	// Validation entry point
@@ -168,7 +181,40 @@ functions:
 
 	// Keywords for IDE support
 	string get_keywords()
-		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"paginate\", \"cursor\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\", \"page\", \"perPage\", \"after\", \"by\"]"
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"paginate\", \"cursor\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\", \"page\", \"perPage\", \"after\", \"by\", \"insertReturningId\"]"
+
+	// Emit raw-INSERT helper functions injected once per build via __preamble.
+	//
+	// Provides:
+	//   integer insertReturningId(string sql, string params)
+	//     Executes an INSERT statement and returns the new row's auto-increment
+	//     id. If the supplied SQL does not contain `RETURNING`, ` RETURNING id`
+	//     is appended automatically. Works on PostgreSQL, SQLite, MySQL 8.0.21+
+	//     and MariaDB 10.5+. Returns 0 when the underlying driver does not
+	//     support RETURNING (older MySQL/MariaDB) — apps targeting those
+	//     engines must use Model.save() or the ORM `insert:` block, which
+	//     drives the row materialisation through the engine-aware path.
+	string emit_raw_insert_helpers()
+		string result = "functions:\n"
+		result = result + "\tinteger insertReturningId(string sql, string params)\n"
+		result = result + "\t\tstring __sql = sql\n"
+		result = result + "\t\tif __sql.indexOf(\"RETURNING\") == -1\n"
+		result = result + "\t\t\t__sql = __sql + \" RETURNING id\"\n"
+		result = result + "\t\tstring __res = _db_query(__sql, params)\n"
+		result = result + "\t\tinteger __pos = __res.indexOf(\"\\\"id\\\":\")\n"
+		result = result + "\t\tif __pos == -1\n"
+		result = result + "\t\t\treturn 0\n"
+		result = result + "\t\tinteger __start = __pos + 5\n"
+		result = result + "\t\tinteger __end = __start\n"
+		result = result + "\t\twhile __end < __res.length()\n"
+		result = result + "\t\t\tstring __ch = __res.substring(__end, __end + 1)\n"
+		result = result + "\t\t\tif __ch == \",\" or __ch == \"}\" or __ch == \" \"\n"
+		result = result + "\t\t\t\tbreak\n"
+		result = result + "\t\t\t__end = __end + 1\n"
+		result = result + "\t\tif __end == __start\n"
+		result = result + "\t\t\treturn 0\n"
+		result = result + "\t\treturn __res.substring(__start, __end).toInteger()\n\n"
+		return result
 
 // ============================================================================
 // DATA MODEL EXPANSION
