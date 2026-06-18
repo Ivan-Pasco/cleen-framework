@@ -4011,6 +4011,7 @@ functions:
 					// _impl directly (see generate_page_class above).
 					new_content = new_content.replace("any load(Request ", "any " + module_name + "_load_impl(any ")
 					new_content = new_content.replace("any load(", "any " + module_name + "_load_impl(")
+					new_content = box_returns_in_function(new_content, module_name + "_load_impl")
 					new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn _ui_normalize_load_return(" + module_name + "_load_impl(__p))\n"
 				if has_guard
 					new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
@@ -4146,6 +4147,94 @@ functions:
 				pos = pos + 1
 
 		return result
+
+	// Compiler workaround for FRAME-UI-DB-QUERY-IN-LOAD-RETURNS-NULL:
+	// returning a typed value (string, etc.) directly from an `any`-declared
+	// function fails to box it, so json.encode() in _ui_normalize_load_return
+	// sees a raw pointer and emits the literal "null". Boxing IS performed
+	// when the value first lands in an `any` local. This walker scans the
+	// body of `any <fn_name>(`, finds each `<indent>return <expr>` line,
+	// and rewrites it to `<indent>any __load_ret_N = <expr>` followed by
+	// `<indent>return __load_ret_N`. Pairs literals already box correctly
+	// but the rewrite is harmless for them. The body ends at the first
+	// non-blank line whose indent matches or precedes the signature's.
+	// Drop this helper once the compiler emits the boxing on `any`-returns.
+	string box_returns_in_function(string source, string fn_name)
+		string sig_marker = "any " + fn_name + "("
+		integer sig_pos = source.indexOf(sig_marker)
+		if sig_pos == -1
+			return source
+
+		// Walk back to the start of the signature's line
+		integer line_start = sig_pos
+		while line_start > 0
+			string prev = source.substring(line_start - 1, line_start)
+			if prev == "\n"
+				break
+			line_start = line_start - 1
+
+		// Count signature line's leading tabs
+		integer sig_indent = 0
+		integer src_len = source.length()
+		while line_start + sig_indent < src_len and source.substring(line_start + sig_indent, line_start + sig_indent + 1) == "\t"
+			sig_indent = sig_indent + 1
+
+		integer sig_nl = source.indexOf("\n", sig_pos)
+		if sig_nl == -1
+			return source
+
+		string before = source.substring(0, sig_nl + 1)
+		string remaining = source.substring(sig_nl + 1, src_len)
+
+		string out = ""
+		integer counter = 0
+		boolean in_body = true
+
+		while in_body and remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			string after = ""
+			if nl == -1
+				line = remaining
+				after = ""
+			else
+				line = remaining.substring(0, nl)
+				after = remaining.substring(nl + 1, remaining.length())
+
+			integer line_indent = 0
+			while line_indent < line.length() and line.substring(line_indent, line_indent + 1) == "\t"
+				line_indent = line_indent + 1
+
+			string content = line.substring(line_indent, line.length())
+			boolean is_blank = content.trim().length() == 0
+
+			if not is_blank and line_indent <= sig_indent
+				in_body = false
+				out = out + line
+				if nl != -1
+					out = out + "\n"
+			else
+				boolean rewrote = false
+				if content.startsWith("return ") and content.length() > 7
+					string expr = content.substring(7, content.length()).trim()
+					boolean already_boxed = expr.startsWith("__load_ret")
+					if expr.length() > 0 and not already_boxed
+						string indent_str = line.substring(0, line_indent)
+						string var_name = "__load_ret_" + counter.toString()
+						counter = counter + 1
+						out = out + indent_str + "any " + var_name + " = " + expr + "\n"
+						out = out + indent_str + "return " + var_name
+						if nl != -1
+							out = out + "\n"
+						rewrote = true
+				if not rewrote
+					out = out + line
+					if nl != -1
+						out = out + "\n"
+			remaining = after
+
+		out = out + remaining
+		return before + out
 
 	// "app/ui/web/pages/login.cln"           -> "pages_login"
 	// "app/ui/web/pages/dashboard/index.cln" -> "pages_dashboard_index"
