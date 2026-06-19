@@ -99,6 +99,15 @@ functions:
 		result = result + "\t\treturn _email_send(recipient, subject, html, text, sender)\n\n"
 		result = result + "\tstring emailLastError()\n"
 		result = result + "\t\treturn _email_last_error()\n\n"
+		// __route_default_body — auto-wrap target. Status-preserving alternative
+		// to jsonResponse. Sets Content-Type + body without touching status, so
+		// that `return helper()` (where helper already called http.respond(4xx))
+		// keeps the helper's status instead of clobbering it back to 200.
+		// Closes FRAME-SERVER-AUTO-WRAP-CLOBBERS-STATUS.
+		result = result + "\tstring __route_default_body(string data)\n"
+		result = result + "\t\tboolean __ct = _res_set_header(\"Content-Type\", \"application/json\")\n"
+		result = result + "\t\t_res_body(data)\n"
+		result = result + "\t\treturn data\n\n"
 		return result
 
 // ============================================================================
@@ -637,6 +646,8 @@ functions:
 	boolean handler_sets_response(string code)
 		if code.indexOf("jsonResponse(") >= 0
 			return true
+		if code.indexOf("__route_default_body(") >= 0
+			return true
 		if code.indexOf("jsonResponseStatus(") >= 0
 			return true
 		if code.indexOf("htmlResponse(") >= 0
@@ -731,7 +742,12 @@ functions:
 			return true
 		return false
 
-	// Rewrite each line `<tabs>return <expr>` to `<tabs>return jsonResponse(<expr>)`.
+	// Rewrite each line `<tabs>return <expr>` to
+	// `<tabs>return __route_default_body(<expr>)`.
+	// __route_default_body sets Content-Type + body but does NOT touch status,
+	// so endpoints that delegate to a helper which already called
+	// http.respond(4xx, ...) keep the helper's status instead of being clobbered
+	// back to 200. Closes FRAME-SERVER-AUTO-WRAP-CLOBBERS-STATUS.
 	// Lines whose parentheses do not balance (continuation of a multi-line
 	// expression) are passed through unchanged.
 	string wrap_returns_with_json(string code)
@@ -764,7 +780,7 @@ functions:
 					while t < tabs
 						indent = indent + "\t"
 						t = t + 1
-					result = result + indent + "return jsonResponse(" + expr + ")\n"
+					result = result + indent + "return __route_default_body(" + expr + ")\n"
 					wrapped = true
 
 			if wrapped == false
