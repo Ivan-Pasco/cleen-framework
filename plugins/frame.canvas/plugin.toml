@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.canvas"
-version = "2.4.1"
+version = "2.4.2"
 description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects"
 author = "Clean Language Team"
 license = "MIT"

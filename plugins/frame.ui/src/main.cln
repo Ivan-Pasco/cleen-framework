@@ -1325,116 +1325,29 @@ functions:
 			result = result + code.replace("__html", var_name)
 			return result
 
-	// Post-process html_block_to_code output to fuse consecutive pure-literal
-	// concat statements into a single statement. Each runtime concat allocates a
-	// fresh buffer in the bump allocator that is never freed within a request, so
-	// emitting one statement of length M is dramatically cheaper than emitting K
-	// statements that grow to length M.
+	// Post-process html_block_to_code output. Currently a passthrough.
 	//
-	// Closes FRAME-UI-HTML-BLOCK-LOOP-128MB-EXHAUSTION (plugin-side mitigation;
-	// the durable fix is COMPILER-MEM-ALLOC-NO-GROW in the compiler's bump
-	// allocator).
+	// Earlier (d60abc1 / v2.12.43) this function fused consecutive
+	// `__html = __html + "..."` statements to cut bump-allocator pressure for
+	// FRAME-UI-HTML-BLOCK-LOOP-128MB-EXHAUSTION (fp 0506d9c4d77e). That
+	// implementation regressed with FRAME-UI-V2.12.23-FUSE-LITERAL-CONCATS-OOB-TRAP
+	// (fp 2d9c7dca297d) — any multi-line html: block traps inside expand
+	// with `wasm trap: out of bounds memory access`, blocking real builds.
 	//
-	// A "pure literal" statement has the exact form:
-	//     __html = __html + "<content>"\n
-	// with no unescaped '"' or '+' inside <content>. Consecutive pure-literal
-	// statements are fused by concatenating their literal contents; statements
-	// with interpolations are passed through unchanged.
+	// Multiple replacement implementations were tested; the trap survived
+	// every variant including a one-line `return code` body, indicating the
+	// failure is sensitive to compiled function layout under cln 0.30.326
+	// rather than to the fusion logic itself.
 	//
-	// For a typical card template with ~15 emitted statements, fusion collapses
-	// open-tag-only and close-tag-only literals around interpolation points,
-	// reducing statement count by ~50–70% and cutting bump-allocator pressure
-	// proportionally.
+	// Fusion is disabled (reverting to v2.12.22 codegen) until the durable
+	// fix COMPILER-MEM-ALLOC-NO-GROW lands; that fix removes the runtime
+	// allocator ceiling, so the optimization this function existed to
+	// provide stops mattering. Kept as a single-call seam so a future
+	// re-enable can drop a tested implementation in without touching the
+	// call sites in `expand_html_block` and the component render-body
+	// generator.
 	string fuse_literal_concats(string code)
-		integer code_len = code.length()
-		if code_len == 0
-			return code
-
-		string result = ""
-		integer cursor = 0
-		// Track pending literal content from prior pure-literal statements that
-		// are eligible for fusion. Empty when no fusion is in progress.
-		string pending_literal = ""
-		boolean have_pending = false
-		integer safety = 0
-
-		while safety < 5000 and cursor < code_len
-			safety = safety + 1
-			integer nl = code.indexOf("\n", cursor)
-			integer line_end = code_len
-			if nl >= 0
-				line_end = nl
-
-			// Detect: line is exactly `__html = __html + "<literal>"` with no
-			// trailing `+ expr` and no unescaped `"` inside the literal content.
-			integer lit_content_end = pure_literal_content_end(code, cursor, line_end)
-
-			if lit_content_end >= 0
-				// Pure literal: extract content (between the opening " and closing ")
-				// and append to pending_literal.
-				string content = code.substring(cursor + 19, lit_content_end)
-				if have_pending
-					pending_literal = pending_literal + content
-				else
-					pending_literal = content
-					have_pending = true
-			else
-				// Non-literal (or empty) line — flush any pending fused literal,
-				// then emit this line as-is.
-				if have_pending
-					result = result + "__html = __html + \"" + pending_literal + "\"\n"
-					pending_literal = ""
-					have_pending = false
-				if line_end > cursor
-					result = result + code.substring(cursor, line_end) + "\n"
-				else
-					result = result + "\n"
-
-			if nl == -1
-				cursor = code_len
-			else
-				cursor = nl + 1
-
-		// Flush any remaining pending literal at end-of-input
-		if have_pending
-			result = result + "__html = __html + \"" + pending_literal + "\"\n"
-
-		return result
-
-	// Returns the index of the closing '"' if code[s_pos..e_pos) is a pure literal
-	// concat statement (`__html = __html + "<content>"` with no `+` after the
-	// closing quote and no unescaped `"` inside the content). Returns -1
-	// otherwise. The 19-byte prefix `__html = __html + "` must match exactly.
-	integer pure_literal_content_end(string code, integer s_pos, integer e_pos)
-		// Need at least the 19-byte prefix + 1 closing quote.
-		if e_pos - s_pos < 20
-			return -1
-		// Cheap prefix probe — compare the first character, then the full prefix.
-		if code.substring(s_pos, s_pos + 1) != "_"
-			return -1
-		if code.substring(s_pos, s_pos + 19) != "__html = __html + \""
-			return -1
-		// Last byte of the trimmed line must be the closing quote — without
-		// trailing `+ expr` continuations.
-		if code.substring(e_pos - 1, e_pos) != "\""
-			return -1
-		// Walk the content [s_pos+19, e_pos-1) and reject if any unescaped `"`
-		// appears (which would indicate a `"+expr+"` interpolation).
-		integer i = s_pos + 19
-		integer last = e_pos - 1
-		while i < last
-			string ch = code.substring(i, i + 1)
-			if ch == "\""
-				// Count immediately preceding backslashes
-				integer bs = 0
-				integer j = i - 1
-				while j >= s_pos + 19 and code.substring(j, j + 1) == "\\"
-					bs = bs + 1
-					j = j - 1
-				if bs % 2 == 0
-					return -1
-			i = i + 1
-		return last
+		return code
 
 	// Core transformer: walks HTML and delegates to text/element processors
 	// Parallel to html_to_render but uses {expr} syntax and __html variable

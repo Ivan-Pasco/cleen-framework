@@ -18,8 +18,8 @@ start:
 	test_html_block_with_var()
 	test_html_block_raw_interpolation()
 	test_html_block_doctype_no_spurious_close()
-	test_html_block_literal_fusion()
-	test_html_block_fusion_preserves_interpolations()
+	test_html_block_no_fusion_emits_per_tag_concats()
+	test_html_block_interpolations_emitted_inline()
 	test_hydration_collect_screens()
 	test_hydration_default_mode_off()
 	test_hydration_entries_to_json()
@@ -116,29 +116,28 @@ functions:
 		// Must NOT contain any closing tag for DOCTYPE
 		assert(result.contains("</!DOCTYPE>") == false)
 
-	// FRAME-UI-HTML-BLOCK-LOOP-128MB-EXHAUSTION (mitigation):
-	// Consecutive pure-literal concat lines must fuse into a single concat to
-	// minimise bump-allocator pressure at runtime. The card template below
-	// would naïvely emit ~7 concat statements; fusion collapses to 1.
-	void test_html_block_literal_fusion()
+	// Fusion of consecutive pure-literal concat lines is currently disabled
+	// (FRAME-UI-V2.12.23-FUSE-LITERAL-CONCATS-OOB-TRAP). The plugin emits
+	// one concat per element/text node. The durable fix for the underlying
+	// allocator pressure is COMPILER-MEM-ALLOC-NO-GROW upstream.
+	void test_html_block_no_fusion_emits_per_tag_concats()
 		string result = expand_block("html", "{}", "<article><header><h3>title</h3></header></article>")
-		// All-literal template — the entire body must be emitted as a single concat.
-		assert(result.contains("__html = __html + \"<article><header><h3>title</h3></header></article>\""))
-		// And nothing should still be emitted as per-tag concats.
-		assert(result.contains("__html = __html + \"<article>\"\n") == false)
-		assert(result.contains("__html = __html + \"<header>\"\n") == false)
+		// Per-tag concats are present.
+		assert(result.contains("__html = __html + \"<article>\""))
+		assert(result.contains("__html = __html + \"<header>\""))
+		assert(result.contains("__html = __html + \"<h3>\""))
+		// No fused single-line concat covering the whole template.
+		assert(result.contains("__html = __html + \"<article><header><h3>title</h3></header></article>\"") == false)
 
-	// Fusion must NOT touch lines with interpolations. The leading and
-	// trailing literal runs around an interpolation should each fuse into
-	// a single concat, but the interpolation line itself stays untouched.
-	void test_html_block_fusion_preserves_interpolations()
+	// Interpolation lines must remain intact and emit _html_escape(...) for
+	// the interpolated expression, regardless of fusion state.
+	void test_html_block_interpolations_emitted_inline()
 		string result = expand_block("html", "{}", "<article><header><h3>{title}</h3></header></article>")
-		// Leading literal run: <article><header><h3>
-		assert(result.contains("__html = __html + \"<article><header><h3>\""))
-		// Trailing literal run: </h3></header></article>
-		assert(result.contains("__html = __html + \"</h3></header></article>\""))
-		// Interpolation line must remain intact
+		// Interpolation line uses _html_escape on the expression.
 		assert(result.contains("_html_escape(title)"))
+		// Surrounding tag concats stay un-fused (one per element).
+		assert(result.contains("__html = __html + \"<article>\""))
+		assert(result.contains("__html = __html + \"</article>\""))
 
 	// Hydration manifest tests (spec 05_frame_ui.md §14.1)
 	void test_hydration_collect_screens()

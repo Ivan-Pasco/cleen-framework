@@ -259,29 +259,29 @@
         // CONSOLE / PRINT
         // ================================================================
 
-        _print(ptr, len) {
+        print(ptr, len) {
           const str = self.readString(ptr, len);
           console.log(str);
           return 0;
         },
 
-        _print_i32(value) {
+        print_integer(value) {
           console.log(value);
           return 0;
         },
 
-        _print_f64(value) {
+        print_float(value) {
           console.log(value);
           return 0;
         },
 
-        _printl(ptr, len) {
+        printl(ptr, len) {
           const str = self.readString(ptr, len);
           console.log(str);
           return 0;
         },
 
-        _console_log(ptr, len) {
+        console_log(ptr, len) {
           const str = self.readString(ptr, len);
           console.log(str);
           return 0;
@@ -293,13 +293,13 @@
           return 0;
         },
 
-        _console_warn(ptr, len) {
+        console_warn(ptr, len) {
           const str = self.readString(ptr, len);
           console.warn(str);
           return 0;
         },
 
-        _console_error(ptr, len) {
+        console_error(ptr, len) {
           const str = self.readString(ptr, len);
           console.error(str);
           return 0;
@@ -315,7 +315,7 @@
           return ptr;
         },
 
-        _string_concat(ptr1, len1, ptr2, len2, outPtr) {
+        string_concat(ptr1, len1, ptr2, len2, outPtr) {
           const str1 = self.readString(ptr1, len1);
           const str2 = self.readString(ptr2, len2);
           const result = str1 + str2;
@@ -330,40 +330,40 @@
         // MATH FUNCTIONS
         // ================================================================
 
-        _math_sin(x) { return Math.sin(x); },
-        _math_cos(x) { return Math.cos(x); },
-        _math_tan(x) { return Math.tan(x); },
-        _math_asin(x) { return Math.asin(x); },
-        _math_acos(x) { return Math.acos(x); },
-        _math_atan(x) { return Math.atan(x); },
-        _math_atan2(y, x) { return Math.atan2(y, x); },
-        _math_sinh(x) { return Math.sinh(x); },
-        _math_cosh(x) { return Math.cosh(x); },
-        _math_tanh(x) { return Math.tanh(x); },
-        _math_sqrt(x) { return Math.sqrt(x); },
-        _math_cbrt(x) { return Math.cbrt(x); },
-        _math_pow(x, y) { return Math.pow(x, y); },
-        _math_exp(x) { return Math.exp(x); },
-        _math_log(x) { return Math.log(x); },
-        _math_log10(x) { return Math.log10(x); },
-        _math_log2(x) { return Math.log2(x); },
-        _math_abs(x) { return Math.abs(x); },
-        _math_floor(x) { return Math.floor(x); },
-        _math_ceil(x) { return Math.ceil(x); },
-        _math_round(x) { return Math.round(x); },
-        _math_trunc(x) { return Math.trunc(x); },
-        _math_sign(x) { return Math.sign(x); },
-        _math_min(x, y) { return Math.min(x, y); },
-        _math_max(x, y) { return Math.max(x, y); },
-        _math_clamp(x, min, max) { return Math.max(min, Math.min(max, x)); },
-        _math_lerp(a, b, t) { return a + (b - a) * t; },
-        _math_random() { return Math.random(); },
-        _math_random_range(min, max) { return Math.random() * (max - min) + min; },
-        _math_random_int(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
+        math_sin(x) { return Math.sin(x); },
+        math_cos(x) { return Math.cos(x); },
+        math_tan(x) { return Math.tan(x); },
+        math_asin(x) { return Math.asin(x); },
+        math_acos(x) { return Math.acos(x); },
+        math_atan(x) { return Math.atan(x); },
+        math_atan2(y, x) { return Math.atan2(y, x); },
+        math_sinh(x) { return Math.sinh(x); },
+        math_cosh(x) { return Math.cosh(x); },
+        math_tanh(x) { return Math.tanh(x); },
+        math_sqrt(x) { return Math.sqrt(x); },
+        math_cbrt(x) { return Math.cbrt(x); },
+        math_pow(x, y) { return Math.pow(x, y); },
+        math_exp(x) { return Math.exp(x); },
+        math_ln(x) { return Math.log(x); },
+        math_log10(x) { return Math.log10(x); },
+        math_log2(x) { return Math.log2(x); },
+        math_abs(x) { return Math.abs(x); },
+        math_floor(x) { return Math.floor(x); },
+        math_ceil(x) { return Math.ceil(x); },
+        math_round(x) { return Math.round(x); },
+        math_trunc(x) { return Math.trunc(x); },
+        math_sign(x) { return Math.sign(x); },
+        math_min(x, y) { return Math.min(x, y); },
+        math_max(x, y) { return Math.max(x, y); },
+        math_clamp(x, min, max) { return Math.max(min, Math.min(max, x)); },
+        math_lerp(a, b, t) { return a + (b - a) * t; },
+        math_random() { return Math.random(); },
+        math_random_range(min, max) { return Math.random() * (max - min) + min; },
+        math_random_int(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
 
         // Constants
-        _math_pi() { return Math.PI; },
-        _math_e() { return Math.E; },
+        math_pi() { return Math.PI; },
+        math_e() { return Math.E; },
 
         // ================================================================
         // TIME FUNCTIONS
@@ -413,22 +413,22 @@
         // TYPE CONVERSION
         // ================================================================
 
-        _int_to_string(value, outPtr) {
+        int_to_string(value, outPtr) {
           const str = value.toString();
           return self.writeString(str, outPtr);
         },
 
-        _float_to_string(value, outPtr) {
+        float_to_string(value, outPtr) {
           const str = value.toString();
           return self.writeString(str, outPtr);
         },
 
-        _parse_int(ptr, len) {
+        string_to_int(ptr, len) {
           const str = self.readString(ptr, len);
           return parseInt(str, 10) || 0;
         },
 
-        _parse_float(ptr, len) {
+        string_to_float(ptr, len) {
           const str = self.readString(ptr, len);
           return parseFloat(str) || 0.0;
         },
