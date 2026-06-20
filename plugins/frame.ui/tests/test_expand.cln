@@ -18,6 +18,8 @@ start:
 	test_html_block_with_var()
 	test_html_block_raw_interpolation()
 	test_html_block_doctype_no_spurious_close()
+	test_html_block_literal_fusion()
+	test_html_block_fusion_preserves_interpolations()
 	test_hydration_collect_screens()
 	test_hydration_default_mode_off()
 	test_hydration_entries_to_json()
@@ -113,6 +115,30 @@ functions:
 		assert(result.contains("\"<!DOCTYPE html>\""))
 		// Must NOT contain any closing tag for DOCTYPE
 		assert(result.contains("</!DOCTYPE>") == false)
+
+	// FRAME-UI-HTML-BLOCK-LOOP-128MB-EXHAUSTION (mitigation):
+	// Consecutive pure-literal concat lines must fuse into a single concat to
+	// minimise bump-allocator pressure at runtime. The card template below
+	// would naïvely emit ~7 concat statements; fusion collapses to 1.
+	void test_html_block_literal_fusion()
+		string result = expand_block("html", "{}", "<article><header><h3>title</h3></header></article>")
+		// All-literal template — the entire body must be emitted as a single concat.
+		assert(result.contains("__html = __html + \"<article><header><h3>title</h3></header></article>\""))
+		// And nothing should still be emitted as per-tag concats.
+		assert(result.contains("__html = __html + \"<article>\"\n") == false)
+		assert(result.contains("__html = __html + \"<header>\"\n") == false)
+
+	// Fusion must NOT touch lines with interpolations. The leading and
+	// trailing literal runs around an interpolation should each fuse into
+	// a single concat, but the interpolation line itself stays untouched.
+	void test_html_block_fusion_preserves_interpolations()
+		string result = expand_block("html", "{}", "<article><header><h3>{title}</h3></header></article>")
+		// Leading literal run: <article><header><h3>
+		assert(result.contains("__html = __html + \"<article><header><h3>\""))
+		// Trailing literal run: </h3></header></article>
+		assert(result.contains("__html = __html + \"</h3></header></article>\""))
+		// Interpolation line must remain intact
+		assert(result.contains("_html_escape(title)"))
 
 	// Hydration manifest tests (spec 05_frame_ui.md §14.1)
 	void test_hydration_collect_screens()

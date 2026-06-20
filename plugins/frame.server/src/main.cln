@@ -750,42 +750,84 @@ functions:
 	// back to 200. Closes FRAME-SERVER-AUTO-WRAP-CLOBBERS-STATUS.
 	// Lines whose parentheses do not balance (continuation of a multi-line
 	// expression) are passed through unchanged.
+	//
+	// Cursor-based iteration eliminates the prior shrinking-rem pattern
+	// (`rem = rem.substring(nl+1, rem.length())` on every line) which created
+	// O(N²) bump-allocator pressure for large handler bodies. Combined with the
+	// `indexOf("return ")` raw pre-filter below, this closes
+	// FRAME-SERVER-ENDPOINTS-EXPAND-MEM-ALLOC-TRAP for projects with many
+	// large endpoints in a single file.
 	string wrap_returns_with_json(string code)
-		string result = ""
-		string rem = code
-		integer safety = 0
-		while safety < 500 and rem.length() > 0
-			safety = safety + 1
-			integer nl = rem.indexOf("\n")
-			string line = ""
-			if nl == -1
-				line = rem
-				rem = ""
-			else
-				line = rem.substring(0, nl)
-				rem = rem.substring(nl + 1, rem.length())
+		// Raw pre-filter: if there's no `return ` token anywhere, skip the entire
+		// per-line scan. Most response-setting handlers hit this path (they end in
+		// jsonResponse/htmlResponse calls without a bare `return`), but the prior
+		// code still walked every line just to discover that.
+		if code.indexOf("return ") < 0
+			return code
 
+		string result = ""
+		integer code_len = code.length()
+		integer cursor = 0
+		integer safety = 0
+		while safety < 500 and cursor < code_len
+			safety = safety + 1
+			integer nl = code.indexOf("\n", cursor)
+			integer line_end = code_len
+			if nl >= 0
+				line_end = nl
+
+			// Count leading tabs without slicing single characters where possible
 			integer tabs = 0
-			while tabs < line.length() and line.substring(tabs, tabs + 1) == "\t"
+			while cursor + tabs < line_end and code.substring(cursor + tabs, cursor + tabs + 1) == "\t"
 				tabs = tabs + 1
 
-			string after_tabs = line.substring(tabs, line.length())
 			boolean wrapped = false
-
-			if after_tabs.indexOf("return ") == 0
-				string expr = after_tabs.substring(7, after_tabs.length()).trim()
+			integer after_tabs_pos = cursor + tabs
+			// Cheap prefix check: only build a substring if line begins with "return "
+			if line_end - after_tabs_pos >= 7 and code.substring(after_tabs_pos, after_tabs_pos + 7) == "return "
+				string expr = code.substring(after_tabs_pos + 7, line_end).trim()
 				if expr.length() > 0 and parens_balanced(expr)
-					string indent = ""
-					integer t = 0
-					while t < tabs
-						indent = indent + "\t"
-						t = t + 1
-					result = result + indent + "return __route_default_body(" + expr + ")\n"
+					result = result + tabs_indent(tabs) + "return __route_default_body(" + expr + ")\n"
 					wrapped = true
 
 			if wrapped == false
-				result = result + line + "\n"
+				result = result + code.substring(cursor, line_end) + "\n"
 
+			if nl == -1
+				cursor = code_len
+			else
+				cursor = nl + 1
+
+		return result
+
+	// Precomputed indent strings for the common depths used by handler emission.
+	// Avoids the prior tab-by-tab `indent = indent + "\t"` pattern which allocated
+	// one new string per tab character per line.
+	string tabs_indent(integer depth)
+		if depth <= 0
+			return ""
+		if depth == 1
+			return "\t"
+		if depth == 2
+			return "\t\t"
+		if depth == 3
+			return "\t\t\t"
+		if depth == 4
+			return "\t\t\t\t"
+		if depth == 5
+			return "\t\t\t\t\t"
+		if depth == 6
+			return "\t\t\t\t\t\t"
+		if depth == 7
+			return "\t\t\t\t\t\t\t"
+		if depth == 8
+			return "\t\t\t\t\t\t\t\t"
+		// Fallback for unusually deep nesting
+		string result = "\t\t\t\t\t\t\t\t"
+		integer d = 8
+		while d < depth
+			result = result + "\t"
+			d = d + 1
 		return result
 
 	// -------------------------------------------------------------------------
@@ -794,6 +836,15 @@ functions:
 
 	// Extract handler code from the block following the route ':', up to the
 	// next route declaration. Strips base indentation and re-indents to \t\t.
+	//
+	// Cursor-based two-pass scan over endpoint_body[0..end_pos). Eliminates the
+	// prior shrinking-rem allocation pattern (`scan = scan.substring(...)` /
+	// `rem = rem.substring(...)` on every line), which created O(N²) bump-
+	// allocator pressure for large handler bodies. With ~10 routes whose bodies
+	// each total ~4 KB, the prior pattern allocated several MB of intermediate
+	// shrinking copies — enough to trip COMPILER-MEM-ALLOC-NO-GROW inside the
+	// plugin and silently truncate output at line 61. Closes
+	// FRAME-SERVER-ENDPOINTS-EXPAND-MEM-ALLOC-TRAP.
 	string extract_handler_body(string endpoint_body)
 		// Find next endpoint boundary
 		integer end_pos = endpoint_body.length()
@@ -820,57 +871,63 @@ functions:
 		if next_ws >= 0 and next_ws < end_pos
 			end_pos = next_ws
 
-		string handler_code = endpoint_body.substring(0, end_pos)
-
 		// Pass 1: find minimum tab depth of non-empty lines
 		integer min_tabs = 99
-		string scan = handler_code
+		integer scan_cursor = 0
 		integer scan_safety = 0
-		while scan_safety < 200 and scan.length() > 0
+		while scan_safety < 500 and scan_cursor < end_pos
 			scan_safety = scan_safety + 1
-			integer snl = scan.indexOf("\n")
-			string sline = ""
-			if snl == -1
-				sline = scan
-				scan = ""
+			integer snl = endpoint_body.indexOf("\n", scan_cursor)
+			integer line_end = end_pos
+			if snl >= 0 and snl < end_pos
+				line_end = snl
+			integer tabs = 0
+			while scan_cursor + tabs < line_end and endpoint_body.substring(scan_cursor + tabs, scan_cursor + tabs + 1) == "\t"
+				tabs = tabs + 1
+			// Check whether the line has any non-whitespace content past the tabs.
+			// Avoid extracting a substring + .trim() — just probe the first char past
+			// the tab run and walk until a non-space byte is found or line ends.
+			boolean has_content = false
+			integer probe = scan_cursor + tabs
+			while probe < line_end
+				string ch = endpoint_body.substring(probe, probe + 1)
+				if ch != " " and ch != "\t"
+					has_content = true
+					probe = line_end
+				else
+					probe = probe + 1
+			if has_content and tabs < min_tabs
+				min_tabs = tabs
+			if snl == -1 or snl >= end_pos
+				scan_cursor = end_pos
 			else
-				sline = scan.substring(0, snl)
-				scan = scan.substring(snl + 1, scan.length())
-			if sline.trim().length() > 0
-				integer tabs = 0
-				while tabs < sline.length() and sline.substring(tabs, tabs + 1) == "\t"
-					tabs = tabs + 1
-				if tabs < min_tabs
-					min_tabs = tabs
+				scan_cursor = snl + 1
 		if min_tabs == 99
 			min_tabs = 0
 
 		// Pass 2: re-indent relative to \t\t base
 		string result = ""
-		string rem = handler_code
+		integer cursor = 0
 		integer safety = 0
-		while safety < 200 and rem.length() > 0
+		while safety < 500 and cursor < end_pos
 			safety = safety + 1
-			integer nl = rem.indexOf("\n")
-			string line = ""
-			if nl == -1
-				line = rem
-				rem = ""
-			else
-				line = rem.substring(0, nl)
-				rem = rem.substring(nl + 1, rem.length())
-			string trimmed = line.trim()
+			integer nl = endpoint_body.indexOf("\n", cursor)
+			integer line_end = end_pos
+			if nl >= 0 and nl < end_pos
+				line_end = nl
+			integer orig_tabs = 0
+			while cursor + orig_tabs < line_end and endpoint_body.substring(cursor + orig_tabs, cursor + orig_tabs + 1) == "\t"
+				orig_tabs = orig_tabs + 1
+			string trimmed = endpoint_body.substring(cursor + orig_tabs, line_end).trim()
 			if trimmed.length() > 0
-				integer orig_tabs = 0
-				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
-					orig_tabs = orig_tabs + 1
 				integer rel_depth = orig_tabs - min_tabs
-				string indent = "\t\t"
-				integer d = 0
-				while d < rel_depth
-					indent = indent + "\t"
-					d = d + 1
-				result = result + indent + trimmed + "\n"
+				if rel_depth < 0
+					rel_depth = 0
+				result = result + tabs_indent(2 + rel_depth) + trimmed + "\n"
+			if nl == -1 or nl >= end_pos
+				cursor = end_pos
+			else
+				cursor = nl + 1
 
 		return result
 
@@ -959,53 +1016,61 @@ functions:
 		return endpoint_body.substring(0, end_pos)
 
 	// Re-indent a section of handler code to \t\t base (same algorithm as extract_handler_body).
+	// Cursor-based two-pass scan — see extract_handler_body for the rationale.
 	string reindent_ws_section(string section)
+		integer sec_len = section.length()
 		integer min_tabs = 99
-		string scan = section
+		integer scan_cursor = 0
 		integer scan_safety = 0
-		while scan_safety < 200 and scan.length() > 0
+		while scan_safety < 500 and scan_cursor < sec_len
 			scan_safety = scan_safety + 1
-			integer snl = scan.indexOf("\n")
-			string sline = ""
+			integer snl = section.indexOf("\n", scan_cursor)
+			integer line_end = sec_len
+			if snl >= 0
+				line_end = snl
+			integer tabs = 0
+			while scan_cursor + tabs < line_end and section.substring(scan_cursor + tabs, scan_cursor + tabs + 1) == "\t"
+				tabs = tabs + 1
+			boolean has_content = false
+			integer probe = scan_cursor + tabs
+			while probe < line_end
+				string ch = section.substring(probe, probe + 1)
+				if ch != " " and ch != "\t"
+					has_content = true
+					probe = line_end
+				else
+					probe = probe + 1
+			if has_content and tabs < min_tabs
+				min_tabs = tabs
 			if snl == -1
-				sline = scan
-				scan = ""
+				scan_cursor = sec_len
 			else
-				sline = scan.substring(0, snl)
-				scan = scan.substring(snl + 1, scan.length())
-			if sline.trim().length() > 0
-				integer tabs = 0
-				while tabs < sline.length() and sline.substring(tabs, tabs + 1) == "\t"
-					tabs = tabs + 1
-				if tabs < min_tabs
-					min_tabs = tabs
+				scan_cursor = snl + 1
 		if min_tabs == 99
 			min_tabs = 0
+
 		string result = ""
-		string rem = section
+		integer cursor = 0
 		integer safety = 0
-		while safety < 200 and rem.length() > 0
+		while safety < 500 and cursor < sec_len
 			safety = safety + 1
-			integer nl = rem.indexOf("\n")
-			string line = ""
-			if nl == -1
-				line = rem
-				rem = ""
-			else
-				line = rem.substring(0, nl)
-				rem = rem.substring(nl + 1, rem.length())
-			string trimmed = line.trim()
+			integer nl = section.indexOf("\n", cursor)
+			integer line_end = sec_len
+			if nl >= 0
+				line_end = nl
+			integer orig_tabs = 0
+			while cursor + orig_tabs < line_end and section.substring(cursor + orig_tabs, cursor + orig_tabs + 1) == "\t"
+				orig_tabs = orig_tabs + 1
+			string trimmed = section.substring(cursor + orig_tabs, line_end).trim()
 			if trimmed.length() > 0
-				integer orig_tabs = 0
-				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
-					orig_tabs = orig_tabs + 1
 				integer rel_depth = orig_tabs - min_tabs
-				string indent = "\t\t"
-				integer d = 0
-				while d < rel_depth
-					indent = indent + "\t"
-					d = d + 1
-				result = result + indent + trimmed + "\n"
+				if rel_depth < 0
+					rel_depth = 0
+				result = result + tabs_indent(2 + rel_depth) + trimmed + "\n"
+			if nl == -1
+				cursor = sec_len
+			else
+				cursor = nl + 1
 		return result
 
 	// Guard for void WS handlers: emit role checks without returning a value.
