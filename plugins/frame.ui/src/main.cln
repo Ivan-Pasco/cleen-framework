@@ -3978,84 +3978,108 @@ functions:
 		integer fi = 0
 		while fi < source_files.length()
 			string file_obj = source_files[fi]
-			string file_path = extract_json_field(file_obj, "path")
 
-			boolean in_pages = file_path.indexOf("pages/") != -1
-			boolean is_html = file_path.endsWith(".html")
+			// Tightened pre-filter on the raw JSON object before touching
+			// extract_json_field. See FRAME-UI-PAGE-RENDER-REGRESSION-STILL-
+			// LIVE-0.30.325 (fp 090ef419ead9) — Clean Studio scaled past the
+			// memory budget the prior fix left and assemble silently emitted
+			// zero `pages_*_render` exports again. Two pre-filters are layered:
+			//   1. file_obj-level: skip path extraction entirely for files
+			//      that can't be page companions or HTML templates.
+			//   2. content-level: skip content extraction for HTML templates
+			//      with no `<screen` markers and page companions with no
+			//      `any load(` / `any guard(` markers. The raw-JSON checks
+			//      are sound because none of the marker substrings contain
+			//      characters JSON would escape (no `"`, `\`, controls), so a
+			//      match on the encoded payload equals a match on the
+			//      unescaped content.
+			// Upstream root cause is still in the compiler's
+			// memory_runtime.mem_alloc bridge — it advances alloc_offset
+			// without growing WASM memory, so once cumulative allocations
+			// cross the plugin's initial WASM pages assemble traps and the
+			// host swallows the trap (COMPILER-MEM-ALLOC-NO-GROW,
+			// COMPILER-ASSEMBLE-ERROR-SWALLOWED). The right durable fix has
+			// to ship in the compiler; this gate keeps the per-file cost
+			// low enough that the trap is avoided in practice.
+			boolean candidate = file_obj.indexOf("pages/") != -1 or file_obj.indexOf(".html") != -1
+			if candidate
+				string file_path = extract_json_field(file_obj, "path")
 
-			// Only extract content for files we actually inspect. Unescaping the
-			// content field allocates 5+ intermediate strings (see
-			// extract_json_field) — doing it for every file in a large project
-			// pushes the plugin's shared bump allocator past the WASM memory
-			// boundary, causing assemble to trap. The host swallows that trap as
-			// "no injected sources" and the build silently produces zero
-			// `pages_*_render` exports. See FRAME-UI-PAGE-RENDER-REGRESSION-
-			// STILL-LIVE-AFTER-RESOLVE (fp 7a98a9ba7769). Upstream root cause is
-			// in the compiler's memory_runtime.mem_alloc bridge, which does not
-			// grow WASM memory the way string-op bridges do.
-			if in_pages or is_html
-				string file_content = extract_json_field(file_obj, "content")
-				boolean has_load = file_content.indexOf("any load(") != -1
-				boolean has_guard = file_content.indexOf("any guard(") != -1
+				boolean in_pages = file_path.indexOf("pages/") != -1
+				boolean is_html = file_path.endsWith(".html")
 
+				boolean raw_has_load = false
+				boolean raw_has_guard = false
+				boolean raw_has_screen = false
+				if in_pages
+					raw_has_load = file_obj.indexOf("any load(") != -1
+					raw_has_guard = file_obj.indexOf("any guard(") != -1
 				if is_html
-					hydration_entries = hydration_entries + collect_screens_from_html(file_content)
+					raw_has_screen = file_obj.indexOf("<screen") != -1
 
-				if in_pages and (has_load or has_guard)
-					string module_name = derive_module_name(file_path)
+				if (in_pages or is_html) and (raw_has_load or raw_has_guard or raw_has_screen)
+					string file_content = extract_json_field(file_obj, "content")
+					boolean has_load = raw_has_load
+					boolean has_guard = raw_has_guard
 
-					// Prefix load()/guard() — handle Request param normalisation first
-					// so the second replace doesn't double-match
-					string new_content = file_content
-					if has_load
-						has_any_load = true
-						// Preserve the user's `any` return type on _impl so a body like
-						// `return { title: "hello" }` (the spec example in
-						// 05_frame_ui.md §load) type-checks as pairs/value, not string.
-						// _load wraps _impl with _ui_normalize_load_return so both
-						// pairs/object returns AND JSON-shaped string returns end up
-						// as the same canonical JSON-object/array payload the bridge
-						// (and template engine) expect. See build_load_helpers_module
-						// above for the normalization rules and the
-						// FRAME-UI-LOAD-STRING-NO-CONTEXT context.
-						// Requires compiler >= 0.30.304 and clean-server >= 1.9.49.
-						// Component / layout assemblers that want the value form call
-						// _impl directly (see generate_page_class above).
-						//
-						// The box_returns_in_function workaround for
-						// CODEGEN-ANY-RETURN-STRING-NOT-BOXED was removed: the
-						// compiler shipped the proper fix in 0.30.316 (commit
-						// 2ab90a6f), the workaround is redundant, and on a real
-						// project it dominates assemble's memory budget via
-						// O(N²) string concatenation and silently corrupted
-						// multi-line `return { ... }` literals. min_compiler_version
-						// in plugin.toml gates this to >=0.30.316.
-						new_content = new_content.replace("any load(Request ", "any " + module_name + "_load_impl(any ")
-						new_content = new_content.replace("any load(", "any " + module_name + "_load_impl(")
-						new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn _ui_normalize_load_return(" + module_name + "_load_impl(__p))\n"
-					if has_guard
-						new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
-						new_content = new_content.replace("any guard(", "any " + module_name + "_guard(")
+					if is_html and raw_has_screen
+						hydration_entries = hydration_entries + collect_screens_from_html(file_content)
 
-					if first_transformed == false
-						transformed_json = transformed_json + ","
-					first_transformed = false
-					transformed_json = transformed_json + "{\"path\":\"" + escape_json_string(file_path) + "\",\"content\":\"" + escape_json_string(new_content) + "\"}"
+					if in_pages and (has_load or has_guard)
+						string module_name = derive_module_name(file_path)
 
-					if has_server
-						string url = derive_url_path(file_path)
-						string html_path = derive_html_path(file_path)
-						route_fns = route_fns + "\tstring " + module_name + "_render()\n"
-						if has_guard
-							route_fns = route_fns + "\t\tany __g = " + module_name + "_guard(null)\n"
-							route_fns = route_fns + "\t\tif __g != null\n"
-							route_fns = route_fns + "\t\t\treturn __g\n"
+						// Prefix load()/guard() — handle Request param normalisation first
+						// so the second replace doesn't double-match
+						string new_content = file_content
 						if has_load
-							route_fns = route_fns + "\t\tstring __d = " + module_name + "_load(null)\n"
-							route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", __d)\n\n"
-						else
-							route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n\n"
-						route_registrations = route_registrations + "\t_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
+							has_any_load = true
+							// Preserve the user's `any` return type on _impl so a body like
+							// `return { title: "hello" }` (the spec example in
+							// 05_frame_ui.md §load) type-checks as pairs/value, not string.
+							// _load wraps _impl with _ui_normalize_load_return so both
+							// pairs/object returns AND JSON-shaped string returns end up
+							// as the same canonical JSON-object/array payload the bridge
+							// (and template engine) expect. See build_load_helpers_module
+							// above for the normalization rules and the
+							// FRAME-UI-LOAD-STRING-NO-CONTEXT context.
+							// Requires compiler >= 0.30.304 and clean-server >= 1.9.49.
+							// Component / layout assemblers that want the value form call
+							// _impl directly (see generate_page_class above).
+							//
+							// The box_returns_in_function workaround for
+							// CODEGEN-ANY-RETURN-STRING-NOT-BOXED was removed: the
+							// compiler shipped the proper fix in 0.30.316 (commit
+							// 2ab90a6f), the workaround is redundant, and on a real
+							// project it dominates assemble's memory budget via
+							// O(N²) string concatenation and silently corrupted
+							// multi-line `return { ... }` literals. min_compiler_version
+							// in plugin.toml gates this to >=0.30.316.
+							new_content = new_content.replace("any load(Request ", "any " + module_name + "_load_impl(any ")
+							new_content = new_content.replace("any load(", "any " + module_name + "_load_impl(")
+							new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn _ui_normalize_load_return(" + module_name + "_load_impl(__p))\n"
+						if has_guard
+							new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
+							new_content = new_content.replace("any guard(", "any " + module_name + "_guard(")
+
+						if first_transformed == false
+							transformed_json = transformed_json + ","
+						first_transformed = false
+						transformed_json = transformed_json + "{\"path\":\"" + escape_json_string(file_path) + "\",\"content\":\"" + escape_json_string(new_content) + "\"}"
+
+						if has_server
+							string url = derive_url_path(file_path)
+							string html_path = derive_html_path(file_path)
+							route_fns = route_fns + "\tstring " + module_name + "_render()\n"
+							if has_guard
+								route_fns = route_fns + "\t\tany __g = " + module_name + "_guard(null)\n"
+								route_fns = route_fns + "\t\tif __g != null\n"
+								route_fns = route_fns + "\t\t\treturn __g\n"
+							if has_load
+								route_fns = route_fns + "\t\tstring __d = " + module_name + "_load(null)\n"
+								route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", __d)\n\n"
+							else
+								route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n\n"
+							route_registrations = route_registrations + "\t_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
 
 			fi = fi + 1
 
