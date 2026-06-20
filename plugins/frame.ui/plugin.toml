@@ -276,6 +276,9 @@ functions = [
   { name = "_ui_clipboard_write_cb", params = ["string", "string", "string"], returns = "void", description = "Write text to clipboard with callbacks: text, onSuccessHandler, onErrorHandler (empty string = no callback)", expand_strings = true, signature = "_ui_clipboard_write_cb(text, onSuccess, onError)", hosts = ["browser"] },
   { name = "_ui_clipboard_read_cb", params = ["string", "string"], returns = "void", description = "Read text from clipboard with callbacks: onSuccessHandler, onErrorHandler", expand_strings = true, signature = "_ui_clipboard_read_cb(onSuccess, onError)", hosts = ["browser"] },
 
+  # HTTP fetch with custom headers (async with single callback)
+  { name = "_ui_fetch_cb", params = ["string", "string", "string", "string", "string"], returns = "integer", description = "Browser fetch with custom headers: url, method, headers JSON object, body, exported handler name. Handler called with (status:integer, body:string); status=0 for network failure, otherwise HTTP status code. Returns 1 if dispatched, 0 if fetch unavailable.", expand_strings = true, signature = "_ui_fetch_cb(url, method, headersJson, body, handlerName) -> integer", hosts = ["browser"] },
+
   # Resize and Intersection Observers
   { name = "_ui_resize_observe", params = ["string", "string"], returns = "integer", description = "Observe element resize: selector, handler name; returns observer ID", expand_strings = true, signature = "_ui_resize_observe(selector, handlerName)", hosts = ["browser"] },
   { name = "_ui_resize_unobserve", params = ["integer"], returns = "void", description = "Stop resize observation by ID", signature = "_ui_resize_unobserve(id)", hosts = ["browser"] },
@@ -444,6 +447,9 @@ functions = [
   # --- Clipboard (async with callbacks) ---
   { name = "ui.clipboardWrite", signature = "ui.clipboardWrite(text, onSuccess, onError)", description = "Write text to clipboard; call onSuccess/onError handler names on completion", maps_to = "_ui_clipboard_write_cb", params = ["string", "string", "string"], returns = "void" },
   { name = "ui.clipboardRead", signature = "ui.clipboardRead(onSuccess, onError)", description = "Read text from clipboard; onSuccess called with text, onError with error message", maps_to = "_ui_clipboard_read_cb", params = ["string", "string"], returns = "void" },
+
+  # --- HTTP fetch (async with callback) ---
+  { name = "ui.fetch", signature = "ui.fetch(url, method, headersJson, body, handlerName) -> integer", description = "Issue an HTTP request with custom headers (e.g. Authorization). Handler called with (status:integer, body:string); status=0 for network failure, otherwise HTTP status code.", maps_to = "_ui_fetch_cb", params = ["string", "string", "string", "string", "string"], returns = "integer" },
 
   # --- Resize and Intersection Observers ---
   { name = "ui.resizeObserve", signature = "ui.resizeObserve(selector, handlerName) -> integer", description = "Observe element size changes; handler called with {width, height, selector} JSON", maps_to = "_ui_resize_observe", params = ["string", "string"], returns = "integer" },

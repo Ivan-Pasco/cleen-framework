@@ -1337,6 +1337,53 @@
 				});
 			},
 
+			// ========== HTTP fetch with custom headers (async with callback) ==========
+
+			_ui_fetch_cb: (urlPtr, urlLen, methodPtr, methodLen, headersPtr, headersLen, bodyPtr, bodyLen, handlerPtr, handlerLen) => {
+				if (typeof fetch !== 'function') {
+					console.warn('[frame.ui] _ui_fetch_cb: window.fetch not available');
+					return 0;
+				}
+				const url = readString(urlPtr, urlLen);
+				const method = readString(methodPtr, methodLen) || 'GET';
+				const headersJson = readString(headersPtr, headersLen);
+				const body = readString(bodyPtr, bodyLen);
+				const handlerName = readString(handlerPtr, handlerLen);
+				let headers = {};
+				if (headersJson) {
+					try {
+						const parsed = JSON.parse(headersJson);
+						if (parsed && typeof parsed === 'object') headers = parsed;
+					} catch (e) {
+						console.warn('[frame.ui] _ui_fetch_cb: invalid headers JSON: ' + (e.message || e));
+					}
+				}
+				const init = { method, headers };
+				const upperMethod = method.toUpperCase();
+				if (body && upperMethod !== 'GET' && upperMethod !== 'HEAD') {
+					init.body = body;
+				}
+				const invoke = (status, responseBody) => {
+					if (!handlerName) return;
+					const fn = instance.exports[handlerName];
+					if (!fn) {
+						console.warn('[frame.ui] _ui_fetch_cb: handler "' + handlerName + '" not exported');
+						return;
+					}
+					const bodyOut = writeString(responseBody == null ? '' : String(responseBody));
+					fn(status | 0, bodyOut);
+				};
+				fetch(url, init).then((res) => {
+					const status = res.status;
+					res.text().then((text) => invoke(status, text)).catch((e) => {
+						invoke(status, e && e.message ? e.message : '');
+					});
+				}).catch((e) => {
+					invoke(0, e && e.message ? e.message : 'fetch failed');
+				});
+				return 1;
+			},
+
 			// ========== Resize and Intersection Observers ==========
 
 			_ui_resize_observe: (selectorPtr, selectorLen, handlerPtr, handlerLen) => {
