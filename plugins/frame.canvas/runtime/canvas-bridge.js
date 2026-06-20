@@ -43,14 +43,16 @@ class CanvasBridge {
     // AUDIO STATE
     // ========================================================================
     this.audioContext = null;
-    this.sounds = new Map();
-    this.nextSoundId = 1;
-    this.soundInstances = new Map();
+    // Name-keyed asset registry (matches function-registry.toml canonical API).
+    // Each entry: { src, buffer, bufferPromise, element }. The same entry serves
+    // both sound and music play APIs; whichever is called first materializes
+    // the corresponding underlying resource.
+    this.namedSounds = new Map();
+    this.namedMusic = new Map();
+    this.musicVolumes = new Map();   // per-track volume by name
+    this.currentMusicName = null;
+    this.soundInstances = new Map(); // numeric instance id -> playing source
     this.nextInstanceId = 1;
-    this.music = new Map();
-    this.nextMusicId = 1;
-    this.currentMusic = null;
-    this.currentMusicElement = null;
     this.masterVolume = 1.0;
     this.musicVolume = 1.0;
     this.isMuted = false;
@@ -433,7 +435,7 @@ class CanvasBridge {
         // BASIC SHAPES
         // ====================================================================
 
-        _canvas_circle(canvasId, x, y, radius, colorPtr, colorLen) {
+        _canvas_circle_outline(canvasId, x, y, radius, colorPtr, colorLen) {
           const entry = self.canvases.get(canvasId);
           if (!entry) return -1;
           const color = self.readString(colorPtr, colorLen);
@@ -457,7 +459,7 @@ class CanvasBridge {
           return 0;
         },
 
-        _canvas_rect(canvasId, x, y, width, height, colorPtr, colorLen) {
+        _canvas_rect_outline(canvasId, x, y, width, height, colorPtr, colorLen) {
           const entry = self.canvases.get(canvasId);
           if (!entry) return -1;
           const color = self.readString(colorPtr, colorLen);
@@ -513,7 +515,7 @@ class CanvasBridge {
           return 0;
         },
 
-        _canvas_ellipse(canvasId, x, y, radiusX, radiusY, colorPtr, colorLen) {
+        _canvas_ellipse_outline(canvasId, x, y, radiusX, radiusY, colorPtr, colorLen) {
           const entry = self.canvases.get(canvasId);
           if (!entry) return -1;
           const color = self.readString(colorPtr, colorLen);
@@ -537,7 +539,7 @@ class CanvasBridge {
           return 0;
         },
 
-        _canvas_triangle(canvasId, x1, y1, x2, y2, x3, y3, colorPtr, colorLen) {
+        _canvas_triangle_outline(canvasId, x1, y1, x2, y2, x3, y3, colorPtr, colorLen) {
           const entry = self.canvases.get(canvasId);
           if (!entry) return -1;
           const color = self.readString(colorPtr, colorLen);
@@ -797,6 +799,385 @@ class CanvasBridge {
         },
 
         // ====================================================================
+        // SCOPED DRAWING STATE (alpha, blend, blur, glow, group, clip)
+        // ====================================================================
+        // Each `_begin` pushes a Canvas2D save() so the matching `_end` can
+        // restore() and leave the surrounding ctx state untouched. Begin/end
+        // pairs may nest because Canvas2D's save/restore stack already does.
+
+        _canvas_alpha_begin(canvasId, alpha) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.save();
+          entry.ctx.globalAlpha *= alpha;
+          return 0;
+        },
+
+        _canvas_alpha_end(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.restore();
+          return 0;
+        },
+
+        _canvas_blend_begin(canvasId, modePtr, modeLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const mode = self.readString(modePtr, modeLen);
+          entry.ctx.save();
+          entry.ctx.globalCompositeOperation = mode || 'source-over';
+          return 0;
+        },
+
+        _canvas_blend_end(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.restore();
+          return 0;
+        },
+
+        _canvas_blur_begin(canvasId, radius) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.save();
+          entry.ctx.filter = `blur(${radius}px)`;
+          return 0;
+        },
+
+        _canvas_blur_end(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.restore();
+          return 0;
+        },
+
+        _canvas_glow_begin(canvasId, colorPtr, colorLen, radius) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const color = self.readString(colorPtr, colorLen);
+          entry.ctx.save();
+          entry.ctx.shadowColor = color || 'rgba(255,255,255,0.5)';
+          entry.ctx.shadowBlur = radius;
+          entry.ctx.shadowOffsetX = 0;
+          entry.ctx.shadowOffsetY = 0;
+          return 0;
+        },
+
+        _canvas_glow_end(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.restore();
+          return 0;
+        },
+
+        _canvas_group_begin(canvasId, x, y, rotationDegrees, scaleX, scaleY, alpha) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const ctx = entry.ctx;
+          ctx.save();
+          if (x !== 0 || y !== 0) ctx.translate(x, y);
+          if (rotationDegrees !== 0) ctx.rotate(rotationDegrees * Math.PI / 180);
+          if (scaleX !== 1 || scaleY !== 1) ctx.scale(scaleX, scaleY);
+          if (alpha !== 1) ctx.globalAlpha *= alpha;
+          return 0;
+        },
+
+        _canvas_group_end(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.restore();
+          return 0;
+        },
+
+        _canvas_clip_rect(canvasId, x, y, width, height) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const ctx = entry.ctx;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(x, y, width, height);
+          ctx.clip();
+          return 0;
+        },
+
+        _canvas_clip_circle(canvasId, x, y, radius) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const ctx = entry.ctx;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.clip();
+          return 0;
+        },
+
+        _canvas_clip_path(canvasId, namePtr, nameLen) {
+          // Named-path clipping is not implemented — the path registry that
+          // _canvas_draw_named_path / _canvas_clip_path resolve names against
+          // is part of the unimplemented path-naming feature. Falls back to
+          // clipping by the current immediate-mode path so apps that build a
+          // path via _canvas_begin_path/...lineTo/closePath and then clip
+          // still get a working scoped clip.
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          // The argument is intentionally ignored; documented above.
+          void self.readString(namePtr, nameLen);
+          entry.ctx.save();
+          entry.ctx.clip();
+          return 0;
+        },
+
+        _canvas_clip_end(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.restore();
+          return 0;
+        },
+
+        // ====================================================================
+        // IMMEDIATE-MODE PATH API
+        // ====================================================================
+        // Each canvas's current path is the Canvas2D context's own internal
+        // path. _canvas_begin_path resets it; the move/line/curve/cubic/arc
+        // calls extend it; _canvas_fill_path commits it with a fill color.
+        // Stroke-the-current-path is intentionally not bridged here — strokes
+        // go through the immediate-mode shape functions (_canvas_line,
+        // _canvas_*_outline) which manage their own paths.
+
+        _canvas_begin_path(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.beginPath();
+          return 0;
+        },
+
+        _canvas_move_to(canvasId, x, y) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.moveTo(x, y);
+          return 0;
+        },
+
+        _canvas_line_to(canvasId, x, y) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.lineTo(x, y);
+          return 0;
+        },
+
+        _canvas_curve_to(canvasId, cpx, cpy, x, y) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.quadraticCurveTo(cpx, cpy, x, y);
+          return 0;
+        },
+
+        _canvas_cubic_to(canvasId, cp1x, cp1y, cp2x, cp2y, x, y) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
+          return 0;
+        },
+
+        _canvas_arc(canvasId, x, y, radius, startAngle, endAngle) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.arc(x, y, radius, startAngle, endAngle);
+          return 0;
+        },
+
+        _canvas_arc_to(canvasId, x1, y1, x2, y2, radius) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.arcTo(x1, y1, x2, y2, radius);
+          return 0;
+        },
+
+        _canvas_close_path(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.closePath();
+          return 0;
+        },
+
+        _canvas_fill_path(canvasId, colorPtr, colorLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const color = self.readString(colorPtr, colorLen);
+          entry.ctx.fillStyle = color || '#000';
+          entry.ctx.fill();
+          return 0;
+        },
+
+        _canvas_stroke_path(canvasId, colorPtr, colorLen, lineWidth) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const color = self.readString(colorPtr, colorLen);
+          entry.ctx.strokeStyle = color || '#000';
+          entry.ctx.lineWidth = lineWidth;
+          entry.ctx.stroke();
+          return 0;
+        },
+
+        // ====================================================================
+        // SHADOW (drop-shadow with offset; distinct from _canvas_glow which
+        // is symmetric around the source)
+        // ====================================================================
+
+        _canvas_shadow_begin(canvasId, blur, offsetX, offsetY, colorPtr, colorLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const color = self.readString(colorPtr, colorLen);
+          entry.ctx.save();
+          entry.ctx.shadowColor = color || 'rgba(0,0,0,0.5)';
+          entry.ctx.shadowBlur = blur;
+          entry.ctx.shadowOffsetX = offsetX;
+          entry.ctx.shadowOffsetY = offsetY;
+          return 0;
+        },
+
+        _canvas_shadow_end(canvasId) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          entry.ctx.restore();
+          return 0;
+        },
+
+        // ====================================================================
+        // TEXT (aligned + measure)
+        // ====================================================================
+
+        _canvas_text_aligned(canvasId, textPtr, textLen, x, y, size, colorPtr, colorLen, baselinePtr, baselineLen, alignPtr, alignLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const text = self.readString(textPtr, textLen);
+          const color = self.readString(colorPtr, colorLen);
+          const baseline = self.readString(baselinePtr, baselineLen);
+          const align = self.readString(alignPtr, alignLen);
+          const ctx = entry.ctx;
+          ctx.save();
+          ctx.font = `${size}px sans-serif`;
+          ctx.fillStyle = color || '#000';
+          ctx.textBaseline = baseline || 'alphabetic';
+          ctx.textAlign = align || 'start';
+          ctx.fillText(text, x, y);
+          ctx.restore();
+          return 0;
+        },
+
+        _canvas_text_width(canvasId, textPtr, textLen, size) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return 0;
+          const text = self.readString(textPtr, textLen);
+          const ctx = entry.ctx;
+          const prevFont = ctx.font;
+          ctx.font = `${size}px sans-serif`;
+          const metrics = ctx.measureText(text);
+          ctx.font = prevFont;
+          return metrics.width;
+        },
+
+        // ====================================================================
+        // FRAME RATE TARGET
+        // ====================================================================
+
+        _canvas_set_fps(canvasId, fps) {
+          // The animation loop uses requestAnimationFrame at the browser's
+          // native refresh rate; we store the target only so _canvas_get_fps
+          // reflects the requested target.
+          if (fps > 0) self.targetFps = fps;
+          return 0;
+        },
+
+        // ====================================================================
+        // GLOBAL VARS (canvas-scoped key-value store)
+        // ====================================================================
+        // Used by the canvas DSL for app-level mutable state that needs to
+        // survive across frames without going through a Clean-side container.
+
+        _canvas_var_set(namePtr, nameLen, value) {
+          const name = self.readString(namePtr, nameLen);
+          if (!self.canvasVars) self.canvasVars = new Map();
+          self.canvasVars.set(name, value);
+          return 0;
+        },
+
+        _canvas_var_get(namePtr, nameLen, defaultValue) {
+          const name = self.readString(namePtr, nameLen);
+          if (!self.canvasVars) self.canvasVars = new Map();
+          return self.canvasVars.has(name) ? self.canvasVars.get(name) : defaultValue;
+        },
+
+        // ====================================================================
+        // EVENT ACCESSORS (read state of the most recent input event)
+        // ====================================================================
+        // Mirror the existing input-state fields so handler bodies can call
+        // these without a dedicated event payload.
+
+        _canvas_event_x() {
+          return self.mouseX;
+        },
+
+        _canvas_event_y() {
+          return self.mouseY;
+        },
+
+        _canvas_event_key() {
+          // Length-prefixed string return: writeString with no destination
+          // pointer allocates from the bridge's string buffer and returns the
+          // length-prefix pointer the WASM module reads.
+          return self.writeString(self.lastKey || '');
+        },
+
+        // ====================================================================
+        // ASSET PRELOAD (image cache by name)
+        // ====================================================================
+
+        _asset_preload_image(namePtr, nameLen, srcPtr, srcLen) {
+          const name = self.readString(namePtr, nameLen);
+          const src = self.readString(srcPtr, srcLen);
+          if (!self.namedImages) self.namedImages = new Map();
+          if (self.namedImages.has(name)) return 0;
+          const img = new Image();
+          img.src = src;
+          self.namedImages.set(name, img);
+          return 0;
+        },
+
+        // ====================================================================
+        // IMAGE WITH OPACITY
+        // ====================================================================
+
+        _canvas_image_opacity(canvasId, srcPtr, srcLen, x, y, width, height, alpha) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const src = self.readString(srcPtr, srcLen);
+
+          // Reuse the image cache from _canvas_image (lazy-load and draw on
+          // ready). Save/restore wraps the alpha change so following draws
+          // aren't affected.
+          if (!self.imageCache) self.imageCache = new Map();
+          let img = self.imageCache.get(src);
+          if (!img) {
+            img = new Image();
+            img.src = src;
+            self.imageCache.set(src, img);
+          }
+          const draw = () => {
+            entry.ctx.save();
+            entry.ctx.globalAlpha *= alpha;
+            entry.ctx.drawImage(img, x, y, width, height);
+            entry.ctx.restore();
+          };
+          if (img.complete && img.naturalWidth > 0) {
+            draw();
+          } else {
+            img.addEventListener('load', draw, { once: true });
+          }
+          return 0;
+        },
+
+        // ====================================================================
         // ANIMATION
         // ====================================================================
 
@@ -883,309 +1264,280 @@ class CanvasBridge {
         },
 
         // ====================================================================
-        // AUDIO - SOUND EFFECTS
+        // AUDIO — NAME-KEYED API (matches function-registry.toml canonical)
         // ====================================================================
+        // Assets are preloaded once by name via _audio_preload and then played
+        // either as sound effects (_audio_play_sound, returns instance id you
+        // can _audio_stop/_audio_pause) or as music tracks (_audio_music_*,
+        // identified by name throughout the lifecycle).
 
-        _audio_load_sound(pathPtr, pathLen) {
-          const path = self.readString(pathPtr, pathLen);
-          const id = self.nextSoundId++;
-
-          fetch(path)
-            .then(response => response.arrayBuffer())
-            .then(buffer => {
-              if (self.audioContext) {
-                return self.audioContext.decodeAudioData(buffer);
-              }
-              return null;
-            })
-            .then(audioBuffer => {
-              if (audioBuffer) {
-                self.sounds.set(id, {
-                  buffer: audioBuffer,
-                  loaded: true
-                });
-                console.log(`[CanvasBridge] Sound ${id} loaded: ${path}`);
-              }
-            })
-            .catch(err => {
-              console.error(`[CanvasBridge] Failed to load sound: ${path}`, err);
-              self.sounds.set(id, { buffer: null, loaded: false });
-            });
-
-          self.sounds.set(id, { buffer: null, loaded: false });
-          return id;
+        _audio_preload(namePtr, nameLen, srcPtr, srcLen) {
+          const name = self.readString(namePtr, nameLen);
+          const src = self.readString(srcPtr, srcLen);
+          if (self.namedSounds.has(name) || self.namedMusic.has(name)) return 0;
+          // Single entry serves both sound and music play APIs; whichever is
+          // called first materializes the corresponding underlying resource.
+          const entry = { src, buffer: null, bufferPromise: null, element: null };
+          self.namedSounds.set(name, entry);
+          self.namedMusic.set(name, entry);
+          return 0;
         },
 
-        _audio_play(soundId, volume, loop) {
-          const sound = self.sounds.get(soundId);
-          if (!sound || !sound.buffer || !self.audioContext) return -1;
+        _audio_play_sound(namePtr, nameLen, volume, pitch) {
+          const name = self.readString(namePtr, nameLen);
+          const entry = self.namedSounds.get(name);
+          if (!entry || !self.audioContext) return -1;
 
-          const source = self.audioContext.createBufferSource();
-          source.buffer = sound.buffer;
-          source.loop = loop;
-
-          const gainNode = self.audioContext.createGain();
-          gainNode.gain.value = volume * self.masterVolume * (self.isMuted ? 0 : 1);
-
-          source.connect(gainNode);
-          gainNode.connect(self.audioContext.destination);
+          // Lazily decode the asset into an AudioBuffer on first play. Subsequent
+          // play calls reuse the cached buffer; concurrent first-plays share one
+          // in-flight promise so the asset only downloads once.
+          if (!entry.buffer && !entry.bufferPromise) {
+            entry.bufferPromise = fetch(entry.src)
+              .then(r => r.arrayBuffer())
+              .then(buf => self.audioContext.decodeAudioData(buf))
+              .then(decoded => { entry.buffer = decoded; return decoded; })
+              .catch(err => {
+                console.error(`[CanvasBridge] _audio_play_sound: decode '${name}' (${entry.src}) failed:`, err);
+                return null;
+              });
+          }
 
           const instanceId = self.nextInstanceId++;
-          self.soundInstances.set(instanceId, {
-            source: source,
-            gainNode: gainNode,
-            playing: true
-          });
+          const startInstance = (audioBuffer) => {
+            if (!audioBuffer || !self.audioContext) {
+              const inst = self.soundInstances.get(instanceId);
+              if (inst) inst.playing = false;
+              return;
+            }
+            const source = self.audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.playbackRate.value = pitch || 1.0;
 
-          source.onended = () => {
-            const instance = self.soundInstances.get(instanceId);
-            if (instance) instance.playing = false;
+            const gainNode = self.audioContext.createGain();
+            gainNode.gain.value = volume * self.masterVolume * (self.isMuted ? 0 : 1);
+
+            source.connect(gainNode);
+            gainNode.connect(self.audioContext.destination);
+            source.onended = () => {
+              const inst = self.soundInstances.get(instanceId);
+              if (inst) inst.playing = false;
+            };
+            source.start(0);
+
+            const inst = self.soundInstances.get(instanceId);
+            if (inst) {
+              inst.source = source;
+              inst.gainNode = gainNode;
+            }
           };
 
-          source.start(0);
+          self.soundInstances.set(instanceId, { source: null, gainNode: null, playing: true, volume });
+          if (entry.buffer) {
+            startInstance(entry.buffer);
+          } else {
+            entry.bufferPromise.then(startInstance);
+          }
           return instanceId;
         },
 
         _audio_stop(instanceId) {
           const instance = self.soundInstances.get(instanceId);
           if (!instance) return -1;
-          try {
-            instance.source.stop();
-            instance.playing = false;
-          } catch (e) { }
+          if (instance.source) {
+            try { instance.source.stop(); } catch (e) { /* already stopped */ }
+          }
+          instance.playing = false;
           return 0;
         },
 
         _audio_pause(instanceId) {
-          // Web Audio API doesn't support pause, so we simulate with stop
-          // For proper pause, we'd need to track playback position
+          // Web Audio BufferSource cannot pause; treat as stop. Music API
+          // (_audio_music_pause) supports real pause/resume.
           return self.env._audio_stop(instanceId);
         },
 
         _audio_resume(instanceId) {
-          // Would require re-creating the source node
+          // Symmetric: cannot resume a stopped BufferSource. Use the music API
+          // (_audio_music_resume) for tracks that need pause/resume semantics.
           return -1;
-        },
-
-        _audio_set_volume(instanceId, volume) {
-          const instance = self.soundInstances.get(instanceId);
-          if (!instance) return -1;
-          instance.gainNode.gain.value = volume * self.masterVolume * (self.isMuted ? 0 : 1);
-          return 0;
-        },
-
-        _audio_set_pitch(instanceId, pitch) {
-          const instance = self.soundInstances.get(instanceId);
-          if (!instance) return -1;
-          instance.source.playbackRate.value = pitch;
-          return 0;
-        },
-
-        _audio_set_pan(instanceId, pan) {
-          // Would require a StereoPannerNode - skipping for simplicity
-          return 0;
         },
 
         _audio_is_playing(instanceId) {
           const instance = self.soundInstances.get(instanceId);
-          return instance ? instance.playing : false;
+          return instance && instance.playing ? 1 : 0;
         },
 
-        // ====================================================================
-        // AUDIO - MUSIC
-        // ====================================================================
+        // ----- MUSIC (name-keyed) -----
 
-        _audio_load_music(pathPtr, pathLen) {
-          const path = self.readString(pathPtr, pathLen);
-          const id = self.nextMusicId++;
+        _audio_music_play(namePtr, nameLen, loop, volume) {
+          const name = self.readString(namePtr, nameLen);
+          const entry = self.namedMusic.get(name);
+          if (!entry) return -1;
 
-          const audio = new Audio();
-          audio.src = path;
-          audio.preload = 'auto';
+          if (!entry.element) {
+            entry.element = new Audio();
+            entry.element.src = entry.src;
+            entry.element.preload = 'auto';
+          }
+          const element = entry.element;
+          element.loop = loop !== 0;
+          element.volume = volume * self.musicVolume * self.masterVolume * (self.isMuted ? 0 : 1);
+          self.musicVolumes.set(name, volume);
 
-          self.music.set(id, {
-            element: audio,
-            loaded: false,
-            path: path
+          element.play().catch(err => {
+            console.warn(`[CanvasBridge] _audio_music_play '${name}' failed (user gesture required?):`, err);
           });
-
-          audio.addEventListener('canplaythrough', () => {
-            const m = self.music.get(id);
-            if (m) m.loaded = true;
-            console.log(`[CanvasBridge] Music ${id} loaded: ${path}`);
-          });
-
-          return id;
-        },
-
-        _audio_play_music(musicId, volume, loop) {
-          const m = self.music.get(musicId);
-          if (!m) return -1;
-
-          // Stop current music
-          if (self.currentMusicElement) {
-            self.currentMusicElement.pause();
-            self.currentMusicElement.currentTime = 0;
-          }
-
-          m.element.loop = loop;
-          m.element.volume = volume * self.musicVolume * self.masterVolume * (self.isMuted ? 0 : 1);
-
-          self.currentMusic = musicId;
-          self.currentMusicElement = m.element;
-
-          m.element.play().catch(err => {
-            console.warn('[CanvasBridge] Music play failed (user interaction required):', err);
-          });
-
+          self.currentMusicName = name;
           return 0;
         },
 
-        _audio_stop_music() {
-          if (self.currentMusicElement) {
-            self.currentMusicElement.pause();
-            self.currentMusicElement.currentTime = 0;
-            self.currentMusicElement = null;
-            self.currentMusic = null;
-          }
+        _audio_music_stop(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const entry = self.namedMusic.get(name);
+          if (!entry || !entry.element) return -1;
+          entry.element.pause();
+          entry.element.currentTime = 0;
+          if (self.currentMusicName === name) self.currentMusicName = null;
           return 0;
         },
 
-        _audio_pause_music() {
-          if (self.currentMusicElement) {
-            self.currentMusicElement.pause();
-          }
+        _audio_music_pause(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const entry = self.namedMusic.get(name);
+          if (!entry || !entry.element) return -1;
+          entry.element.pause();
           return 0;
         },
 
-        _audio_resume_music() {
-          if (self.currentMusicElement) {
-            self.currentMusicElement.play().catch(() => { });
-          }
+        _audio_music_resume(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const entry = self.namedMusic.get(name);
+          if (!entry || !entry.element) return -1;
+          entry.element.play().catch(() => {});
           return 0;
         },
 
-        _audio_set_music_volume(volume) {
-          self.musicVolume = volume;
-          if (self.currentMusicElement) {
-            self.currentMusicElement.volume = volume * self.masterVolume * (self.isMuted ? 0 : 1);
-          }
+        _audio_music_set_volume(namePtr, nameLen, volume) {
+          const name = self.readString(namePtr, nameLen);
+          const entry = self.namedMusic.get(name);
+          if (!entry || !entry.element) return -1;
+          self.musicVolumes.set(name, volume);
+          entry.element.volume = volume * self.musicVolume * self.masterVolume * (self.isMuted ? 0 : 1);
           return 0;
         },
 
-        _audio_fade_music(targetVolume, duration) {
-          if (!self.currentMusicElement) return -1;
+        _audio_music_fade_out(namePtr, nameLen, duration) {
+          const name = self.readString(namePtr, nameLen);
+          const entry = self.namedMusic.get(name);
+          if (!entry || !entry.element) return -1;
 
-          const startVolume = self.currentMusicElement.volume;
+          const element = entry.element;
+          const startVolume = element.volume;
           const startTime = performance.now();
-
-          const fade = () => {
+          const tick = () => {
             const elapsed = (performance.now() - startTime) / 1000;
             const t = Math.min(elapsed / duration, 1);
-            const volume = startVolume + (targetVolume - startVolume) * t;
-            if (self.currentMusicElement) {
-              self.currentMusicElement.volume = volume * (self.isMuted ? 0 : 1);
-            }
+            element.volume = startVolume * (1 - t) * (self.isMuted ? 0 : 1);
             if (t < 1) {
-              requestAnimationFrame(fade);
+              requestAnimationFrame(tick);
+            } else {
+              element.pause();
+              if (self.currentMusicName === name) self.currentMusicName = null;
             }
           };
-
-          requestAnimationFrame(fade);
+          requestAnimationFrame(tick);
           return 0;
         },
 
-        _audio_crossfade(musicId, volume, duration) {
-          // Fade out current, fade in new
-          const fadeOutPromise = new Promise(resolve => {
-            if (self.currentMusicElement) {
-              const startVolume = self.currentMusicElement.volume;
-              const startTime = performance.now();
-              const fade = () => {
-                const elapsed = (performance.now() - startTime) / 1000;
-                const t = Math.min(elapsed / duration, 1);
-                if (self.currentMusicElement) {
-                  self.currentMusicElement.volume = startVolume * (1 - t);
-                }
-                if (t < 1) {
-                  requestAnimationFrame(fade);
-                } else {
-                  if (self.currentMusicElement) {
-                    self.currentMusicElement.pause();
-                  }
-                  resolve();
-                }
-              };
-              requestAnimationFrame(fade);
-            } else {
-              resolve();
+        _audio_music_crossfade(fromPtr, fromLen, toPtr, toLen, duration) {
+          const fromName = self.readString(fromPtr, fromLen);
+          const toName = self.readString(toPtr, toLen);
+          const fromEntry = self.namedMusic.get(fromName);
+          const toEntry = self.namedMusic.get(toName);
+          if (!toEntry) return -1;
+
+          if (!toEntry.element) {
+            toEntry.element = new Audio();
+            toEntry.element.src = toEntry.src;
+            toEntry.element.preload = 'auto';
+          }
+          const toElement = toEntry.element;
+          const targetVolume = self.musicVolumes.get(toName) ?? 1.0;
+          toElement.loop = true;
+          toElement.volume = 0;
+          toElement.play().catch(() => {});
+
+          const fromElement = fromEntry && fromEntry.element ? fromEntry.element : null;
+          const fromStartVolume = fromElement ? fromElement.volume : 0;
+          const startTime = performance.now();
+          const tick = () => {
+            const elapsed = (performance.now() - startTime) / 1000;
+            const t = Math.min(elapsed / duration, 1);
+            if (fromElement) {
+              fromElement.volume = fromStartVolume * (1 - t) * (self.isMuted ? 0 : 1);
             }
-          });
-
-          fadeOutPromise.then(() => {
-            // Start new music with fade in
-            const m = self.music.get(musicId);
-            if (!m) return;
-
-            m.element.volume = 0;
-            m.element.loop = true;
-            self.currentMusic = musicId;
-            self.currentMusicElement = m.element;
-
-            m.element.play().then(() => {
-              const startTime = performance.now();
-              const fadeIn = () => {
-                const elapsed = (performance.now() - startTime) / 1000;
-                const t = Math.min(elapsed / duration, 1);
-                if (self.currentMusicElement) {
-                  self.currentMusicElement.volume = volume * t * self.masterVolume * (self.isMuted ? 0 : 1);
-                }
-                if (t < 1) {
-                  requestAnimationFrame(fadeIn);
-                }
-              };
-              requestAnimationFrame(fadeIn);
-            }).catch(() => { });
-          });
-
+            toElement.volume = targetVolume * t * self.musicVolume * self.masterVolume * (self.isMuted ? 0 : 1);
+            if (t < 1) {
+              requestAnimationFrame(tick);
+            } else {
+              if (fromElement) {
+                fromElement.pause();
+                fromElement.currentTime = 0;
+              }
+              self.currentMusicName = toName;
+            }
+          };
+          requestAnimationFrame(tick);
           return 0;
         },
 
-        // ====================================================================
-        // AUDIO - MASTER CONTROL
-        // ====================================================================
+        // ----- MASTER CONTROL -----
 
         _audio_set_master_volume(volume) {
           self.masterVolume = volume;
-          // Update all playing sounds
-          for (const [id, instance] of self.soundInstances) {
-            if (instance.playing) {
-              instance.gainNode.gain.value = instance.gainNode.gain.value; // Triggers recalc
+          for (const [, instance] of self.soundInstances) {
+            if (instance.playing && instance.gainNode) {
+              instance.gainNode.gain.value = instance.volume * volume * (self.isMuted ? 0 : 1);
             }
           }
-          if (self.currentMusicElement) {
-            self.currentMusicElement.volume = self.musicVolume * volume * (self.isMuted ? 0 : 1);
+          for (const [name, entry] of self.namedMusic) {
+            if (entry.element && !entry.element.paused) {
+              const trackVolume = self.musicVolumes.get(name) ?? 1.0;
+              entry.element.volume = trackVolume * self.musicVolume * volume * (self.isMuted ? 0 : 1);
+            }
           }
           return 0;
         },
 
-        _audio_mute_all() {
+        _audio_mute() {
           self.isMuted = true;
-          for (const [id, instance] of self.soundInstances) {
-            instance.gainNode.gain.value = 0;
+          for (const [, instance] of self.soundInstances) {
+            if (instance.gainNode) instance.gainNode.gain.value = 0;
           }
-          if (self.currentMusicElement) {
-            self.currentMusicElement.volume = 0;
+          for (const [, entry] of self.namedMusic) {
+            if (entry.element) entry.element.volume = 0;
           }
           return 0;
         },
 
-        _audio_unmute_all() {
+        _audio_unmute() {
           self.isMuted = false;
-          if (self.currentMusicElement) {
-            self.currentMusicElement.volume = self.musicVolume * self.masterVolume;
+          for (const [, instance] of self.soundInstances) {
+            if (instance.gainNode && instance.playing) {
+              instance.gainNode.gain.value = instance.volume * self.masterVolume;
+            }
+          }
+          for (const [name, entry] of self.namedMusic) {
+            if (entry.element && !entry.element.paused) {
+              const trackVolume = self.musicVolumes.get(name) ?? 1.0;
+              entry.element.volume = trackVolume * self.musicVolume * self.masterVolume;
+            }
           }
           return 0;
+        },
+
+        _audio_is_muted() {
+          return self.isMuted ? 1 : 0;
         },
 
         // ====================================================================
@@ -1493,14 +1845,14 @@ class CanvasBridge {
           return (dx * dx + dy * dy <= radius * radius) ? 1 : 0;
         },
 
-        _collision_circle_circle(x1, y1, r1, x2, y2, r2) {
+        _collision_circles(x1, y1, r1, x2, y2, r2) {
           const dx = x2 - x1;
           const dy = y2 - y1;
           const dist = Math.sqrt(dx * dx + dy * dy);
           return (dist <= r1 + r2) ? 1 : 0;
         },
 
-        _collision_rect_rect(x1, y1, w1, h1, x2, y2, w2, h2) {
+        _collision_rects(x1, y1, w1, h1, x2, y2, w2, h2) {
           return (x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2) ? 1 : 0;
         },
 
@@ -1570,7 +1922,7 @@ class CanvasBridge {
           return Math.min(overlapTop, overlapBottom);
         },
 
-        _collision_raycast_circle(ox, oy, dx, dy, cx, cy, r) {
+        _collision_ray_circle(ox, oy, dx, dy, cx, cy, r) {
           const fx = ox - cx;
           const fy = oy - cy;
 
@@ -2100,15 +2452,15 @@ class CanvasBridge {
           return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
         },
 
-        _ease_in_cubic(t) {
+        _ease_cubic_in(t) {
           return t * t * t;
         },
 
-        _ease_out_cubic(t) {
+        _ease_cubic_out(t) {
           return (--t) * t * t + 1;
         },
 
-        _ease_in_out_cubic(t) {
+        _ease_cubic_in_out(t) {
           return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
         },
 
@@ -2140,12 +2492,12 @@ class CanvasBridge {
             : (2 - Math.pow(2, -20 * t + 10)) / 2;
         },
 
-        _ease_in_elastic(t) {
+        _ease_elastic_in(t) {
           const c4 = (2 * Math.PI) / 3;
           return t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
         },
 
-        _ease_out_elastic(t) {
+        _ease_elastic_out(t) {
           const c4 = (2 * Math.PI) / 3;
           return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
         },
@@ -2157,11 +2509,11 @@ class CanvasBridge {
             : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 + 1;
         },
 
-        _ease_in_bounce(t) {
-          return 1 - self.env._ease_out_bounce(1 - t);
+        _ease_bounce_in(t) {
+          return 1 - self.env._ease_bounce_out(1 - t);
         },
 
-        _ease_out_bounce(t) {
+        _ease_bounce_out(t) {
           const n1 = 7.5625;
           const d1 = 2.75;
           if (t < 1 / d1) {
@@ -2177,23 +2529,23 @@ class CanvasBridge {
 
         _ease_in_out_bounce(t) {
           return t < 0.5
-            ? (1 - self.env._ease_out_bounce(1 - 2 * t)) / 2
-            : (1 + self.env._ease_out_bounce(2 * t - 1)) / 2;
+            ? (1 - self.env._ease_bounce_out(1 - 2 * t)) / 2
+            : (1 + self.env._ease_bounce_out(2 * t - 1)) / 2;
         },
 
-        _ease_in_back(t) {
+        _ease_back_in(t) {
           const c1 = 1.70158;
           const c3 = c1 + 1;
           return c3 * t * t * t - c1 * t * t;
         },
 
-        _ease_out_back(t) {
+        _ease_back_out(t) {
           const c1 = 1.70158;
           const c3 = c1 + 1;
           return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
         },
 
-        _ease_in_out_back(t) {
+        _ease_back_in_out(t) {
           const c1 = 1.70158;
           const c2 = c1 * 1.525;
           return t < 0.5
