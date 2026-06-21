@@ -1849,7 +1849,7 @@ functions:
 		// content replaces the default <slot></slot>.
 		if layout != ""
 			result = result + "\t\t\tstring __page_content = html\n"
-			result = result + "\t\t\tstring __layout_html = _ui_loadLayout(\"app/ui/web/layouts/" + layout + ".html\")\n"
+			result = result + "\t\t\tstring __layout_html = _ui_load_layout(\"app/ui/web/layouts/" + layout + ".html\")\n"
 			result = result + "\t\t\tif __layout_html != \"\"\n"
 			// Named slot extraction loop — runs up to 10 named slots
 			result = result + "\t\t\t\tinteger __slot_i = 0\n"
