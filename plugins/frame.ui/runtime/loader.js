@@ -23,6 +23,9 @@
 	const stateStore = new Map();
 	const registeredEventTypes = new Set();
 	const eventHandlers = new Map(); // "selector\0eventType" -> [handlerIdx, ...]
+	let loadedPages = null;            // lazy Map<path, html>
+	let componentHtmlRegistry = null;  // lazy Map<tag, html>
+
 
 	// --- Memory observability (MEMORY_POLICY.md §9.3) ---
 
@@ -331,6 +334,35 @@
 
 			_ui_get_component: (tagPtr, tagLen) => {
 				return writeString(componentRegistry.get(readString(tagPtr, tagLen)) || '');
+			},
+
+			// Page template loading and component-HTML registration. These are
+			// primarily server-side concerns but the registry lists hosts =
+			// ["browser", "server"] so the client-side loader must handle them
+			// too. In the browser, _ui_load_page resolves via fetch when called
+			// from a non-render context (it's still sync to WASM — we cache the
+			// last fetch result and only return cached content on subsequent
+			// calls). For the typical SSR flow on the server, this never runs.
+			_ui_load_page: (pathPtr, pathLen) => {
+				const path = readString(pathPtr, pathLen);
+				if (!loadedPages) loadedPages = new Map();
+				if (loadedPages.has(path)) return writeString(loadedPages.get(path));
+				// Kick off an async fetch and return empty for now; once the
+				// fetch lands, subsequent calls will hit the cache. This
+				// matches the "load on demand" pattern other browser-side
+				// runtime APIs use.
+				if (typeof fetch === 'function') {
+					fetch(path).then(r => r.ok ? r.text() : '').then(text => {
+						loadedPages.set(path, text || '');
+					}).catch(() => loadedPages.set(path, ''));
+				}
+				return writeString('');
+			},
+
+			_ui_register_component_html: (tagPtr, tagLen, htmlPtr, htmlLen) => {
+				if (!componentHtmlRegistry) componentHtmlRegistry = new Map();
+				componentHtmlRegistry.set(readString(tagPtr, tagLen), readString(htmlPtr, htmlLen));
+				return 0;
 			},
 
 			// ========== Slot Management ==========

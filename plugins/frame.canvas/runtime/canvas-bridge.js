@@ -124,6 +124,65 @@ class CanvasBridge {
     this.sceneStack = [];
 
     // ========================================================================
+    // NAMED ASSETS (gradients/paths/layers/tweens/timelines/animstates/animsprites/particles)
+    // ========================================================================
+    // Each Map below is keyed by the user-supplied name from the DSL block.
+    this.namedPaths = new Map();      // name -> [{op, args}]
+    this.namedLayers = new Map();     // name -> {z, drawCalls:[]}
+    this.layerOrder = [];             // sorted layer names by z (ascending)
+    this.currentLayer = null;
+    this.namedTweens = new Map();     // name -> {state, vars, elapsed}
+    this.namedTimelines = new Map();  // name -> {state, json, time}
+    this.namedAnimStates = new Map(); // name -> {state, current, json}
+    this.namedAnimSprites = new Map();// name -> {sheetName, frameStart, frameEnd, fps, loop, current, elapsed}
+    this.namedParticles = new Map();  // name -> {json, emitters:[]}
+    this.namedSprites = new Map();    // name -> sheet entry by user-given name
+    this.fontsLoaded = new Map();     // name -> { src, loaded }
+    this.customEases = new Map();     // name -> {x1, y1, x2, y2}
+
+    // ========================================================================
+    // EVENT HANDLER REGISTRATION (canvas-scoped)
+    // ========================================================================
+    // Each canvasId maps to an export-name string the WASM module declared.
+    this.pointerDownHandlers = new Map();
+    this.pointerMoveHandlers = new Map();
+    this.pointerUpHandlers = new Map();
+    this.keyDownHandlers = new Map();
+    this.keyUpHandlers = new Map();
+    this.onExitHandlers = new Map();
+    this.onPauseHandlers = new Map();
+    this.onResumeHandlers = new Map();
+
+    // ========================================================================
+    // PAGE/UI BRIDGE + SCENE PARAMETERS
+    // ========================================================================
+    this.pageStore = new Map();   // key -> JSON-encoded value (string)
+    this.sceneParams = new Map(); // key -> JSON-encoded value (string)
+
+    // ========================================================================
+    // CAMERA FOLLOW STATE
+    // ========================================================================
+    this.cameraFollowX = null;
+    this.cameraFollowY = null;
+    this.cameraFollowSmoothing = 0;
+    this.cameraOffsetX = 0;
+    this.cameraOffsetY = 0;
+    this.cameraDeadzoneW = 0;
+    this.cameraDeadzoneH = 0;
+    this.cameraBounds = null; // {x, y, w, h} or null
+
+    // ========================================================================
+    // RETURN-STRING HEAP (for bridge functions that return strings)
+    // ========================================================================
+    // Sits past the loader's STRING_BUFFER_OFFSET=1MB region. The 1MB window
+    // here is large enough for many frames of short string returns before it
+    // wraps. Clean reads each returned string immediately, so wrap-around is
+    // safe in practice.
+    this._returnHeapBase = 2 * 1024 * 1024;
+    this._returnHeapPtr = this._returnHeapBase;
+    this._returnHeapMax = 3 * 1024 * 1024;
+
+    // ========================================================================
     // WASM REFERENCES
     // ========================================================================
     this.memory = null;
@@ -162,9 +221,32 @@ class CanvasBridge {
     return new TextDecoder().decode(bytes);
   }
 
+  // Two calling conventions:
+  //   writeString(str, ptr) — raw write at given ptr, returns byte length
+  //   writeString(str)      — allocate from the bridge return-string heap
+  //                           and write a 4-byte LE length-prefix followed
+  //                           by the UTF-8 bytes. Returns the pointer to the
+  //                           length prefix, which is the format Clean reads
+  //                           when a bridge function returns a string.
   writeString(str, ptr) {
     if (!this.memory) return 0;
-    const bytes = new TextEncoder().encode(str);
+    const bytes = new TextEncoder().encode(str || '');
+    if (ptr === undefined) {
+      // Length-prefixed allocation in the bridge's return-string region.
+      if (this._returnHeapPtr + bytes.length + 8 >= this._returnHeapMax) {
+        // wrap around — return strings are short-lived; Clean reads them
+        // immediately after the call.
+        this._returnHeapPtr = this._returnHeapBase;
+      }
+      const result = this._returnHeapPtr;
+      const dv = new DataView(this.memory.buffer);
+      dv.setUint32(result, bytes.length, true);
+      const view = new Uint8Array(this.memory.buffer, result + 4, bytes.length);
+      view.set(bytes);
+      const pad = (4 - (bytes.length % 4)) % 4;
+      this._returnHeapPtr += 4 + bytes.length + pad;
+      return result;
+    }
     const view = new Uint8Array(this.memory.buffer, ptr, bytes.length);
     view.set(bytes);
     return bytes.length;
@@ -200,6 +282,8 @@ class CanvasBridge {
       const rect = element.getBoundingClientRect();
       self.mouseX = e.clientX - rect.left;
       self.mouseY = e.clientY - rect.top;
+      const handler = self.pointerMoveHandlers.get(canvasId);
+      if (handler) self._callExport(handler, canvasId, self.mouseX, self.mouseY);
     });
 
     element.addEventListener('mousedown', (e) => {
@@ -209,6 +293,8 @@ class CanvasBridge {
         self.mouseButtonsJustPressed[button] = true;
       }
       element.focus();
+      const handler = self.pointerDownHandlers.get(canvasId);
+      if (handler) self._callExport(handler, canvasId, self.mouseX, self.mouseY);
     });
 
     element.addEventListener('mouseup', (e) => {
@@ -217,6 +303,8 @@ class CanvasBridge {
         self.mouseButtons[button] = false;
         self.mouseButtonsJustReleased[button] = true;
       }
+      const handler = self.pointerUpHandlers.get(canvasId);
+      if (handler) self._callExport(handler, canvasId, self.mouseX, self.mouseY);
     });
 
     element.addEventListener('mouseleave', () => {
@@ -248,12 +336,18 @@ class CanvasBridge {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(key)) {
         e.preventDefault();
       }
+
+      const handler = self.keyDownHandlers.get(canvasId);
+      if (handler) self._callExport(handler, canvasId);
     });
 
     element.addEventListener('keyup', (e) => {
       const key = e.key;
       self.keysDown.delete(key);
       self.keysJustReleased.add(key);
+
+      const handler = self.keyUpHandlers.get(canvasId);
+      if (handler) self._callExport(handler, canvasId);
     });
 
     // ========== TOUCH EVENTS ==========
@@ -349,6 +443,354 @@ class CanvasBridge {
     this.textInput = '';
     this.touchStarted = false;
     this.touchEnded = false;
+  }
+
+  // ==========================================================================
+  // EASING (numeric ID + named lookup + custom cubic-bezier)
+  // ==========================================================================
+  // Easing IDs match the order easing functions are documented in plugin.toml
+  // and let _tween_animate / _camera_shake / _tween_animate_path use a single
+  // integer argument without an extra string round-trip.
+
+  _easeNameToId(name) {
+    const t = {
+      linear: 0,
+      cubic_in: 1, cubic_out: 2, cubic_in_out: 3,
+      quad_in: 4, in_quad: 4,
+      quad_out: 5, out_quad: 5,
+      quad_in_out: 6, in_out_quad: 6,
+      sine_in: 7, in_sine: 7,
+      sine_out: 8, out_sine: 8,
+      sine_in_out: 9, in_out_sine: 9,
+      expo_in: 10, in_expo: 10,
+      expo_out: 11, out_expo: 11,
+      expo_in_out: 12, in_out_expo: 12,
+      elastic_in: 13, elastic_out: 14, elastic_in_out: 15, in_out_elastic: 15,
+      bounce_in: 16, bounce_out: 17, bounce_in_out: 18, in_out_bounce: 18,
+      back_in: 19, back_out: 20, back_in_out: 21,
+    };
+    return t[name] != null ? t[name] : 0;
+  }
+
+  _evalEaseId(id, t) {
+    t = Math.max(0, Math.min(1, t));
+    switch (id) {
+      case 0: return t;
+      case 1: return t * t * t;
+      case 2: return 1 - Math.pow(1 - t, 3);
+      case 3: return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      case 4: return t * t;
+      case 5: return 1 - (1 - t) * (1 - t);
+      case 6: return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      case 7: return 1 - Math.cos((t * Math.PI) / 2);
+      case 8: return Math.sin((t * Math.PI) / 2);
+      case 9: return -(Math.cos(Math.PI * t) - 1) / 2;
+      case 10: return t === 0 ? 0 : Math.pow(2, 10 * t - 10);
+      case 11: return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+      case 12: return t === 0 ? 0 : t === 1 ? 1 : t < 0.5
+        ? Math.pow(2, 20 * t - 10) / 2
+        : (2 - Math.pow(2, -20 * t + 10)) / 2;
+      case 13: {
+        const c4 = (2 * Math.PI) / 3;
+        return t === 0 ? 0 : t === 1 ? 1 : -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+      }
+      case 14: {
+        const c4 = (2 * Math.PI) / 3;
+        return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+      }
+      case 15: {
+        const c5 = (2 * Math.PI) / 4.5;
+        return t === 0 ? 0 : t === 1 ? 1 : t < 0.5
+          ? -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) / 2
+          : (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 + 1;
+      }
+      case 16: return 1 - this._evalBounceOut(1 - t);
+      case 17: return this._evalBounceOut(t);
+      case 18: return t < 0.5
+        ? (1 - this._evalBounceOut(1 - 2 * t)) / 2
+        : (1 + this._evalBounceOut(2 * t - 1)) / 2;
+      case 19: {
+        const c1 = 1.70158, c3 = c1 + 1;
+        return c3 * t * t * t - c1 * t * t;
+      }
+      case 20: {
+        const c1 = 1.70158, c3 = c1 + 1;
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      }
+      case 21: {
+        const c1 = 1.70158, c2 = c1 * 1.525;
+        return t < 0.5
+          ? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2
+          : (Math.pow(2 * t - 2, 2) * ((c2 + 1) * (t * 2 - 2) + c2) + 2) / 2;
+      }
+      default: return t;
+    }
+  }
+
+  _evalBounceOut(t) {
+    const n1 = 7.5625, d1 = 2.75;
+    if (t < 1 / d1) return n1 * t * t;
+    if (t < 2 / d1) return n1 * (t -= 1.5 / d1) * t + 0.75;
+    if (t < 2.5 / d1) return n1 * (t -= 2.25 / d1) * t + 0.9375;
+    return n1 * (t -= 2.625 / d1) * t + 0.984375;
+  }
+
+  _evalEaseByName(name, t) {
+    if (!name || name === 'linear') return t;
+    if (this.customEases.has(name)) return this._evalCustomEase(name, t);
+    return this._evalEaseId(this._easeNameToId(name), t);
+  }
+
+  _evalCustomEase(name, t) {
+    const cp = this.customEases.get(name);
+    if (!cp) return t;
+    // Cubic-bezier(0,0, x1,y1, x2,y2, 1,1). Solve x(u)=t for u via bisection,
+    // then return y(u). Bisection is fine here — 20 iterations gives ~1e-6.
+    const { x1, y1, x2, y2 } = cp;
+    const bx = (u) => 3 * (1 - u) * (1 - u) * u * x1 + 3 * (1 - u) * u * u * x2 + u * u * u;
+    const by = (u) => 3 * (1 - u) * (1 - u) * u * y1 + 3 * (1 - u) * u * u * y2 + u * u * u;
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (bx(mid) < t) lo = mid; else hi = mid;
+    }
+    return by((lo + hi) / 2);
+  }
+
+  // ==========================================================================
+  // WASM EXPORT CALLBACK
+  // ==========================================================================
+  // Bridge functions that register handlers store the export name as a string.
+  // When the event fires, this helper resolves and calls the export safely.
+
+  _callExport(exportName, ...args) {
+    if (!this.wasmInstance || !exportName) return;
+    const fn = this.wasmInstance.exports[exportName];
+    if (typeof fn !== 'function') return;
+    try {
+      fn(...args);
+    } catch (err) {
+      console.error(`[CanvasBridge] Export "${exportName}" threw:`, err);
+    }
+  }
+
+  // ==========================================================================
+  // PER-FRAME ANIMATION TICK
+  // ==========================================================================
+  // Advances tweens, timelines, animsprites, particles each frame. Hooked into
+  // the requestAnimationFrame loop just before the WASM _frame_callback so
+  // Clean code reading from canvasVars sees the updated values.
+
+  _updateAnimations(dt) {
+    if (!this.canvasVars) this.canvasVars = new Map();
+
+    // ---- Tweens ----
+    for (const [, tween] of this.namedTweens) {
+      if (tween.state !== 'playing') continue;
+      tween.elapsed += dt;
+      let allDone = true;
+      for (const v of tween.vars) {
+        if (v.done && !v.repeat) continue;
+        // delay phase
+        let local = tween.elapsed - v.delay;
+        if (local < 0) { allDone = false; continue; }
+        let cycle = v.duration > 0 ? local / v.duration : 1;
+        let direction = 1;
+        if (v.repeat > 0 || v.repeat === -1) {
+          const intCycle = Math.floor(cycle);
+          const frac = cycle - intCycle;
+          if (v.repeat !== -1 && intCycle > v.repeat) {
+            cycle = 1; v.done = true;
+          } else {
+            cycle = frac;
+            if (v.yoyo && (intCycle % 2 === 1)) direction = -1;
+          }
+        } else if (cycle >= 1) {
+          cycle = 1; v.done = true;
+        }
+        const tt = direction === 1 ? cycle : 1 - cycle;
+        const eased = this._evalEaseByName(v.ease, tt);
+        let value;
+        if (v.pathName && this.namedPaths.has(v.pathName)) {
+          const pt = this._sampleNamedPath(v.pathName, eased);
+          // path tween writes "<varName>_x" and "<varName>_y"
+          this.canvasVars.set(v.varName + '_x', pt.x);
+          this.canvasVars.set(v.varName + '_y', pt.y);
+          if (v.orient) this.canvasVars.set(v.varName + '_angle', pt.angle);
+          value = eased;
+        } else {
+          value = v.from + (v.to - v.from) * eased;
+        }
+        this.canvasVars.set(v.varName, value);
+        if (!v.done) allDone = false;
+      }
+      if (allDone) tween.state = 'stopped';
+    }
+
+    // ---- Timelines ----
+    for (const [, tl] of this.namedTimelines) {
+      if (tl.state !== 'playing') continue;
+      tl.time += dt;
+      if (tl.config && Array.isArray(tl.config.steps)) {
+        for (const step of tl.config.steps) {
+          if (!step._fired && tl.time >= (step.at || 0)) {
+            step._fired = true;
+            if (step.set && step.var != null) this.canvasVars.set(step.var, step.set);
+            if (step.play) {
+              const target = this.namedTweens.get(step.play);
+              if (target) { target.state = 'playing'; target.elapsed = 0; target.vars.forEach(x => x.done = false); }
+            }
+          }
+        }
+      }
+      if (tl.config && tl.time >= (tl.config.duration || 0)) {
+        tl.state = 'stopped';
+      }
+    }
+
+    // ---- AnimSprite clips ----
+    for (const [, clip] of this.namedAnimSprites) {
+      clip.elapsed += dt;
+      const period = clip.fps > 0 ? 1 / clip.fps : 0.1;
+      while (clip.elapsed >= period) {
+        clip.elapsed -= period;
+        clip.current++;
+        if (clip.current > clip.frameEnd) {
+          if (clip.loop) clip.current = clip.frameStart;
+          else { clip.current = clip.frameEnd; clip.elapsed = 0; break; }
+        }
+      }
+    }
+
+    // ---- Particles ----
+    for (const [, sys] of this.namedParticles) {
+      for (let i = sys.emitters.length - 1; i >= 0; i--) {
+        const em = sys.emitters[i];
+        // age existing particles
+        for (let j = em.particles.length - 1; j >= 0; j--) {
+          const p = em.particles[j];
+          p.life -= dt;
+          if (p.life <= 0) { em.particles.splice(j, 1); continue; }
+          p.vy += (sys.config.gravity || 0) * dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+        }
+        // continuous emission
+        if (em.continuous) {
+          em.emitAccum += dt * (sys.config.rate || 30);
+          while (em.emitAccum >= 1) {
+            em.emitAccum -= 1;
+            em.particles.push(this._spawnParticle(em.x, em.y, sys.config));
+          }
+        }
+        // remove finished one-shot emitters
+        if (!em.continuous && em.particles.length === 0) sys.emitters.splice(i, 1);
+      }
+    }
+  }
+
+  _spawnParticle(x, y, cfg) {
+    const speedMin = cfg.speedMin != null ? cfg.speedMin : 50;
+    const speedMax = cfg.speedMax != null ? cfg.speedMax : 150;
+    const lifeMin = cfg.lifeMin != null ? cfg.lifeMin : 0.5;
+    const lifeMax = cfg.lifeMax != null ? cfg.lifeMax : 1.5;
+    const speed = speedMin + Math.random() * (speedMax - speedMin);
+    const angle = (cfg.angleMin != null ? cfg.angleMin : 0)
+      + Math.random() * ((cfg.angleMax != null ? cfg.angleMax : Math.PI * 2)
+                         - (cfg.angleMin != null ? cfg.angleMin : 0));
+    return {
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: lifeMin + Math.random() * (lifeMax - lifeMin),
+      maxLife: lifeMin + Math.random() * (lifeMax - lifeMin),
+      size: (cfg.sizeMin != null ? cfg.sizeMin : 2)
+        + Math.random() * ((cfg.sizeMax != null ? cfg.sizeMax : 5) - (cfg.sizeMin != null ? cfg.sizeMin : 2)),
+      color: cfg.color || '#fff',
+    };
+  }
+
+  _buildCanvasGradient(ctx, gradName) {
+    const grad = this.gradients.get(gradName);
+    if (!grad) return null;
+    let fill;
+    if (grad.type === 'linear') {
+      fill = ctx.createLinearGradient(grad.x1, grad.y1, grad.x2, grad.y2);
+    } else {
+      fill = ctx.createRadialGradient(grad.cx, grad.cy, 0, grad.cx, grad.cy, grad.radius);
+    }
+    for (const s of grad.stops) fill.addColorStop(s.offset, s.color);
+    return fill;
+  }
+
+  _replayPathSegments(ctx, segs) {
+    for (const s of segs) {
+      switch (s.op) {
+        case 'move':  ctx.moveTo(s.x, s.y); break;
+        case 'line':  ctx.lineTo(s.x, s.y); break;
+        case 'curve': ctx.quadraticCurveTo(s.cpx, s.cpy, s.x, s.y); break;
+        case 'cubic': ctx.bezierCurveTo(s.cp1x, s.cp1y, s.cp2x, s.cp2y, s.x, s.y); break;
+        case 'arc':   ctx.arc(s.x, s.y, s.radius, s.startAngle, s.endAngle); break;
+        case 'close': ctx.closePath(); break;
+      }
+    }
+  }
+
+  _easeIdToName(id) {
+    const names = [
+      'linear', 'cubic_in', 'cubic_out', 'cubic_in_out',
+      'quad_in', 'quad_out', 'quad_in_out',
+      'sine_in', 'sine_out', 'sine_in_out',
+      'expo_in', 'expo_out', 'expo_in_out',
+      'elastic_in', 'elastic_out', 'elastic_in_out',
+      'bounce_in', 'bounce_out', 'bounce_in_out',
+      'back_in', 'back_out', 'back_in_out',
+    ];
+    return names[id] || 'linear';
+  }
+
+  _sampleNamedPath(name, t) {
+    const path = this.namedPaths.get(name);
+    if (!path || !path.length) return { x: 0, y: 0, angle: 0 };
+    // Linearize path: walk segments and pick a point at fractional length t
+    // For simplicity, treat all segments as straight lines between their
+    // endpoints. (Bezier/arc segments are approximated by their endpoint.)
+    const pts = [];
+    let cx = 0, cy = 0;
+    for (const seg of path) {
+      switch (seg.op) {
+        case 'move': cx = seg.x; cy = seg.y; pts.push({ x: cx, y: cy }); break;
+        case 'line':
+        case 'curve':
+        case 'cubic':
+        case 'arc':
+          cx = seg.x; cy = seg.y; pts.push({ x: cx, y: cy }); break;
+        case 'close':
+          if (pts.length) { pts.push({ x: pts[0].x, y: pts[0].y }); cx = pts[0].x; cy = pts[0].y; }
+          break;
+      }
+    }
+    if (pts.length < 2) return { x: pts[0] ? pts[0].x : 0, y: pts[0] ? pts[0].y : 0, angle: 0 };
+    let total = 0;
+    const lens = [];
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      lens.push(d); total += d;
+    }
+    if (total === 0) return { x: pts[0].x, y: pts[0].y, angle: 0 };
+    let target = t * total;
+    for (let i = 0; i < lens.length; i++) {
+      if (target <= lens[i]) {
+        const f = lens[i] > 0 ? target / lens[i] : 0;
+        const x = pts[i].x + (pts[i + 1].x - pts[i].x) * f;
+        const y = pts[i].y + (pts[i + 1].y - pts[i].y) * f;
+        const angle = Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x);
+        return { x, y, angle };
+      }
+      target -= lens[i];
+    }
+    const last = pts[pts.length - 1];
+    return { x: last.x, y: last.y, angle: 0 };
   }
 
   // ==========================================================================
@@ -912,18 +1354,17 @@ class CanvasBridge {
         },
 
         _canvas_clip_path(canvasId, namePtr, nameLen) {
-          // Named-path clipping is not implemented — the path registry that
-          // _canvas_draw_named_path / _canvas_clip_path resolve names against
-          // is part of the unimplemented path-naming feature. Falls back to
-          // clipping by the current immediate-mode path so apps that build a
-          // path via _canvas_begin_path/...lineTo/closePath and then clip
-          // still get a working scoped clip.
           const entry = self.canvases.get(canvasId);
           if (!entry) return -1;
-          // The argument is intentionally ignored; documented above.
-          void self.readString(namePtr, nameLen);
-          entry.ctx.save();
-          entry.ctx.clip();
+          const name = self.readString(namePtr, nameLen);
+          const segs = self.namedPaths.get(name);
+          const ctx = entry.ctx;
+          ctx.save();
+          if (segs) {
+            ctx.beginPath();
+            self._replayPathSegments(ctx, segs);
+          }
+          ctx.clip();
           return 0;
         },
 
@@ -1216,6 +1657,30 @@ class CanvasBridge {
                 self.cameraShakeIntensity = 0;
               }
             }
+
+            // Update camera follow before WASM frame so reads inside onFrame
+            // see the new position.
+            if (self.cameraFollowX !== null) {
+              const targetX = self.cameraFollowX + self.cameraOffsetX;
+              const targetY = self.cameraFollowY + self.cameraOffsetY;
+              if (self.cameraFollowSmoothing > 0) {
+                const lerp = Math.min(1, 1 - Math.pow(1 - 0.1, self.cameraFollowSmoothing * 60 * self.deltaTime));
+                self.cameraX += (targetX - self.cameraX) * lerp;
+                self.cameraY += (targetY - self.cameraY) * lerp;
+              } else {
+                self.cameraX = targetX;
+                self.cameraY = targetY;
+              }
+              if (self.cameraBounds) {
+                const b = self.cameraBounds;
+                self.cameraX = Math.max(b.x, Math.min(b.x + b.w, self.cameraX));
+                self.cameraY = Math.max(b.y, Math.min(b.y + b.h, self.cameraY));
+              }
+            }
+
+            // Tick named tweens, timelines, animsprites, particles. Must run
+            // before _frame_callback so user draw code reads up-to-date state.
+            self._updateAnimations(self.deltaTime);
 
             // Call WASM frame handler
             if (self.wasmInstance && self.wasmInstance.exports._frame_callback) {
@@ -2558,20 +3023,43 @@ class CanvasBridge {
         // ====================================================================
 
         _scene_get_current() {
-          // Would need to write to WASM memory - return 0 for now
-          return 0;
+          return self.writeString(self.currentScene || '');
         },
 
         _scene_change(namePtr, nameLen) {
           const name = self.readString(namePtr, nameLen);
+          const prev = self.currentScene;
+          if (prev && self.onExitHandlers.has(prev)) {
+            self._callExport(self.onExitHandlers.get(prev));
+          }
           self.currentScene = name;
           self.sceneStack = [name];
           console.log(`[CanvasBridge] Scene changed to: ${name}`);
           return 0;
         },
 
+        _scene_change_animated(namePtr, nameLen, transitionPtr, transitionLen, duration) {
+          const name = self.readString(namePtr, nameLen);
+          const transition = self.readString(transitionPtr, transitionLen);
+          const prev = self.currentScene;
+          if (prev && self.onExitHandlers.has(prev)) {
+            self._callExport(self.onExitHandlers.get(prev));
+          }
+          // Persist the transition + duration in pageStore so the next scene's
+          // init can render its enter animation if desired.
+          self.pageStore.set('__scene_transition', JSON.stringify({ from: prev, to: name, kind: transition, duration }));
+          self.currentScene = name;
+          self.sceneStack = [name];
+          console.log(`[CanvasBridge] Scene change animated: ${prev}→${name} via ${transition} (${duration}s)`);
+          return 0;
+        },
+
         _scene_push(namePtr, nameLen) {
           const name = self.readString(namePtr, nameLen);
+          const prev = self.currentScene;
+          if (prev && self.onPauseHandlers.has(prev)) {
+            self._callExport(self.onPauseHandlers.get(prev));
+          }
           self.sceneStack.push(name);
           self.currentScene = name;
           console.log(`[CanvasBridge] Scene pushed: ${name}`);
@@ -2580,12 +3068,737 @@ class CanvasBridge {
 
         _scene_pop() {
           if (self.sceneStack.length > 1) {
-            self.sceneStack.pop();
+            const prev = self.sceneStack.pop();
+            if (prev && self.onExitHandlers.has(prev)) {
+              self._callExport(self.onExitHandlers.get(prev));
+            }
             self.currentScene = self.sceneStack[self.sceneStack.length - 1];
+            if (self.currentScene && self.onResumeHandlers.has(self.currentScene)) {
+              self._callExport(self.onResumeHandlers.get(self.currentScene));
+            }
             console.log(`[CanvasBridge] Scene popped, current: ${self.currentScene}`);
             return 0;
           }
           return -1;
+        },
+
+        _scene_set(keyPtr, keyLen, valPtr, valLen) {
+          const key = self.readString(keyPtr, keyLen);
+          const val = self.readString(valPtr, valLen);
+          self.sceneParams.set(key, val);
+          return 0;
+        },
+
+        _scene_get(keyPtr, keyLen) {
+          const key = self.readString(keyPtr, keyLen);
+          return self.writeString(self.sceneParams.get(key) || '');
+        },
+
+        // ====================================================================
+        // PAGE / UI BRIDGE
+        // ====================================================================
+
+        _page_set(keyPtr, keyLen, valPtr, valLen) {
+          const key = self.readString(keyPtr, keyLen);
+          const val = self.readString(valPtr, valLen);
+          self.pageStore.set(key, val);
+          // Forward to the surrounding page via a CustomEvent so the
+          // enclosing app (frame.ui or vanilla page) can subscribe.
+          if (typeof window !== 'undefined' && typeof CustomEvent === 'function') {
+            window.dispatchEvent(new CustomEvent('clean-canvas-page-set', { detail: { key, value: val } }));
+          }
+          return 0;
+        },
+
+        _page_get(keyPtr, keyLen) {
+          const key = self.readString(keyPtr, keyLen);
+          return self.writeString(self.pageStore.get(key) || '');
+        },
+
+        // ====================================================================
+        // GRADIENTS (named, with stops, used as fill via _gradient_ref)
+        // ====================================================================
+
+        _gradient_linear(namePtr, nameLen, x1, y1, x2, y2) {
+          const name = self.readString(namePtr, nameLen);
+          self.gradients.set(name, { type: 'linear', x1, y1, x2, y2, stops: [], _cache: new Map() });
+          return 0;
+        },
+
+        _gradient_radial(namePtr, nameLen, cx, cy, radius) {
+          const name = self.readString(namePtr, nameLen);
+          self.gradients.set(name, { type: 'radial', cx, cy, radius, stops: [], _cache: new Map() });
+          return 0;
+        },
+
+        _gradient_add_stop(namePtr, nameLen, offset, colorPtr, colorLen) {
+          const name = self.readString(namePtr, nameLen);
+          const color = self.readString(colorPtr, colorLen);
+          const grad = self.gradients.get(name);
+          if (!grad) return -1;
+          grad.stops.push({ offset, color });
+          grad._cache.clear();
+          return 0;
+        },
+
+        _gradient_ref(namePtr, nameLen) {
+          // Returns an opaque integer the user can pass to gradient-fill calls.
+          // We use 1-based index into gradients map insertion order so 0 means
+          // "no gradient".
+          const name = self.readString(namePtr, nameLen);
+          let i = 1;
+          for (const key of self.gradients.keys()) {
+            if (key === name) return i;
+            i++;
+          }
+          return 0;
+        },
+
+        // ====================================================================
+        // GRADIENT-FILLED SHAPES
+        // ====================================================================
+
+        _canvas_rect_gradient(canvasId, x, y, w, h, gradPtr, gradLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const gradName = self.readString(gradPtr, gradLen);
+          const fill = self._buildCanvasGradient(entry.ctx, gradName);
+          if (!fill) return -1;
+          entry.ctx.fillStyle = fill;
+          entry.ctx.fillRect(x, y, w, h);
+          return 0;
+        },
+
+        _canvas_circle_gradient(canvasId, x, y, radius, gradPtr, gradLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const gradName = self.readString(gradPtr, gradLen);
+          const fill = self._buildCanvasGradient(entry.ctx, gradName);
+          if (!fill) return -1;
+          entry.ctx.beginPath();
+          entry.ctx.arc(x, y, radius, 0, Math.PI * 2);
+          entry.ctx.fillStyle = fill;
+          entry.ctx.fill();
+          return 0;
+        },
+
+        _canvas_fill_path_gradient(canvasId, gradPtr, gradLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const gradName = self.readString(gradPtr, gradLen);
+          const fill = self._buildCanvasGradient(entry.ctx, gradName);
+          if (!fill) return -1;
+          entry.ctx.fillStyle = fill;
+          entry.ctx.fill();
+          return 0;
+        },
+
+        // ====================================================================
+        // NAMED PATHS (path: block — define once, draw many)
+        // ====================================================================
+
+        _path_begin(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          self.namedPaths.set(name, []);
+          return 0;
+        },
+
+        _path_move_to(namePtr, nameLen, x, y) {
+          const name = self.readString(namePtr, nameLen);
+          const p = self.namedPaths.get(name); if (!p) return -1;
+          p.push({ op: 'move', x, y });
+          return 0;
+        },
+
+        _path_line_to(namePtr, nameLen, x, y) {
+          const name = self.readString(namePtr, nameLen);
+          const p = self.namedPaths.get(name); if (!p) return -1;
+          p.push({ op: 'line', x, y });
+          return 0;
+        },
+
+        _path_curve_to(namePtr, nameLen, cpx, cpy, x, y) {
+          const name = self.readString(namePtr, nameLen);
+          const p = self.namedPaths.get(name); if (!p) return -1;
+          p.push({ op: 'curve', cpx, cpy, x, y });
+          return 0;
+        },
+
+        _path_cubic_to(namePtr, nameLen, cp1x, cp1y, cp2x, cp2y, x, y) {
+          const name = self.readString(namePtr, nameLen);
+          const p = self.namedPaths.get(name); if (!p) return -1;
+          p.push({ op: 'cubic', cp1x, cp1y, cp2x, cp2y, x, y });
+          return 0;
+        },
+
+        _path_arc_to(namePtr, nameLen, x, y, radius, startAngle, endAngle) {
+          const name = self.readString(namePtr, nameLen);
+          const p = self.namedPaths.get(name); if (!p) return -1;
+          p.push({ op: 'arc', x, y, radius, startAngle, endAngle });
+          return 0;
+        },
+
+        _path_close(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const p = self.namedPaths.get(name); if (!p) return -1;
+          p.push({ op: 'close' });
+          return 0;
+        },
+
+        _canvas_draw_named_path(canvasId, namePtr, nameLen, strokeWidth, colorPtr, colorLen) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const name = self.readString(namePtr, nameLen);
+          const segs = self.namedPaths.get(name);
+          if (!segs) return -1;
+          const color = self.readString(colorPtr, colorLen);
+          const ctx = entry.ctx;
+          ctx.beginPath();
+          self._replayPathSegments(ctx, segs);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = strokeWidth;
+          ctx.stroke();
+          return 0;
+        },
+
+        // ====================================================================
+        // LAYERS (named z-ordered draw groups)
+        // ====================================================================
+        // Layers in the canvas DSL declare draw order. The current minimal
+        // implementation tracks the active layer name so future immediate-mode
+        // draws can be tagged; the existing draw functions render directly to
+        // the canvas in declaration order, so layer routing is a no-op for
+        // now but the bookkeeping is correct.
+
+        _layer_declare(namePtr, nameLen, z) {
+          const name = self.readString(namePtr, nameLen);
+          self.namedLayers.set(name, { z, drawCalls: [] });
+          self.layerOrder = [...self.namedLayers.entries()]
+            .sort((a, b) => a[1].z - b[1].z)
+            .map(([k]) => k);
+          return 0;
+        },
+
+        _layer_begin(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          self.currentLayer = name;
+          return 0;
+        },
+
+        _layer_end() {
+          self.currentLayer = null;
+          return 0;
+        },
+
+        // ====================================================================
+        // TWEENS — named definitions + playback control
+        // ====================================================================
+
+        _tween_define_var(namePtr, nameLen, varPtr, varLen, from, to, duration, easePtr, easeLen, repeat, yoyo, delay, pathPtr, pathLen) {
+          const name = self.readString(namePtr, nameLen);
+          const varName = self.readString(varPtr, varLen);
+          const ease = self.readString(easePtr, easeLen);
+          const pathName = self.readString(pathPtr, pathLen);
+          if (!self.namedTweens.has(name)) {
+            self.namedTweens.set(name, { state: 'stopped', elapsed: 0, vars: [] });
+          }
+          const tw = self.namedTweens.get(name);
+          tw.vars.push({
+            varName, from, to, duration, ease,
+            repeat: repeat | 0, yoyo: !!yoyo, delay,
+            pathName: pathName || null, orient: 0, done: false,
+          });
+          return 0;
+        },
+
+        _tween_play(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const tw = self.namedTweens.get(name);
+          if (!tw) return -1;
+          tw.state = 'playing';
+          tw.elapsed = 0;
+          tw.vars.forEach(v => v.done = false);
+          return 0;
+        },
+
+        _tween_stop(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const tw = self.namedTweens.get(name);
+          if (!tw) return -1;
+          tw.state = 'stopped';
+          tw.elapsed = 0;
+          return 0;
+        },
+
+        _tween_pause(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const tw = self.namedTweens.get(name);
+          if (!tw) return -1;
+          if (tw.state === 'playing') tw.state = 'paused';
+          return 0;
+        },
+
+        _tween_resume(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const tw = self.namedTweens.get(name);
+          if (!tw) return -1;
+          if (tw.state === 'paused') tw.state = 'playing';
+          return 0;
+        },
+
+        _tween_animate(varPtr, varLen, target, duration, easingId) {
+          // Inline animate: drives a single var from its current value to
+          // target over duration seconds using easingId. Creates an anonymous
+          // tween keyed by var name so re-calling replaces it.
+          const varName = self.readString(varPtr, varLen);
+          const key = '__inline__' + varName;
+          const from = self.canvasVars && self.canvasVars.has(varName)
+            ? self.canvasVars.get(varName) : 0;
+          self.namedTweens.set(key, {
+            state: 'playing', elapsed: 0,
+            vars: [{
+              varName, from, to: target, duration,
+              ease: self._easeIdToName(easingId),
+              repeat: 0, yoyo: false, delay: 0,
+              pathName: null, orient: 0, done: false,
+            }],
+          });
+          return 0;
+        },
+
+        _tween_animate_path(twPtr, twLen, pathPtr, pathLen, duration, easingId, orient) {
+          const tweenName = self.readString(twPtr, twLen);
+          const pathName = self.readString(pathPtr, pathLen);
+          if (!self.namedTweens.has(tweenName)) {
+            self.namedTweens.set(tweenName, { state: 'stopped', elapsed: 0, vars: [] });
+          }
+          const tw = self.namedTweens.get(tweenName);
+          tw.vars.push({
+            varName: tweenName,
+            from: 0, to: 1, duration,
+            ease: self._easeIdToName(easingId),
+            repeat: 0, yoyo: false, delay: 0,
+            pathName, orient: orient ? 1 : 0, done: false,
+          });
+          tw.state = 'playing';
+          tw.elapsed = 0;
+          return 0;
+        },
+
+        // ====================================================================
+        // TIMELINES — JSON-defined sequences
+        // ====================================================================
+
+        _timeline_define_json(namePtr, nameLen, jsonPtr, jsonLen) {
+          const name = self.readString(namePtr, nameLen);
+          const json = self.readString(jsonPtr, jsonLen);
+          let cfg = {};
+          try { cfg = JSON.parse(json); } catch (e) {
+            console.error(`[CanvasBridge] _timeline_define_json: bad JSON for "${name}"`, e);
+          }
+          self.namedTimelines.set(name, { state: 'stopped', time: 0, config: cfg });
+          return 0;
+        },
+
+        _timeline_play(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const tl = self.namedTimelines.get(name);
+          if (!tl) return -1;
+          tl.state = 'playing'; tl.time = 0;
+          if (tl.config && Array.isArray(tl.config.steps)) tl.config.steps.forEach(s => s._fired = false);
+          return 0;
+        },
+
+        _timeline_stop(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const tl = self.namedTimelines.get(name);
+          if (!tl) return -1;
+          tl.state = 'stopped'; tl.time = 0;
+          return 0;
+        },
+
+        _timeline_pause(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const tl = self.namedTimelines.get(name);
+          if (!tl) return -1;
+          if (tl.state === 'playing') tl.state = 'paused';
+          return 0;
+        },
+
+        _timeline_seek(namePtr, nameLen, position) {
+          const name = self.readString(namePtr, nameLen);
+          const tl = self.namedTimelines.get(name);
+          if (!tl) return -1;
+          tl.time = Math.max(0, position);
+          if (tl.config && Array.isArray(tl.config.steps)) {
+            tl.config.steps.forEach(s => { s._fired = (s.at || 0) < tl.time; });
+          }
+          return 0;
+        },
+
+        // ====================================================================
+        // ANIMATION STATE MACHINES (FSM for sprite animation states)
+        // ====================================================================
+
+        _animstate_define_json(namePtr, nameLen, jsonPtr, jsonLen) {
+          const name = self.readString(namePtr, nameLen);
+          const json = self.readString(jsonPtr, jsonLen);
+          let cfg = {};
+          try { cfg = JSON.parse(json); } catch (e) {
+            console.error(`[CanvasBridge] _animstate_define_json: bad JSON for "${name}"`, e);
+          }
+          self.namedAnimStates.set(name, {
+            state: 'stopped',
+            current: cfg.initial || '',
+            config: cfg,
+          });
+          return 0;
+        },
+
+        _anim_state_start(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const fsm = self.namedAnimStates.get(name);
+          if (!fsm) return -1;
+          fsm.state = 'running';
+          fsm.current = fsm.config.initial || fsm.current || '';
+          return 0;
+        },
+
+        _anim_state_force(namePtr, nameLen, statePtr, stateLen) {
+          const name = self.readString(namePtr, nameLen);
+          const stateName = self.readString(statePtr, stateLen);
+          const fsm = self.namedAnimStates.get(name);
+          if (!fsm) return -1;
+          fsm.current = stateName;
+          return 0;
+        },
+
+        _anim_state_current(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const fsm = self.namedAnimStates.get(name);
+          return self.writeString(fsm ? (fsm.current || '') : '');
+        },
+
+        // ====================================================================
+        // ANIMSPRITE — named sprite-sheet animation clips
+        // ====================================================================
+
+        _animsprite_define(clipPtr, clipLen, sheetPtr, sheetLen, frameStart, frameEnd, fps, loop) {
+          const clipName = self.readString(clipPtr, clipLen);
+          const sheetName = self.readString(sheetPtr, sheetLen);
+          self.namedAnimSprites.set(clipName, {
+            sheetName,
+            frameStart: frameStart | 0,
+            frameEnd: frameEnd | 0,
+            fps, loop: !!loop,
+            current: frameStart | 0,
+            elapsed: 0,
+          });
+          return 0;
+        },
+
+        _anim_sprite_reset(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const clip = self.namedAnimSprites.get(name);
+          if (!clip) return -1;
+          clip.current = clip.frameStart;
+          clip.elapsed = 0;
+          return 0;
+        },
+
+        _anim_sprite_draw(canvasId, namePtr, nameLen, x, y) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const clipName = self.readString(namePtr, nameLen);
+          const clip = self.namedAnimSprites.get(clipName);
+          if (!clip) return -1;
+          const sheet = self.namedSprites.get(clip.sheetName);
+          if (!sheet || !sheet.loaded) return -1;
+          const col = clip.current % sheet.framesPerRow;
+          const row = Math.floor(clip.current / sheet.framesPerRow);
+          entry.ctx.drawImage(
+            sheet.image,
+            col * sheet.frameWidth, row * sheet.frameHeight, sheet.frameWidth, sheet.frameHeight,
+            x, y, sheet.frameWidth, sheet.frameHeight,
+          );
+          return 0;
+        },
+
+        _anim_sprite_draw_ex(canvasId, namePtr, nameLen, x, y, w, h, flipX, flipY) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const clipName = self.readString(namePtr, nameLen);
+          const clip = self.namedAnimSprites.get(clipName);
+          if (!clip) return -1;
+          const sheet = self.namedSprites.get(clip.sheetName);
+          if (!sheet || !sheet.loaded) return -1;
+          const col = clip.current % sheet.framesPerRow;
+          const row = Math.floor(clip.current / sheet.framesPerRow);
+          const ctx = entry.ctx;
+          ctx.save();
+          const cx = x + w / 2, cy = y + h / 2;
+          ctx.translate(cx, cy);
+          ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+          ctx.drawImage(
+            sheet.image,
+            col * sheet.frameWidth, row * sheet.frameHeight, sheet.frameWidth, sheet.frameHeight,
+            -w / 2, -h / 2, w, h,
+          );
+          ctx.restore();
+          return 0;
+        },
+
+        // ====================================================================
+        // PARTICLES — emitters defined by JSON config
+        // ====================================================================
+
+        _particles_define_json(namePtr, nameLen, jsonPtr, jsonLen) {
+          const name = self.readString(namePtr, nameLen);
+          const json = self.readString(jsonPtr, jsonLen);
+          let cfg = {};
+          try { cfg = JSON.parse(json); } catch (e) {
+            console.error(`[CanvasBridge] _particles_define_json: bad JSON for "${name}"`, e);
+          }
+          self.namedParticles.set(name, { config: cfg, emitters: [] });
+          return 0;
+        },
+
+        _particles_emit(namePtr, nameLen, x, y) {
+          const name = self.readString(namePtr, nameLen);
+          const sys = self.namedParticles.get(name);
+          if (!sys) return -1;
+          const count = sys.config.burst != null ? sys.config.burst : 20;
+          const em = { x, y, continuous: false, emitAccum: 0, particles: [] };
+          for (let i = 0; i < count; i++) em.particles.push(self._spawnParticle(x, y, sys.config));
+          sys.emitters.push(em);
+          return 0;
+        },
+
+        _particles_start(namePtr, nameLen, x, y) {
+          const name = self.readString(namePtr, nameLen);
+          const sys = self.namedParticles.get(name);
+          if (!sys) return -1;
+          sys.emitters.push({ x, y, continuous: true, emitAccum: 0, particles: [] });
+          return 0;
+        },
+
+        _particles_stop(namePtr, nameLen) {
+          const name = self.readString(namePtr, nameLen);
+          const sys = self.namedParticles.get(name);
+          if (!sys) return -1;
+          sys.emitters.forEach(em => em.continuous = false);
+          return 0;
+        },
+
+        // ====================================================================
+        // CAMERA — follow, deadzone, bounds
+        // ====================================================================
+
+        _camera_set_follow(targetX, targetY, smoothing) {
+          self.cameraFollowX = targetX;
+          self.cameraFollowY = targetY;
+          self.cameraFollowSmoothing = smoothing;
+          return 0;
+        },
+
+        _camera_set_offset(offsetX, offsetY) {
+          self.cameraOffsetX = offsetX;
+          self.cameraOffsetY = offsetY;
+          return 0;
+        },
+
+        _camera_set_deadzone(w, h) {
+          self.cameraDeadzoneW = w;
+          self.cameraDeadzoneH = h;
+          return 0;
+        },
+
+        _camera_set_bounds(x, y, w, h) {
+          self.cameraBounds = { x, y, w, h };
+          return 0;
+        },
+
+        // ====================================================================
+        // EVENT HANDLER REGISTRATION
+        // ====================================================================
+        // The canvas DSL emits handler functions under fixed export names:
+        // _on_pointer_down / _on_pointer_move / _on_pointer_up / _on_key_down /
+        // _on_key_up / _on_exit / _on_pause / _on_resume. Registration here
+        // marks the canvas (or scene) as having a handler so the bridge knows
+        // to dispatch events to it.
+
+        _canvas_on_pointer_down(canvasId) {
+          self.pointerDownHandlers.set(canvasId, '_on_pointer_down');
+          return 0;
+        },
+
+        _canvas_on_pointer_move(canvasId) {
+          self.pointerMoveHandlers.set(canvasId, '_on_pointer_move');
+          return 0;
+        },
+
+        _canvas_on_pointer_up(canvasId) {
+          self.pointerUpHandlers.set(canvasId, '_on_pointer_up');
+          return 0;
+        },
+
+        _canvas_on_key_down(canvasId) {
+          self.keyDownHandlers.set(canvasId, '_on_key_down');
+          return 0;
+        },
+
+        _canvas_on_key_up(canvasId) {
+          self.keyUpHandlers.set(canvasId, '_on_key_up');
+          return 0;
+        },
+
+        _canvas_on_exit(canvasId) {
+          self.onExitHandlers.set(self.currentScene || 'default', '_on_exit');
+          return 0;
+        },
+
+        _canvas_on_pause(canvasId) {
+          self.onPauseHandlers.set(self.currentScene || 'default', '_on_pause');
+          return 0;
+        },
+
+        _canvas_on_resume(canvasId) {
+          self.onResumeHandlers.set(self.currentScene || 'default', '_on_resume');
+          return 0;
+        },
+
+        // ====================================================================
+        // FONT LOADING
+        // ====================================================================
+
+        _font_load(namePtr, nameLen, srcPtr, srcLen) {
+          const name = self.readString(namePtr, nameLen);
+          const src = self.readString(srcPtr, srcLen);
+          if (typeof document === 'undefined' || typeof FontFace === 'undefined') {
+            self.fontsLoaded.set(name, { src, loaded: false });
+            return 0;
+          }
+          const face = new FontFace(name, `url(${src})`);
+          self.fontsLoaded.set(name, { src, loaded: false, face });
+          face.load().then(loaded => {
+            document.fonts.add(loaded);
+            const entry = self.fontsLoaded.get(name);
+            if (entry) entry.loaded = true;
+          }).catch(err => console.error(`[CanvasBridge] Font "${name}" failed to load:`, err));
+          return 1;
+        },
+
+        // ====================================================================
+        // CUSTOM EASING (cubic bezier)
+        // ====================================================================
+
+        _custom_ease_register(namePtr, nameLen, x1, y1, x2, y2) {
+          const name = self.readString(namePtr, nameLen);
+          self.customEases.set(name, { x1, y1, x2, y2 });
+          return 0;
+        },
+
+        _ease_custom(namePtr, nameLen, t) {
+          const name = self.readString(namePtr, nameLen);
+          return self._evalCustomEase(name, t);
+        },
+
+        // ====================================================================
+        // NAMED SPRITE REGISTRATION (sheets keyed by user-given name)
+        // ====================================================================
+
+        _sprite_register_sheet(namePtr, nameLen, srcPtr, srcLen, frameWidth, frameHeight) {
+          const name = self.readString(namePtr, nameLen);
+          const src = self.readString(srcPtr, srcLen);
+          const img = new Image();
+          img.src = src;
+          const sheet = {
+            image: img,
+            frameWidth,
+            frameHeight,
+            loaded: false,
+            framesPerRow: 0,
+            totalFrames: 0,
+          };
+          self.namedSprites.set(name, sheet);
+          img.onload = () => {
+            sheet.loaded = true;
+            sheet.framesPerRow = Math.floor(img.width / frameWidth);
+            const rows = Math.floor(img.height / frameHeight);
+            sheet.totalFrames = sheet.framesPerRow * rows;
+          };
+          return 0;
+        },
+
+        _sprite_draw_flipped(canvasId, namePtr, nameLen, frameIndex, x, y, w, h, flipX, flipY) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const name = self.readString(namePtr, nameLen);
+          const sheet = self.namedSprites.get(name);
+          if (!sheet || !sheet.loaded) return -1;
+          const col = frameIndex % sheet.framesPerRow;
+          const row = Math.floor(frameIndex / sheet.framesPerRow);
+          const ctx = entry.ctx;
+          ctx.save();
+          const cx = x + w / 2, cy = y + h / 2;
+          ctx.translate(cx, cy);
+          ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+          ctx.drawImage(
+            sheet.image,
+            col * sheet.frameWidth, row * sheet.frameHeight, sheet.frameWidth, sheet.frameHeight,
+            -w / 2, -h / 2, w, h,
+          );
+          ctx.restore();
+          return 0;
+        },
+
+        _sprite_draw_tint(canvasId, namePtr, nameLen, frameIndex, x, y, w, h, tintPtr, tintLen, tintStrength) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const name = self.readString(namePtr, nameLen);
+          const sheet = self.namedSprites.get(name);
+          if (!sheet || !sheet.loaded) return -1;
+          const tint = self.readString(tintPtr, tintLen);
+          const col = frameIndex % sheet.framesPerRow;
+          const row = Math.floor(frameIndex / sheet.framesPerRow);
+          const ctx = entry.ctx;
+          ctx.drawImage(
+            sheet.image,
+            col * sheet.frameWidth, row * sheet.frameHeight, sheet.frameWidth, sheet.frameHeight,
+            x, y, w, h,
+          );
+          if (tintStrength > 0) {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, Math.min(1, tintStrength));
+            ctx.globalCompositeOperation = 'source-atop';
+            ctx.fillStyle = tint;
+            ctx.fillRect(x, y, w, h);
+            ctx.restore();
+          }
+          return 0;
+        },
+
+        _sprite_draw_state(canvasId, spritePtr, spriteLen, fsmPtr, fsmLen, x, y) {
+          const entry = self.canvases.get(canvasId);
+          if (!entry) return -1;
+          const spriteName = self.readString(spritePtr, spriteLen);
+          const fsmName = self.readString(fsmPtr, fsmLen);
+          const sheet = self.namedSprites.get(spriteName);
+          if (!sheet || !sheet.loaded) return -1;
+          const fsm = self.namedAnimStates.get(fsmName);
+          // Use the FSM's current state name to look up an animsprite clip
+          // with the same name. Renders the clip's current frame from sheet.
+          const clipName = fsm && fsm.current ? fsm.current : '';
+          const clip = self.namedAnimSprites.get(clipName);
+          const frameIndex = clip ? clip.current : 0;
+          const col = frameIndex % sheet.framesPerRow;
+          const row = Math.floor(frameIndex / sheet.framesPerRow);
+          entry.ctx.drawImage(
+            sheet.image,
+            col * sheet.frameWidth, row * sheet.frameHeight, sheet.frameWidth, sheet.frameHeight,
+            x, y, sheet.frameWidth, sheet.frameHeight,
+          );
+          return 0;
         },
 
         // ====================================================================
