@@ -4204,6 +4204,11 @@ functions:
 		// ambiguity.
 		integer total_files = source_files.length()
 
+		// __DIAG_TRACE__ marker: lets us confirm post-build (via `strings
+		// dist/app.wasm | grep __DIAG_TRACE__`) which branch this assemble
+		// call took. Remove after PAGE-COMPANION-NO-ROUTE-GENERATED is closed.
+		string trace_marker = "// __DIAG_TRACE__ total_files=" + total_files.toString() + " has_server=" + has_server_str + "\n"
+
 		// FRAME-UI-PAGE-RENDER-HOOK-STILL-NOOPS-ON-REAL-PROJECTS signature:
 		// real page companions were detected but routes were silently lost
 		// between detection and emission. Fail the build immediately so the
@@ -4227,7 +4232,7 @@ functions:
 		if start_body.length() > 0
 			diag_module = diag_module + "\nstart:\n" + start_body
 		diag_module = diag_module + "\nfunctions:\n\tstring _frame_ui_assemble_diagnostics()\n"
-		diag_module = diag_module + "\t\treturn \"frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
+		diag_module = diag_module + "\t\treturn \"__DIAG_TRACE__ start_body_len=" + start_body.length().toString() + " has_server=" + has_server_str + " total_files=" + total_files.toString() + " | frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
 
 		if not first_injected
 			injected_json = injected_json + ","
