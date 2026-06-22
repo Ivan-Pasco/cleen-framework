@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.data"
-version = "2.1.4"
+version = "2.1.5"
 description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
 author = "Clean Language Team"
 license = "MIT"
@@ -49,6 +49,15 @@ functions = [
   # Query and Execute - strings passed as (ptr, len) pairs at WASM level
   { name = "_db_query", params = ["string", "string"], returns = "string", description = "Execute SELECT query, returns JSON result with rows", expand_strings = true, hosts = ["server"] },
   { name = "_db_execute", params = ["string", "string"], returns = "i32", description = "Execute INSERT/UPDATE/DELETE, returns affected row count", expand_strings = true, hosts = ["server"] },
+
+  # Current Unix timestamp — needed by the ORM `now()` helper so projects that
+  # load frame.data without frame.server (data-only / job workers) still get
+  # a working timestamp source for created_at / updated_at columns and similar.
+  # Closes ORM-DSL-CODEGEN-FUNCTION-NOT-FOUND (603ad03b53df) for the now()-not-found
+  # half of the report. The bridge is shared with frame.server (same _time_now
+  # in clean-server) — both plugins declaring it is a duplicate signature, not
+  # a duplicate implementation.
+  { name = "_time_now", params = [], returns = "i64", description = "Current Unix timestamp in seconds since epoch.", hosts = ["all"] },
 
   # Transactions
   { name = "_db_begin", params = [], returns = "i32", description = "Begin a database transaction; returns 1 on success, 0 on error", hosts = ["server"] },
@@ -153,6 +162,13 @@ functions = [
   { name = "Model.cursor", signature = "Model.cursor:\n\twhere:\n\t\tcondition\n\tcursor:\n\t\tperPage 20\n\t\tafter \"\"\n\t\tby \"id\"", description = "Cursor-based paginated query returning CursorResult<Model> with items, nextCursor, hasPrev, count" },
   { name = "db.paginate", signature = "db.paginate(tableName, whereJson, page, perPage)", description = "Low-level offset pagination bridge; prefer Model.paginate: block", maps_to = "_db_paginate", params = ["string", "string", "integer", "integer"], returns = "string" },
   { name = "db.cursorPage", signature = "db.cursorPage(tableName, whereJson, perPage, after, byField)", description = "Low-level cursor pagination bridge; prefer Model.cursor: block", maps_to = "_db_cursor_page", params = ["string", "string", "integer", "string", "string"], returns = "string" },
+  # ORM `now()` helper — current Unix timestamp in seconds. Mirrors frame.server's
+  # declaration (same bridge, same signature) so projects that load frame.data
+  # without frame.server can still use now() for created_at / updated_at column
+  # defaults. Closes the now()-not-found half of ORM-DSL-CODEGEN-FUNCTION-NOT-FOUND
+  # (603ad03b53df).
+  { name = "time.now", signature = "time.now()", description = "Current Unix timestamp in seconds since epoch", maps_to = "_time_now", params = [], returns = "integer" },
+  { name = "now", signature = "now()", description = "Alias for time.now() — current Unix timestamp in seconds; the canonical default for created_at/updated_at columns in ORM models", maps_to = "_time_now", params = [], returns = "integer" },
   # Raw-INSERT helper — Clean wrapper emitted via __preamble (no maps_to). Provides
   # the working migration target requested by FRAME-DATA-NO-INSERT-RETURNING-ID-BRIDGE
   # for apps issuing raw db.query INSERTs. Appends ` RETURNING id` to the SQL if not
