@@ -243,22 +243,36 @@ functions:
 // ============================================================================
 
 functions:
-	// Strip leading and trailing spaces without using broken trim()
+	// Strip leading and trailing spaces without using broken trim().
+	// Original used `while s.length() > 0 and s.substring(0,1) == " "` plus
+	// `break` inside if. Both patterns hit known plugin-WASM bugs:
+	// e2b5be3967a5 (non-short-circuiting `and` reads OOB) and the nested
+	// `break` issue closed in 2.12.32 (find_unescaped_quote). Re-implemented
+	// with explicit keep-loop flags so substring runs only inside a verified
+	// bounds-check.
 	string strip_spaces(string s)
-		// Strip leading spaces
 		integer lead_count = 0
-		while s.length() > 0 and s.substring(0, 1) == " "
-			s = s.substring(1, s.length())
-			lead_count = lead_count + 1
-			if lead_count > 100
-				break
-		// Strip trailing spaces
+		boolean __strip_lead = true
+		while __strip_lead and s.length() > 0
+			string __lc = s.substring(0, 1)
+			if __lc != " "
+				__strip_lead = false
+			else
+				s = s.substring(1, s.length())
+				lead_count = lead_count + 1
+				if lead_count > 100
+					__strip_lead = false
 		integer trail_count = 0
-		while s.length() > 0 and s.substring(s.length() - 1, s.length()) == " "
-			s = s.substring(0, s.length() - 1)
-			trail_count = trail_count + 1
-			if trail_count > 100
-				break
+		boolean __strip_trail = true
+		while __strip_trail and s.length() > 0
+			string __tc = s.substring(s.length() - 1, s.length())
+			if __tc != " "
+				__strip_trail = false
+			else
+				s = s.substring(0, s.length() - 1)
+				trail_count = trail_count + 1
+				if trail_count > 100
+					__strip_trail = false
 		return s
 
 // ============================================================================
@@ -1623,12 +1637,19 @@ functions:
 			return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"\",\"after\":\"\",\"fallback\":\"\"}"
 		content_start = content_start + 1
 
-		// Determine the indentation level of the html: line
+		// Determine the indentation level of the html: line.
+		// `and` does not short-circuit (e2b5be3967a5) — guard the substring
+		// behind the bounds check explicitly via a __keep flag.
 		integer html_line_indent = 0
 		integer scan = html_pos - 1
-		while scan >= 0 and body.substring(scan, scan + 1) == "\t"
-			html_line_indent = html_line_indent + 1
-			scan = scan - 1
+		boolean __scan_html_indent = true
+		while __scan_html_indent and scan >= 0
+			string __sc_ch = body.substring(scan, scan + 1)
+			if __sc_ch != "\t"
+				__scan_html_indent = false
+			else
+				html_line_indent = html_line_indent + 1
+				scan = scan - 1
 
 		// Find end of html: block by scanning for next section header at same or lower indent
 		integer html_end = body.length()
@@ -1642,10 +1663,16 @@ functions:
 				nl = search_remaining.length()
 			string line = search_remaining.substring(line_start, nl)
 
-			// Count indent level
+			// Count indent level. `and` is non-short-circuiting (e2b5be3967a5);
+			// guard substring read with explicit flag.
 			integer indent = 0
-			while indent < line.length() and line.substring(indent, indent + 1) == "\t"
-				indent = indent + 1
+			boolean __count_indent_a = true
+			while __count_indent_a and indent < line.length()
+				string __ci_a_ch = line.substring(indent, indent + 1)
+				if __ci_a_ch != "\t"
+					__count_indent_a = false
+				else
+					indent = indent + 1
 
 			// Check if this is a section header at same or lower indent
 			if indent <= html_line_indent and line.trim().length() > 0
@@ -1685,9 +1712,15 @@ functions:
 					// Find end of fallback block (next section at same or lower indent level)
 					integer fallback_line_indent = 0
 					integer fscan = fallback_pos - 1
-					while fscan >= 0 and body.substring(fscan, fscan + 1) == "\t"
-						fallback_line_indent = fallback_line_indent + 1
-						fscan = fscan - 1
+					// Non-short-circuiting `and` (e2b5be3967a5).
+					boolean __scan_fb_indent = true
+					while __scan_fb_indent and fscan >= 0
+						string __sfb_ch = body.substring(fscan, fscan + 1)
+						if __sfb_ch != "\t"
+							__scan_fb_indent = false
+						else
+							fallback_line_indent = fallback_line_indent + 1
+							fscan = fscan - 1
 					string fallback_sections = ",inputs:,state:,functions:,computed:,events:,html:,"
 					string fsearch = body.substring(fallback_content_start, body.length())
 					integer fline_start = 0
@@ -1697,8 +1730,14 @@ functions:
 							fnl = fsearch.length()
 						string fline = fsearch.substring(fline_start, fnl)
 						integer findent = 0
-						while findent < fline.length() and fline.substring(findent, findent + 1) == "\t"
-							findent = findent + 1
+						// Non-short-circuiting `and` (e2b5be3967a5).
+						boolean __count_findent = true
+						while __count_findent and findent < fline.length()
+							string __fi_ch = fline.substring(findent, findent + 1)
+							if __fi_ch != "\t"
+								__count_findent = false
+							else
+								findent = findent + 1
 						if findent <= fallback_line_indent and fline.trim().length() > 0
 							string ftrimmed = fline.trim()
 							if ftrimmed.endsWith(":")
@@ -1734,8 +1773,14 @@ functions:
 
 			if line.trim().length() > 0
 				integer indent = 0
-				while indent < line.length() and line.substring(indent, indent + 1) == "\t"
-					indent = indent + 1
+				// Non-short-circuiting `and` (e2b5be3967a5).
+				boolean __count_indent_b = true
+				while __count_indent_b and indent < line.length()
+					string __ci_b_ch = line.substring(indent, indent + 1)
+					if __ci_b_ch != "\t"
+						__count_indent_b = false
+					else
+						indent = indent + 1
 				if indent < min_indent
 					min_indent = indent
 
@@ -2555,9 +2600,19 @@ functions:
 
 		integer value_start = pos + pattern.length()
 
-		// Skip whitespace
-		while value_start < json.length() and json.substring(value_start, value_start + 1) == " "
-			value_start = value_start + 1
+		// Skip whitespace.
+		// Cannot rely on `and` short-circuiting — Clean Language lowers
+		// `and` to i32.and (bitwise) and the right-hand `substring(N, N+1)`
+		// is evaluated even when value_start has reached json.length(), at
+		// which point the substring intrinsic does an OOB load.
+		// FRAME-UI-EXTRACT-JSON-FIELD-NON-SHORT-CIRCUIT-AND-OOB (e2b5be3967a5).
+		boolean __skip_ws = true
+		while __skip_ws and value_start < json.length()
+			string __ws_ch = json.substring(value_start, value_start + 1)
+			if __ws_ch != " "
+				__skip_ws = false
+			else
+				value_start = value_start + 1
 
 		if value_start >= json.length()
 			return ""
@@ -2657,9 +2712,14 @@ functions:
 		// Parse comma-separated quoted strings
 		string remaining = content
 		while remaining.length() > 0
-			// Skip whitespace
-			while remaining.length() > 0 and remaining.substring(0, 1) == " "
-				remaining = remaining.substring(1, remaining.length())
+			// Skip whitespace. Non-short-circuiting `and` (e2b5be3967a5).
+			boolean __skip_ws_jstr = true
+			while __skip_ws_jstr and remaining.length() > 0
+				string __ws_jstr_ch = remaining.substring(0, 1)
+				if __ws_jstr_ch != " "
+					__skip_ws_jstr = false
+				else
+					remaining = remaining.substring(1, remaining.length())
 
 			if remaining.length() == 0
 				break
@@ -3952,10 +4012,24 @@ functions:
 		m = m + "\t\t\telse\n"
 		m = m + "\t\t\t\tif __ch == \":\"\n"
 		m = m + "\t\t\t\t\tinteger __j = __i + 1\n"
-		m = m + "\t\t\t\t\twhile __j < __n and __input.substring(__j, __j + 1) == \" \"\n"
-		m = m + "\t\t\t\t\t\t__j = __j + 1\n"
+		// e2b5be3967a5: generated code must not assume short-circuit `and`.
+		// Convert `while X < N and substring(X, X+1) == c` into the explicit
+		// keep-flag form so the substring runs only after the bounds check.
+		m = m + "\t\t\t\t\tboolean __ws_keep = true\n"
+		m = m + "\t\t\t\t\twhile __ws_keep and __j < __n\n"
+		m = m + "\t\t\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
+		m = m + "\t\t\t\t\t\tif __ws_ch != \" \"\n"
+		m = m + "\t\t\t\t\t\t\t__ws_keep = false\n"
+		m = m + "\t\t\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t\t\t__j = __j + 1\n"
 		m = m + "\t\t\t\t\tboolean __did = false\n"
-		m = m + "\t\t\t\t\tif __j + 1 < __n and __input.substring(__j, __j + 1) == \"\\\"\"\n"
+		// Same guard for the if-check: separate the bounds test from the read.
+		m = m + "\t\t\t\t\tboolean __qt_match = false\n"
+		m = m + "\t\t\t\t\tif __j + 1 < __n\n"
+		m = m + "\t\t\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
+		m = m + "\t\t\t\t\t\tif __qt_ch == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t\t\t__qt_match = true\n"
+		m = m + "\t\t\t\t\tif __qt_match\n"
 		m = m + "\t\t\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
 		m = m + "\t\t\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
 		m = m + "\t\t\t\t\t\t\tinteger __end = __j + 1\n"
