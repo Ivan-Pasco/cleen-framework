@@ -4197,6 +4197,13 @@ functions:
 		// second condition that does fire on real projects.
 		string start_body = ""
 
+		// Cache list lengths in locals — chained method calls inside boolean
+		// conditions previously parsed in a way that prevented the second
+		// guard below from firing in v2.12.27 (start_body stayed empty even
+		// when source_files.length()==0). Using integer locals removes the
+		// ambiguity.
+		integer total_files = source_files.length()
+
 		// FRAME-UI-PAGE-RENDER-HOOK-STILL-NOOPS-ON-REAL-PROJECTS signature:
 		// real page companions were detected but routes were silently lost
 		// between detection and emission. Fail the build immediately so the
@@ -4213,7 +4220,7 @@ functions:
 		// silently produces an HTTP server with no routes. API-only projects
 		// (.cln files in app/server/api/) keep total_files > 0, so this guard
 		// does not fire for them.
-		if has_server and source_files.length() == 0
+		if has_server and total_files == 0
 			start_body = start_body + "\terror(\"frame.ui: frame.server is loaded but the compiler discovered 0 source files in any plugin-owned folder. If you have page companions, put them in app/ui/web/pages/ (see frame.ui plugin.toml [paths].owns). If you have endpoints, put them in app/server/api/ (see frame.server plugin.toml [paths].owns). Files outside these folders are invisible to the plugin assemble pipeline and produce no routes (PAGE-COMPANION-NO-ROUTE-GENERATED, fp b5f210c3c09d).\")\n"
 
 		string diag_module = diag_lines
