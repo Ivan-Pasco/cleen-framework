@@ -4147,6 +4147,146 @@ functions:
 			injected_json = injected_json + "{\"virtual_path\":\"__page_routes_generated.cln\",\"content\":\"" + escape_json_string(module_content) + "\"}"
 			first_injected = false
 
+		// Emit bare-name `<tag>_render` wrappers for every component registered
+		// during expansion. Closes CUSTOM-COMPONENT-TAGS-NOT-RENDERED-IN-PAGES
+		// (52ccc8d5ef22). clean-server's _ui_render_page implements the
+		// component_tag_render callback (purpose declared on the bridge entry
+		// in plugin.toml) by scanning the WASM exports table for the matching
+		// `{tagname}_render` export — the function must therefore be top-level
+		// AND survive BFS tree-shaking. We satisfy both: emit the wrappers in
+		// a virtual module whose start: block calls _ui_register_component for
+		// each tag (server-side tag→class mapping) and then invokes each
+		// render() once so the wrappers stay reachable from `_start`. The
+		// startup render call is cheap (no I/O, no DB) and its result is
+		// discarded; the only purpose is to anchor the export in the BFS root
+		// set so the server's exports_matching discovery succeeds.
+		if has_server
+			// Scan source_files for `component: tag="…"` declarations and
+			// rebuild a tag,class table. assemble's input_json does NOT
+			// include the build_state snapshot in this compiler version
+			// (only expand_block-style lifecycle slots receive it), and
+			// _build_state_get inside assemble returns the empty string
+			// because the keystore is scoped to expand_block. Parsing
+			// directly out of the user source is the workaround that keeps
+			// the wrapper-emission self-contained.
+			string comp_table = ""
+			integer cti = 0
+			while cti < source_files.length()
+				string ctf = source_files[cti]
+				string ct_content = extract_json_field(ctf, "content")
+				integer ct_search = 0
+				integer ct_safety = 0
+				while ct_safety < 100 and ct_search < ct_content.length()
+					ct_safety = ct_safety + 1
+					integer ct_pos = ct_content.indexOf("component: tag=\"", ct_search)
+					if ct_pos == -1
+						ct_search = ct_content.length()
+					else
+						integer ct_qstart = ct_pos + 16
+						integer ct_qend = ct_content.indexOf("\"", ct_qstart)
+						if ct_qend == -1
+							ct_search = ct_content.length()
+						else
+							string ct_tag = ct_content.substring(ct_qstart, ct_qend)
+							if ct_tag.length() > 0
+								// Dedupe: source_files often contains the same
+								// component file multiple times across the lifecycle.
+								string ct_dupe_probe = ct_tag + "|"
+								if comp_table.indexOf(ct_dupe_probe) == -1
+									// Extract the html: body literal from this
+									// component source. Recording the rendered
+									// HTML as a string instead of trying to call
+									// the class's render() method at startup
+									// sidesteps a client_only_build codegen gap
+									// (render() symbol not in function map on
+									// that path) and keeps the wrapper a pure
+									// no-arg string-returning function — exactly
+									// the shape clean-server's exports_matching
+									// discovery expects.
+									string ct_html_body = ""
+									integer ct_html_pos = ct_content.indexOf("html:", ct_qend)
+									if ct_html_pos != -1
+										integer ct_html_nl = ct_content.indexOf("\n", ct_html_pos)
+										if ct_html_nl != -1
+											integer ct_html_start = ct_html_nl + 1
+											integer ct_html_end = ct_content.length()
+											integer ct_scan = ct_html_start
+											integer ct_html_safety = 0
+											while ct_html_safety < 500 and ct_scan < ct_content.length()
+												ct_html_safety = ct_html_safety + 1
+												integer ct_next_nl = ct_content.indexOf("\n", ct_scan)
+												string ct_line = ""
+												integer ct_new_scan = 0
+												if ct_next_nl == -1
+													ct_line = ct_content.substring(ct_scan, ct_content.length())
+													ct_new_scan = ct_content.length()
+												else
+													ct_line = ct_content.substring(ct_scan, ct_next_nl)
+													ct_new_scan = ct_next_nl + 1
+												// Indented (tab) line stays inside html:; anything else terminates.
+												if ct_line.trim().length() > 0 and not ct_line.startsWith("\t\t")
+													ct_html_end = ct_scan
+													ct_html_safety = 999
+												else
+													ct_scan = ct_new_scan
+											ct_html_body = ct_content.substring(ct_html_start, ct_html_end).trim()
+									// Pipe-delimit so the dupe-probe regexp
+									// doesn't false-positive on a tag substring.
+									string ct_record = ct_tag + "|" + ct_html_body
+									if comp_table.length() == 0
+										comp_table = ct_record
+									else
+										comp_table = comp_table + "\x1e" + ct_record
+							ct_search = ct_qend + 1
+				cti = cti + 1
+			if comp_table.length() > 0
+				string comp_render_fns = ""
+				string comp_anchor_calls = ""
+				string remaining_records = comp_table
+				integer cr_safety = 0
+				while cr_safety < 200 and remaining_records.length() > 0
+					cr_safety = cr_safety + 1
+					// Records are separated by the ASCII Record-Separator
+					// control character (\x1e) so that html bodies containing
+					// `;` or `,` don't collide with the delimiter.
+					integer semi = remaining_records.indexOf("\x1e")
+					string record = ""
+					if semi == -1
+						record = remaining_records
+						remaining_records = ""
+					else
+						record = remaining_records.substring(0, semi)
+						remaining_records = remaining_records.substring(semi + 1, remaining_records.length())
+					integer c1 = record.indexOf("|")
+					if c1 != -1
+						string c_tag = record.substring(0, c1)
+						string c_html_body = record.substring(c1 + 1, record.length())
+						string c_export = c_tag.replace("-", "_") + "_render"
+						string c_class = tag_to_class_name(c_tag)
+						// Escape the html body for a Clean string literal:
+						// backslash + double-quote + newline are the three
+						// metacharacters that would break the literal.
+						string c_escaped = c_html_body.replace("\\", "\\\\")
+						c_escaped = c_escaped.replace("\"", "\\\"")
+						c_escaped = c_escaped.replace("\n", "\\n")
+						comp_render_fns = comp_render_fns + "\tstring " + c_export + "()\n"
+						comp_render_fns = comp_render_fns + "\t\treturn \"" + c_escaped + "\"\n"
+						// Anchor: invoke the render export from start: so BFS
+						// keeps it reachable. The server discovers exports via
+						// the build-manifest.json callbacks list and matches
+						// the `{tagname}_render` pattern at startup — no
+						// runtime registration call is required (and the only
+						// available one, _ui_register_component, is an SSR
+						// no-op stub with a signature that doesn't match
+						// what frame.ui historically declared).
+						comp_anchor_calls = comp_anchor_calls + "\tstring __anchor_" + c_tag.replace("-", "_") + " = " + c_export + "()\n"
+				if comp_render_fns.length() > 0
+					string comp_module = "// Auto-generated component-tag renderers\nstart:\n" + comp_anchor_calls + "\nfunctions:\n" + comp_render_fns
+					if not first_injected
+						injected_json = injected_json + ","
+					injected_json = injected_json + "{\"virtual_path\":\"__ui_component_renders.cln\",\"content\":\"" + escape_json_string(comp_module) + "\"}"
+					first_injected = false
+
 		// Emit the hydration manifest module whenever screens were found, even
 		// if has_frame_server is false — pure-client builds may still want to
 		// query the manifest for selective hydration.
