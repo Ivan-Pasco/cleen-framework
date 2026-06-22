@@ -135,11 +135,14 @@ functions:
 						//   1. _ui_update_element populates the SSR-emitted wrapper
 						//      (main.cln:938-940) with client-rendered HTML so that
 						//      onMount() sees its DOM in place per the lifecycle spec.
-						//   2. instance_<tag>.onMount() runs user lifecycle code.
+						//   2. onMount(instance_<tag>) runs user lifecycle code.
+						// events: handlers are emitted as bare-name top-level WASM thunks
+						// (standalone functions) by compiler 0.30.273+, so onMount must
+						// be called as onMount(instance), not instance.onMount().
 						// Tag has hyphens; replace with underscores for the Clean identifier.
 						string instance_var = "instance_" + rec_tag.replace("-", "_")
 						statements = statements + "_ui_update_element(\"[data-island='" + rec_tag + "']\", " + instance_var + ".render())\n"
-						statements = statements + instance_var + ".onMount()\n"
+						statements = statements + "onMount(" + instance_var + ")\n"
 
 		// JSON-escape the statements payload for safe transport.
 		string escaped = statements.replace("\\", "\\\\")
@@ -2519,16 +2522,22 @@ functions:
 			integer quote_pos = text.indexOf("\"", current_pos)
 			if quote_pos == -1
 				return -1
-			// Check if this quote is escaped by counting preceding backslashes
+			// Check if this quote is escaped by counting preceding backslashes.
+			// Use an explicit loop-exit flag instead of `break` — a `break`
+			// inside the inner `if/else` of a nested `while` was failing to
+			// terminate the inner loop in compiled WASM, causing
+			// extract_json_field to hang on the first non-trivial component
+			// body (bug bb8271b6e516).
 			integer backslash_count = 0
 			integer check_pos = quote_pos - 1
-			while check_pos >= start_pos
+			boolean keep_counting = true
+			while keep_counting and check_pos >= start_pos
 				string ch = text.substring(check_pos, check_pos + 1)
 				if ch.charCodeAt(0) == 92
 					backslash_count = backslash_count + 1
 					check_pos = check_pos - 1
 				else
-					break
+					keep_counting = false
 			// If even number of backslashes, the quote is not escaped
 			if backslash_count % 2 == 0
 				return quote_pos
