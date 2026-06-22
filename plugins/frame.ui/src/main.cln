@@ -4198,6 +4198,19 @@ functions:
 			diag_module = diag_module + "\nstart:\n"
 			diag_module = diag_module + "\terror(\"frame.ui: " + pm_str + " page companion(s) detected but 0 render exports emitted (FRAME-UI-PAGE-RENDER-HOOK-STILL-NOOPS-ON-REAL-PROJECTS-2-12-46, fp 111a1653d150). Likely cumulative memory pressure in assemble — see plugins/frame.ui/src/main.cln for the diagnostic counters.\")\n"
 
+		// Detect PAGE-COMPANION-NO-ROUTE-GENERATED (fp b5f210c3c09d):
+		// frame.server is loaded but the compiler handed assemble zero files,
+		// meaning no .cln files were discovered in any plugin-owned folder.
+		// The common cause is pages placed outside `app/ui/web/pages/` (e.g.
+		// `app/pages/`); the compiler only walks folders declared in plugin
+		// [paths].owns, so misplaced files are invisible to route generation
+		// and the build silently produces an HTTP server with no routes.
+		// API-only projects (.cln files in app/server/api/) keep total_files
+		// above zero, so this guard does not fire for them.
+		if has_server and source_files.length() == 0
+			diag_module = diag_module + "\nstart:\n"
+			diag_module = diag_module + "\terror(\"frame.ui: frame.server is loaded but the compiler discovered 0 source files in any plugin-owned folder. If you have page companions, put them in app/ui/web/pages/ (see frame.ui plugin.toml [paths].owns). If you have endpoints, put them in app/server/api/ (see frame.server plugin.toml [paths].owns). Files outside these folders are invisible to the plugin assemble pipeline and produce no routes (PAGE-COMPANION-NO-ROUTE-GENERATED, fp b5f210c3c09d).\")\n"
+
 		if not first_injected
 			injected_json = injected_json + ","
 		injected_json = injected_json + "{\"virtual_path\":\"__frame_ui_diagnostics.cln\",\"content\":\"" + escape_json_string(diag_module) + "\"}"
