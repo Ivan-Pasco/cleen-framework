@@ -98,11 +98,10 @@ component: tag="confirm-modal"
 // </body>
 // </html>
 
-// Server endpoint
+// Server endpoint — [auth] inline modifier requires a valid session before
+// the handler runs.
 endpoints:
-	DELETE "/api/users/:id":
-		guard:
-			require auth
+	DELETE "/api/users/:id" [auth]:
 		integer id = param("id").toInteger()
 		User.delete:
 			where:

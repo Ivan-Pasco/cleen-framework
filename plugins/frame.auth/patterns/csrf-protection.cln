@@ -10,10 +10,9 @@ plugins:
 	frame.auth
 
 endpoints:
-	// GET: render the form — generate a CSRF token and embed it
-	GET "/settings":
-		guard:
-			require auth
+	// GET: render the form — generate a CSRF token and embed it.
+	// The inline [auth] modifier requires a valid session before the handler runs.
+	GET "/settings" [auth]:
 		string csrf_token = auth.csrf.generate()
 		// Embed csrf_token as a hidden input in the rendered HTML form
 		return htmlResponse("
@@ -25,9 +24,7 @@ endpoints:
 		")
 
 	// POST: validate the CSRF token before processing the mutation
-	POST "/settings":
-		guard:
-			require auth
+	POST "/settings" [auth]:
 		string csrf_token = req.body_field("_csrf")
 
 		// Reject immediately if token is missing or invalid
@@ -46,9 +43,7 @@ endpoints:
 		return jsonResponse("{\"message\": \"Settings saved\", \"display_name\": \"" + display_name + "\"}")
 
 	// DELETE with CSRF — token passed as a header for JS-initiated requests
-	DELETE "/account":
-		guard:
-			require auth
+	DELETE "/account" [auth]:
 		// For JS fetch requests, send CSRF token in X-CSRF-Token header
 		string csrf_token = req.header("X-CSRF-Token")
 		if csrf_token.length() == 0

@@ -47,10 +47,9 @@ endpoints:
 			return unauthorized(jsonResponse("{\"code\": \"INVALID_CREDENTIALS\", \"message\": \"Invalid email or password\"}"))
 		return jsonResponse("{\"message\": \"Logged in\"}")
 
-	// All tenant-scoped routes read tenant_id from session, not from the request
-	GET "/projects":
-		guard:
-			require auth
+	// All tenant-scoped routes read tenant_id from session, not from the request.
+	// The inline [auth] modifier requires a valid session before the handler runs.
+	GET "/projects" [auth]:
 		// auth.tenant.getId() reads from the session — cannot be forged
 		string tid = auth.tenant.getId()
 		string projects = Project.find:
@@ -58,9 +57,7 @@ endpoints:
 				tenant_id == tid
 		return jsonResponse("{\"projects\": " + projects + "}")
 
-	POST "/projects":
-		guard:
-			require auth
+	POST "/projects" [auth]:
 		string tid = auth.tenant.getId()
 		string name = req.body_field("name")
 		if name.length() == 0
@@ -72,9 +69,7 @@ endpoints:
 			name = name
 		return jsonResponse("{\"id\": " + id + ", \"name\": \"" + name + "\"}")
 
-	GET "/projects/:id":
-		guard:
-			require auth
+	GET "/projects/:id" [auth]:
 		string tid = auth.tenant.getId()
 		integer pid = param("id").toInteger()
 

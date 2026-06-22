@@ -200,18 +200,18 @@ block_folder_rules = [
 ]
 
 [ai]
-description = "Authentication and authorization plugin. Use the auth: block for configuration, guard: for route protection, and auth.* functions for session/JWT/role checks. Never implement your own password hashing or token signing."
+description = "Authentication and authorization plugin. Use the auth: block for configuration, the inline [role] route modifier (e.g. GET \"/path\" [admin]:) for route protection, and auth.* functions for session/JWT/role checks. Never implement your own password hashing or token signing."
 constraints = [
   "Always use auth.hashPassword / auth.verifyPassword — never implement your own hashing",
   "Never sign JWTs manually — use auth.jwt.sign with the secret read via env.get(\"VAR_NAME\")",
-  "Role checks belong in guard: sub-blocks, not inline if statements in handlers",
+  "Role checks belong on the route header as an inline [role] modifier (e.g. GET \"/path\" [admin]:), not inline if statements in handlers",
   "Read tenant_id from auth.tenant.getId() — never from user-supplied body or query params",
 ]
 
 [[ai.patterns]]
 name = "role-based-access"
 use_when = "different user types (admin, editor, viewer) have different permissions to routes or features"
-anti_pattern = "checking user.role == 'admin' inline inside handler logic — declare roles in the auth: roles: block and use guard: sub-blocks so the check is enforced before the handler runs"
+anti_pattern = "checking user.role == 'admin' inline inside handler logic — declare roles in the auth: roles: block and apply the inline [admin] modifier on the route header (e.g. GET \"/path\" [admin]:) so the check is enforced before the handler runs"
 example = "patterns/role-based-access.cln"
 
 [[ai.patterns]]

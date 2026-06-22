@@ -375,7 +375,7 @@ block_folder_rules = [
 ]
 
 [ai]
-description = "HTTP server plugin. Define all routes inside endpoints: blocks. Use guard: for auth checks. Use response helpers (json, html, redirect) — never call _http_respond or _http_route directly."
+description = "HTTP server plugin. Define all routes inside endpoints: blocks. Apply auth checks with the inline [role] route modifier (e.g. GET \"/path\" [admin]:) — guard: sub-blocks are not supported. Use response helpers (json, html, redirect) — never call _http_respond or _http_route directly."
 constraints = [
   "All routes must be declared inside endpoints: blocks — never call _http_route() directly",
   "Protected routes must use [role] inline guard on the route header line — e.g. GET \"/path\" [admin] :",

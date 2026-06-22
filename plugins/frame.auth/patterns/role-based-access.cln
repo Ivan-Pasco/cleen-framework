@@ -3,7 +3,8 @@
 // Anti-pattern: DON'T check roles inline: if user.role == "admin" { ... }
 //   Inline checks scatter auth logic across handlers, are easy to forget, and
 //   can't be audited in one place. Declare roles in auth: roles: block and
-//   use guard: sub-blocks — the check is enforced before the handler runs.
+//   apply them as inline [role,role] modifiers on each route header — the
+//   compiler enforces the check before the handler body runs.
 
 plugins:
 	frame.server
@@ -24,43 +25,34 @@ roles:
 		permissions = ["reports.read"]
 
 endpoints:
-	// Public — no guard needed
+	// Public — no role modifier needed
 	GET "/":
 		return jsonResponse("{\"message\": \"Welcome\"}")
 
-	// Any authenticated user
-	GET "/profile":
-		guard:
-			require auth
+	// Any authenticated user — the [auth] modifier requires a session
+	GET "/profile" [auth]:
 		string user = auth.getCurrentUser()
 		return jsonResponse("{\"user_id\": " + user.id + ", \"role\": \"" + user.role + "\"}")
 
-	// Editor or admin
-	GET "/reports":
-		guard:
-			role in ["admin", "editor"]
+	// Editor or admin — listed roles are an OR check
+	GET "/reports" [admin, editor]:
 		return jsonResponse("{\"reports\": []}")
 
-	// Admin only — by role name
-	GET "/admin/users":
-		guard:
-			role in ["admin"]
+	// Admin only — single role
+	GET "/admin/users" [admin]:
 		return jsonResponse("{\"users\": []}")
 
-	// Permission-based check — more granular than role-based
-	DELETE "/admin/users/:id":
-		guard:
-			role in ["admin"]
+	// Permission-based check — more granular than role-based.
+	// The [admin] modifier filters to admins; auth.can() additionally checks
+	// for the specific permission within the admin role.
+	DELETE "/admin/users/:id" [admin]:
 		string id = param("id")
-		// auth.can checks if the current user's role has the "users.delete" permission
 		if auth.can("users.delete") == 0
 			return unauthorized("Insufficient permissions")
 		return jsonResponse("{\"deleted\": \"" + id + "\"}")
 
 	// Settings — only admin with specific permission
-	PUT "/settings":
-		guard:
-			role in ["admin"]
+	PUT "/settings" [admin]:
 		if auth.can("settings.write") == 0
 			return unauthorized("settings.write permission required")
 		return jsonResponse("{\"updated\": true}")
