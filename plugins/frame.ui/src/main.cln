@@ -11,13 +11,10 @@
 // lives at clean-language-compiler/src/plugins/wasm_adapter.rs and is
 // fully verified end-to-end since compiler 0.30.261 (commit c83b4440).
 
-external:
-	// Returns i32 status; callers may capture into integer and discard.
-	// Earlier we declared this `void` with expand_strings=true in plugin.toml;
-	// cln 0.30.349 surfaced the import-type mismatch — fix is to declare
-	// returns=i32 with no expand_strings (host stub is (i32,i32)->i32).
-	integer _build_state_set(string key, string value)
-	string _build_state_get(string key)
+// _build_state_set and _build_state_get bridges are resolved from
+// plugin.toml's [bridge] declarations — no `external:` block needed.
+// Aligned to foundation/platform-architecture/function-registry.toml:
+// _build_state_set returns void with LP-string params.
 
 // ============================================================================
 // MAIN ENTRY POINTS
@@ -1994,11 +1991,10 @@ functions:
 		if tag != ""
 			string components_state = _build_state_get("frame.ui:components")
 			string entry = tag + "," + name + "," + client
-			integer __bs_status = 0
 			if components_state == ""
-				__bs_status = _build_state_set("frame.ui:components", entry)
+				_build_state_set("frame.ui:components", entry)
 			else
-				__bs_status = _build_state_set("frame.ui:components", components_state + ";" + entry)
+				_build_state_set("frame.ui:components", components_state + ";" + entry)
 
 		string result = "// __frame_ui_expanded__\n"
 		result = result + "class " + name + "\n"

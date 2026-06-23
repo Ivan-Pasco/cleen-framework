@@ -98,7 +98,7 @@ functions:
 		assert(result.contains("handleErr()"))
 
 	void test_load_url_interpolation()
-		string result = expand_block("load", "{}", "posts from \"/api/posts/{query.cat}\"")
+		string result = expand_block("load", "{}", "posts from \"/api/posts/\{query.cat\}\"")
 		assert(result.contains("query.cat"))
 		assert(result.contains("\"/api/posts/\""))
 
@@ -123,7 +123,7 @@ functions:
 		assert(compile_url("/api/users") == "\"/api/users\"")
 
 	void test_compile_url_interpolated()
-		string result = compile_url("/api/posts/{query.cat}")
+		string result = compile_url("/api/posts/\{query.cat\}")
 		assert(result.contains("query.cat"))
 		assert(result.contains("\"/api/posts/\""))
 
@@ -317,14 +317,14 @@ functions:
 
 	void test_send_url_interpolated()
 		// {taskId} placeholder resolves to the module-level variable taskId
-		string result = expand_block("send", "deleteTask delete \"/api/tasks/{taskId}\"", "")
+		string result = expand_block("send", "deleteTask delete \"/api/tasks/\{taskId\}\"", "")
 		assert(result.contains("taskId"))
 		// Must not contain the literal placeholder text
-		assert(result.contains("{taskId}") == false)
+		assert(result.contains("\{taskId\}") == false)
 
 	void test_parse_send_name()
 		assert(parse_send_name("deleteUser delete \"/api/users\"") == "deleteUser")
-		assert(parse_send_name("archivePost patch \"/api/posts/{id}/archive\"") == "archivePost")
+		assert(parse_send_name("archivePost patch \"/api/posts/\{id\}/archive\"") == "archivePost")
 		// Missing method/url — still parses first word
 		assert(parse_send_name("deleteUser") == "")
 		assert(parse_send_name("") == "")
@@ -338,7 +338,7 @@ functions:
 
 	void test_parse_send_url()
 		assert(parse_send_url("deleteUser delete \"/api/users\"") == "/api/users")
-		assert(parse_send_url("deleteTask delete \"/api/tasks/{taskId}\"") == "/api/tasks/{taskId}")
+		assert(parse_send_url("deleteTask delete \"/api/tasks/\{taskId\}\"") == "/api/tasks/\{taskId\}")
 		// No URL present
 		assert(parse_send_url("deleteUser delete") == "")
 
@@ -349,15 +349,15 @@ functions:
 
 	void test_compile_send_url_interpolated()
 		// {varName} becomes a bare variable reference concatenated in
-		string result = compile_send_url("/api/tasks/{taskId}")
+		string result = compile_send_url("/api/tasks/\{taskId\}")
 		assert(result.contains("taskId"))
 		assert(result.contains("\"/api/tasks/\""))
 		// The literal placeholder must not appear in the output
-		assert(result.contains("{taskId}") == false)
+		assert(result.contains("\{taskId\}") == false)
 
 	void test_compile_send_url_multiple_placeholders()
 		// Multiple placeholders: /api/{org}/tasks/{taskId}
-		string result = compile_send_url("/api/{org}/tasks/{taskId}")
+		string result = compile_send_url("/api/\{org\}/tasks/\{taskId\}")
 		assert(result.contains("org"))
 		assert(result.contains("taskId"))
 		assert(result.contains("\"/api/\""))

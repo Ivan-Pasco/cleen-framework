@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.client"
-version = "1.2.2"
+version = "1.2.3"
 description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, SSE feeds, and declarative blocks (load:, form:, send:)"
 author = "Clean Language Team"
 license = "MIT"
@@ -211,4 +211,4 @@ required_blocks = []
 block_folder_rules = []
 
 [build]
-built_with_compiler = "0.30.333"
+built_with_compiler = "0.30.351"

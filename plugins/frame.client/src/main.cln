@@ -532,7 +532,7 @@ functions:
 		string url = parse_send_url(attributes)
 
 		if name.length() == 0 or method.length() == 0 or url.length() == 0
-			return "// send: requires name method url (e.g. send: deleteUser delete \"/api/users/{id}\")"
+			return "// send: requires name method url (e.g. send: deleteUser delete \"/api/users/\{id\}\")"
 
 		string emit_success = ""
 		string emit_error = ""
