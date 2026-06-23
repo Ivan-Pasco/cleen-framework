@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.10"
+version = "2.7.11"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -40,6 +40,16 @@ get_keywords = "get_keywords"
 # CLIENT_BUILD_ENTRY_LEAK at codegen time. Tag every server-only bridge.
 [bridge]
 functions = [
+  # Compiler-owned build_state keystore — used to coordinate routes:-block
+  # guard records with frame.ui's assemble. expand_routes writes
+  # `pattern|role,role,…;…` records to "frame.server:guards"; frame.ui reads
+  # them back to wrap matching page-route render handlers with role checks.
+  # Closes ROUTES-PATH-GUARDS-NOT-ENFORCED (78c8f54f5b53). NO expand_strings;
+  # host stub for _set is (i32, i32) -> i32, for _get is (i32) -> i32 (the
+  # i32 return is a pointer to a length-prefixed Clean string).
+  { name = "_build_state_set", params = ["string", "string"], returns = "i32", description = "Persist a key-value pair into the compiler-owned build_state keystore.", hosts = ["all"] },
+  { name = "_build_state_get", params = ["string"], returns = "string", description = "Read a key from the compiler-owned build_state keystore. Returns the empty string when the key is absent.", hosts = ["all"] },
+
   # HTTP Server - Lifecycle (server-only; binds a socket)
   { name = "_http_listen", params = ["i32"], returns = "i32", description = "Start HTTP server on specified port", hosts = ["server"] },
 
@@ -420,4 +430,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.333"
+built_with_compiler = "0.30.349"

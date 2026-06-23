@@ -12,7 +12,11 @@
 // fully verified end-to-end since compiler 0.30.261 (commit c83b4440).
 
 external:
-	void _build_state_set(string key, string value)
+	// Returns i32 status; callers may capture into integer and discard.
+	// Earlier we declared this `void` with expand_strings=true in plugin.toml;
+	// cln 0.30.349 surfaced the import-type mismatch — fix is to declare
+	// returns=i32 with no expand_strings (host stub is (i32,i32)->i32).
+	integer _build_state_set(string key, string value)
 	string _build_state_get(string key)
 
 // ============================================================================
@@ -1990,10 +1994,11 @@ functions:
 		if tag != ""
 			string components_state = _build_state_get("frame.ui:components")
 			string entry = tag + "," + name + "," + client
+			integer __bs_status = 0
 			if components_state == ""
-				_build_state_set("frame.ui:components", entry)
+				__bs_status = _build_state_set("frame.ui:components", entry)
 			else
-				_build_state_set("frame.ui:components", components_state + ";" + entry)
+				__bs_status = _build_state_set("frame.ui:components", components_state + ";" + entry)
 
 		string result = "// __frame_ui_expanded__\n"
 		result = result + "class " + name + "\n"
@@ -4075,6 +4080,23 @@ functions:
 
 		list<string> source_files = parse_source_files(input_json)
 
+		// Build the routes:-block guard table by scanning source_files for
+		// routes: declarations. assemble's input_json does NOT include the
+		// build_state snapshot in cln 0.30.349 (writes from expand_block do
+		// not propagate to assemble's input_json), so reading what
+		// frame.server.expand_routes wrote via _build_state_set is not an
+		// option — we have to re-parse the user source here. Each record
+		// becomes `pattern|role,role,…` joined by `;`. Used below in the
+		// page-route emit loop to wrap matching handlers with role-check
+		// prologues. Closes ROUTES-PATH-GUARDS-NOT-ENFORCED (78c8f54f5b53).
+		string __routes_guard_table = ""
+		integer __gsi = 0
+		while __gsi < source_files.length()
+			string __gsf = source_files[__gsi]
+			string __gsc = extract_json_field(__gsf, "content")
+			__routes_guard_table = scan_routes_guards(__gsc, __routes_guard_table)
+			__gsi = __gsi + 1
+
 		string transformed_json = ""
 		string route_fns = ""
 		string route_registrations = ""
@@ -4200,6 +4222,12 @@ functions:
 							string url = derive_url_path(file_path)
 							string html_path = derive_html_path(file_path)
 							route_fns = route_fns + "\tstring " + module_name + "_render()\n"
+							// Routes:-block declarative guards run first — a 401 here
+							// short-circuits BEFORE the user's guard() or load() runs.
+							// Closes ROUTES-PATH-GUARDS-NOT-ENFORCED (78c8f54f5b53).
+							string __routes_guard_roles = lookup_routes_guard(url, __routes_guard_table)
+							if __routes_guard_roles.length() > 0
+								route_fns = route_fns + emit_routes_guard_check(__routes_guard_roles)
 							if has_guard
 								route_fns = route_fns + "\t\tany __g = " + module_name + "_guard(null)\n"
 								route_fns = route_fns + "\t\tif __g != null\n"
@@ -4573,4 +4601,180 @@ functions:
 		if rel.endsWith(".cln")
 			rel = rel.substring(0, rel.length() - 4) + ".html"
 		return "app/ui/web/pages/" + rel
+
+	// ============================================================================
+	// ROUTES-BLOCK GUARD ENFORCEMENT
+	// ============================================================================
+	// User declares `routes:` blocks with `guard: "/path-pattern" [role,role]`
+	// directives — typically in `app/ui/web/routes.cln`. That file IS included
+	// in source_files passed to assemble (the pages folder allowlist covers
+	// it). We scan the body of every `routes:` block and accumulate guard
+	// records into a `pattern|role,role,…` table joined by `;`. The
+	// page-route emit loop then uses lookup_routes_guard to inject a
+	// role-check prologue at the top of every render handler whose URL
+	// matches a pattern.
+	//
+	// Why not read from build_state: frame.server.expand_routes also writes
+	// the same records via _build_state_set, but cln 0.30.349 does not
+	// propagate expand_block writes into assemble's input_json (verified
+	// empirically — extract_json_field(input_json, "build_state") returns ""
+	// even after expand_routes ran successfully). Scanning the user source
+	// directly keeps the fix self-contained.
+	//
+	// Closes ROUTES-PATH-GUARDS-NOT-ENFORCED (78c8f54f5b53).
+
+	// Extract `guard: "/pattern" [role,role]` records from `routes:` blocks
+	// in `content` and append each to `accumulator` (joined by `;`).
+	string scan_routes_guards(string content, string accumulator)
+		string result = accumulator
+		integer search_from = 0
+		integer outer_safety = 0
+		while outer_safety < 50 and search_from < content.length()
+			outer_safety = outer_safety + 1
+			integer rp = content.indexOf("routes:", search_from)
+			if rp == -1
+				return result
+			// Confirm routes: starts at line head (offset 0 or after \n).
+			boolean at_line_head = false
+			if rp == 0
+				at_line_head = true
+			else
+				string prev = content.substring(rp - 1, rp)
+				if prev == "\n"
+					at_line_head = true
+			if not at_line_head
+				search_from = rp + 7
+			else
+				// Walk lines from after the routes: line until indent drops
+				// below the block (line not starting with tab).
+				integer body_start = content.indexOf("\n", rp)
+				if body_start == -1
+					return result
+				body_start = body_start + 1
+				integer cursor = body_start
+				integer inner_safety = 0
+				boolean keep_inner = true
+				while keep_inner and inner_safety < 200 and cursor < content.length()
+					inner_safety = inner_safety + 1
+					integer nl = content.indexOf("\n", cursor)
+					string line = ""
+					integer next_cursor = 0
+					if nl == -1
+						line = content.substring(cursor, content.length())
+						next_cursor = content.length()
+					else
+						line = content.substring(cursor, nl)
+						next_cursor = nl + 1
+					cursor = next_cursor
+					if line.trim().length() == 0
+						inner_safety = inner_safety + 0
+					else
+						if not line.startsWith("\t")
+							keep_inner = false
+						else
+							string ltrim = line.trim()
+							if ltrim.startsWith("guard:")
+								string g_after = ltrim.substring(6, ltrim.length()).trim()
+								integer gq1 = g_after.indexOf("\"")
+								if gq1 != -1
+									integer gq2 = g_after.indexOf("\"", gq1 + 1)
+									if gq2 != -1
+										string g_pattern = g_after.substring(gq1 + 1, gq2)
+										string g_rest = g_after.substring(gq2 + 1, g_after.length()).trim()
+										integer g_ob = g_rest.indexOf("[")
+										integer g_cb = g_rest.indexOf("]")
+										if g_ob != -1 and g_cb != -1
+											string g_roles = g_rest.substring(g_ob + 1, g_cb).replace(" ", "")
+											if g_pattern.length() > 0 and g_roles.length() > 0
+												string g_record = g_pattern + "|" + g_roles
+												if result.length() == 0
+													result = g_record
+												else
+													result = result + ";" + g_record
+				search_from = cursor
+		return result
+
+	boolean path_matches_pattern(string path, string pattern)
+		string rp = path
+		if rp.startsWith("/")
+			rp = rp.substring(1, rp.length())
+		string rpat = pattern
+		if rpat.startsWith("/")
+			rpat = rpat.substring(1, rpat.length())
+
+		integer safety = 0
+		while safety < 50
+			safety = safety + 1
+			if rpat.length() == 0
+				return rp.length() == 0
+			integer p_slash = rpat.indexOf("/")
+			string p_seg = ""
+			if p_slash == -1
+				p_seg = rpat
+				rpat = ""
+			else
+				p_seg = rpat.substring(0, p_slash)
+				rpat = rpat.substring(p_slash + 1, rpat.length())
+			if p_seg == "**"
+				return true
+			if rp.length() == 0
+				return false
+			integer t_slash = rp.indexOf("/")
+			string t_seg = ""
+			if t_slash == -1
+				t_seg = rp
+				rp = ""
+			else
+				t_seg = rp.substring(0, t_slash)
+				rp = rp.substring(t_slash + 1, rp.length())
+			if p_seg == "*"
+				safety = safety + 0
+			else
+				if p_seg != t_seg
+					return false
+		return false
+
+	string lookup_routes_guard(string url, string table)
+		if table.length() == 0
+			return ""
+		string remaining = table
+		integer safety = 0
+		while safety < 100 and remaining.length() > 0
+			safety = safety + 1
+			integer semi = remaining.indexOf(";")
+			string record = ""
+			if semi == -1
+				record = remaining
+				remaining = ""
+			else
+				record = remaining.substring(0, semi)
+				remaining = remaining.substring(semi + 1, remaining.length())
+			integer pipe = record.indexOf("|")
+			if pipe != -1
+				string g_pattern = record.substring(0, pipe)
+				string g_roles = record.substring(pipe + 1, record.length())
+				if path_matches_pattern(url, g_pattern)
+					return g_roles
+		return ""
+
+	string emit_routes_guard_check(string roles)
+		string result = "\t\tboolean __routes_auth_ok = false\n"
+		string mr = roles
+		integer safety = 0
+		while safety < 20 and mr.length() > 0
+			safety = safety + 1
+			integer comma = mr.indexOf(",")
+			string role = ""
+			if comma == -1
+				role = mr.trim()
+				mr = ""
+			else
+				role = mr.substring(0, comma).trim()
+				mr = mr.substring(comma + 1, mr.length())
+			if role.length() > 0
+				result = result + "\t\tif _auth_require_role(\"" + role + "\") == 1\n"
+				result = result + "\t\t\t__routes_auth_ok = true\n"
+		result = result + "\t\tif not __routes_auth_ok\n"
+		result = result + "\t\t\treturn unauthorized()\n"
+		return result
 

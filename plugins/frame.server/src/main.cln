@@ -1137,6 +1137,32 @@ functions:
 			if trimmed.startsWith("error:")
 				continue
 			if trimmed.startsWith("guard:")
+				// guard: "/pattern" [role,role]
+				// Parse and write to build_state["frame.server:guards"]; frame.ui's
+				// assemble reads them back and wraps matching page-route render
+				// handlers with the role check. Closes ROUTES-PATH-GUARDS-NOT-
+				// ENFORCED (78c8f54f5b53). expand_routes emits no code itself for
+				// guards — the wrapper lives in frame.ui's auto-generated
+				// __page_routes_generated.cln virtual module.
+				string g_after = trimmed.substring(6, trimmed.length()).trim()
+				integer gq1 = g_after.indexOf("\"")
+				if gq1 != -1
+					integer gq2 = g_after.indexOf("\"", gq1 + 1)
+					if gq2 != -1
+						string g_pattern = g_after.substring(gq1 + 1, gq2)
+						string g_rest = g_after.substring(gq2 + 1, g_after.length()).trim()
+						integer g_ob = g_rest.indexOf("[")
+						integer g_cb = g_rest.indexOf("]")
+						if g_ob != -1 and g_cb != -1
+							string g_roles = g_rest.substring(g_ob + 1, g_cb).replace(" ", "")
+							if g_pattern.length() > 0 and g_roles.length() > 0
+								string g_record = g_pattern + "|" + g_roles
+								string g_existing = _build_state_get("frame.server:guards")
+								integer g_status = 0
+								if g_existing.length() == 0
+									g_status = _build_state_set("frame.server:guards", g_record)
+								else
+									g_status = _build_state_set("frame.server:guards", g_existing + ";" + g_record)
 				continue
 
 			if trimmed.startsWith("redirect:")
