@@ -4361,12 +4361,20 @@ functions:
 						string c_html_body = record.substring(c1 + 1, record.length())
 						string c_export = c_tag.replace("-", "_") + "_render"
 						string c_class = tag_to_class_name(c_tag)
-						// Escape the html body for a Clean string literal:
-						// backslash + double-quote + newline are the three
-						// metacharacters that would break the literal.
+						// Escape the html body for a Clean string literal.
+						// Backslash and double-quote must come first; otherwise
+						// the curly-brace escapes are themselves escaped.
+						// `{` and `}` are escaped because Clean treats `{expr}`
+						// inside string literals as runtime interpolation
+						// (grammar.ebnf §1.6 string_interpolation). The html body
+						// here is a template literal that the SSR layer
+						// substitutes at runtime, not Clean source — so the
+						// braces must be passed through verbatim.
 						string c_escaped = c_html_body.replace("\\", "\\\\")
 						c_escaped = c_escaped.replace("\"", "\\\"")
 						c_escaped = c_escaped.replace("\n", "\\n")
+						c_escaped = c_escaped.replace("{", "\\{")
+						c_escaped = c_escaped.replace("}", "\\}")
 						comp_render_fns = comp_render_fns + "\tstring " + c_export + "()\n"
 						comp_render_fns = comp_render_fns + "\t\treturn \"" + c_escaped + "\"\n"
 						// Anchor: invoke the render export from start: so BFS
