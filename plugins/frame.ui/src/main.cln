@@ -136,14 +136,12 @@ functions:
 						//   1. _ui_update_element populates the SSR-emitted wrapper
 						//      (main.cln:938-940) with client-rendered HTML so that
 						//      onMount() sees its DOM in place per the lifecycle spec.
-						//   2. onMount(instance_<tag>) runs user lifecycle code.
-						// events: handlers are emitted as bare-name top-level WASM thunks
-						// (standalone functions) by compiler 0.30.273+, so onMount must
-						// be called as onMount(instance), not instance.onMount().
+						//   2. instance.onMount() runs user lifecycle code as a
+						//      method call on the per-tag instance singleton.
 						// Tag has hyphens; replace with underscores for the Clean identifier.
 						string instance_var = "instance_" + rec_tag.replace("-", "_")
 						statements = statements + "_ui_update_element(\"[data-island='" + rec_tag + "']\", " + instance_var + ".render())\n"
-						statements = statements + "onMount(" + instance_var + ")\n"
+						statements = statements + instance_var + ".onMount()\n"
 
 		// JSON-escape the statements payload for safe transport.
 		string escaped = statements.replace("\\", "\\\\")
