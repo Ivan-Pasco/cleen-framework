@@ -6,7 +6,10 @@ author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.31.0"
+# Tracks the 0.30.x release line, which is currently the latest published
+# compiler (see foundation/management/cross-component-prompts/compiler-v0.32-version-track-correction.md).
+# Raise to "0.32.0" once that release ships.
+min_compiler_version = "0.30.357"
 
 [exports]
 expand = "expand_block"

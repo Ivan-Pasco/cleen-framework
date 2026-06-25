@@ -16,6 +16,28 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 ## Pending — In Scope (clean-framework)
 
+### Cross-Component — Compiler v0.32.0 Release Coordination 🟡 MEDIUM-HIGH
+
+- ⬜ **Raise frame.mcp pin to "0.32.0" once compiler v0.32.0 ships** — `plugins/frame.mcp/plugin.toml` currently pins `min_compiler_version = "0.30.357"` as a temporary fix. The honest target is `0.32.0` per the version-track correction documented in `../foundation/management/cross-component-prompts/compiler-v0.32-version-track-correction.md`. Required steps once compiler ships v0.32.0:
+  1. Lift `min_compiler_version` in `frame.mcp/plugin.toml` from `"0.30.357"` to `"0.32.0"`.
+  2. Audit the other plugins (`frame.client`, `frame.ui`, `frame.canvas`) — at least 10 framework patterns use `events:` blocks (introduced post-v0.31.0). Consider declaring `min_compiler_version = "0.32.0"` on those plugins too so consumers get a clear error if they downgrade.
+  3. Rebuild all plugins against `cln 0.32.0` via the existing build loop.
+  4. Bump framework `Cargo.toml` from `2.12.69` to `2.13.0` (minor — new compiler-feature dependency).
+  5. Run COMITA. Tag should be `v2.13.0`, not a patch.
+
+### Browser Host Bridge Parity 🟡 MEDIUM-HIGH
+
+- ⬜ **60 missing stdlib bridge functions in browser host JS** — `check_host_parity.py --host browser --strict` reports 60 functions declared `hosts = ["all"]` in `foundation/platform-architecture/function-registry.toml` that no browser-side JS runtime implements. Three runtime files share the gap: `plugins/frame.canvas/runtime/loader.js`, `plugins/frame.ui/runtime/loader.js`, `plugins/frame.client/runtime/bridge.js`. Families:
+  - `array_*` (13): push, pop, get, set, slice, map, filter, find, reduce, sort, reverse, concat, contains
+  - `list.*` (10): add, allocate, clear, contains, get, isEmpty, push, remove, set
+  - `math_*` (16): abs_i32, max_i32, min_i32, fmod, hypot, expm1, log1p, is_finite, is_infinite, is_nan, ln10, ln2, log10e, log2e, sqrt1_2, sqrt2, log
+  - `string_*` (17): length, contains, equals, equals_ignore_case, starts_with, ends_with, char_at, char_code_at, from_char_code, index_of, last_index_of, join, pad_start, pad_end, replace_first, reverse, is_empty, is_blank
+  - Misc (4): float_to_string_fixed, http_get_response_header, print_debug, print_error
+
+  Pragmatic fix: add all 60 to `frame.canvas/runtime/loader.js` in `createStdlibImports()`. Most are one-liners (`array_push: (h, v) => …`, `math_log: Math.log`).
+
+- ⬜ **(Follow-up)** Extract a shared `clean-stdlib.js` consumed by all three browser runtimes — eliminates the 3-way duplication of the existing 87 stdlib functions in `frame.canvas/runtime/loader.js`. Larger refactor; do only when one of the three runtimes diverges in a way that bites.
+
 ### Test Infrastructure 🟡 MEDIUM-HIGH
 
 - ✅ ~~**Plugin tests cannot resolve plugin functions**~~ — Fixed 2026-06-04: `scripts/test-plugins.sh` now concatenates `src/main.cln` + a generated `assert()` helper + the test's `functions:` block before invoking `cln check`. Compilation-pass parity is the guard; 3/4 plugin test suites (auth, data, server) compile cleanly.
