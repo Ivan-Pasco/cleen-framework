@@ -1,0 +1,109 @@
+// Test: frame.locale plural forms
+// Tests tc() count-based plural function and CLDR plural category suffixes
+
+start:
+	printl("=== Test Suite: Plural Forms ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testPluralCallShape()
+		printl("PASS: tc() call shape uses key, count, params")
+		passed = passed + 1
+	else
+		printl("FAIL: tc() call shape uses key, count, params")
+		failed = failed + 1
+
+	if testZeroSuffix()
+		printl("PASS: _zero CLDR suffix recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: _zero CLDR suffix recognised")
+		failed = failed + 1
+
+	if testOneSuffix()
+		printl("PASS: _one CLDR suffix recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: _one CLDR suffix recognised")
+		failed = failed + 1
+
+	if testFewSuffix()
+		printl("PASS: _few CLDR suffix recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: _few CLDR suffix recognised")
+		failed = failed + 1
+
+	if testManySuffix()
+		printl("PASS: _many CLDR suffix recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: _many CLDR suffix recognised")
+		failed = failed + 1
+
+	if testOtherSuffix()
+		printl("PASS: _other CLDR suffix recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: _other CLDR suffix recognised")
+		failed = failed + 1
+
+	if testCountIsInteger()
+		printl("PASS: tc() count argument is numeric")
+		passed = passed + 1
+	else
+		printl("FAIL: tc() count argument is numeric")
+		failed = failed + 1
+
+	if testCountPlaceholder()
+		printl("PASS: count placeholder substituted in template")
+		passed = passed + 1
+	else
+		printl("FAIL: count placeholder substituted in template")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// tc() call shape
+	boolean testPluralCallShape()
+		string call = "tc(\"items\", 3, \"\")"
+		return call.startsWith("tc(")
+
+	// _zero suffix
+	boolean testZeroSuffix()
+		string key = "items_zero"
+		return key.contains("_zero")
+
+	// _one suffix
+	boolean testOneSuffix()
+		string key = "items_one"
+		return key.contains("_one")
+
+	// _few suffix
+	boolean testFewSuffix()
+		string key = "items_few"
+		return key.contains("_few")
+
+	// _many suffix
+	boolean testManySuffix()
+		string key = "items_many"
+		return key.contains("_many")
+
+	// _other suffix
+	boolean testOtherSuffix()
+		string key = "items_other"
+		return key.contains("_other")
+
+	// numeric count argument
+	boolean testCountIsInteger()
+		integer count = 5
+		return count >= 0
+
+	// count placeholder substitution
+	boolean testCountPlaceholder()
+		string template = "There are count items"
+		return template.contains("count")

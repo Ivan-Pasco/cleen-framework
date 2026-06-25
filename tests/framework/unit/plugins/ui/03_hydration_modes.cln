@@ -1,42 +1,6 @@
 // Test: frame.ui hydration strategies
 // Tests that hydration modes are correctly handled
 
-functions:
-	// Test default SSR (no client hydration)
-	boolean testDefaultSsr()
-		string component = "component Static:"
-		return component.indexOf("client=") == -1
-
-	// Test client hydration on
-	boolean testClientHydrationOn()
-		string component = "component Interactive(client=\"on\"):"
-		return component.contains("client=\"on\"")
-
-	// Test client hydration visible (lazy)
-	boolean testClientHydrationVisible()
-		string component = "component LazyLoad(client=\"visible\"):"
-		return component.contains("client=\"visible\"")
-
-	// Test client hydration idle
-	boolean testClientHydrationIdle()
-		string component = "component DeferredLoad(client=\"idle\"):"
-		return component.contains("client=\"idle\"")
-
-	// Test client only (no SSR)
-	boolean testClientOnly()
-		string component = "component ClientOnlyMap(client=\"only\"):"
-		return component.contains("client=\"only\"")
-
-	// Test hydration off (static)
-	boolean testHydrationOff()
-		string component = "component PureStatic(client=\"off\"):"
-		return component.contains("client=\"off\"")
-
-	// Test island architecture
-	boolean testIslandArchitecture()
-		string island = "island:\n\tcomponent Counter(client=\"on\"):"
-		return island.contains("island:")
-
 start:
 	printl("=== Test Suite: Hydration Modes ===")
 	printl("")
@@ -95,3 +59,39 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test default SSR (no client hydration)
+	boolean testDefaultSsr()
+		string component = "component Static:"
+		return component.indexOf("client=") == -1
+
+	// Test client hydration on
+	boolean testClientHydrationOn()
+		string component = "component Interactive(client=\"on\"):"
+		return component.contains("client=\"on\"")
+
+	// Test client hydration visible (lazy)
+	boolean testClientHydrationVisible()
+		string component = "component LazyLoad(client=\"visible\"):"
+		return component.contains("client=\"visible\"")
+
+	// Test client hydration idle
+	boolean testClientHydrationIdle()
+		string component = "component DeferredLoad(client=\"idle\"):"
+		return component.contains("client=\"idle\"")
+
+	// Test client only (no SSR)
+	boolean testClientOnly()
+		string component = "component ClientOnlyMap(client=\"only\"):"
+		return component.contains("client=\"only\"")
+
+	// Test hydration off (static)
+	boolean testHydrationOff()
+		string component = "component PureStatic(client=\"off\"):"
+		return component.contains("client=\"off\"")
+
+	// Test island architecture
+	boolean testIslandArchitecture()
+		string island = "island:\n\tcomponent Counter(client=\"on\"):"
+		return island.contains("island:")
+

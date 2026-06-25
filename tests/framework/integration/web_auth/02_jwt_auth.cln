@@ -1,41 +1,6 @@
 // Integration Test: JWT authentication flow
 // Tests complete JWT auth workflow
 
-functions:
-	// Test login generates token
-	boolean testLoginGeneratesToken()
-		string endpoint = "POST /auth/login"
-		string response = "token in response"
-		return response.contains("token")
-
-	// Test token in auth header
-	boolean testTokenInHeader()
-		string header = "Authorization: Bearer token123"
-		return header.contains("Bearer")
-
-	// Test token verification
-	boolean testTokenVerification()
-		string verifyCall = "Auth.verifyToken(token)"
-		return verifyCall.contains("verifyToken")
-
-	// Test expired token rejected
-	boolean testExpiredTokenRejected()
-		string scenario = "Expired token sent to protected route"
-		string errorCode = "TOKEN_EXPIRED"
-		return errorCode == "TOKEN_EXPIRED"
-
-	// Test token refresh flow
-	boolean testTokenRefreshFlow()
-		string endpoint = "POST /auth/refresh"
-		string refreshToken = "refresh_token"
-		return refreshToken.contains("refresh")
-
-	// Test logout invalidates token
-	boolean testLogoutInvalidatesToken()
-		string endpoint = "POST /auth/logout"
-		string action = "invalidate token"
-		return action.contains("invalidate")
-
 start:
 	printl("=== Integration Test: JWT Auth Flow ===")
 	printl("")
@@ -87,3 +52,38 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test login generates token
+	boolean testLoginGeneratesToken()
+		string endpoint = "POST /auth/login"
+		string response = "token in response"
+		return response.contains("token")
+
+	// Test token in auth header
+	boolean testTokenInHeader()
+		string header = "Authorization: Bearer token123"
+		return header.contains("Bearer")
+
+	// Test token verification
+	boolean testTokenVerification()
+		string verifyCall = "Auth.verifyToken(token)"
+		return verifyCall.contains("verifyToken")
+
+	// Test expired token rejected
+	boolean testExpiredTokenRejected()
+		string scenario = "Expired token sent to protected route"
+		string errorCode = "TOKEN_EXPIRED"
+		return errorCode == "TOKEN_EXPIRED"
+
+	// Test token refresh flow
+	boolean testTokenRefreshFlow()
+		string endpoint = "POST /auth/refresh"
+		string refreshToken = "refresh_token"
+		return refreshToken.contains("refresh")
+
+	// Test logout invalidates token
+	boolean testLogoutInvalidatesToken()
+		string endpoint = "POST /auth/logout"
+		string action = "invalidate token"
+		return action.contains("invalidate")
+

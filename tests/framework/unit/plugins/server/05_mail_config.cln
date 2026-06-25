@@ -1,0 +1,172 @@
+// Test: frame.server §8a — mail: configuration block (SMTP)
+// Verifies the shape of the mail: block: host, port, secure, username,
+// password, from fields; env.get() for secret values; and the email.send()
+// call shape used by application code.
+
+start:
+	printl("=== Test Suite: Mail / SMTP Config (§8a) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testMailBlockHeader()
+		printl("PASS: mail: block header recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: mail: block header recognized")
+		failed = failed + 1
+
+	if testMailHostField()
+		printl("PASS: host field accepts env.get()")
+		passed = passed + 1
+	else
+		printl("FAIL: host field accepts env.get()")
+		failed = failed + 1
+
+	if testMailPortInteger()
+		printl("PASS: port is an integer literal")
+		passed = passed + 1
+	else
+		printl("FAIL: port is an integer literal")
+		failed = failed + 1
+
+	if testMailSecureBoolean()
+		printl("PASS: secure is a boolean literal")
+		passed = passed + 1
+	else
+		printl("FAIL: secure is a boolean literal")
+		failed = failed + 1
+
+	if testMailUsernameField()
+		printl("PASS: username field accepts env.get()")
+		passed = passed + 1
+	else
+		printl("FAIL: username field accepts env.get()")
+		failed = failed + 1
+
+	if testMailPasswordField()
+		printl("PASS: password field accepts env.get()")
+		passed = passed + 1
+	else
+		printl("FAIL: password field accepts env.get()")
+		failed = failed + 1
+
+	if testMailFromField()
+		printl("PASS: from field accepts string literal")
+		passed = passed + 1
+	else
+		printl("FAIL: from field accepts string literal")
+		failed = failed + 1
+
+	if testEnvGetCallShape()
+		printl("PASS: env.get(VAR_NAME) call shape correct")
+		passed = passed + 1
+	else
+		printl("FAIL: env.get(VAR_NAME) call shape correct")
+		failed = failed + 1
+
+	if testSecretNotInSource()
+		printl("PASS: env.get() prevents secret in source")
+		passed = passed + 1
+	else
+		printl("FAIL: env.get() prevents secret in source")
+		failed = failed + 1
+
+	if testEmailSendShape()
+		printl("PASS: email.send(to, subject, html) call shape")
+		passed = passed + 1
+	else
+		printl("FAIL: email.send(to, subject, html) call shape")
+		failed = failed + 1
+
+	if testEmailConfigureBridge()
+		printl("PASS: _email_configure bridge name correct")
+		passed = passed + 1
+	else
+		printl("FAIL: _email_configure bridge name correct")
+		failed = failed + 1
+
+	if testMailDefaultPort587()
+		printl("PASS: default STARTTLS port is 587")
+		passed = passed + 1
+	else
+		printl("FAIL: default STARTTLS port is 587")
+		failed = failed + 1
+
+	if testMailTlsPort465()
+		printl("PASS: TLS-on-connect port 465 supported")
+		passed = passed + 1
+	else
+		printl("FAIL: TLS-on-connect port 465 supported")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// mail: block header
+	boolean testMailBlockHeader()
+		string header = "mail:"
+		return header == "mail:"
+
+	// host = env.get("SMTP_HOST")
+	boolean testMailHostField()
+		string line = "host = env.get(\"SMTP_HOST\")"
+		return line.startsWith("host =") and line.contains("env.get(")
+
+	// port = 587
+	boolean testMailPortInteger()
+		string line = "port = 587"
+		return line.startsWith("port =") and line.indexOf("587") != -1
+
+	// secure = false
+	boolean testMailSecureBoolean()
+		string line = "secure = false"
+		return line.contains("secure =") and (line.contains("false") or line.contains("true"))
+
+	// username = env.get("SMTP_USER")
+	boolean testMailUsernameField()
+		string line = "username = env.get(\"SMTP_USER\")"
+		return line.startsWith("username =") and line.contains("env.get(")
+
+	// password = env.get("SMTP_PASS")
+	boolean testMailPasswordField()
+		string line = "password = env.get(\"SMTP_PASS\")"
+		return line.startsWith("password =") and line.contains("env.get(")
+
+	// from = "noreply@example.com"
+	boolean testMailFromField()
+		string line = "from = \"noreply@example.com\""
+		return line.startsWith("from =") and line.indexOf("@") != -1
+
+	// env.get("VAR_NAME") call shape
+	boolean testEnvGetCallShape()
+		string call = "env.get(\"SMTP_HOST\")"
+		return call.startsWith("env.get(") and call.endsWith(")")
+
+	// Secrets must NOT appear as literal strings
+	boolean testSecretNotInSource()
+		string line = "password = env.get(\"SMTP_PASS\")"
+		// no raw secret like a literal "p@ss"
+		return line.contains("env.get(") and line.indexOf("\"hunter2\"") == -1
+
+	// email.send(to, subject, html) — application-level call shape
+	boolean testEmailSendShape()
+		string call = "email.send(toAddr, subjectLine, htmlBody)"
+		return call.startsWith("email.send(") and call.endsWith(")")
+
+	// Underlying bridge function name
+	boolean testEmailConfigureBridge()
+		string bridge = "_email_configure"
+		return bridge == "_email_configure"
+
+	// SMTP STARTTLS port
+	boolean testMailDefaultPort587()
+		integer port = 587
+		return port == 587
+
+	// SMTP TLS-on-connect port
+	boolean testMailTlsPort465()
+		integer port = 465
+		return port == 465

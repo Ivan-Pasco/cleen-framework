@@ -1,43 +1,6 @@
 // Integration Test: Protected routes with authentication
 // Tests that protected routes work correctly with auth
 
-functions:
-	// Test protected route blocks authentication
-	boolean testProtectedRouteBlocksUnauth()
-		string scenario = "Unauthenticated user hits protected route"
-		integer expectedStatus = 401
-		return expectedStatus == 401
-
-	// Test protected route allows authenticated
-	boolean testProtectedRouteAllowsAuth()
-		string scenario = "Authenticated user hits protected route"
-		integer expectedStatus = 200
-		return expectedStatus == 200
-
-	// Test guard function integration
-	boolean testGuardIntegration()
-		string guard = "guard: isAuthenticated()"
-		return guard.contains("isAuthenticated")
-
-	// Test role guard blocks wrong role
-	boolean testRoleGuardBlocksWrongRole()
-		string scenario = "User with 'user' role hits admin route"
-		integer expectedStatus = 403
-		return expectedStatus == 403
-
-	// Test role guard allows correct role
-	boolean testRoleGuardAllowsCorrectRole()
-		string scenario = "User with 'admin' role hits admin route"
-		integer expectedStatus = 200
-		return expectedStatus == 200
-
-	// Test multiple guards
-	boolean testMultipleGuards()
-		string guards = "guard: isAuthenticated() and hasRole(admin)"
-		boolean hasAuth = guards.contains("isAuthenticated")
-		boolean hasRole = guards.contains("hasRole")
-		return hasAuth and hasRole
-
 start:
 	printl("=== Integration Test: Protected Routes ===")
 	printl("")
@@ -89,3 +52,40 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test protected route blocks authentication
+	boolean testProtectedRouteBlocksUnauth()
+		string scenario = "Unauthenticated user hits protected route"
+		integer expectedStatus = 401
+		return expectedStatus == 401
+
+	// Test protected route allows authenticated
+	boolean testProtectedRouteAllowsAuth()
+		string scenario = "Authenticated user hits protected route"
+		integer expectedStatus = 200
+		return expectedStatus == 200
+
+	// Test guard function integration
+	boolean testGuardIntegration()
+		string guard = "guard: isAuthenticated()"
+		return guard.contains("isAuthenticated")
+
+	// Test role guard blocks wrong role
+	boolean testRoleGuardBlocksWrongRole()
+		string scenario = "User with 'user' role hits admin route"
+		integer expectedStatus = 403
+		return expectedStatus == 403
+
+	// Test role guard allows correct role
+	boolean testRoleGuardAllowsCorrectRole()
+		string scenario = "User with 'admin' role hits admin route"
+		integer expectedStatus = 200
+		return expectedStatus == 200
+
+	// Test multiple guards
+	boolean testMultipleGuards()
+		string guards = "guard: isAuthenticated() and hasRole(admin)"
+		boolean hasAuth = guards.contains("isAuthenticated")
+		boolean hasRole = guards.contains("hasRole")
+		return hasAuth and hasRole
+

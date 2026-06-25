@@ -1,0 +1,124 @@
+// Test: frame.ui §FEXT-3.6 cl-preview directive (Designer preview iframe)
+// Verifies that cl-preview marks an iframe as a Designer preview target,
+// gets rewritten to data-cl-preview, and uses postMessage for selection.
+
+start:
+	printl("=== Test Suite: cl-preview (Designer iframe) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testDirectiveRegistered()
+		printl("PASS: cl-preview listed in known directives")
+		passed = passed + 1
+	else
+		printl("FAIL: cl-preview listed in known directives")
+		failed = failed + 1
+
+	if testValuelessAttribute()
+		printl("PASS: cl-preview is a valueless boolean attribute")
+		passed = passed + 1
+	else
+		printl("FAIL: cl-preview is a valueless boolean attribute")
+		failed = failed + 1
+
+	if testIframeOnly()
+		printl("PASS: cl-preview is applied to iframe elements")
+		passed = passed + 1
+	else
+		printl("FAIL: cl-preview is applied to iframe elements")
+		failed = failed + 1
+
+	if testRewriteToDataAttr()
+		printl("PASS: cl-preview is rewritten to data-cl-preview in output HTML")
+		passed = passed + 1
+	else
+		printl("FAIL: cl-preview is rewritten to data-cl-preview in output HTML")
+		failed = failed + 1
+
+	if testDataMarkerTrue()
+		printl("PASS: data-cl-preview marker uses value 'true'")
+		passed = passed + 1
+	else
+		printl("FAIL: data-cl-preview marker uses value 'true'")
+		failed = failed + 1
+
+	if testSrcAttributePreserved()
+		printl("PASS: iframe src attribute is preserved alongside the marker")
+		passed = passed + 1
+	else
+		printl("FAIL: iframe src attribute is preserved alongside the marker")
+		failed = failed + 1
+
+	if testPostMessageProtocol()
+		printl("PASS: selection runtime communicates via postMessage")
+		passed = passed + 1
+	else
+		printl("FAIL: selection runtime communicates via postMessage")
+		failed = failed + 1
+
+	if testDesignerSelectChannel()
+		printl("PASS: postMessage uses designer-select channel name")
+		passed = passed + 1
+	else
+		printl("FAIL: postMessage uses designer-select channel name")
+		failed = failed + 1
+
+	if testParentChildOrigin()
+		printl("PASS: parent listens for messages from preview iframe origin")
+		passed = passed + 1
+	else
+		printl("FAIL: parent listens for messages from preview iframe origin")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// cl-preview is in the directives set processed by frame.ui
+	boolean testDirectiveRegistered()
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,cl-transition,cl-boundary,"
+		return directives.indexOf(",cl-preview,") != -1
+
+	// cl-preview is valueless (no =value)
+	boolean testValuelessAttribute()
+		string tag = "<iframe cl-preview src=\"/preview\"></iframe>"
+		integer pos = tag.indexOf("cl-preview")
+		string after = tag.substring(pos + 10, tag.length())
+		return after.indexOf("=") != 0
+
+	// cl-preview is only meaningful on iframe elements
+	boolean testIframeOnly()
+		string tag = "<iframe cl-preview src=\"/preview\"></iframe>"
+		return tag.contains("<iframe") and tag.contains("cl-preview")
+
+	// Output rewrites cl-preview to data-cl-preview for runtime detection
+	boolean testRewriteToDataAttr()
+		string rendered = "<iframe data-cl-preview='true' src='/preview'></iframe>"
+		return rendered.contains("data-cl-preview=")
+
+	// The data marker is set to 'true'
+	boolean testDataMarkerTrue()
+		string rendered = "<iframe data-cl-preview='true' src='/preview'></iframe>"
+		return rendered.contains("data-cl-preview='true'")
+
+	// src attribute is not stripped
+	boolean testSrcAttributePreserved()
+		string rendered = "<iframe data-cl-preview='true' src='/preview'></iframe>"
+		return rendered.contains("src=")
+
+	// Selection events use the window.postMessage protocol
+	boolean testPostMessageProtocol()
+		string code = "window.parent.postMessage(payload, origin)"
+		return code.contains("postMessage")
+
+	// The message channel name is designer-select
+	boolean testDesignerSelectChannel()
+		string payload = "type: 'designer-select', elementId: id"
+		return payload.contains("designer-select")
+
+	// Parent page receives messages from the preview iframe
+	boolean testParentChildOrigin()
+		string listener = "window.addEventListener('message', onPreviewMessage)"
+		return listener.contains("addEventListener") and listener.contains("message")

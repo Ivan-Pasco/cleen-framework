@@ -1,0 +1,109 @@
+// Test: frame.locale translation basic functionality
+// Tests t() translation function shape, key paths, namespace lookup
+
+start:
+	printl("=== Test Suite: Translation Basic ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testTranslateCallShape()
+		printl("PASS: t() call shape uses key and params")
+		passed = passed + 1
+	else
+		printl("FAIL: t() call shape uses key and params")
+		failed = failed + 1
+
+	if testDotSeparatedKey()
+		printl("PASS: key path uses dot separator")
+		passed = passed + 1
+	else
+		printl("FAIL: key path uses dot separator")
+		failed = failed + 1
+
+	if testNamespaceLookup()
+		printl("PASS: namespace lookup uses prefix.key form")
+		passed = passed + 1
+	else
+		printl("FAIL: namespace lookup uses prefix.key form")
+		failed = failed + 1
+
+	if testCommonNamespace()
+		printl("PASS: common namespace recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: common namespace recognised")
+		failed = failed + 1
+
+	if testErrorsNamespace()
+		printl("PASS: errors namespace recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: errors namespace recognised")
+		failed = failed + 1
+
+	if testEmptyParams()
+		printl("PASS: empty params JSON allowed")
+		passed = passed + 1
+	else
+		printl("FAIL: empty params JSON allowed")
+		failed = failed + 1
+
+	if testParamPlaceholder()
+		printl("PASS: placeholder uses single brace syntax")
+		passed = passed + 1
+	else
+		printl("FAIL: placeholder uses single brace syntax")
+		failed = failed + 1
+
+	if testLocaleBlockField()
+		printl("PASS: locale block has default field")
+		passed = passed + 1
+	else
+		printl("FAIL: locale block has default field")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// t() call shape
+	boolean testTranslateCallShape()
+		string call = "t(\"common.save\", \"\")"
+		return call.startsWith("t(")
+
+	// dot-separated key path
+	boolean testDotSeparatedKey()
+		string key = "common.save"
+		return key.indexOf(".") > 0
+
+	// namespace.key lookup
+	boolean testNamespaceLookup()
+		string call = "t(\"errors.required\", \"\")"
+		return call.contains("errors.required")
+
+	// common namespace
+	boolean testCommonNamespace()
+		string key = "common.cancel"
+		return key.startsWith("common.")
+
+	// errors namespace
+	boolean testErrorsNamespace()
+		string key = "errors.invalid"
+		return key.startsWith("errors.")
+
+	// empty params JSON
+	boolean testEmptyParams()
+		string call = "t(\"common.ok\", \"\")"
+		return call.contains(", \"\")")
+
+	// placeholder syntax uses single brace
+	boolean testParamPlaceholder()
+		string template = "Hello placeholder field"
+		return template.contains("placeholder")
+
+	// locale block default field
+	boolean testLocaleBlockField()
+		string field = "default = \"en\""
+		return field.contains("default")

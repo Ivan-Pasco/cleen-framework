@@ -1,0 +1,147 @@
+// Test: frame.canvas input and events (onPointer*, onKey*, onFrame, input.* expressions)
+
+start:
+	printl("=== Test Suite: Input and Events ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testOnFrameHandler()
+		printl("PASS: onFrame: handler with param=")
+		passed = passed + 1
+	else
+		printl("FAIL: onFrame handler")
+		failed = failed + 1
+
+	if testOnPointerDown()
+		printl("PASS: onPointerDown: handler")
+		passed = passed + 1
+	else
+		printl("FAIL: onPointerDown")
+		failed = failed + 1
+
+	if testOnPointerMove()
+		printl("PASS: onPointerMove: handler")
+		passed = passed + 1
+	else
+		printl("FAIL: onPointerMove")
+		failed = failed + 1
+
+	if testOnPointerUp()
+		printl("PASS: onPointerUp: handler")
+		passed = passed + 1
+	else
+		printl("FAIL: onPointerUp")
+		failed = failed + 1
+
+	if testOnKeyDown()
+		printl("PASS: onKeyDown: handler with key param")
+		passed = passed + 1
+	else
+		printl("FAIL: onKeyDown")
+		failed = failed + 1
+
+	if testOnKeyUp()
+		printl("PASS: onKeyUp: handler")
+		passed = passed + 1
+	else
+		printl("FAIL: onKeyUp")
+		failed = failed + 1
+
+	if testInputMouseX()
+		printl("PASS: input.mouseX expression")
+		passed = passed + 1
+	else
+		printl("FAIL: input.mouseX")
+		failed = failed + 1
+
+	if testInputMousePressed()
+		printl("PASS: input.mousePressed expression")
+		passed = passed + 1
+	else
+		printl("FAIL: input.mousePressed")
+		failed = failed + 1
+
+	if testInputKeyDown()
+		printl("PASS: input.keyDown(key) expression")
+		passed = passed + 1
+	else
+		printl("FAIL: input.keyDown")
+		failed = failed + 1
+
+	if testInputTouchCount()
+		printl("PASS: input.touchCount expression")
+		passed = passed + 1
+	else
+		printl("FAIL: input.touchCount")
+		failed = failed + 1
+
+	if testInputGamepad()
+		printl("PASS: input.gamepadButton expression")
+		passed = passed + 1
+	else
+		printl("FAIL: input.gamepadButton")
+		failed = failed + 1
+
+	if testInputBridgePrefix()
+		printl("PASS: input bridge prefix _input_")
+		passed = passed + 1
+	else
+		printl("FAIL: input bridge prefix")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testOnFrameHandler()
+		string h = "onFrame: param=dt"
+		return h.startsWith("onFrame") and h.contains("param=")
+
+	boolean testOnPointerDown()
+		string h = "onPointerDown: param=mx,my"
+		return h.startsWith("onPointerDown")
+
+	boolean testOnPointerMove()
+		string h = "onPointerMove: param=px,py"
+		return h.startsWith("onPointerMove")
+
+	boolean testOnPointerUp()
+		string h = "onPointerUp: param=rx,ry"
+		return h.startsWith("onPointerUp")
+
+	boolean testOnKeyDown()
+		string h = "onKeyDown: param=key"
+		return h.startsWith("onKeyDown")
+
+	boolean testOnKeyUp()
+		string h = "onKeyUp: param=key"
+		return h.startsWith("onKeyUp")
+
+	boolean testInputMouseX()
+		string expr = "input.mouseX"
+		return expr.startsWith("input.")
+
+	boolean testInputMousePressed()
+		string expr1 = "input.mousePressed"
+		string expr2 = "input.mouseJustPressed"
+		return expr1.contains("mousePressed") and expr2.contains("JustPressed")
+
+	boolean testInputKeyDown()
+		string expr = "input.keyDown(Space)"
+		return expr.startsWith("input.keyDown(")
+
+	boolean testInputTouchCount()
+		string expr1 = "input.touchCount"
+		string expr2 = "input.touchX(0)"
+		return expr1.contains("touchCount") and expr2.contains("touchX(")
+
+	boolean testInputGamepad()
+		string expr = "input.gamepadButton(0, 1)"
+		return expr.startsWith("input.gamepad")
+
+	boolean testInputBridgePrefix()
+		string b1 = "_input_mouse_x"
+		string b2 = "_input_key_down"
+		return b1.startsWith("_input_") and b2.startsWith("_input_")

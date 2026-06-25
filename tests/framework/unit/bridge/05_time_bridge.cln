@@ -1,42 +1,6 @@
 // Test: Host Bridge time functions
 // Tests that time bridge functions work correctly
 
-functions:
-	// Test current time
-	boolean testTimeNow()
-		string nowCall = "_time_now()"
-		return nowCall.contains("_time_now")
-
-	// Test time format
-	boolean testTimeFormat()
-		string formatCall = "_time_format(timestamp, YYYY-MM-DD)"
-		return formatCall.contains("_time_format")
-
-	// Test time parse
-	boolean testTimeParse()
-		string parseCall = "_time_parse(dateString, YYYY-MM-DD)"
-		return parseCall.contains("_time_parse")
-
-	// Test time add
-	boolean testTimeAdd()
-		string addCall = "_time_add(timestamp, 1, day)"
-		return addCall.contains("_time_add")
-
-	// Test time diff
-	boolean testTimeDiff()
-		string diffCall = "_time_diff(start, end)"
-		return diffCall.contains("_time_diff")
-
-	// Test time zone
-	boolean testTimeZone()
-		string tzCall = "_time_zone(UTC)"
-		return tzCall.contains("_time_zone")
-
-	// Test unix timestamp
-	boolean testTimeUnix()
-		string unixCall = "_time_unix()"
-		return unixCall.contains("_time_unix")
-
 start:
 	printl("=== Test Suite: Time Bridge ===")
 	printl("")
@@ -95,3 +59,39 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test current time
+	boolean testTimeNow()
+		string nowCall = "_time_now()"
+		return nowCall.contains("_time_now")
+
+	// Test time format
+	boolean testTimeFormat()
+		string formatCall = "_time_format(timestamp, YYYY-MM-DD)"
+		return formatCall.contains("_time_format")
+
+	// Test time parse
+	boolean testTimeParse()
+		string parseCall = "_time_parse(dateString, YYYY-MM-DD)"
+		return parseCall.contains("_time_parse")
+
+	// Test time add
+	boolean testTimeAdd()
+		string addCall = "_time_add(timestamp, 1, day)"
+		return addCall.contains("_time_add")
+
+	// Test time diff
+	boolean testTimeDiff()
+		string diffCall = "_time_diff(start, end)"
+		return diffCall.contains("_time_diff")
+
+	// Test time zone
+	boolean testTimeZone()
+		string tzCall = "_time_zone(UTC)"
+		return tzCall.contains("_time_zone")
+
+	// Test unix timestamp
+	boolean testTimeUnix()
+		string unixCall = "_time_unix()"
+		return unixCall.contains("_time_unix")
+

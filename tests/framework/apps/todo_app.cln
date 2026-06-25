@@ -1,6 +1,25 @@
 // Test Application: Todo API
 // A complete todo CRUD application for integration testing
 
+start:
+	printl("Starting Todo App...")
+	integer status = 0
+
+	// Register routes
+	status = _http_route("GET", "/", 0)
+	status = _http_route("GET", "/api/todos", 1)
+	status = _http_route("POST", "/api/todos", 2)
+	status = _http_route("GET", "/api/todos/:id", 3)
+	status = _http_route("PUT", "/api/todos/:id", 4)
+	status = _http_route("DELETE", "/api/todos/:id", 5)
+	status = _http_route("PATCH", "/api/todos/:id/toggle", 6)
+	status = _http_route("GET", "/api/todos/filter", 7)
+	status = _http_route("GET", "/health", 8)
+
+	printl("Todo App routes registered")
+
+	// Start listening
+	integer listenStatus = _http_listen(3000)
 functions:
 	// Handler 0: Home page
 	string __route_handler_0()
@@ -49,22 +68,3 @@ functions:
 	string __route_handler_9()
 		return "error:Not Found,code:404"
 
-start:
-	printl("Starting Todo App...")
-	integer status = 0
-
-	// Register routes
-	status = _http_route("GET", "/", 0)
-	status = _http_route("GET", "/api/todos", 1)
-	status = _http_route("POST", "/api/todos", 2)
-	status = _http_route("GET", "/api/todos/:id", 3)
-	status = _http_route("PUT", "/api/todos/:id", 4)
-	status = _http_route("DELETE", "/api/todos/:id", 5)
-	status = _http_route("PATCH", "/api/todos/:id/toggle", 6)
-	status = _http_route("GET", "/api/todos/filter", 7)
-	status = _http_route("GET", "/health", 8)
-
-	printl("Todo App routes registered")
-
-	// Start listening
-	integer listenStatus = _http_listen(3000)

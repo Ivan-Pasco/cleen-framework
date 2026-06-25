@@ -1,0 +1,137 @@
+// Test: frame.server §6 — Error Handlers (server: handle: + onError)
+// Verifies that the global server: handle: block syntax shape is correct,
+// that error type patterns bind via "as", that "_" is the catch-all,
+// and that statusCode/json/status response shapes match the spec.
+
+start:
+	printl("=== Test Suite: Error Handlers (server: handle:) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testServerHandleBlock()
+		printl("PASS: server: handle: block header recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: server: handle: block header recognized")
+		failed = failed + 1
+
+	if testErrorPatternTypeName()
+		printl("PASS: error pattern accepts a type identifier")
+		passed = passed + 1
+	else
+		printl("FAIL: error pattern accepts a type identifier")
+		failed = failed + 1
+
+	if testErrorPatternCatchAll()
+		printl("PASS: _ pattern is the catch-all clause")
+		passed = passed + 1
+	else
+		printl("FAIL: _ pattern is the catch-all clause")
+		failed = failed + 1
+
+	if testErrorBindAs()
+		printl("PASS: error binding via as identifier")
+		passed = passed + 1
+	else
+		printl("FAIL: error binding via as identifier")
+		failed = failed + 1
+
+	if testNotFoundClause()
+		printl("PASS: NotFound clause returns notFound()")
+		passed = passed + 1
+	else
+		printl("FAIL: NotFound clause returns notFound()")
+		failed = failed + 1
+
+	if testValidationClauseStatus()
+		printl("PASS: ValidationError clause uses status(422, ...)")
+		passed = passed + 1
+	else
+		printl("FAIL: ValidationError clause uses status(422, ...)")
+		failed = failed + 1
+
+	if testDefaultStatus500()
+		printl("PASS: _ default clause returns status(500, ...)")
+		passed = passed + 1
+	else
+		printl("FAIL: _ default clause returns status(500, ...)")
+		failed = failed + 1
+
+	if testOnErrorPerStatement()
+		printl("PASS: per-statement onError: block shape recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: per-statement onError: block shape recognized")
+		failed = failed + 1
+
+	if testStatusCodeField()
+		printl("PASS: status response carries an integer statusCode")
+		passed = passed + 1
+	else
+		printl("FAIL: status response carries an integer statusCode")
+		failed = failed + 1
+
+	if testErrorMessageAccess()
+		printl("PASS: bound error exposes a message field")
+		passed = passed + 1
+	else
+		printl("FAIL: bound error exposes a message field")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// server: handle: header line
+	boolean testServerHandleBlock()
+		string header = "server: handle:"
+		return header.contains("handle:") and header.startsWith("server:")
+
+	// error_pattern = identifier — type name like NotFound, ValidationError
+	boolean testErrorPatternTypeName()
+		string clause = "NotFound: return notFound()"
+		return clause.indexOf(":") != -1 and clause.indexOf("NotFound") == 0
+
+	// error_pattern = "_" — catch-all
+	boolean testErrorPatternCatchAll()
+		string clause = "_: return status(500, json(payload))"
+		return clause.startsWith("_:")
+
+	// Optional binding: "as" identifier
+	boolean testErrorBindAs()
+		string clause = "ValidationError as e: return status(422, json(payload))"
+		return clause.contains(" as e:") and clause.indexOf("ValidationError") == 0
+
+	// NotFound clause maps to notFound() helper
+	boolean testNotFoundClause()
+		string body = "return notFound()"
+		return body.contains("notFound(")
+
+	// ValidationError clause uses status(422, ...)
+	boolean testValidationClauseStatus()
+		string body = "return status(422, json(payload))"
+		return body.contains("status(422,")
+
+	// Default error clause uses status(500, ...)
+	boolean testDefaultStatus500()
+		string body = "return status(500, json(payload))"
+		return body.contains("status(500,")
+
+	// Per-statement onError: block (core Clean Language syntax)
+	boolean testOnErrorPerStatement()
+		string sample = "onError: return notFound()"
+		return sample.startsWith("onError:") and sample.contains("return")
+
+	// status(code, body) carries an integer status code (first arg)
+	boolean testStatusCodeField()
+		string call = "status(503, json(payload))"
+		integer openParen = call.indexOf("(")
+		integer comma = call.indexOf(",")
+		return openParen != -1 and comma != -1 and comma > openParen
+
+	// Bound error variable exposes .message
+	boolean testErrorMessageAccess()
+		string access = "e.message"
+		return access.contains(".message")

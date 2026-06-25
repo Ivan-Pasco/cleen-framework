@@ -1,6 +1,25 @@
 // Test Application: Auth API
 // Authentication flow testing application
 
+start:
+	printl("Starting Auth Service...")
+	integer status = 0
+
+	// Register routes
+	status = _http_route("GET", "/", 0)
+	status = _http_route("POST", "/auth/register", 1)
+	status = _http_route("POST", "/auth/login", 2)
+	status = _http_route("GET", "/api/profile", 3)
+	status = _http_route("POST", "/auth/refresh", 4)
+	status = _http_route("POST", "/auth/logout", 5)
+	status = _http_route("PUT", "/auth/password", 6)
+	status = _http_route("POST", "/auth/validate", 7)
+	status = _http_route("GET", "/health", 8)
+
+	printl("Auth Service routes registered")
+
+	// Start listening
+	integer listenStatus = _http_listen(3000)
 functions:
 	// Handler 0: Home page
 	string __route_handler_0()
@@ -60,22 +79,3 @@ functions:
 	string __route_handler_8()
 		return "status:healthy,service:auth"
 
-start:
-	printl("Starting Auth Service...")
-	integer status = 0
-
-	// Register routes
-	status = _http_route("GET", "/", 0)
-	status = _http_route("POST", "/auth/register", 1)
-	status = _http_route("POST", "/auth/login", 2)
-	status = _http_route("GET", "/api/profile", 3)
-	status = _http_route("POST", "/auth/refresh", 4)
-	status = _http_route("POST", "/auth/logout", 5)
-	status = _http_route("PUT", "/auth/password", 6)
-	status = _http_route("POST", "/auth/validate", 7)
-	status = _http_route("GET", "/health", 8)
-
-	printl("Auth Service routes registered")
-
-	// Start listening
-	integer listenStatus = _http_listen(3000)

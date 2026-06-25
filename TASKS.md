@@ -49,6 +49,17 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 - ⬜ **Password-reset email hook** — `plugins/frame.auth/patterns/password-reset.cln:89` has `// TODO: send email with reset link containing raw_token`. Pattern (user template), so this is an integration point, not a missing impl. Reword as `// User integration: send email with reset link containing raw_token` once an email/messaging plugin contract is defined (requires `bridge:email` declaration first).
 
+### Frame Canvas — Runtime Examples 🟢 LOW
+
+- ⬜ **Canvas runtime examples have duplicated inline WASM loaders** — Five HTML demos under `plugins/frame.canvas/runtime/examples/` carry a full ~350–450-line inline WASM loader instead of using the shared `canvas-bridge.js` + `loader.js`:
+  - `simple-demo.html` (385 lines — static draw scene, no event handlers)
+  - `index.html` (365 lines — bouncing-balls, custom pointer event wiring)
+  - `geometry.html` (390 lines — custom pointer event wiring)
+  - `dashboard.html` (395 lines — custom pointer event wiring)
+  - `gallery.html` (451 lines — custom pointer event wiring)
+
+  Refactor blocked on two open questions: (a) the shared `loader.js`/`canvas-bridge.js` do not expose a `memory_runtime` module, yet the example .wasm files import `memory_runtime.mem_alloc` etc. — needs runtime verification that the shared-loader examples (`animated-ball.html`, `bouncing-balls.html`, `paddle-game.html`, `solar-system.html`) actually run; (b) the four examples with pointer handlers register them inline rather than via `_canvas_on_pointer_down()`, so the corresponding `.cln` files would need updating to register handlers per the bridge contract. Total duplicated code: ~2000 lines. Safe-to-migrate without code changes: `simple-demo.html` only.
+
 ### Phase 9.3: Testing Infrastructure 🟡 MEDIUM-HIGH
 
 - ⬜ Implement `tests:` block parser in Clean Language *(cross-component: compiler)*

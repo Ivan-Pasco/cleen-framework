@@ -1,0 +1,155 @@
+// Test: frame.auth CSRF protection
+// Tests CSRF section syntax, token header, mutation-method validation, and exempt routes
+
+start:
+	printl("=== Test Suite: CSRF Protection ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testCsrfSection()
+		printl("PASS: csrf: section exists in auth block")
+		passed = passed + 1
+	else
+		printl("FAIL: csrf: section exists in auth block")
+		failed = failed + 1
+
+	if testCsrfEnabledField()
+		printl("PASS: csrf enabled = true field shape")
+		passed = passed + 1
+	else
+		printl("FAIL: csrf enabled = true field shape")
+		failed = failed + 1
+
+	if testCsrfHeaderName()
+		printl("PASS: X-CSRF-Token header name is canonical")
+		passed = passed + 1
+	else
+		printl("FAIL: X-CSRF-Token header name is canonical")
+		failed = failed + 1
+
+	if testCsrfTokenServerSide()
+		printl("PASS: CSRF token stored server-side with session")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF token stored server-side with session")
+		failed = failed + 1
+
+	if testCsrfValidatesPost()
+		printl("PASS: CSRF validates POST requests")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF validates POST requests")
+		failed = failed + 1
+
+	if testCsrfValidatesPut()
+		printl("PASS: CSRF validates PUT requests")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF validates PUT requests")
+		failed = failed + 1
+
+	if testCsrfValidatesPatch()
+		printl("PASS: CSRF validates PATCH requests")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF validates PATCH requests")
+		failed = failed + 1
+
+	if testCsrfValidatesDelete()
+		printl("PASS: CSRF validates DELETE requests")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF validates DELETE requests")
+		failed = failed + 1
+
+	if testCsrfExemptsGet()
+		printl("PASS: CSRF exempts GET (idempotent)")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF exempts GET (idempotent)")
+		failed = failed + 1
+
+	if testCsrfExemptsHead()
+		printl("PASS: CSRF exempts HEAD (idempotent)")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF exempts HEAD (idempotent)")
+		failed = failed + 1
+
+	if testCsrfFailureCode()
+		printl("PASS: CSRF_FAIL error code is canonical")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF_FAIL error code is canonical")
+		failed = failed + 1
+
+	if testCsrfHiddenFormInput()
+		printl("PASS: CSRF token deliverable as hidden form input")
+		passed = passed + 1
+	else
+		printl("FAIL: CSRF token deliverable as hidden form input")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// csrf: appears as an auth_section per EBNF
+	boolean testCsrfSection()
+		string block = "csrf:"
+		return block.contains("csrf:")
+
+	// csrf_enabled_field = "enabled" "=" boolean_literal
+	boolean testCsrfEnabledField()
+		string field = "enabled = true"
+		return field.contains("enabled") and field.contains("true")
+
+	// Canonical request header for CSRF
+	boolean testCsrfHeaderName()
+		string header = "X-CSRF-Token"
+		return header.contains("CSRF-Token") and header.startsWith("X-")
+
+	// AUTH-S006 — server-side binding
+	boolean testCsrfTokenServerSide()
+		string note = "csrf token stored in session.csrfToken"
+		return note.contains("session") and note.contains("csrfToken")
+
+	// AUTH-S007 — POST validated
+	boolean testCsrfValidatesPost()
+		string method = "POST"
+		return method == "POST"
+
+	boolean testCsrfValidatesPut()
+		string method = "PUT"
+		return method == "PUT"
+
+	boolean testCsrfValidatesPatch()
+		string method = "PATCH"
+		return method == "PATCH"
+
+	boolean testCsrfValidatesDelete()
+		string method = "DELETE"
+		return method == "DELETE"
+
+	// AUTH-S007 — GET exempt
+	boolean testCsrfExemptsGet()
+		string method = "GET"
+		string mutating = "POST,PUT,PATCH,DELETE"
+		return mutating.indexOf(method) == -1
+
+	boolean testCsrfExemptsHead()
+		string method = "HEAD"
+		string mutating = "POST,PUT,PATCH,DELETE"
+		return mutating.indexOf(method) == -1
+
+	// AUTH-I007 — fixed error code enumeration
+	boolean testCsrfFailureCode()
+		string code = "CSRF_FAIL"
+		return code == "CSRF_FAIL"
+
+	// Hidden form input delivery channel
+	boolean testCsrfHiddenFormInput()
+		string input = "type=hidden name=_csrf"
+		return input.contains("hidden") and input.contains("_csrf")

@@ -2,42 +2,6 @@
 // Grammar: mouse_event_attr (frame-ui.ebnf §3)
 // Spec: oncontextmenu in mouse_event_attr, ContextMenuEvent injected type
 
-functions:
-	// oncontextmenu must be in the recognised event attribute list
-	boolean testOnContextMenuInEventList()
-		string events = ",onclick,oninput,onsubmit,onchange,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,oncontextmenu,"
-		return events.indexOf(",oncontextmenu,") != -1
-
-	// .prevent modifier must be in the recognised modifier list
-	boolean testPreventModifierRecognised()
-		string modifiers = ",prevent,stop,once,enter,escape,space,left,right,passive,"
-		return modifiers.indexOf(",prevent,") != -1
-
-	// ContextMenuEvent injected type name is correct
-	boolean testContextMenuEventTypeName()
-		string typeName = "ContextMenuEvent"
-		return typeName == "ContextMenuEvent"
-
-	// ContextMenuEvent must expose clientX field
-	boolean testContextMenuEventHasClientX()
-		string fields = "clientX,clientY,targetId"
-		return fields.indexOf("clientX") != -1
-
-	// ContextMenuEvent must expose clientY field
-	boolean testContextMenuEventHasClientY()
-		string fields = "clientX,clientY,targetId"
-		return fields.indexOf("clientY") != -1
-
-	// ContextMenuEvent must expose targetId field
-	boolean testContextMenuEventHasTargetId()
-		string fields = "clientX,clientY,targetId"
-		return fields.indexOf("targetId") != -1
-
-	// oncontextmenu + .prevent combination is the canonical right-click-prevention pattern
-	boolean testPreventDefaultPattern()
-		string attr = "oncontextmenu.prevent"
-		return attr.startsWith("oncontextmenu") and attr.endsWith(".prevent")
-
 start:
 	printl("=== Test Suite: Context Menu Event (frame.ui) ===")
 	printl("")
@@ -96,3 +60,39 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// oncontextmenu must be in the recognised event attribute list
+	boolean testOnContextMenuInEventList()
+		string events = ",onclick,oninput,onsubmit,onchange,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,oncontextmenu,"
+		return events.indexOf(",oncontextmenu,") != -1
+
+	// .prevent modifier must be in the recognised modifier list
+	boolean testPreventModifierRecognised()
+		string modifiers = ",prevent,stop,once,enter,escape,space,left,right,passive,"
+		return modifiers.indexOf(",prevent,") != -1
+
+	// ContextMenuEvent injected type name is correct
+	boolean testContextMenuEventTypeName()
+		string typeName = "ContextMenuEvent"
+		return typeName == "ContextMenuEvent"
+
+	// ContextMenuEvent must expose clientX field
+	boolean testContextMenuEventHasClientX()
+		string fields = "clientX,clientY,targetId"
+		return fields.indexOf("clientX") != -1
+
+	// ContextMenuEvent must expose clientY field
+	boolean testContextMenuEventHasClientY()
+		string fields = "clientX,clientY,targetId"
+		return fields.indexOf("clientY") != -1
+
+	// ContextMenuEvent must expose targetId field
+	boolean testContextMenuEventHasTargetId()
+		string fields = "clientX,clientY,targetId"
+		return fields.indexOf("targetId") != -1
+
+	// oncontextmenu + .prevent combination is the canonical right-click-prevention pattern
+	boolean testPreventDefaultPattern()
+		string attr = "oncontextmenu.prevent"
+		return attr.startsWith("oncontextmenu") and attr.endsWith(".prevent")
+

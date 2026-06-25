@@ -1,116 +1,6 @@
 // Test: frame.ui — toast notification bridge functions
 // Spec: HOST_BRIDGE.md §UI — Toast Notifications
 
-functions:
-	// Bridge function names
-	boolean testToastName()
-		string name = "_ui_toast"
-		return name == "_ui_toast"
-
-	boolean testToastDismissName()
-		string name = "_ui_toast_dismiss"
-		return name == "_ui_toast_dismiss"
-
-	boolean testToastDismissAllName()
-		string name = "_ui_toast_dismiss_all"
-		return name == "_ui_toast_dismiss_all"
-
-	// _ui_toast returns an integer ID
-	boolean testToastReturnsId()
-		integer stubId = 1
-		return stubId > 0
-
-	// _ui_toast_dismiss accepts an integer ID
-	boolean testToastDismissAcceptsId()
-		integer id = 1
-		return id > 0
-
-	// Server stub for _ui_toast returns 0 (no DOM on server)
-	boolean testServerStubToastReturnsZero()
-		integer stub = 0
-		return stub == 0
-
-	// Variant strings must be one of success, error, warning, info
-	boolean testVariantSuccess()
-		string variant = "success"
-		return variant == "success"
-
-	boolean testVariantError()
-		string variant = "error"
-		return variant == "error"
-
-	boolean testVariantWarning()
-		string variant = "warning"
-		return variant == "warning"
-
-	boolean testVariantInfo()
-		string variant = "info"
-		return variant == "info"
-
-	// All 4 variant strings are distinct
-	boolean testVariantsDistinct()
-		string variants = ",success,error,warning,info,"
-		return variants.indexOf(",success,") != -1 and variants.indexOf(",error,") != -1 and variants.indexOf(",warning,") != -1 and variants.indexOf(",info,") != -1
-
-	// Position strings
-	boolean testPositionTopRight()
-		string pos = "top-right"
-		return pos == "top-right"
-
-	boolean testPositionBottomRight()
-		string pos = "bottom-right"
-		return pos == "bottom-right"
-
-	boolean testPositionBottomCenter()
-		string pos = "bottom-center"
-		return pos == "bottom-center"
-
-	boolean testPositionTopLeft()
-		string pos = "top-left"
-		return pos == "top-left"
-
-	boolean testPositionTopCenter()
-		string pos = "top-center"
-		return pos == "top-center"
-
-	boolean testPositionBottomLeft()
-		string pos = "bottom-left"
-		return pos == "bottom-left"
-
-	// duration = 0 means sticky (no auto-dismiss)
-	boolean testDurationZeroMeansSticky()
-		integer sticky = 0
-		return sticky == 0
-
-	// Clean aliases
-	boolean testToastShowAlias()
-		string alias = "toast.show"
-		return alias == "toast.show"
-
-	boolean testToastDismissAlias()
-		string alias = "toast.dismiss"
-		return alias == "toast.dismiss"
-
-	boolean testToastDismissAllAlias()
-		string alias = "toast.dismissAll"
-		return alias == "toast.dismissAll"
-
-	boolean testToastSuccessAlias()
-		string alias = "toast.success"
-		return alias == "toast.success"
-
-	boolean testToastErrorAlias()
-		string alias = "toast.error"
-		return alias == "toast.error"
-
-	boolean testToastWarningAlias()
-		string alias = "toast.warning"
-		return alias == "toast.warning"
-
-	boolean testToastInfoAlias()
-		string alias = "toast.info"
-		return alias == "toast.info"
-
 start:
 	printl("=== Test Suite: Toast Notifications (frame.ui) ===")
 	printl("")
@@ -295,3 +185,113 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function names
+	boolean testToastName()
+		string name = "_ui_toast"
+		return name == "_ui_toast"
+
+	boolean testToastDismissName()
+		string name = "_ui_toast_dismiss"
+		return name == "_ui_toast_dismiss"
+
+	boolean testToastDismissAllName()
+		string name = "_ui_toast_dismiss_all"
+		return name == "_ui_toast_dismiss_all"
+
+	// _ui_toast returns an integer ID
+	boolean testToastReturnsId()
+		integer stubId = 1
+		return stubId > 0
+
+	// _ui_toast_dismiss accepts an integer ID
+	boolean testToastDismissAcceptsId()
+		integer id = 1
+		return id > 0
+
+	// Server stub for _ui_toast returns 0 (no DOM on server)
+	boolean testServerStubToastReturnsZero()
+		integer stub = 0
+		return stub == 0
+
+	// Variant strings must be one of success, error, warning, info
+	boolean testVariantSuccess()
+		string variant = "success"
+		return variant == "success"
+
+	boolean testVariantError()
+		string variant = "error"
+		return variant == "error"
+
+	boolean testVariantWarning()
+		string variant = "warning"
+		return variant == "warning"
+
+	boolean testVariantInfo()
+		string variant = "info"
+		return variant == "info"
+
+	// All 4 variant strings are distinct
+	boolean testVariantsDistinct()
+		string variants = ",success,error,warning,info,"
+		return variants.indexOf(",success,") != -1 and variants.indexOf(",error,") != -1 and variants.indexOf(",warning,") != -1 and variants.indexOf(",info,") != -1
+
+	// Position strings
+	boolean testPositionTopRight()
+		string pos = "top-right"
+		return pos == "top-right"
+
+	boolean testPositionBottomRight()
+		string pos = "bottom-right"
+		return pos == "bottom-right"
+
+	boolean testPositionBottomCenter()
+		string pos = "bottom-center"
+		return pos == "bottom-center"
+
+	boolean testPositionTopLeft()
+		string pos = "top-left"
+		return pos == "top-left"
+
+	boolean testPositionTopCenter()
+		string pos = "top-center"
+		return pos == "top-center"
+
+	boolean testPositionBottomLeft()
+		string pos = "bottom-left"
+		return pos == "bottom-left"
+
+	// duration = 0 means sticky (no auto-dismiss)
+	boolean testDurationZeroMeansSticky()
+		integer sticky = 0
+		return sticky == 0
+
+	// Clean aliases
+	boolean testToastShowAlias()
+		string alias = "toast.show"
+		return alias == "toast.show"
+
+	boolean testToastDismissAlias()
+		string alias = "toast.dismiss"
+		return alias == "toast.dismiss"
+
+	boolean testToastDismissAllAlias()
+		string alias = "toast.dismissAll"
+		return alias == "toast.dismissAll"
+
+	boolean testToastSuccessAlias()
+		string alias = "toast.success"
+		return alias == "toast.success"
+
+	boolean testToastErrorAlias()
+		string alias = "toast.error"
+		return alias == "toast.error"
+
+	boolean testToastWarningAlias()
+		string alias = "toast.warning"
+		return alias == "toast.warning"
+
+	boolean testToastInfoAlias()
+		string alias = "toast.info"
+		return alias == "toast.info"
+

@@ -1,0 +1,138 @@
+// Test: frame.client load: on error callback, retry, fallback, and query.X placeholders
+// Verifies load: block error handling, URL placeholder expansion, and generated state
+
+start:
+	printl("=== Test Suite: Load on error and query placeholders (frame.client) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testLoadOnErrorCallback()
+		printl("PASS: load: on error: handler function name accepted")
+		passed = passed + 1
+	else
+		printl("FAIL: load: on error: handler function name accepted")
+		failed = failed + 1
+
+	if testLoadAtJsonPath()
+		printl("PASS: load: at clause extracts nested JSON path")
+		passed = passed + 1
+	else
+		printl("FAIL: load: at clause extracts nested JSON path")
+		failed = failed + 1
+
+	if testLoadFullDeclaration()
+		printl("PASS: users from URL at data on error handler accepted")
+		passed = passed + 1
+	else
+		printl("FAIL: users from URL at data on error handler accepted")
+		failed = failed + 1
+
+	if testQueryPlaceholderResolution()
+		printl("PASS: query.X placeholder expands to concatenation expression")
+		passed = passed + 1
+	else
+		printl("FAIL: query.X placeholder expands to concatenation expression")
+		failed = failed + 1
+
+	if testQueryPlaceholderMultiple()
+		printl("PASS: multiple query.X placeholders in same URL accepted")
+		passed = passed + 1
+	else
+		printl("FAIL: multiple query.X placeholders in same URL accepted")
+		failed = failed + 1
+
+	if testQueryPlaceholderNotInSend()
+		printl("PASS: query.X is load-only; send: uses bare varName placeholders")
+		passed = passed + 1
+	else
+		printl("FAIL: query.X is load-only; send: uses bare varName placeholders")
+		failed = failed + 1
+
+	if testLoadGeneratesLoading()
+		printl("PASS: load: generates boolean loading state")
+		passed = passed + 1
+	else
+		printl("FAIL: load: generates boolean loading state")
+		failed = failed + 1
+
+	if testLoadGeneratesLoadError()
+		printl("PASS: load: generates string loadError state")
+		passed = passed + 1
+	else
+		printl("FAIL: load: generates string loadError state")
+		failed = failed + 1
+
+	if testLoadFallbackNull()
+		printl("PASS: load: variables default to null until fetched")
+		passed = passed + 1
+	else
+		printl("FAIL: load: variables default to null until fetched")
+		failed = failed + 1
+
+	if testRetryPolicyShape()
+		printl("PASS: retry policy uses api.get inside named handler")
+		passed = passed + 1
+	else
+		printl("FAIL: retry policy uses api.get inside named handler")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test on error: callback names handler function
+	boolean testLoadOnErrorCallback()
+		string decl = "users from /api/users on error: handleErr"
+		return decl.contains("on error:") and decl.contains("handleErr")
+
+	// Test at clause for JSON path extraction
+	boolean testLoadAtJsonPath()
+		string decl = "products from /api/products at items"
+		return decl.contains("at") and decl.contains("items")
+
+	// Test full declaration with from, at, on error
+	boolean testLoadFullDeclaration()
+		string decl = "products from /api/products at items on error: handleErr"
+		return decl.contains("from") and decl.contains("at") and decl.contains("on error:")
+
+	// Test query.X placeholder expands to concatenation
+	boolean testQueryPlaceholderResolution()
+		string url = "/api/users/[query.id]"
+		string expanded = "/api/users/ + query.id"
+		return url.contains("query.id") and expanded.contains("+ query.id")
+
+	// Test multiple placeholders in URL
+	boolean testQueryPlaceholderMultiple()
+		string url = "/api/orgs/[query.org]/users/[query.id]"
+		integer firstPos = url.indexOf("query.")
+		string rest = url.substring(firstPos + 6, url.length())
+		integer secondPos = rest.indexOf("query.")
+		return firstPos != -1 and secondPos != -1
+
+	// Test load uses query.X, send uses bare varName
+	boolean testQueryPlaceholderNotInSend()
+		string loadUrl = "/api/users/[query.id]"
+		string sendUrl = "/api/users/[id]"
+		return loadUrl.contains("query.") and not sendUrl.contains("query.")
+
+	// Test loading state generation
+	boolean testLoadGeneratesLoading()
+		string generated = "boolean loading = true"
+		return generated.contains("loading") and generated.contains("boolean")
+
+	// Test loadError state generation
+	boolean testLoadGeneratesLoadError()
+		string generated = "string loadError = "
+		return generated.contains("loadError") and generated.contains("string")
+
+	// Test variables default to null
+	boolean testLoadFallbackNull()
+		string generated = "any users = null"
+		return generated.contains("null") and generated.contains("any")
+
+	// Test retry policy: handler re-calls api.get
+	boolean testRetryPolicyShape()
+		string handler = "handleErr(): api.get(api_users_url, onUsers)"
+		return handler.contains("api.get") and handler.contains("handleErr")

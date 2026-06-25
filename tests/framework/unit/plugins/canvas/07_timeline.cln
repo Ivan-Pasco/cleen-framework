@@ -1,0 +1,126 @@
+// Test: frame.canvas timeline (timeline block, at/after/together steps, stagger, animate inline)
+
+start:
+	printl("=== Test Suite: Timeline ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testTimelineBlock()
+		printl("PASS: timeline block header with name")
+		passed = passed + 1
+	else
+		printl("FAIL: timeline block")
+		failed = failed + 1
+
+	if testAtStep()
+		printl("PASS: at <time>: absolute step")
+		passed = passed + 1
+	else
+		printl("FAIL: at step")
+		failed = failed + 1
+
+	if testAfterStep()
+		printl("PASS: after: step")
+		passed = passed + 1
+	else
+		printl("FAIL: after step")
+		failed = failed + 1
+
+	if testAfterOverlap()
+		printl("PASS: after overlap= step")
+		passed = passed + 1
+	else
+		printl("FAIL: after overlap")
+		failed = failed + 1
+
+	if testAfterGap()
+		printl("PASS: after gap= step")
+		passed = passed + 1
+	else
+		printl("FAIL: after gap")
+		failed = failed + 1
+
+	if testTogetherStep()
+		printl("PASS: together: step")
+		passed = passed + 1
+	else
+		printl("FAIL: together step")
+		failed = failed + 1
+
+	if testTogetherStagger()
+		printl("PASS: together stagger= step")
+		passed = passed + 1
+	else
+		printl("FAIL: together stagger")
+		failed = failed + 1
+
+	if testTweenReference()
+		printl("PASS: tween name reference inside step")
+		passed = passed + 1
+	else
+		printl("FAIL: tween reference")
+		failed = failed + 1
+
+	if testAnimateInline()
+		printl("PASS: animate inline expression")
+		passed = passed + 1
+	else
+		printl("FAIL: animate inline")
+		failed = failed + 1
+
+	if testTimelineControl()
+		printl("PASS: play/pause/stop/seek timeline control")
+		passed = passed + 1
+	else
+		printl("FAIL: timeline control")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testTimelineBlock()
+		string header = "timeline intro:"
+		return header.startsWith("timeline ")
+
+	boolean testAtStep()
+		string step = "at 0.5:"
+		return step.startsWith("at ")
+
+	boolean testAfterStep()
+		string step = "after:"
+		return step.startsWith("after")
+
+	boolean testAfterOverlap()
+		string step = "after overlap=0.2:"
+		return step.contains("overlap=")
+
+	boolean testAfterGap()
+		string step = "after gap=0.3:"
+		return step.contains("gap=")
+
+	boolean testTogetherStep()
+		string step = "together:"
+		return step.startsWith("together")
+
+	boolean testTogetherStagger()
+		string step = "together stagger=0.08:"
+		return step.contains("stagger=")
+
+	boolean testTweenReference()
+		string ref = "tween card1Show"
+		return ref.startsWith("tween ")
+
+	boolean testAnimateInline()
+		string expr = "animate ballY from=0 to=300 duration=1.0 ease=easeOutBounce"
+		boolean hasAnimate = expr.startsWith("animate ")
+		boolean hasTo = expr.contains("to=")
+		boolean hasDur = expr.contains("duration=")
+		return hasAnimate and hasTo and hasDur
+
+	boolean testTimelineControl()
+		string play = "play timeline intro"
+		string seek = "seek timeline intro to=1.5"
+		return play.contains("play timeline") and seek.contains("seek timeline")

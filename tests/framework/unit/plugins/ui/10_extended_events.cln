@@ -2,60 +2,6 @@
 // Verifies that the new event families are recognized by extract_attributes
 // and that the event string in main.cln contains all new event types.
 
-functions:
-	// Drag event family
-	boolean testDragStartRecognized()
-		string evts = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onkeypress,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,onwheel,onscroll,"
-		return evts.indexOf(",ondragstart,") != -1
-
-	boolean testDragDropRecognized()
-		string evts = ",ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,"
-		return evts.indexOf(",ondrop,") != -1
-
-	boolean testDragEnterLeaveRecognized()
-		string evts = ",ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,"
-		return evts.indexOf(",ondragenter,") != -1 and evts.indexOf(",ondragleave,") != -1
-
-	// Pointer event family
-	boolean testPointerDownRecognized()
-		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
-		return evts.indexOf(",onpointerdown,") != -1
-
-	boolean testPointerMoveRecognized()
-		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
-		return evts.indexOf(",onpointermove,") != -1
-
-	boolean testPointerCancelRecognized()
-		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
-		return evts.indexOf(",onpointercancel,") != -1
-
-	// Wheel + scroll event family
-	boolean testWheelRecognized()
-		string evts = ",onwheel,onscroll,"
-		return evts.indexOf(",onwheel,") != -1
-
-	boolean testScrollRecognized()
-		string evts = ",onwheel,onscroll,"
-		return evts.indexOf(",onscroll,") != -1
-
-	// Event modifiers
-	boolean testPassiveModifierExists()
-		string mods = ",prevent,stop,once,enter,escape,space,left,right,passive,"
-		return mods.indexOf(",passive,") != -1
-
-	boolean testLeftRightModifiersExist()
-		string mods = ",prevent,stop,once,enter,escape,space,left,right,passive,"
-		return mods.indexOf(",left,") != -1 and mods.indexOf(",right,") != -1
-
-	// Drag data functions registered
-	boolean testSetDragDataSignature()
-		string sig = "_ui_set_drag_data(key, value)"
-		return sig.indexOf("_ui_set_drag_data") != -1
-
-	boolean testGetDragDataSignature()
-		string sig = "_ui_get_drag_data(key)"
-		return sig.indexOf("_ui_get_drag_data") != -1
-
 start:
 	printl("=== Test Suite: Extended Events (§FEXT-1) ===")
 	printl("")
@@ -149,3 +95,57 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Drag event family
+	boolean testDragStartRecognized()
+		string evts = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onkeypress,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,onwheel,onscroll,"
+		return evts.indexOf(",ondragstart,") != -1
+
+	boolean testDragDropRecognized()
+		string evts = ",ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,"
+		return evts.indexOf(",ondrop,") != -1
+
+	boolean testDragEnterLeaveRecognized()
+		string evts = ",ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,"
+		return evts.indexOf(",ondragenter,") != -1 and evts.indexOf(",ondragleave,") != -1
+
+	// Pointer event family
+	boolean testPointerDownRecognized()
+		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
+		return evts.indexOf(",onpointerdown,") != -1
+
+	boolean testPointerMoveRecognized()
+		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
+		return evts.indexOf(",onpointermove,") != -1
+
+	boolean testPointerCancelRecognized()
+		string evts = ",onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,"
+		return evts.indexOf(",onpointercancel,") != -1
+
+	// Wheel + scroll event family
+	boolean testWheelRecognized()
+		string evts = ",onwheel,onscroll,"
+		return evts.indexOf(",onwheel,") != -1
+
+	boolean testScrollRecognized()
+		string evts = ",onwheel,onscroll,"
+		return evts.indexOf(",onscroll,") != -1
+
+	// Event modifiers
+	boolean testPassiveModifierExists()
+		string mods = ",prevent,stop,once,enter,escape,space,left,right,passive,"
+		return mods.indexOf(",passive,") != -1
+
+	boolean testLeftRightModifiersExist()
+		string mods = ",prevent,stop,once,enter,escape,space,left,right,passive,"
+		return mods.indexOf(",left,") != -1 and mods.indexOf(",right,") != -1
+
+	// Drag data functions registered
+	boolean testSetDragDataSignature()
+		string sig = "_ui_set_drag_data(key, value)"
+		return sig.indexOf("_ui_set_drag_data") != -1
+
+	boolean testGetDragDataSignature()
+		string sig = "_ui_get_drag_data(key)"
+		return sig.indexOf("_ui_get_drag_data") != -1
+

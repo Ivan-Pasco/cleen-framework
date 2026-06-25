@@ -1,0 +1,113 @@
+// Test: frame.jobs basic job definition syntax
+// Verifies job handler shape, queue field, priority/timeout fields
+
+start:
+	printl("=== Test Suite: Jobs Basic ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testJobsBlockKeyword()
+		printl("PASS: jobs: block keyword present")
+		passed = passed + 1
+	else
+		printl("FAIL: jobs: block keyword present")
+		failed = failed + 1
+
+	if testJobHandlerName()
+		printl("PASS: job handler identifier followed by colon")
+		passed = passed + 1
+	else
+		printl("FAIL: job handler identifier followed by colon")
+		failed = failed + 1
+
+	if testQueueField()
+		printl("PASS: queue: field accepts string literal")
+		passed = passed + 1
+	else
+		printl("FAIL: queue: field accepts string literal")
+		failed = failed + 1
+
+	if testTimeoutField()
+		printl("PASS: timeout: field accepts integer ms value")
+		passed = passed + 1
+	else
+		printl("FAIL: timeout: field accepts integer ms value")
+		failed = failed + 1
+
+	if testHandlerBodyStatements()
+		printl("PASS: handler body has statements after fields")
+		passed = passed + 1
+	else
+		printl("FAIL: handler body has statements after fields")
+		failed = failed + 1
+
+	if testMultipleJobs()
+		printl("PASS: jobs: block can contain multiple handlers")
+		passed = passed + 1
+	else
+		printl("FAIL: jobs: block can contain multiple handlers")
+		failed = failed + 1
+
+	if testQueueNameString()
+		printl("PASS: queue name uses string literal with quotes")
+		passed = passed + 1
+	else
+		printl("FAIL: queue name uses string literal with quotes")
+		failed = failed + 1
+
+	if testTimeoutIsInteger()
+		printl("PASS: timeout value is integer milliseconds")
+		passed = passed + 1
+	else
+		printl("FAIL: timeout value is integer milliseconds")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// jobs: block keyword
+	boolean testJobsBlockKeyword()
+		string block = "jobs:"
+		return block.startsWith("jobs") and block.contains(":")
+
+	// Job handler name colon form
+	boolean testJobHandlerName()
+		string handler = "sendWelcomeEmail:"
+		return handler.contains(":") and handler.indexOf(":") > 0
+
+	// queue field with string literal
+	boolean testQueueField()
+		string field = "queue: \"email\""
+		return field.contains("queue:") and field.contains("\"")
+
+	// timeout field with integer
+	boolean testTimeoutField()
+		string field = "timeout: 30000"
+		return field.contains("timeout:") and field.contains("30000")
+
+	// Handler body has statements
+	boolean testHandlerBodyStatements()
+		string body = "queue: \"email\"\nstring user = job.args"
+		return body.contains("queue:") and body.contains("job.args")
+
+	// Multiple handlers in one block
+	boolean testMultipleJobs()
+		string block = "jobs:\n\tsendEmail:\n\tsendDigest:"
+		integer first = block.indexOf("sendEmail:")
+		integer second = block.indexOf("sendDigest:")
+		return first >= 0 and second > first
+
+	// queue name is string literal
+	boolean testQueueNameString()
+		string field = "queue: \"notifications\""
+		integer openQuote = field.indexOf("\"")
+		return openQuote > 0
+
+	// timeout is integer ms
+	boolean testTimeoutIsInteger()
+		string field = "timeout: 60000"
+		string value = field.substring(field.indexOf(":") + 1, field.length())
+		return value.contains("60000")

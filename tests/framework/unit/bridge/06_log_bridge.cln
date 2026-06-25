@@ -1,45 +1,6 @@
 // Test: Host Bridge logging functions
 // Tests that logging bridge functions work correctly
 
-functions:
-	// Test log info
-	boolean testLogInfo()
-		string infoCall = "_log_info(message)"
-		return infoCall.contains("_log_info")
-
-	// Test log warn
-	boolean testLogWarn()
-		string warnCall = "_log_warn(message)"
-		return warnCall.contains("_log_warn")
-
-	// Test log error
-	boolean testLogError()
-		string errorCall = "_log_error(message)"
-		return errorCall.contains("_log_error")
-
-	// Test log debug
-	boolean testLogDebug()
-		string debugCall = "_log_debug(message)"
-		return debugCall.contains("_log_debug")
-
-	// Test log with context
-	boolean testLogContext()
-		string contextCall = "_log_info(message, context)"
-		return contextCall.contains("context")
-
-	// Test log levels
-	boolean testLogLevels()
-		string debug = "DEBUG"
-		string info = "INFO"
-		string warn = "WARN"
-		string errorLevel = "ERROR"
-		return debug == "DEBUG" and info == "INFO"
-
-	// Test structured logging
-	boolean testStructuredLog()
-		string structuredCall = "_log_structured(level, message, fields)"
-		return structuredCall.contains("_log_structured")
-
 start:
 	printl("=== Test Suite: Log Bridge ===")
 	printl("")
@@ -98,3 +59,42 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test log info
+	boolean testLogInfo()
+		string infoCall = "_log_info(message)"
+		return infoCall.contains("_log_info")
+
+	// Test log warn
+	boolean testLogWarn()
+		string warnCall = "_log_warn(message)"
+		return warnCall.contains("_log_warn")
+
+	// Test log error
+	boolean testLogError()
+		string errorCall = "_log_error(message)"
+		return errorCall.contains("_log_error")
+
+	// Test log debug
+	boolean testLogDebug()
+		string debugCall = "_log_debug(message)"
+		return debugCall.contains("_log_debug")
+
+	// Test log with context
+	boolean testLogContext()
+		string contextCall = "_log_info(message, context)"
+		return contextCall.contains("context")
+
+	// Test log levels
+	boolean testLogLevels()
+		string debug = "DEBUG"
+		string info = "INFO"
+		string warn = "WARN"
+		string errorLevel = "ERROR"
+		return debug == "DEBUG" and info == "INFO"
+
+	// Test structured logging
+	boolean testStructuredLog()
+		string structuredCall = "_log_structured(level, message, fields)"
+		return structuredCall.contains("_log_structured")
+

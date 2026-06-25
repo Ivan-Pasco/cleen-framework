@@ -1,39 +1,6 @@
 // Test: frame.data transaction support
 // Tests that transactions are correctly handled
 
-functions:
-	// Test transaction block syntax
-	boolean testTransactionBlockSyntax()
-		string txBlock = "transaction:\n\tuser.save()\n\tprofile.save()"
-		return txBlock.contains("transaction:")
-
-	// Test transaction commit
-	boolean testTransactionCommit()
-		string commit = "tx.commit()"
-		return commit.contains("commit()")
-
-	// Test transaction rollback
-	boolean testTransactionRollback()
-		string rollback = "tx.rollback()"
-		return rollback.contains("rollback()")
-
-	// Test nested operations in transaction
-	boolean testNestedOperations()
-		string tx = "transaction:\n\tuser = User.create(data)\n\tprofile = Profile.create(profileData)\n\tprofile.userId = user.id\n\tprofile.save()"
-		boolean hasCreate = tx.contains("create(")
-		boolean hasSave = tx.contains("save()")
-		return hasCreate and hasSave
-
-	// Test transaction error handling
-	boolean testTransactionErrorHandling()
-		string errorBlock = "onError:\n\tprintl(\"Transaction failed\")\n\treturn error"
-		return errorBlock.contains("onError:")
-
-	// Test transaction isolation level
-	boolean testTransactionIsolation()
-		string isoLevel = "transaction(isolation=\"serializable\"):"
-		return isoLevel.contains("isolation=")
-
 start:
 	printl("=== Test Suite: Transaction Support ===")
 	printl("")
@@ -85,3 +52,36 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test transaction block syntax
+	boolean testTransactionBlockSyntax()
+		string txBlock = "transaction:\n\tuser.save()\n\tprofile.save()"
+		return txBlock.contains("transaction:")
+
+	// Test transaction commit
+	boolean testTransactionCommit()
+		string commit = "tx.commit()"
+		return commit.contains("commit()")
+
+	// Test transaction rollback
+	boolean testTransactionRollback()
+		string rollback = "tx.rollback()"
+		return rollback.contains("rollback()")
+
+	// Test nested operations in transaction
+	boolean testNestedOperations()
+		string tx = "transaction:\n\tuser = User.create(data)\n\tprofile = Profile.create(profileData)\n\tprofile.userId = user.id\n\tprofile.save()"
+		boolean hasCreate = tx.contains("create(")
+		boolean hasSave = tx.contains("save()")
+		return hasCreate and hasSave
+
+	// Test transaction error handling
+	boolean testTransactionErrorHandling()
+		string errorBlock = "onError:\n\tprintl(\"Transaction failed\")\n\treturn error"
+		return errorBlock.contains("onError:")
+
+	// Test transaction isolation level
+	boolean testTransactionIsolation()
+		string isoLevel = "transaction(isolation=\"serializable\"):"
+		return isoLevel.contains("isolation=")
+

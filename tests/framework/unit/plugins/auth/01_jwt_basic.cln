@@ -1,54 +1,6 @@
 // Test: frame.auth JWT basic functionality
 // Tests that JWT tokens are correctly created and validated
 
-functions:
-	// Test JWT token structure
-	boolean testJwtStructure()
-		string token = "header.payload.signature"
-		integer dotCount = 0
-		string text = token
-		integer pos = text.indexOf(".")
-		while pos != -1
-			dotCount = dotCount + 1
-			text = text.substring(pos + 1, text.length())
-			pos = text.indexOf(".")
-		return dotCount == 2
-
-	// Test JWT create function
-	boolean testJwtCreate()
-		string createCall = "Auth.createToken(userId, claims)"
-		return createCall.contains("createToken")
-
-	// Test JWT verify function
-	boolean testJwtVerify()
-		string verifyCall = "Auth.verifyToken(token)"
-		return verifyCall.contains("verifyToken")
-
-	// Test JWT decode function
-	boolean testJwtDecode()
-		string decodeCall = "Auth.decodeToken(token)"
-		return decodeCall.contains("decodeToken")
-
-	// Test JWT expiration
-	boolean testJwtExpiration()
-		string claim = "exp: 1234567890"
-		return claim.contains("exp:")
-
-	// Test JWT issuer claim
-	boolean testJwtIssuer()
-		string claim = "iss: \"myapp\""
-		return claim.contains("iss:")
-
-	// Test JWT subject claim
-	boolean testJwtSubject()
-		string claim = "sub: \"user123\""
-		return claim.contains("sub:")
-
-	// Test JWT refresh token
-	boolean testJwtRefresh()
-		string refreshCall = "Auth.refreshToken(token)"
-		return refreshCall.contains("refreshToken")
-
 start:
 	printl("=== Test Suite: JWT Basic ===")
 	printl("")
@@ -114,3 +66,51 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test JWT token structure
+	boolean testJwtStructure()
+		string token = "header.payload.signature"
+		integer dotCount = 0
+		string text = token
+		integer pos = text.indexOf(".")
+		while pos != -1
+			dotCount = dotCount + 1
+			text = text.substring(pos + 1, text.length())
+			pos = text.indexOf(".")
+		return dotCount == 2
+
+	// Test JWT create function
+	boolean testJwtCreate()
+		string createCall = "Auth.createToken(userId, claims)"
+		return createCall.contains("createToken")
+
+	// Test JWT verify function
+	boolean testJwtVerify()
+		string verifyCall = "Auth.verifyToken(token)"
+		return verifyCall.contains("verifyToken")
+
+	// Test JWT decode function
+	boolean testJwtDecode()
+		string decodeCall = "Auth.decodeToken(token)"
+		return decodeCall.contains("decodeToken")
+
+	// Test JWT expiration
+	boolean testJwtExpiration()
+		string claim = "exp: 1234567890"
+		return claim.contains("exp:")
+
+	// Test JWT issuer claim
+	boolean testJwtIssuer()
+		string claim = "iss: \"myapp\""
+		return claim.contains("iss:")
+
+	// Test JWT subject claim
+	boolean testJwtSubject()
+		string claim = "sub: \"user123\""
+		return claim.contains("sub:")
+
+	// Test JWT refresh token
+	boolean testJwtRefresh()
+		string refreshCall = "Auth.refreshToken(token)"
+		return refreshCall.contains("refreshToken")
+

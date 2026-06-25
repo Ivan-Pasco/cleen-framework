@@ -1,47 +1,6 @@
 // Test: frame.auth validation errors
 // Tests that invalid configurations produce appropriate errors
 
-functions:
-	// Test invalid JWT secret (too short)
-	boolean testInvalidJwtSecret()
-		string secret = "short"
-		return secret.length() < 32
-
-	// Test expired token detection
-	boolean testExpiredTokenDetection()
-		string errorCode = "TOKEN_EXPIRED"
-		return errorCode == "TOKEN_EXPIRED"
-
-	// Test invalid token format
-	boolean testInvalidTokenFormat()
-		string errorCode = "INVALID_TOKEN"
-		return errorCode == "INVALID_TOKEN"
-
-	// Test missing auth header
-	boolean testMissingAuthHeader()
-		string errorCode = "NO_AUTH_HEADER"
-		return errorCode == "NO_AUTH_HEADER"
-
-	// Test invalid credentials
-	boolean testInvalidCredentials()
-		string errorCode = "INVALID_CREDENTIALS"
-		return errorCode == "INVALID_CREDENTIALS"
-
-	// Test session not found
-	boolean testSessionNotFound()
-		string errorCode = "SESSION_NOT_FOUND"
-		return errorCode == "SESSION_NOT_FOUND"
-
-	// Test permission denied
-	boolean testPermissionDenied()
-		string errorCode = "PERMISSION_DENIED"
-		return errorCode == "PERMISSION_DENIED"
-
-	// Test weak password rejection
-	boolean testWeakPassword()
-		string errorCode = "WEAK_PASSWORD"
-		return errorCode == "WEAK_PASSWORD"
-
 start:
 	printl("=== Test Suite: Auth Validation Errors ===")
 	printl("")
@@ -107,3 +66,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test invalid JWT secret (too short)
+	boolean testInvalidJwtSecret()
+		string secret = "short"
+		return secret.length() < 32
+
+	// Test expired token detection
+	boolean testExpiredTokenDetection()
+		string errorCode = "TOKEN_EXPIRED"
+		return errorCode == "TOKEN_EXPIRED"
+
+	// Test invalid token format
+	boolean testInvalidTokenFormat()
+		string errorCode = "INVALID_TOKEN"
+		return errorCode == "INVALID_TOKEN"
+
+	// Test missing auth header
+	boolean testMissingAuthHeader()
+		string errorCode = "NO_AUTH_HEADER"
+		return errorCode == "NO_AUTH_HEADER"
+
+	// Test invalid credentials
+	boolean testInvalidCredentials()
+		string errorCode = "INVALID_CREDENTIALS"
+		return errorCode == "INVALID_CREDENTIALS"
+
+	// Test session not found
+	boolean testSessionNotFound()
+		string errorCode = "SESSION_NOT_FOUND"
+		return errorCode == "SESSION_NOT_FOUND"
+
+	// Test permission denied
+	boolean testPermissionDenied()
+		string errorCode = "PERMISSION_DENIED"
+		return errorCode == "PERMISSION_DENIED"
+
+	// Test weak password rejection
+	boolean testWeakPassword()
+		string errorCode = "WEAK_PASSWORD"
+		return errorCode == "WEAK_PASSWORD"
+

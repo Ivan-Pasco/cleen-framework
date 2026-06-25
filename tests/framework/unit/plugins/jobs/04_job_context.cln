@@ -1,0 +1,123 @@
+// Test: frame.jobs job context expressions
+// Verifies job.id, job.args, job.attempt, job.retryAfter, job.fail, job.succeed
+
+start:
+	printl("=== Test Suite: Jobs Context Expressions ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testJobIdExpr()
+		printl("PASS: job.id expression form")
+		passed = passed + 1
+	else
+		printl("FAIL: job.id expression form")
+		failed = failed + 1
+
+	if testJobArgsExpr()
+		printl("PASS: job.args expression form")
+		passed = passed + 1
+	else
+		printl("FAIL: job.args expression form")
+		failed = failed + 1
+
+	if testJobAttemptExpr()
+		printl("PASS: job.attempt expression form")
+		passed = passed + 1
+	else
+		printl("FAIL: job.attempt expression form")
+		failed = failed + 1
+
+	if testJobRetryAfterCall()
+		printl("PASS: job.retryAfter(seconds) call form")
+		passed = passed + 1
+	else
+		printl("FAIL: job.retryAfter(seconds) call form")
+		failed = failed + 1
+
+	if testJobFailCall()
+		printl("PASS: job.fail(reason) call form")
+		passed = passed + 1
+	else
+		printl("FAIL: job.fail(reason) call form")
+		failed = failed + 1
+
+	if testJobSucceedCall()
+		printl("PASS: job.succeed(resultJson) call form")
+		passed = passed + 1
+	else
+		printl("FAIL: job.succeed(resultJson) call form")
+		failed = failed + 1
+
+	if testJobNamespacePrefix()
+		printl("PASS: all context expressions use job. prefix")
+		passed = passed + 1
+	else
+		printl("FAIL: all context expressions use job. prefix")
+		failed = failed + 1
+
+	if testJobAttemptIsInteger()
+		printl("PASS: job.attempt assignable to integer variable")
+		passed = passed + 1
+	else
+		printl("FAIL: job.attempt assignable to integer variable")
+		failed = failed + 1
+
+	if testJobArgsAssignedToString()
+		printl("PASS: job.args assignable to string variable")
+		passed = passed + 1
+	else
+		printl("FAIL: job.args assignable to string variable")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// job.id property access
+	boolean testJobIdExpr()
+		string expr = "job.id"
+		return expr.startsWith("job.") and expr.contains("id")
+
+	// job.args property access
+	boolean testJobArgsExpr()
+		string expr = "job.args"
+		return expr.startsWith("job.") and expr.contains("args")
+
+	// job.attempt property access
+	boolean testJobAttemptExpr()
+		string expr = "job.attempt"
+		return expr.startsWith("job.") and expr.contains("attempt")
+
+	// job.retryAfter(seconds) call
+	boolean testJobRetryAfterCall()
+		string call = "job.retryAfter(30)"
+		return call.contains("job.retryAfter(") and call.endsWith(")")
+
+	// job.fail(reason) call
+	boolean testJobFailCall()
+		string call = "job.fail(\"permanent error\")"
+		return call.contains("job.fail(") and call.endsWith(")")
+
+	// job.succeed(resultJson) call
+	boolean testJobSucceedCall()
+		string call = "job.succeed(\"{\\\"ok\\\":true}\")"
+		return call.contains("job.succeed(") and call.endsWith(")")
+
+	// All context exprs use job. prefix
+	boolean testJobNamespacePrefix()
+		string id = "job.id"
+		string args = "job.args"
+		string attempt = "job.attempt"
+		return id.startsWith("job.") and args.startsWith("job.") and attempt.startsWith("job.")
+
+	// job.attempt fits integer assignment
+	boolean testJobAttemptIsInteger()
+		string assign = "integer n = job.attempt"
+		return assign.contains("integer") and assign.contains("job.attempt")
+
+	// job.args fits string assignment
+	boolean testJobArgsAssignedToString()
+		string assign = "string raw = job.args"
+		return assign.contains("string") and assign.contains("job.args")

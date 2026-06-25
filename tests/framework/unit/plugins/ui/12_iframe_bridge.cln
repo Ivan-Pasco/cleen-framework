@@ -2,48 +2,6 @@
 // Verifies bridge function names, cl-preview directive handling,
 // and the postMessage channel contract.
 
-functions:
-	// Bridge function names
-	boolean testIframeSendName()
-		return "_ui_iframe_send" == "_ui_iframe_send"
-
-	boolean testIframeOnMessageName()
-		return "_ui_iframe_on_message" == "_ui_iframe_on_message"
-
-	boolean testIframeGetBoundsName()
-		return "_ui_iframe_get_bounds" == "_ui_iframe_get_bounds"
-
-	boolean testIframeInjectName()
-		return "_ui_iframe_inject" == "_ui_iframe_inject"
-
-	// cl-preview directive recognized in directives string
-	boolean testClPreviewInDirectives()
-		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,"
-		return directives.indexOf(",cl-preview,") != -1
-
-	// cl-preview renders data-cl-preview marker on iframe
-	boolean testClPreviewRendersMarker()
-		// The main.cln render_element_with_preview function adds data-cl-preview='true'
-		string expected = "data-cl-preview='true'"
-		return expected.indexOf("data-cl-preview") != -1
-
-	// designer-select message type contract
-	boolean testDesignerSelectMessageType()
-		string msgType = "designer-select"
-		return msgType == "designer-select"
-
-	// postMessage payload fields
-	boolean testPostMessageFields()
-		string fields = "type,selector,tagName,bounds,attrs"
-		return fields.indexOf("type") != -1 and fields.indexOf("selector") != -1 and fields.indexOf("bounds") != -1
-
-	// Clean namespace aliases
-	boolean testUiIframeSendAlias()
-		return "ui.iframeSend" == "ui.iframeSend"
-
-	boolean testUiIframeOnMessageAlias()
-		return "ui.iframeOnMessage" == "ui.iframeOnMessage"
-
 start:
 	printl("=== Test Suite: iframe Communication Bridge (§FEXT-3) ===")
 	printl("")
@@ -123,3 +81,45 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function names
+	boolean testIframeSendName()
+		return "_ui_iframe_send" == "_ui_iframe_send"
+
+	boolean testIframeOnMessageName()
+		return "_ui_iframe_on_message" == "_ui_iframe_on_message"
+
+	boolean testIframeGetBoundsName()
+		return "_ui_iframe_get_bounds" == "_ui_iframe_get_bounds"
+
+	boolean testIframeInjectName()
+		return "_ui_iframe_inject" == "_ui_iframe_inject"
+
+	// cl-preview directive recognized in directives string
+	boolean testClPreviewInDirectives()
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,"
+		return directives.indexOf(",cl-preview,") != -1
+
+	// cl-preview renders data-cl-preview marker on iframe
+	boolean testClPreviewRendersMarker()
+		// The main.cln render_element_with_preview function adds data-cl-preview='true'
+		string expected = "data-cl-preview='true'"
+		return expected.indexOf("data-cl-preview") != -1
+
+	// designer-select message type contract
+	boolean testDesignerSelectMessageType()
+		string msgType = "designer-select"
+		return msgType == "designer-select"
+
+	// postMessage payload fields
+	boolean testPostMessageFields()
+		string fields = "type,selector,tagName,bounds,attrs"
+		return fields.indexOf("type") != -1 and fields.indexOf("selector") != -1 and fields.indexOf("bounds") != -1
+
+	// Clean namespace aliases
+	boolean testUiIframeSendAlias()
+		return "ui.iframeSend" == "ui.iframeSend"
+
+	boolean testUiIframeOnMessageAlias()
+		return "ui.iframeOnMessage" == "ui.iframeOnMessage"
+

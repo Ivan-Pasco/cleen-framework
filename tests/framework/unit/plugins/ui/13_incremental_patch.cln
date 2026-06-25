@@ -2,55 +2,6 @@
 // Verifies bridge function contract, the patchNode algorithm guarantees,
 // and that the Clean alias ui.patch is registered.
 
-functions:
-	// Bridge function name
-	boolean testUiPatchName()
-		return "_ui_patch" == "_ui_patch"
-
-	// patchNode behavioral guarantee: text node update
-	boolean testTextNodeUpdateContract()
-		// If text content changes, only the text node value is updated (not the element)
-		string guarantee = "update nodeValue if text content changes"
-		return guarantee.indexOf("nodeValue") != -1
-
-	// patchNode behavioral guarantee: keyed reconciliation
-	boolean testKeyedReconciliationContract()
-		// Elements with key="X" are matched by key value, not position
-		string guarantee = "key attribute match"
-		return guarantee.indexOf("key") != -1
-
-	// patchNode behavioral guarantee: focus preservation
-	boolean testFocusPreservationContract()
-		// The currently focused element is never removed or recreated
-		string guarantee = "activeElement check before remove"
-		return guarantee.indexOf("activeElement") != -1
-
-	// patchNode behavioral guarantee: data-component is atomic
-	boolean testDataComponentAtomicContract()
-		// Elements with data-component are treated as atomic units
-		string guarantee = "data-component: attributes only, no child recursion"
-		return guarantee.indexOf("data-component") != -1
-
-	// patchAttrs contract
-	boolean testPatchAttrsAddsNew()
-		string contract = "Array.from(newEl.attributes).forEach — setAttribute"
-		return contract.indexOf("setAttribute") != -1
-
-	boolean testPatchAttrsRemovesAbsent()
-		string contract = "Array.from(oldEl.attributes).forEach — removeAttribute"
-		return contract.indexOf("removeAttribute") != -1
-
-	// Clean alias
-	boolean testUiPatchAlias()
-		string alias = "ui.patch"
-		return alias == "ui.patch"
-
-	// Selector-not-found returns -1
-	boolean testMissingElementReturnsNegativeOne()
-		// When selector matches nothing, _ui_patch returns -1 (no-op)
-		integer result = -1
-		return result == -1
-
 start:
 	printl("=== Test Suite: Incremental DOM Patching (§FEXT-5) ===")
 	printl("")
@@ -123,3 +74,52 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function name
+	boolean testUiPatchName()
+		return "_ui_patch" == "_ui_patch"
+
+	// patchNode behavioral guarantee: text node update
+	boolean testTextNodeUpdateContract()
+		// If text content changes, only the text node value is updated (not the element)
+		string guarantee = "update nodeValue if text content changes"
+		return guarantee.indexOf("nodeValue") != -1
+
+	// patchNode behavioral guarantee: keyed reconciliation
+	boolean testKeyedReconciliationContract()
+		// Elements with key="X" are matched by key value, not position
+		string guarantee = "key attribute match"
+		return guarantee.indexOf("key") != -1
+
+	// patchNode behavioral guarantee: focus preservation
+	boolean testFocusPreservationContract()
+		// The currently focused element is never removed or recreated
+		string guarantee = "activeElement check before remove"
+		return guarantee.indexOf("activeElement") != -1
+
+	// patchNode behavioral guarantee: data-component is atomic
+	boolean testDataComponentAtomicContract()
+		// Elements with data-component are treated as atomic units
+		string guarantee = "data-component: attributes only, no child recursion"
+		return guarantee.indexOf("data-component") != -1
+
+	// patchAttrs contract
+	boolean testPatchAttrsAddsNew()
+		string contract = "Array.from(newEl.attributes).forEach — setAttribute"
+		return contract.indexOf("setAttribute") != -1
+
+	boolean testPatchAttrsRemovesAbsent()
+		string contract = "Array.from(oldEl.attributes).forEach — removeAttribute"
+		return contract.indexOf("removeAttribute") != -1
+
+	// Clean alias
+	boolean testUiPatchAlias()
+		string alias = "ui.patch"
+		return alias == "ui.patch"
+
+	// Selector-not-found returns -1
+	boolean testMissingElementReturnsNegativeOne()
+		// When selector matches nothing, _ui_patch returns -1 (no-op)
+		integer result = -1
+		return result == -1
+

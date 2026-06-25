@@ -1,39 +1,6 @@
 // Integration Test: Full stack integration
 // Tests all plugins working together
 
-functions:
-	// Test web + data integration
-	boolean testWebDataIntegration()
-		string flow = "endpoint calls model.find()"
-		return flow.contains("model")
-
-	// Test web + auth integration
-	boolean testWebAuthIntegration()
-		string flow = "endpoint with guard checks token"
-		return flow.contains("guard")
-
-	// Test auth + data integration
-	boolean testAuthDataIntegration()
-		string flow = "auth stores user in database"
-		return flow.contains("database")
-
-	// Test ui + web integration
-	boolean testUiWebIntegration()
-		string flow = "component fetches from endpoint"
-		return flow.contains("endpoint")
-
-	// Test full request cycle
-	boolean testFullRequestCycle()
-		string flow = "request to endpoint to model to response"
-		boolean hasRequest = flow.contains("request")
-		boolean hasResponse = flow.contains("response")
-		return hasRequest and hasResponse
-
-	// Test transaction across plugins
-	boolean testTransactionAcrossPlugins()
-		string flow = "transaction creates user and profile"
-		return flow.contains("transaction")
-
 start:
 	printl("=== Integration Test: Full Stack ===")
 	printl("")
@@ -85,3 +52,36 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test web + data integration
+	boolean testWebDataIntegration()
+		string flow = "endpoint calls model.find()"
+		return flow.contains("model")
+
+	// Test web + auth integration
+	boolean testWebAuthIntegration()
+		string flow = "endpoint with guard checks token"
+		return flow.contains("guard")
+
+	// Test auth + data integration
+	boolean testAuthDataIntegration()
+		string flow = "auth stores user in database"
+		return flow.contains("database")
+
+	// Test ui + web integration
+	boolean testUiWebIntegration()
+		string flow = "component fetches from endpoint"
+		return flow.contains("endpoint")
+
+	// Test full request cycle
+	boolean testFullRequestCycle()
+		string flow = "request to endpoint to model to response"
+		boolean hasRequest = flow.contains("request")
+		boolean hasResponse = flow.contains("response")
+		return hasRequest and hasResponse
+
+	// Test transaction across plugins
+	boolean testTransactionAcrossPlugins()
+		string flow = "transaction creates user and profile"
+		return flow.contains("transaction")
+

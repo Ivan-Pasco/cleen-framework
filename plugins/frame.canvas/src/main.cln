@@ -81,7 +81,7 @@ functions:
 		string id_str = get_attr(attrs, "id", "_canvas_0")
 		string fps_val = get_attr(attrs, "fps", "60")
 
-		// Extract each sub-block body (all lines trimmed)
+		// Single-instance sub-blocks
 		string state_body = extract_scene_subblock(body, "state")
 		string init_body = extract_scene_subblock(body, "init")
 		string frame_body = extract_scene_subblock(body, "onFrame")
@@ -93,6 +93,37 @@ functions:
 		string mv_param = extract_scene_subblock_attr(body, "onPointerMove", "param", "px,py")
 		string up_body = extract_scene_subblock(body, "onPointerUp")
 		string up_param = extract_scene_subblock_attr(body, "onPointerUp", "param", "px,py")
+		string assets_body = extract_scene_subblock(body, "assets")
+		string layers_body = extract_scene_subblock(body, "layers")
+		string camera_body = extract_scene_subblock(body, "camera")
+		string kd_body = extract_scene_subblock(body, "onKeyDown")
+		string kd_param = extract_scene_subblock_attr(body, "onKeyDown", "param", "key")
+		string ku_body = extract_scene_subblock(body, "onKeyUp")
+		string ku_param = extract_scene_subblock_attr(body, "onKeyUp", "param", "key")
+		string ex_body = extract_scene_subblock(body, "onExit")
+		string ps_body = extract_scene_subblock(body, "onPause")
+		string rs_body = extract_scene_subblock(body, "onResume")
+
+		// Multi-instance defs — each yields registration calls for start:
+		string tween_regs = scan_multi_instance(body, "tween", 1)
+		string timeline_regs = scan_multi_instance(body, "timeline", 2)
+		string anim_sprite_regs = scan_multi_instance(body, "animSprite", 3)
+		string anim_state_regs = scan_multi_instance(body, "animState", 4)
+		string particles_regs = scan_multi_instance(body, "particles", 5)
+		string path_regs = scan_multi_instance(body, "path", 6)
+		string gradient_regs = scan_multi_instance(body, "gradient", 7)
+		string custom_ease_regs = scan_multi_instance(body, "customEase", 8)
+
+		// Single-instance registration outputs
+		string asset_regs = ""
+		if assets_body.trim().length() > 0
+			asset_regs = process_assets_body(assets_body)
+		string layer_regs = ""
+		if layers_body.trim().length() > 0
+			layer_regs = process_layers_body(layers_body)
+		string camera_regs = ""
+		if camera_body.trim().length() > 0
+			camera_regs = expand_camera("{}", camera_body)
 
 		// State management snippets
 		string s_load = scene_state_load(state_body)
@@ -147,10 +178,83 @@ functions:
 			result = result + s_save
 			result = result + "\n"
 
-		// start: block — init canvas, state vars, request first frame
+		// _on_key_down (only if declared)
+		string kd_trimmed = kd_body.trim()
+		if kd_trimmed.length() > 0
+			string kd_var = scene_param_part(kd_param, 0)
+			result = result + "\tvoid _on_key_down(integer __cv, string " + kd_var + ")\n"
+			result = result + s_load
+			result = result + scene_expand_lines(kd_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// _on_key_up (only if declared)
+		string ku_trimmed = ku_body.trim()
+		if ku_trimmed.length() > 0
+			string ku_var = scene_param_part(ku_param, 0)
+			result = result + "\tvoid _on_key_up(integer __cv, string " + ku_var + ")\n"
+			result = result + s_load
+			result = result + scene_expand_lines(ku_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// _on_exit (only if declared)
+		string ex_trimmed = ex_body.trim()
+		if ex_trimmed.length() > 0
+			result = result + "\tvoid _on_exit(integer __cv)\n"
+			result = result + s_load
+			result = result + scene_expand_lines(ex_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// _on_pause (only if declared)
+		string ps_trimmed = ps_body.trim()
+		if ps_trimmed.length() > 0
+			result = result + "\tvoid _on_pause(integer __cv)\n"
+			result = result + s_load
+			result = result + scene_expand_lines(ps_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// _on_resume (only if declared)
+		string rs_trimmed = rs_body.trim()
+		if rs_trimmed.length() > 0
+			result = result + "\tvoid _on_resume(integer __cv)\n"
+			result = result + s_load
+			result = result + scene_expand_lines(rs_body)
+			result = result + s_save
+			result = result + "\n"
+
+		// start: block — init canvas, register assets/animations, request first frame
 		result = result + "start:\n"
 		result = result + "\tinteger __cv = _canvas_init(" + width + ", " + height + ", \"" + id_str + "\")\n"
 		result = result + "\t_canvas_set_fps(__cv, " + fps_val + ")\n"
+		// Asset and layer registrations
+		result = result + indent_lines(asset_regs)
+		result = result + indent_lines(layer_regs)
+		// Animation/visual definitions
+		result = result + indent_lines(anim_sprite_regs)
+		result = result + indent_lines(anim_state_regs)
+		result = result + indent_lines(tween_regs)
+		result = result + indent_lines(timeline_regs)
+		result = result + indent_lines(particles_regs)
+		result = result + indent_lines(path_regs)
+		result = result + indent_lines(gradient_regs)
+		result = result + indent_lines(custom_ease_regs)
+		// Camera config
+		result = result + indent_lines(camera_regs)
+		// Lifecycle / key handler registrations
+		if kd_trimmed.length() > 0
+			result = result + "\tinteger __rkd = _canvas_on_key_down(__cv)\n"
+		if ku_trimmed.length() > 0
+			result = result + "\tinteger __rku = _canvas_on_key_up(__cv)\n"
+		if ex_trimmed.length() > 0
+			result = result + "\tinteger __rex = _canvas_on_exit(__cv)\n"
+		if ps_trimmed.length() > 0
+			result = result + "\tinteger __rps = _canvas_on_pause(__cv)\n"
+		if rs_trimmed.length() > 0
+			result = result + "\tinteger __rrs = _canvas_on_resume(__cv)\n"
+		// State vars and user init
 		result = result + s_init
 		string init_trimmed = init_body.trim()
 		if init_trimmed.length() > 0
@@ -2081,3 +2185,157 @@ functions:
 		if idx == 0
 			return p.substring(0, comma).trim()
 		return p.substring(comma + 1, p.length()).trim()
+
+	// =====================================================================
+	// NESTED SUB-BLOCK SCANNING
+	// =====================================================================
+	// canvasScene: bodies are passed to expand_canvas_scene as one opaque
+	// string. The compiler does not recurse into nested blocks, so the scene
+	// expander must walk the body and dispatch each sub-block (assets, tween,
+	// animSprite, animState, particles, path, gradient, customEase, camera,
+	// timeline, layers, onKeyDown/Up/Exit/Pause/Resume) to the matching
+	// expander. Without this, every spec-canonical canvas pattern that uses
+	// these blocks silently drops them at compile time.
+
+	// Parse a sub-block header tail like `"hero-idle"` or
+	// `"myEase" x1=0.4 y1=0.1 x2=0.6 y2=0.9` into an attrs-JSON string
+	// that get_attr() can consume.
+	string parse_inline_attrs(string s)
+		string json = "{"
+		string rest = s.trim()
+		boolean first = true
+
+		// First token: optional quoted name
+		if rest.startsWith("\"")
+			integer end_quote = rest.indexOf("\"", 1)
+			if end_quote != -1
+				string name = rest.substring(1, end_quote)
+				json = json + "\"name\":\"" + name + "\""
+				first = false
+				rest = rest.substring(end_quote + 1, rest.length()).trim()
+
+		// Remaining: key=value pairs
+		integer safety = 0
+		while rest.length() > 0 and safety < 32
+			safety = safety + 1
+			integer eq = rest.indexOf("=")
+			if eq == -1
+				rest = ""
+			else
+				string key = rest.substring(0, eq).trim()
+				string after = rest.substring(eq + 1, rest.length())
+				string value = ""
+				if after.startsWith("\"")
+					integer end_q = after.indexOf("\"", 1)
+					if end_q == -1
+						rest = ""
+					else
+						value = after.substring(1, end_q)
+						rest = after.substring(end_q + 1, after.length()).trim()
+				else
+					integer space = after.indexOf(" ")
+					if space == -1
+						value = after
+						rest = ""
+					else
+						value = after.substring(0, space)
+						rest = after.substring(space, after.length()).trim()
+				if not first
+					json = json + ","
+				first = false
+				json = json + "\"" + key + "\":\"" + value + "\""
+
+		json = json + "}"
+		return json
+
+	// Indent every line of `code` with a single tab, so the registration
+	// statements emitted by sub-block expanders sit at start: body depth.
+	string indent_lines(string code)
+		string out = ""
+		integer i = 0
+		integer len = code.length()
+		while i < len
+			integer nl = code.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = code.substring(i, len)
+				next_i = len
+			else
+				line = code.substring(i, nl)
+				next_i = nl + 1
+			if line.length() > 0
+				out = out + "\t" + line + "\n"
+			i = next_i
+		return out
+
+	// Walk the canvasScene body looking for `keyword "name" ...:` style
+	// headers (multi-instance sub-blocks: tween/timeline/animSprite/
+	// animState/particles/path/gradient/customEase). For each instance,
+	// build an attrs-JSON from the header tail, collect the body until
+	// the next sub-block header, and dispatch to the matching expander.
+	// `kind` selects the expander because Clean has no function pointers.
+	string scan_multi_instance(string body, string keyword, integer kind)
+		string out = ""
+		integer scan = 0
+		integer len = body.length()
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string trimmed = line.trim()
+			boolean is_target = false
+			if trimmed.startsWith(keyword + " ")
+				is_target = true
+			else if trimmed == keyword + ":"
+				is_target = true
+			if is_target
+				string header_rest = trimmed.substring(keyword.length(), trimmed.length()).trim()
+				if header_rest.endsWith(":")
+					header_rest = header_rest.substring(0, header_rest.length() - 1).trim()
+				string attrs_json = parse_inline_attrs(header_rest)
+				// Collect body until next sub-block header
+				string sub_body = ""
+				integer s2 = next_scan
+				while s2 < len
+					integer nl2 = body.indexOf("\n", s2)
+					string l2 = ""
+					integer ns2 = 0
+					if nl2 == -1
+						l2 = body.substring(s2, len)
+						ns2 = len
+					else
+						l2 = body.substring(s2, nl2)
+						ns2 = nl2 + 1
+					string t2 = l2.trim()
+					if is_scene_subblock_header(t2)
+						break
+					if t2.length() > 0
+						sub_body = sub_body + t2 + "\n"
+					s2 = ns2
+				if kind == 1
+					out = out + expand_tween(attrs_json, sub_body)
+				if kind == 2
+					out = out + expand_timeline(attrs_json, sub_body)
+				if kind == 3
+					out = out + expand_anim_sprite(attrs_json, sub_body)
+				if kind == 4
+					out = out + expand_anim_state(attrs_json, sub_body)
+				if kind == 5
+					out = out + expand_particles(attrs_json, sub_body)
+				if kind == 6
+					out = out + expand_path(attrs_json, sub_body)
+				if kind == 7
+					out = out + expand_gradient(attrs_json, sub_body)
+				if kind == 8
+					out = out + expand_custom_ease(attrs_json, sub_body)
+				scan = s2
+			else
+				scan = next_scan
+		return out

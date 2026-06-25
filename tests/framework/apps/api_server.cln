@@ -1,6 +1,29 @@
 // Test Application: Full API Server
 // Tests complete server functionality with middleware concepts
 
+start:
+	printl("Starting API Server...")
+	integer status = 0
+
+	// Register routes
+	status = _http_route("GET", "/", 0)
+	status = _http_route("GET", "/health", 1)
+	status = _http_route("GET", "/api/info", 2)
+	status = _http_route("POST", "/api/echo", 3)
+	status = _http_route("GET", "/api/headers", 4)
+	status = _http_route("GET", "/api/params", 5)
+	status = _http_route("GET", "/api/items/:id/details/:subId", 6)
+	status = _http_route("GET", "/api/method", 7)
+	status = _http_route("GET", "/api/error", 8)
+	status = _http_route("OPTIONS", "/api/*", 9)
+	status = _http_route("GET", "/api/rate-limited", 10)
+	status = _http_route("GET", "/api/protected", 11)
+	status = _http_route("POST", "/api/validate", 12)
+
+	printl("API Server routes registered")
+
+	// Start listening
+	integer listenStatus = _http_listen(3000)
 functions:
 	// Handler 0: Home page
 	string __route_handler_0()
@@ -76,26 +99,3 @@ functions:
 		string path = _req_path()
 		return "error:NOT_FOUND,message:Route not found,path:" + path
 
-start:
-	printl("Starting API Server...")
-	integer status = 0
-
-	// Register routes
-	status = _http_route("GET", "/", 0)
-	status = _http_route("GET", "/health", 1)
-	status = _http_route("GET", "/api/info", 2)
-	status = _http_route("POST", "/api/echo", 3)
-	status = _http_route("GET", "/api/headers", 4)
-	status = _http_route("GET", "/api/params", 5)
-	status = _http_route("GET", "/api/items/:id/details/:subId", 6)
-	status = _http_route("GET", "/api/method", 7)
-	status = _http_route("GET", "/api/error", 8)
-	status = _http_route("OPTIONS", "/api/*", 9)
-	status = _http_route("GET", "/api/rate-limited", 10)
-	status = _http_route("GET", "/api/protected", 11)
-	status = _http_route("POST", "/api/validate", 12)
-
-	printl("API Server routes registered")
-
-	// Start listening
-	integer listenStatus = _http_listen(3000)

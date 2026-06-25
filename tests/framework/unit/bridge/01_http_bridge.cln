@@ -1,50 +1,6 @@
 // Test: Host Bridge HTTP functions
 // Tests that HTTP bridge functions work correctly
 
-functions:
-	// Test HTTP route registration
-	boolean testHttpRoute()
-		string routeCall = "_http_route(GET, /api/test, 0)"
-		return routeCall.contains("_http_route")
-
-	// Test HTTP listen
-	boolean testHttpListen()
-		string listenCall = "_http_listen(3000)"
-		return listenCall.contains("_http_listen")
-
-	// Test HTTP response functions
-	boolean testHttpResponse()
-		string responseCall = "_http_response(200, body)"
-		return responseCall.contains("_http_response")
-
-	// Test request body access
-	boolean testReqBody()
-		string bodyCall = "_req_body()"
-		return bodyCall.contains("_req_body")
-
-	// Test request param access
-	boolean testReqParam()
-		string paramCall = "_req_param(id)"
-		return paramCall.contains("_req_param")
-
-	// Test request header access
-	boolean testReqHeader()
-		string headerCall = "_req_header(Content-Type)"
-		return headerCall.contains("_req_header")
-
-	// Test response header set
-	boolean testResHeader()
-		string headerCall = "_res_header(Content-Type, application/json)"
-		return headerCall.contains("_res_header")
-
-	// Test HTTP status codes
-	boolean testHttpStatusCodes()
-		integer ok = 200
-		integer created = 201
-		integer notFound = 404
-		integer serverError = 500
-		return ok == 200 and notFound == 404
-
 start:
 	printl("=== Test Suite: HTTP Bridge ===")
 	printl("")
@@ -110,3 +66,47 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test HTTP route registration
+	boolean testHttpRoute()
+		string routeCall = "_http_route(GET, /api/test, 0)"
+		return routeCall.contains("_http_route")
+
+	// Test HTTP listen
+	boolean testHttpListen()
+		string listenCall = "_http_listen(3000)"
+		return listenCall.contains("_http_listen")
+
+	// Test HTTP response functions
+	boolean testHttpResponse()
+		string responseCall = "_http_response(200, body)"
+		return responseCall.contains("_http_response")
+
+	// Test request body access
+	boolean testReqBody()
+		string bodyCall = "_req_body()"
+		return bodyCall.contains("_req_body")
+
+	// Test request param access
+	boolean testReqParam()
+		string paramCall = "_req_param(id)"
+		return paramCall.contains("_req_param")
+
+	// Test request header access
+	boolean testReqHeader()
+		string headerCall = "_req_header(Content-Type)"
+		return headerCall.contains("_req_header")
+
+	// Test response header set
+	boolean testResHeader()
+		string headerCall = "_res_header(Content-Type, application/json)"
+		return headerCall.contains("_res_header")
+
+	// Test HTTP status codes
+	boolean testHttpStatusCodes()
+		integer ok = 200
+		integer created = 201
+		integer notFound = 404
+		integer serverError = 500
+		return ok == 200 and notFound == 404
+

@@ -1,47 +1,6 @@
 // Test: frame.data model field types
 // Tests that model fields are correctly defined and typed
 
-functions:
-	// Test string field type
-	boolean testStringFieldType()
-		string field = "string name"
-		return field.contains("string")
-
-	// Test integer field type
-	boolean testIntegerFieldType()
-		string field = "integer age"
-		return field.contains("integer")
-
-	// Test boolean field type
-	boolean testBooleanFieldType()
-		string field = "boolean active"
-		return field.contains("boolean")
-
-	// Test number/float field type
-	boolean testNumberFieldType()
-		string field = "number price"
-		return field.contains("number")
-
-	// Test nullable field
-	boolean testNullableField()
-		string field = "string? middleName"
-		return field.contains("?")
-
-	// Test field with default value
-	boolean testFieldDefaultValue()
-		string field = "boolean active = true"
-		return field.contains("= true")
-
-	// Test field validation constraint
-	boolean testFieldValidation()
-		string field = "string email(min=5, max=100)"
-		return field.contains("min=") and field.contains("max=")
-
-	// Test unique constraint
-	boolean testUniqueConstraint()
-		string field = "string email(unique)"
-		return field.contains("unique")
-
 start:
 	printl("=== Test Suite: Model Field Types ===")
 	printl("")
@@ -107,3 +66,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test string field type
+	boolean testStringFieldType()
+		string field = "string name"
+		return field.contains("string")
+
+	// Test integer field type
+	boolean testIntegerFieldType()
+		string field = "integer age"
+		return field.contains("integer")
+
+	// Test boolean field type
+	boolean testBooleanFieldType()
+		string field = "boolean active"
+		return field.contains("boolean")
+
+	// Test number/float field type
+	boolean testNumberFieldType()
+		string field = "number price"
+		return field.contains("number")
+
+	// Test nullable field
+	boolean testNullableField()
+		string field = "string? middleName"
+		return field.contains("?")
+
+	// Test field with default value
+	boolean testFieldDefaultValue()
+		string field = "boolean active = true"
+		return field.contains("= true")
+
+	// Test field validation constraint
+	boolean testFieldValidation()
+		string field = "string email(min=5, max=100)"
+		return field.contains("min=") and field.contains("max=")
+
+	// Test unique constraint
+	boolean testUniqueConstraint()
+		string field = "string email(unique)"
+		return field.contains("unique")
+

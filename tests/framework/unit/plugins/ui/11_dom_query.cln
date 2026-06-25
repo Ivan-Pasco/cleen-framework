@@ -2,55 +2,6 @@
 // Verifies that the DOM query bridge function signatures are correct
 // and that BoundsResult / ScrollResult type fields are documented.
 
-functions:
-	// Bridge function name checks (names must match what loader.js registers)
-	boolean testGetBoundsName()
-		string name = "_ui_get_bounds"
-		return name == "_ui_get_bounds"
-
-	boolean testGetOffsetBoundsName()
-		string name = "_ui_get_offset_bounds"
-		return name == "_ui_get_offset_bounds"
-
-	boolean testGetScrollName()
-		string name = "_ui_get_scroll"
-		return name == "_ui_get_scroll"
-
-	boolean testSetScrollName()
-		string name = "_ui_set_scroll"
-		return name == "_ui_set_scroll"
-
-	boolean testQueryAllName()
-		string name = "_ui_query_all"
-		return name == "_ui_query_all"
-
-	boolean testGetComputedStyleName()
-		string name = "_ui_get_computed_style"
-		return name == "_ui_get_computed_style"
-
-	// BoundsResult field names (must match JSON returned by loader.js)
-	boolean testBoundsResultFields()
-		string fields = "x,y,width,height,top,left,right,bottom"
-		return fields.indexOf("x") != -1 and fields.indexOf("width") != -1 and fields.indexOf("bottom") != -1
-
-	// ScrollResult field names
-	boolean testScrollResultFields()
-		string fields = "scrollX,scrollY,scrollWidth,scrollHeight"
-		return fields.indexOf("scrollX") != -1 and fields.indexOf("scrollHeight") != -1
-
-	// Clean namespace aliases
-	boolean testUiBoundsAlias()
-		string alias = "ui.getBounds"
-		return alias == "ui.getBounds"
-
-	boolean testUiQueryAllAlias()
-		string alias = "ui.queryAll"
-		return alias == "ui.queryAll"
-
-	boolean testUiPatchAlias()
-		string alias = "ui.patch"
-		return alias == "ui.patch"
-
 start:
 	printl("=== Test Suite: DOM Query Bridge Functions (§FEXT-2) ===")
 	printl("")
@@ -137,3 +88,52 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function name checks (names must match what loader.js registers)
+	boolean testGetBoundsName()
+		string name = "_ui_get_bounds"
+		return name == "_ui_get_bounds"
+
+	boolean testGetOffsetBoundsName()
+		string name = "_ui_get_offset_bounds"
+		return name == "_ui_get_offset_bounds"
+
+	boolean testGetScrollName()
+		string name = "_ui_get_scroll"
+		return name == "_ui_get_scroll"
+
+	boolean testSetScrollName()
+		string name = "_ui_set_scroll"
+		return name == "_ui_set_scroll"
+
+	boolean testQueryAllName()
+		string name = "_ui_query_all"
+		return name == "_ui_query_all"
+
+	boolean testGetComputedStyleName()
+		string name = "_ui_get_computed_style"
+		return name == "_ui_get_computed_style"
+
+	// BoundsResult field names (must match JSON returned by loader.js)
+	boolean testBoundsResultFields()
+		string fields = "x,y,width,height,top,left,right,bottom"
+		return fields.indexOf("x") != -1 and fields.indexOf("width") != -1 and fields.indexOf("bottom") != -1
+
+	// ScrollResult field names
+	boolean testScrollResultFields()
+		string fields = "scrollX,scrollY,scrollWidth,scrollHeight"
+		return fields.indexOf("scrollX") != -1 and fields.indexOf("scrollHeight") != -1
+
+	// Clean namespace aliases
+	boolean testUiBoundsAlias()
+		string alias = "ui.getBounds"
+		return alias == "ui.getBounds"
+
+	boolean testUiQueryAllAlias()
+		string alias = "ui.queryAll"
+		return alias == "ui.queryAll"
+
+	boolean testUiPatchAlias()
+		string alias = "ui.patch"
+		return alias == "ui.patch"
+

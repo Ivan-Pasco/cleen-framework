@@ -1,63 +1,6 @@
 // E2E Test: Todo Application
 // Tests complete todo app workflow with CRUD operations
 
-functions:
-	boolean testCreateTodo()
-		// POST /api/todos with title creates new todo
-		string method = "POST"
-		string path = "/api/todos"
-		string body = "title: Buy groceries"
-		return method == "POST" and path.contains("todos") and body.contains("title")
-
-	boolean testListTodos()
-		// GET /api/todos returns array of todos
-		string method = "GET"
-		string path = "/api/todos"
-		string response = "todos array"
-		return method == "GET" and response.contains("array")
-
-	boolean testGetTodoById()
-		// GET /api/todos/:id returns single todo
-		string path = "/api/todos/1"
-		string response = "single todo with id 1"
-		return path.contains("todos") and response.contains("id")
-
-	boolean testUpdateTodo()
-		// PUT /api/todos/:id updates todo
-		string method = "PUT"
-		string path = "/api/todos/1"
-		string body = "completed: true"
-		return method == "PUT" and body.contains("completed")
-
-	boolean testDeleteTodo()
-		// DELETE /api/todos/:id removes todo
-		string method = "DELETE"
-		string path = "/api/todos/1"
-		integer statusCode = 204
-		return method == "DELETE" and statusCode == 204
-
-	boolean testToggleTodoComplete()
-		// PATCH /api/todos/:id/toggle toggles completion status
-		string method = "PATCH"
-		string path = "/api/todos/1/toggle"
-		boolean before = false
-		boolean after = true
-		return method == "PATCH" and before != after
-
-	boolean testFilterByStatus()
-		// GET /api/todos with status filter
-		string path = "/api/todos"
-		string filter = "completed"
-		string response = "filtered todos"
-		return path.contains("todos") and filter == "completed"
-
-	boolean testTodoValidation()
-		// POST with empty title returns validation error
-		string body = "title is empty"
-		integer statusCode = 400
-		string errorCode = "VALIDATION_ERROR"
-		return statusCode == 400 and errorCode.contains("VALIDATION")
-
 start:
 	printl("=== E2E Test: Todo Application ===")
 	printl("")
@@ -123,3 +66,60 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	boolean testCreateTodo()
+		// POST /api/todos with title creates new todo
+		string method = "POST"
+		string path = "/api/todos"
+		string body = "title: Buy groceries"
+		return method == "POST" and path.contains("todos") and body.contains("title")
+
+	boolean testListTodos()
+		// GET /api/todos returns array of todos
+		string method = "GET"
+		string path = "/api/todos"
+		string response = "todos array"
+		return method == "GET" and response.contains("array")
+
+	boolean testGetTodoById()
+		// GET /api/todos/:id returns single todo
+		string path = "/api/todos/1"
+		string response = "single todo with id 1"
+		return path.contains("todos") and response.contains("id")
+
+	boolean testUpdateTodo()
+		// PUT /api/todos/:id updates todo
+		string method = "PUT"
+		string path = "/api/todos/1"
+		string body = "completed: true"
+		return method == "PUT" and body.contains("completed")
+
+	boolean testDeleteTodo()
+		// DELETE /api/todos/:id removes todo
+		string method = "DELETE"
+		string path = "/api/todos/1"
+		integer statusCode = 204
+		return method == "DELETE" and statusCode == 204
+
+	boolean testToggleTodoComplete()
+		// PATCH /api/todos/:id/toggle toggles completion status
+		string method = "PATCH"
+		string path = "/api/todos/1/toggle"
+		boolean before = false
+		boolean after = true
+		return method == "PATCH" and before != after
+
+	boolean testFilterByStatus()
+		// GET /api/todos with status filter
+		string path = "/api/todos"
+		string filter = "completed"
+		string response = "filtered todos"
+		return path.contains("todos") and filter == "completed"
+
+	boolean testTodoValidation()
+		// POST with empty title returns validation error
+		string body = "title is empty"
+		integer statusCode = 400
+		string errorCode = "VALIDATION_ERROR"
+		return statusCode == 400 and errorCode.contains("VALIDATION")
+

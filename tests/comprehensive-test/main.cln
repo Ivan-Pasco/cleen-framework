@@ -5,6 +5,48 @@ plugins:
 	frame.data
 	frame.server
 
+start:
+	printl("================================")
+	printl("  Comprehensive Framework Test")
+	printl("================================")
+	printl("")
+
+	// Initialize database
+	printl("Initializing database...")
+	string createSql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, price REAL DEFAULT 0, quantity INTEGER DEFAULT 0)"
+	integer createResult = _db_execute(createSql, "[]")
+	printl("Table: " + createResult.toString())
+	printl("")
+
+	printl("Registering routes...")
+	integer status = 0
+
+	status = _http_route("GET", "/", 0)
+	printl("  GET  /")
+
+	status = _http_route("GET", "/api/status", 1)
+	printl("  GET  /api/status")
+
+	status = _http_route("GET", "/api/items", 2)
+	printl("  GET  /api/items")
+
+	status = _http_route("POST", "/api/items", 3)
+	printl("  POST /api/items")
+
+	status = _http_route("GET", "/api/items/:id", 4)
+	printl("  GET  /api/items/:id")
+
+	status = _http_route("POST", "/api/items/:id/delete", 5)
+	printl("  POST /api/items/:id/delete")
+
+	status = _http_route("GET", "/api/test/json", 6)
+	printl("  GET  /api/test/json")
+
+	status = _http_route("GET", "/api/test/db", 7)
+	printl("  GET  /api/test/db")
+
+	printl("")
+	printl("Server ready on http://localhost:3000")
 functions:
 	// HANDLER 0: Home page
 	string __route_handler_0()
@@ -281,45 +323,3 @@ functions:
 		p = p + "]"
 		return p
 
-start:
-	printl("================================")
-	printl("  Comprehensive Framework Test")
-	printl("================================")
-	printl("")
-
-	// Initialize database
-	printl("Initializing database...")
-	string createSql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, price REAL DEFAULT 0, quantity INTEGER DEFAULT 0)"
-	integer createResult = _db_execute(createSql, "[]")
-	printl("Table: " + createResult.toString())
-	printl("")
-
-	printl("Registering routes...")
-	integer status = 0
-
-	status = _http_route("GET", "/", 0)
-	printl("  GET  /")
-
-	status = _http_route("GET", "/api/status", 1)
-	printl("  GET  /api/status")
-
-	status = _http_route("GET", "/api/items", 2)
-	printl("  GET  /api/items")
-
-	status = _http_route("POST", "/api/items", 3)
-	printl("  POST /api/items")
-
-	status = _http_route("GET", "/api/items/:id", 4)
-	printl("  GET  /api/items/:id")
-
-	status = _http_route("POST", "/api/items/:id/delete", 5)
-	printl("  POST /api/items/:id/delete")
-
-	status = _http_route("GET", "/api/test/json", 6)
-	printl("  GET  /api/test/json")
-
-	status = _http_route("GET", "/api/test/db", 7)
-	printl("  GET  /api/test/db")
-
-	printl("")
-	printl("Server ready on http://localhost:3000")

@@ -1,0 +1,113 @@
+// Test: frame.client form: on success sub-options and on error/on submit hooks
+// Verifies form: block accepts clear, emit, ordering between them, and error/submit hooks
+
+start:
+	printl("=== Test Suite: Form on success/error sub-options (frame.client) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testOnSuccessClear()
+		printl("PASS: on success: clear option recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: on success: clear option recognised")
+		failed = failed + 1
+
+	if testOnSuccessEmit()
+		printl("PASS: on success: emit \"funcName\" calls named function")
+		passed = passed + 1
+	else
+		printl("FAIL: on success: emit \"funcName\" calls named function")
+		failed = failed + 1
+
+	if testOnSuccessClearThenEmit()
+		printl("PASS: on success: clear emit \"loadTasks\" ordering accepted")
+		passed = passed + 1
+	else
+		printl("FAIL: on success: clear emit \"loadTasks\" ordering accepted")
+		failed = failed + 1
+
+	if testOnSuccessEmitThenClear()
+		printl("PASS: on success: emit \"loadTasks\" clear ordering accepted")
+		passed = passed + 1
+	else
+		printl("FAIL: on success: emit \"loadTasks\" clear ordering accepted")
+		failed = failed + 1
+
+	if testOnErrorShow()
+		printl("PASS: on error: show option populates formError")
+		passed = passed + 1
+	else
+		printl("FAIL: on error: show option populates formError")
+		failed = failed + 1
+
+	if testOnSubmitHook()
+		printl("PASS: on submit: pre-hook callback recognised")
+		passed = passed + 1
+	else
+		printl("FAIL: on submit: pre-hook callback recognised")
+		failed = failed + 1
+
+	if testFormGeneratesSubmit()
+		printl("PASS: form: block generates submit() function")
+		passed = passed + 1
+	else
+		printl("FAIL: form: block generates submit() function")
+		failed = failed + 1
+
+	if testFormGeneratesState()
+		printl("PASS: form: block generates submitting/formError/formSuccess state")
+		passed = passed + 1
+	else
+		printl("FAIL: form: block generates submitting/formError/formSuccess state")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Test on success: clear
+	boolean testOnSuccessClear()
+		string option = "on success: clear"
+		return option.contains("on success:") and option.contains("clear")
+
+	// Test on success: emit "funcName"
+	boolean testOnSuccessEmit()
+		string option = "on success: emit loadTasks"
+		return option.contains("on success:") and option.contains("emit") and option.contains("loadTasks")
+
+	// Test ordering: clear emit
+	boolean testOnSuccessClearThenEmit()
+		string option = "on success: clear emit loadTasks"
+		integer clearPos = option.indexOf("clear")
+		integer emitPos = option.indexOf("emit")
+		return clearPos != -1 and emitPos != -1 and clearPos < emitPos
+
+	// Test ordering: emit clear
+	boolean testOnSuccessEmitThenClear()
+		string option = "on success: emit loadTasks clear"
+		integer emitPos = option.indexOf("emit")
+		integer clearPos = option.indexOf("clear")
+		return emitPos != -1 and clearPos != -1 and emitPos < clearPos
+
+	// Test on error: show
+	boolean testOnErrorShow()
+		string option = "on error: show"
+		return option.startsWith("on error:") and option.contains("show")
+
+	// Test on submit: pre-hook
+	boolean testOnSubmitHook()
+		string option = "on submit: validateBeforeSend"
+		return option.startsWith("on submit:") and option.contains("validateBeforeSend")
+
+	// Test form: block generates submit()
+	boolean testFormGeneratesSubmit()
+		string generated = "void submit()"
+		return generated.contains("submit()")
+
+	// Test form: block generates state variables
+	boolean testFormGeneratesState()
+		string generated = "boolean submitting; string formError; string formSuccess"
+		return generated.contains("submitting") and generated.contains("formError") and generated.contains("formSuccess")

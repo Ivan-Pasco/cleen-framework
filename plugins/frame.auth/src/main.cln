@@ -135,11 +135,15 @@ functions:
 		result = result + "functions:\n"
 
 		// auth.session.create(userId, claims)
+		// Spec §17: rotate the CSRF token on session creation so any pre-login
+		// token cannot be replayed against the new authenticated session.
 		result = result + "\tstring session_create(integer userId, string claims)\n"
 		result = result + "\t\tstring sessionId = _crypto_random_hex(32)\n"
 		result = result + "\t\tinteger expiry = _time_now() + (__session_timeout * 60)\n"
 		result = result + "\t\tstring sessionData = \"{\\\"userId\\\":\" + userId.toString() + \",\\\"claims\\\":\" + claims + \",\\\"expiry\\\":\" + expiry.toString() + \"}\"\n"
 		result = result + "\t\t_session_store(sessionId, \"\", sessionData, 0, 0)\n"
+		result = result + "\t\tif __csrf_enabled\n"
+		result = result + "\t\t\t_session_set_csrf(_crypto_random_hex(32))\n"
 		result = result + "\t\treturn sessionId\n\n"
 
 		// auth.session.setCookie(sessionId, response) — spec §5
@@ -291,11 +295,11 @@ functions:
 
 functions:
 	// Expand roles: config block
+	// Builds the roles JSON at expand time (not at runtime) so role names
+	// and permission lists are properly escaped before being embedded as a
+	// Clean string literal. The runtime then just registers the prebuilt blob.
 	string expand_roles(string body)
-		string result = "// Roles configuration\n"
-		result = result + "string __roles_config = \"{\"\n"
-
-		// Parse each role line
+		string json = "{"
 		string lines = body
 		integer line_start = 0
 		boolean first = true
@@ -312,16 +316,18 @@ functions:
 				string permissions = line.substring(colon_pos + 1, line.length()).trim()
 
 				if not first
-					result = result + " + \",\"\n"
+					json = json + ","
 				first = false
 
-				result = result + "__roles_config = __roles_config + \"\\\"" + role_name + "\\\":\" + \"" + permissions + "\"\n"
+				json = json + "\"" + escape_string_literal(role_name) + "\":" + permissions
 
 			line_start = line_end + 1
 
-		result = result + "__roles_config = __roles_config + \"}\"\n"
-		result = result + "_roles_register(__roles_config)\n\n"
+		json = json + "}"
 
+		string result = "// Roles configuration\n"
+		result = result + "string __roles_config = \"" + escape_string_literal(json) + "\"\n"
+		result = result + "_roles_register(__roles_config)\n\n"
 		return result
 
 // ============================================================================
@@ -352,7 +358,7 @@ functions:
 		result = result + "\t\tstring safe_role = user.role.replace(\"\\\\\", \"\\\\\\\\\").replace(\"\\\"\", \"\\\\\\\"\")\n"
 		result = result + "\t\tstring claims = \"{\\\"email\\\":\\\"\" + safe_email + \"\\\",\\\"role\\\":\\\"\" + safe_role + \"\\\"}\"\n"
 		result = result + "\t\tstring sessionId = session_create(user.id, claims)\n"
-		result = result + "\t\tsession_setCookie(sessionId)\n"
+		result = result + "\t\tsession_setCookie(sessionId, \"\")\n"
 		result = result + "\t\treturn redirect(\"" + redirect_to + "\")\n\n"
 
 		result = result + body
@@ -363,6 +369,23 @@ functions:
 // ============================================================================
 
 functions:
+	// Escape a string for embedding inside a Clean Language string literal.
+	// Doubles as JSON-string escaping for backslash and quote characters,
+	// which is what we need for both role names and the prebuilt roles JSON.
+	string escape_string_literal(string s)
+		string out = ""
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch == "\\"
+				out = out + "\\\\"
+			if ch == "\""
+				out = out + "\\\""
+			if ch != "\\" and ch != "\""
+				out = out + ch
+			i = i + 1
+		return out
+
 	// Extract a sub-block from body
 	string extract_subblock(string body, string block_name)
 		integer start_pos = body.indexOf(block_name)

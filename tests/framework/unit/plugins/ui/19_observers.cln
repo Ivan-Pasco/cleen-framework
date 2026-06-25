@@ -1,81 +1,6 @@
 // Test: frame.ui — ResizeObserver and IntersectionObserver bridge functions
 // Spec: HOST_BRIDGE.md §UI — Observers: Resize and Intersection
 
-functions:
-	// Bridge function names
-	boolean testResizeObserveName()
-		string name = "_ui_resize_observe"
-		return name == "_ui_resize_observe"
-
-	boolean testResizeUnobserveName()
-		string name = "_ui_resize_unobserve"
-		return name == "_ui_resize_unobserve"
-
-	boolean testIntersectObserveName()
-		string name = "_ui_intersect_observe"
-		return name == "_ui_intersect_observe"
-
-	boolean testIntersectUnobserveName()
-		string name = "_ui_intersect_unobserve"
-		return name == "_ui_intersect_unobserve"
-
-	// observe functions return integer IDs
-	boolean testResizeObserveReturnsId()
-		// Returns 0 if selector does not match; positive integer otherwise
-		integer stubNoMatch = 0
-		integer stubMatch = 1
-		return stubNoMatch == 0 and stubMatch > 0
-
-	boolean testIntersectObserveReturnsId()
-		integer stubNoMatch = 0
-		integer stubMatch = 1
-		return stubNoMatch == 0 and stubMatch > 0
-
-	// unobserve functions accept integer IDs
-	boolean testResizeUnobserveAcceptsId()
-		integer id = 1
-		return id > 0
-
-	boolean testIntersectUnobserveAcceptsId()
-		integer id = 1
-		return id > 0
-
-	// Server stubs for observe functions return 0 (no DOM on server)
-	boolean testServerStubResizeObserveReturnsZero()
-		integer stub = 0
-		return stub == 0
-
-	boolean testServerStubIntersectObserveReturnsZero()
-		integer stub = 0
-		return stub == 0
-
-	// ResizeEntry JSON format must contain width, height, targetId
-	boolean testResizeEntryJsonContract()
-		string json = "{\"width\": 320, \"height\": 240, \"targetId\": \"#panel\"}"
-		return json.indexOf("width") != -1 and json.indexOf("height") != -1 and json.indexOf("targetId") != -1
-
-	// IntersectionEntry JSON format must contain isIntersecting, intersectionRatio, targetId
-	boolean testIntersectionEntryJsonContract()
-		string json = "{\"isIntersecting\": true, \"intersectionRatio\": 0.75, \"targetId\": \"#card\"}"
-		return json.indexOf("isIntersecting") != -1 and json.indexOf("intersectionRatio") != -1 and json.indexOf("targetId") != -1
-
-	// Clean aliases
-	boolean testResizeObserveAlias()
-		string alias = "ui.resizeObserve"
-		return alias == "ui.resizeObserve"
-
-	boolean testResizeUnobserveAlias()
-		string alias = "ui.resizeUnobserve"
-		return alias == "ui.resizeUnobserve"
-
-	boolean testIntersectObserveAlias()
-		string alias = "ui.intersectObserve"
-		return alias == "ui.intersectObserve"
-
-	boolean testIntersectUnobserveAlias()
-		string alias = "ui.intersectUnobserve"
-		return alias == "ui.intersectUnobserve"
-
 start:
 	printl("=== Test Suite: Resize and Intersection Observers (frame.ui) ===")
 	printl("")
@@ -197,3 +122,78 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function names
+	boolean testResizeObserveName()
+		string name = "_ui_resize_observe"
+		return name == "_ui_resize_observe"
+
+	boolean testResizeUnobserveName()
+		string name = "_ui_resize_unobserve"
+		return name == "_ui_resize_unobserve"
+
+	boolean testIntersectObserveName()
+		string name = "_ui_intersect_observe"
+		return name == "_ui_intersect_observe"
+
+	boolean testIntersectUnobserveName()
+		string name = "_ui_intersect_unobserve"
+		return name == "_ui_intersect_unobserve"
+
+	// observe functions return integer IDs
+	boolean testResizeObserveReturnsId()
+		// Returns 0 if selector does not match; positive integer otherwise
+		integer stubNoMatch = 0
+		integer stubMatch = 1
+		return stubNoMatch == 0 and stubMatch > 0
+
+	boolean testIntersectObserveReturnsId()
+		integer stubNoMatch = 0
+		integer stubMatch = 1
+		return stubNoMatch == 0 and stubMatch > 0
+
+	// unobserve functions accept integer IDs
+	boolean testResizeUnobserveAcceptsId()
+		integer id = 1
+		return id > 0
+
+	boolean testIntersectUnobserveAcceptsId()
+		integer id = 1
+		return id > 0
+
+	// Server stubs for observe functions return 0 (no DOM on server)
+	boolean testServerStubResizeObserveReturnsZero()
+		integer stub = 0
+		return stub == 0
+
+	boolean testServerStubIntersectObserveReturnsZero()
+		integer stub = 0
+		return stub == 0
+
+	// ResizeEntry JSON format must contain width, height, targetId
+	boolean testResizeEntryJsonContract()
+		string json = "{\"width\": 320, \"height\": 240, \"targetId\": \"#panel\"}"
+		return json.indexOf("width") != -1 and json.indexOf("height") != -1 and json.indexOf("targetId") != -1
+
+	// IntersectionEntry JSON format must contain isIntersecting, intersectionRatio, targetId
+	boolean testIntersectionEntryJsonContract()
+		string json = "{\"isIntersecting\": true, \"intersectionRatio\": 0.75, \"targetId\": \"#card\"}"
+		return json.indexOf("isIntersecting") != -1 and json.indexOf("intersectionRatio") != -1 and json.indexOf("targetId") != -1
+
+	// Clean aliases
+	boolean testResizeObserveAlias()
+		string alias = "ui.resizeObserve"
+		return alias == "ui.resizeObserve"
+
+	boolean testResizeUnobserveAlias()
+		string alias = "ui.resizeUnobserve"
+		return alias == "ui.resizeUnobserve"
+
+	boolean testIntersectObserveAlias()
+		string alias = "ui.intersectObserve"
+		return alias == "ui.intersectObserve"
+
+	boolean testIntersectUnobserveAlias()
+		string alias = "ui.intersectUnobserve"
+		return alias == "ui.intersectUnobserve"
+

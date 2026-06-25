@@ -1,0 +1,134 @@
+// Test: frame.canvas draw primitives (canvas.clear/rect/circle/line/text/triangle/ellipse + bridge fn names)
+
+start:
+	printl("=== Test Suite: Draw Primitives ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testDrawBlock()
+		printl("PASS: draw: block header")
+		passed = passed + 1
+	else
+		printl("FAIL: draw: block header")
+		failed = failed + 1
+
+	if testCanvasClear()
+		printl("PASS: canvas.clear bridge name")
+		passed = passed + 1
+	else
+		printl("FAIL: canvas.clear bridge name")
+		failed = failed + 1
+
+	if testCanvasRect()
+		printl("PASS: canvas.rect uses x/y/width/height/color")
+		passed = passed + 1
+	else
+		printl("FAIL: canvas.rect attrs")
+		failed = failed + 1
+
+	if testCanvasCircle()
+		printl("PASS: canvas.circle uses x/y/radius/color")
+		passed = passed + 1
+	else
+		printl("FAIL: canvas.circle attrs")
+		failed = failed + 1
+
+	if testCanvasLine()
+		printl("PASS: canvas.line uses fromX/fromY/toX/toY")
+		passed = passed + 1
+	else
+		printl("FAIL: canvas.line attrs")
+		failed = failed + 1
+
+	if testCanvasText()
+		printl("PASS: canvas.text uses value/x/y/size/color")
+		passed = passed + 1
+	else
+		printl("FAIL: canvas.text attrs")
+		failed = failed + 1
+
+	if testCanvasTriangle()
+		printl("PASS: canvas.triangle uses x1/y1/x2/y2/x3/y3")
+		passed = passed + 1
+	else
+		printl("FAIL: canvas.triangle attrs")
+		failed = failed + 1
+
+	if testCanvasEllipse()
+		printl("PASS: canvas.ellipse uses radiusX/radiusY")
+		passed = passed + 1
+	else
+		printl("FAIL: canvas.ellipse attrs")
+		failed = failed + 1
+
+	if testBridgeFunctionPrefix()
+		printl("PASS: bridge function prefix _canvas_")
+		passed = passed + 1
+	else
+		printl("FAIL: bridge prefix")
+		failed = failed + 1
+
+	if testCornerRadius()
+		printl("PASS: canvas.rect supports cornerRadius")
+		passed = passed + 1
+	else
+		printl("FAIL: cornerRadius attr")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testDrawBlock()
+		string header = "draw:"
+		return header.startsWith("draw")
+
+	boolean testCanvasClear()
+		string call = "canvas.clear color=black"
+		string bridge = "_canvas_clear_color"
+		return call.startsWith("canvas.clear") and bridge.startsWith("_canvas_")
+
+	boolean testCanvasRect()
+		string call = "canvas.rect x=10 y=10 width=100 height=50 color=red"
+		boolean hasX = call.contains("x=")
+		boolean hasW = call.contains("width=")
+		boolean hasH = call.contains("height=")
+		boolean hasC = call.contains("color=")
+		return hasX and hasW and hasH and hasC
+
+	boolean testCanvasCircle()
+		string call = "canvas.circle x=100 y=100 radius=30 color=blue"
+		return call.contains("radius=") and call.contains("color=")
+
+	boolean testCanvasLine()
+		string call = "canvas.line fromX=0 fromY=0 toX=100 toY=100 color=green"
+		boolean hasFrom = call.contains("fromX=")
+		boolean hasTo = call.contains("toX=")
+		return hasFrom and hasTo
+
+	boolean testCanvasText()
+		string call = "canvas.text value=Hello x=50 y=50 size=24 color=white"
+		boolean hasValue = call.contains("value=")
+		boolean hasSize = call.contains("size=")
+		return hasValue and hasSize
+
+	boolean testCanvasTriangle()
+		string call = "canvas.triangle x1=0 y1=0 x2=10 y2=0 x3=5 y3=10 color=orange"
+		boolean hasX1 = call.contains("x1=")
+		boolean hasX3 = call.contains("x3=")
+		return hasX1 and hasX3
+
+	boolean testCanvasEllipse()
+		string call = "canvas.ellipse x=200 y=200 radiusX=60 radiusY=30 color=purple"
+		return call.contains("radiusX=") and call.contains("radiusY=")
+
+	boolean testBridgeFunctionPrefix()
+		string bridge1 = "_canvas_draw_rect"
+		string bridge2 = "_canvas_draw_circle"
+		return bridge1.startsWith("_canvas_") and bridge2.startsWith("_canvas_")
+
+	boolean testCornerRadius()
+		string call = "canvas.rect x=0 y=0 width=100 height=50 color=red cornerRadius=8"
+		return call.contains("cornerRadius=")

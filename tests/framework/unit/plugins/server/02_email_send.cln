@@ -1,70 +1,6 @@
 // Test: frame.server — email SMTP bridge function contract
 // Spec: HOST_BRIDGE.md §Email — SMTP
 
-functions:
-	// Bridge function names
-	boolean testEmailSendName()
-		string name = "_email_send"
-		return name == "_email_send"
-
-	boolean testEmailLastErrorName()
-		string name = "_email_last_error"
-		return name == "_email_last_error"
-
-	boolean testEmailConfigureName()
-		string name = "_email_configure"
-		return name == "_email_configure"
-
-	// _email_send accepts 5 string parameters: to, subject, html, text, from
-	boolean testEmailSendParamCount()
-		string contract = "_email_send(to_ptr, to_len, subject_ptr, subject_len, html_ptr, html_len, text_ptr, text_len, from_ptr, from_len)"
-		return contract.indexOf("to_ptr") != -1 and contract.indexOf("subject_ptr") != -1 and contract.indexOf("html_ptr") != -1 and contract.indexOf("text_ptr") != -1 and contract.indexOf("from_ptr") != -1
-
-	// _email_send returns 1 on success, 0 on failure
-	boolean testEmailSendReturnSuccess()
-		integer success = 1
-		return success == 1
-
-	boolean testEmailSendReturnFailure()
-		integer failure = 0
-		return failure == 0
-
-	// _email_last_error returns string (empty on no error)
-	boolean testEmailLastErrorReturnsString()
-		string returnType = "string"
-		return returnType == "string"
-
-	boolean testEmailLastErrorEmptyOnSuccess()
-		string noError = ""
-		return noError == ""
-
-	// _email_configure accepts: host, port (i32), secure (i32), username, password, from
-	boolean testEmailConfigureParamTypes()
-		string contract = "_email_configure(host_ptr, host_len, port: i32, secure: i32, user_ptr, user_len, pass_ptr, pass_len, from_ptr, from_len)"
-		return contract.indexOf("host_ptr") != -1 and contract.indexOf("port") != -1 and contract.indexOf("secure") != -1
-
-	// Clean aliases
-	boolean testEmailSendAlias()
-		string alias = "email.send"
-		return alias == "email.send"
-
-	boolean testEmailSendFromAlias()
-		string alias = "email.sendFrom"
-		return alias == "email.sendFrom"
-
-	boolean testEmailLastErrorAlias()
-		string alias = "email.lastError"
-		return alias == "email.lastError"
-
-	// Scope boundary: no attachments, CC, BCC, queuing, or multi-provider
-	boolean testScopeBoundaryNoAttachments()
-		string scope = "to,subject,html,text,from"
-		return scope.indexOf("attachment") == -1
-
-	boolean testScopeBoundaryNoCc()
-		string scope = "to,subject,html,text,from"
-		return scope.indexOf("cc") == -1
-
 start:
 	printl("=== Test Suite: Email SMTP Bridge (frame.server) ===")
 	printl("")
@@ -172,3 +108,67 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function names
+	boolean testEmailSendName()
+		string name = "_email_send"
+		return name == "_email_send"
+
+	boolean testEmailLastErrorName()
+		string name = "_email_last_error"
+		return name == "_email_last_error"
+
+	boolean testEmailConfigureName()
+		string name = "_email_configure"
+		return name == "_email_configure"
+
+	// _email_send accepts 5 string parameters: to, subject, html, text, from
+	boolean testEmailSendParamCount()
+		string contract = "_email_send(to_ptr, to_len, subject_ptr, subject_len, html_ptr, html_len, text_ptr, text_len, from_ptr, from_len)"
+		return contract.indexOf("to_ptr") != -1 and contract.indexOf("subject_ptr") != -1 and contract.indexOf("html_ptr") != -1 and contract.indexOf("text_ptr") != -1 and contract.indexOf("from_ptr") != -1
+
+	// _email_send returns 1 on success, 0 on failure
+	boolean testEmailSendReturnSuccess()
+		integer success = 1
+		return success == 1
+
+	boolean testEmailSendReturnFailure()
+		integer failure = 0
+		return failure == 0
+
+	// _email_last_error returns string (empty on no error)
+	boolean testEmailLastErrorReturnsString()
+		string returnType = "string"
+		return returnType == "string"
+
+	boolean testEmailLastErrorEmptyOnSuccess()
+		string noError = ""
+		return noError == ""
+
+	// _email_configure accepts: host, port (i32), secure (i32), username, password, from
+	boolean testEmailConfigureParamTypes()
+		string contract = "_email_configure(host_ptr, host_len, port: i32, secure: i32, user_ptr, user_len, pass_ptr, pass_len, from_ptr, from_len)"
+		return contract.indexOf("host_ptr") != -1 and contract.indexOf("port") != -1 and contract.indexOf("secure") != -1
+
+	// Clean aliases
+	boolean testEmailSendAlias()
+		string alias = "email.send"
+		return alias == "email.send"
+
+	boolean testEmailSendFromAlias()
+		string alias = "email.sendFrom"
+		return alias == "email.sendFrom"
+
+	boolean testEmailLastErrorAlias()
+		string alias = "email.lastError"
+		return alias == "email.lastError"
+
+	// Scope boundary: no attachments, CC, BCC, queuing, or multi-provider
+	boolean testScopeBoundaryNoAttachments()
+		string scope = "to,subject,html,text,from"
+		return scope.indexOf("attachment") == -1
+
+	boolean testScopeBoundaryNoCc()
+		string scope = "to,subject,html,text,from"
+		return scope.indexOf("cc") == -1
+

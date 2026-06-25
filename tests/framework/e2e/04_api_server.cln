@@ -1,71 +1,6 @@
 // E2E Test: Full API Server
 // Tests complete API server with all plugins working together
 
-functions:
-	boolean testServerStarts()
-		// Server starts and listens on port
-		integer port = 3000
-		string status = "listening"
-		return port == 3000 and status == "listening"
-
-	boolean testHealthEndpoint()
-		// GET /health returns server status
-		string path = "/health"
-		integer statusCode = 200
-		string response = "healthy"
-		return statusCode == 200 and response == "healthy"
-
-	boolean testCorsHeaders()
-		// Response includes CORS headers
-		string header = "Access-Control-Allow-Origin"
-		string value = "allowed origin"
-		return header.contains("Access-Control") and value.contains("origin")
-
-	boolean testContentTypeJson()
-		// API responses have JSON content type
-		string contentType = "application/json"
-		return contentType.contains("json")
-
-	boolean testRequestLogging()
-		// Requests are logged
-		string logLevel = "info"
-		string logMessage = "request logged"
-		return logLevel == "info" and logMessage.contains("logged")
-
-	boolean testErrorMiddleware()
-		// Errors are caught and formatted
-		integer statusCode = 500
-		string errorCode = "INTERNAL_ERROR"
-		string message = "error message"
-		return statusCode == 500 and errorCode.contains("ERROR")
-
-	boolean testRateLimiting()
-		// Rate limiting is applied
-		integer maxRequests = 100
-		integer window = 60
-		string header = "X-RateLimit-Remaining"
-		return maxRequests == 100 and header.contains("RateLimit")
-
-	boolean testAuthMiddleware()
-		// Auth middleware protects routes
-		string path = "/api/protected"
-		integer unauthorizedStatus = 401
-		integer authorizedStatus = 200
-		return unauthorizedStatus == 401 and authorizedStatus == 200
-
-	boolean testDatabaseConnection()
-		// Database connection is established
-		string dbStatus = "connected"
-		boolean poolActive = true
-		return dbStatus == "connected" and poolActive
-
-	boolean testGracefulShutdown()
-		// Server shuts down gracefully
-		string signal = "SIGTERM"
-		string status = "shutting down"
-		boolean connectionsClosed = true
-		return signal == "SIGTERM" and connectionsClosed
-
 start:
 	printl("=== E2E Test: Full API Server ===")
 	printl("")
@@ -145,3 +80,68 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	boolean testServerStarts()
+		// Server starts and listens on port
+		integer port = 3000
+		string status = "listening"
+		return port == 3000 and status == "listening"
+
+	boolean testHealthEndpoint()
+		// GET /health returns server status
+		string path = "/health"
+		integer statusCode = 200
+		string response = "healthy"
+		return statusCode == 200 and response == "healthy"
+
+	boolean testCorsHeaders()
+		// Response includes CORS headers
+		string header = "Access-Control-Allow-Origin"
+		string value = "allowed origin"
+		return header.contains("Access-Control") and value.contains("origin")
+
+	boolean testContentTypeJson()
+		// API responses have JSON content type
+		string contentType = "application/json"
+		return contentType.contains("json")
+
+	boolean testRequestLogging()
+		// Requests are logged
+		string logLevel = "info"
+		string logMessage = "request logged"
+		return logLevel == "info" and logMessage.contains("logged")
+
+	boolean testErrorMiddleware()
+		// Errors are caught and formatted
+		integer statusCode = 500
+		string errorCode = "INTERNAL_ERROR"
+		string message = "error message"
+		return statusCode == 500 and errorCode.contains("ERROR")
+
+	boolean testRateLimiting()
+		// Rate limiting is applied
+		integer maxRequests = 100
+		integer window = 60
+		string header = "X-RateLimit-Remaining"
+		return maxRequests == 100 and header.contains("RateLimit")
+
+	boolean testAuthMiddleware()
+		// Auth middleware protects routes
+		string path = "/api/protected"
+		integer unauthorizedStatus = 401
+		integer authorizedStatus = 200
+		return unauthorizedStatus == 401 and authorizedStatus == 200
+
+	boolean testDatabaseConnection()
+		// Database connection is established
+		string dbStatus = "connected"
+		boolean poolActive = true
+		return dbStatus == "connected" and poolActive
+
+	boolean testGracefulShutdown()
+		// Server shuts down gracefully
+		string signal = "SIGTERM"
+		string status = "shutting down"
+		boolean connectionsClosed = true
+		return signal == "SIGTERM" and connectionsClosed
+

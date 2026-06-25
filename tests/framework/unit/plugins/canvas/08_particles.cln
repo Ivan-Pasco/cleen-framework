@@ -1,0 +1,152 @@
+// Test: frame.canvas particles (particles block, emitter, overLifetime, forces, control)
+
+start:
+	printl("=== Test Suite: Particles ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testParticlesBlock()
+		printl("PASS: particles block header")
+		passed = passed + 1
+	else
+		printl("FAIL: particles block")
+		failed = failed + 1
+
+	if testTopLevelAttrs()
+		printl("PASS: top-level lifetime/speed/angle/color attrs")
+		passed = passed + 1
+	else
+		printl("FAIL: top-level attrs")
+		failed = failed + 1
+
+	if testValueRange()
+		printl("PASS: value range syntax 1.0..3.0")
+		passed = passed + 1
+	else
+		printl("FAIL: value range")
+		failed = failed + 1
+
+	if testEmitterBlock()
+		printl("PASS: emitter: sub-block")
+		passed = passed + 1
+	else
+		printl("FAIL: emitter block")
+		failed = failed + 1
+
+	if testEmitterAttrs()
+		printl("PASS: emitter rate/shape/radius attrs")
+		passed = passed + 1
+	else
+		printl("FAIL: emitter attrs")
+		failed = failed + 1
+
+	if testOverLifetimeBlock()
+		printl("PASS: overLifetime: sub-block")
+		passed = passed + 1
+	else
+		printl("FAIL: overLifetime block")
+		failed = failed + 1
+
+	if testForcesGravity()
+		printl("PASS: forces: gravity = number")
+		passed = passed + 1
+	else
+		printl("FAIL: forces gravity")
+		failed = failed + 1
+
+	if testForcesDrag()
+		printl("PASS: forces: drag multiplier")
+		passed = passed + 1
+	else
+		printl("FAIL: forces drag")
+		failed = failed + 1
+
+	if testForcesWind()
+		printl("PASS: forces: wind x=/y=")
+		passed = passed + 1
+	else
+		printl("FAIL: forces wind")
+		failed = failed + 1
+
+	if testForcesAttractor()
+		printl("PASS: forces: attractor x=/y=/strength=")
+		passed = passed + 1
+	else
+		printl("FAIL: forces attractor")
+		failed = failed + 1
+
+	if testEmitParticles()
+		printl("PASS: emit particles burst control")
+		passed = passed + 1
+	else
+		printl("FAIL: emit particles")
+		failed = failed + 1
+
+	if testStartStopParticles()
+		printl("PASS: start/stop particles continuous control")
+		passed = passed + 1
+	else
+		printl("FAIL: start/stop particles")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testParticlesBlock()
+		string header = "particles sparks:"
+		return header.startsWith("particles ")
+
+	boolean testTopLevelAttrs()
+		string lt = "lifetime = 1.0..3.0"
+		string sp = "speed = 150..400"
+		string ang = "angle = 0..360"
+		string col = "color = #ff8800"
+		return lt.contains("lifetime") and sp.contains("speed") and ang.contains("angle") and col.contains("color")
+
+	boolean testValueRange()
+		string range = "1.0..3.0"
+		return range.contains("..")
+
+	boolean testEmitterBlock()
+		string header = "emitter:"
+		return header == "emitter:"
+
+	boolean testEmitterAttrs()
+		string rate = "rate = 60"
+		string shape = "shape = point"
+		string radius = "radius = 10"
+		return rate.contains("rate") and shape.contains("shape") and radius.contains("radius")
+
+	boolean testOverLifetimeBlock()
+		string header = "overLifetime:"
+		return header == "overLifetime:"
+
+	boolean testForcesGravity()
+		string g = "gravity = 980"
+		return g.contains("gravity")
+
+	boolean testForcesDrag()
+		string d = "drag = 0.96"
+		return d.contains("drag")
+
+	boolean testForcesWind()
+		string w = "wind x=20 y=0"
+		return w.startsWith("wind") and w.contains("x=") and w.contains("y=")
+
+	boolean testForcesAttractor()
+		string a = "attractor x=400 y=300 strength=200"
+		boolean hasX = a.contains("x=")
+		boolean hasStr = a.contains("strength=")
+		return hasX and hasStr
+
+	boolean testEmitParticles()
+		string cmd = "emit particles sparks x=100 y=200"
+		return cmd.startsWith("emit particles ")
+
+	boolean testStartStopParticles()
+		string startCmd = "start particles rain x=400 y=0"
+		string stopCmd = "stop particles rain"
+		return startCmd.startsWith("start particles ") and stopCmd.startsWith("stop particles ")

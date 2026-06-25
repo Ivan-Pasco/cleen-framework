@@ -36,6 +36,12 @@ functions:
 		if server_version == ""
 			server_version = "1.0.0"
 		string transport = extract_transport(body)
+		string http_port = extract_transport_nested(body, "port")
+		if http_port == ""
+			http_port = "3001"
+		string http_host = extract_transport_nested(body, "host")
+		if http_host == ""
+			http_host = "0.0.0.0"
 
 		// Collect all tools
 		string tools_code = ""
@@ -297,7 +303,7 @@ functions:
 		out = out + build_handle_fn(server_name, server_version, capabilities)
 
 		// start: block with the transport loop
-		out = out + build_start_block(transport)
+		out = out + build_start_block(transport, http_port, http_host)
 
 		return out
 
@@ -348,6 +354,45 @@ functions:
 		if line.startsWith("http")
 			return "http"
 		return "stdio"
+
+	// Extract a nested field (e.g. port:, host:) from inside a
+	// `transport: http:` block. Returns "" if not present.
+	// The nested block is identified by two-tab indented sibling lines
+	// immediately following `\ttransport: http:`.
+	string extract_transport_nested(string body, string key)
+		integer transport_pos = body.indexOf("\ttransport: http:")
+		if transport_pos < 0
+			return ""
+		integer body_start = body.indexOf("\n", transport_pos)
+		if body_start < 0
+			return ""
+		body_start = body_start + 1
+		integer scan = body_start
+		integer len = body.length()
+		integer safety = 0
+		while safety < 64 and scan < len
+			safety = safety + 1
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl < 0
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			// Stop scanning when we leave the nested block.
+			if not line.startsWith("\t\t")
+				return ""
+			string trimmed = line.trim()
+			string prefix = key + ":"
+			if trimmed.startsWith(prefix)
+				string value = trimmed.substring(prefix.length(), trimmed.length()).trim()
+				if value.startsWith("\"") and value.endsWith("\"")
+					value = value.substring(1, value.length() - 1)
+				return value
+			scan = next_scan
+		return ""
 
 // ============================================================================
 // SUB-BLOCK EXTRACTION HELPERS
@@ -836,10 +881,15 @@ functions:
 		return out
 
 	// Build the start: block for the selected transport.
-	string build_start_block(string transport)
+	// HTTP port/host come from `transport: http:` nested config; defaults
+	// are 3001 and "0.0.0.0" when unspecified.
+	// NOTE: HTTP response delivery currently routes through _mcp_stdio_write
+	// because no _mcp_http_respond bridge exists yet. This is a server-side
+	// gap tracked separately — see FRAME-MCP-NO-HTTP-RESPONSE-BRIDGE.
+	string build_start_block(string transport, string http_port, string http_host)
 		string out = "start:\n"
 		if transport == "http"
-			out = out + "\t_mcp_http_serve(3001, \"0.0.0.0\")\n"
+			out = out + "\t_mcp_http_serve(" + http_port + ", \"" + http_host + "\")\n"
 			out = out + "\tboolean __http_running = true\n"
 			out = out + "\twhile __http_running\n"
 			out = out + "\t\tstring __req = _mcp_http_accept()\n"

@@ -1,42 +1,6 @@
 // Test: frame.ui state management
 // Tests that component state is correctly managed
 
-functions:
-	// Test state block
-	boolean testStateBlock()
-		string state = "state:\n\tinteger count = 0"
-		return state.contains("state:")
-
-	// Test state initialization
-	boolean testStateInit()
-		string init = "integer count = 0"
-		return init.contains("= 0")
-
-	// Test state update
-	boolean testStateUpdate()
-		string update = "count = count + 1"
-		return update.contains("count + 1")
-
-	// Test derived state
-	boolean testDerivedState()
-		string derived = "computed:\n\tinteger doubled = count * 2"
-		return derived.contains("computed:")
-
-	// Test state reactivity
-	boolean testStateReactivity()
-		string reactiveCall = "onStateChange: rerender()"
-		return reactiveCall.contains("onStateChange:")
-
-	// Test props to state
-	boolean testPropsToState()
-		string mapping = "state:\n\tstring value = inputs.initialValue"
-		return mapping.contains("inputs.")
-
-	// Test state reset
-	boolean testStateReset()
-		string reset = "resetState()"
-		return reset.contains("resetState()")
-
 start:
 	printl("=== Test Suite: State Management ===")
 	printl("")
@@ -95,3 +59,39 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test state block
+	boolean testStateBlock()
+		string state = "state:\n\tinteger count = 0"
+		return state.contains("state:")
+
+	// Test state initialization
+	boolean testStateInit()
+		string init = "integer count = 0"
+		return init.contains("= 0")
+
+	// Test state update
+	boolean testStateUpdate()
+		string update = "count = count + 1"
+		return update.contains("count + 1")
+
+	// Test derived state
+	boolean testDerivedState()
+		string derived = "computed:\n\tinteger doubled = count * 2"
+		return derived.contains("computed:")
+
+	// Test state reactivity
+	boolean testStateReactivity()
+		string reactiveCall = "onStateChange: rerender()"
+		return reactiveCall.contains("onStateChange:")
+
+	// Test props to state
+	boolean testPropsToState()
+		string mapping = "state:\n\tstring value = inputs.initialValue"
+		return mapping.contains("inputs.")
+
+	// Test state reset
+	boolean testStateReset()
+		string reset = "resetState()"
+		return reset.contains("resetState()")
+

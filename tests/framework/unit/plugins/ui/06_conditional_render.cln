@@ -1,47 +1,6 @@
 // Test: frame.ui conditional rendering
 // Tests that conditional rendering works correctly
 
-functions:
-	// Test if conditional
-	boolean testIfConditional()
-		string ifBlock = "if isLoggedIn then show welcome"
-		return ifBlock.contains("if ")
-
-	// Test else conditional
-	boolean testElseConditional()
-		string elseBlock = "else show login"
-		return elseBlock.contains("else")
-
-	// Test ternary in HTML
-	boolean testTernaryInHtml()
-		string ternary = "condition then Yes else No"
-		return ternary.contains("then") and ternary.contains("else")
-
-	// Test each loop
-	boolean testEachLoop()
-		string eachBlock = "each item in items loop"
-		return eachBlock.contains("each ")
-
-	// Test for loop in render
-	boolean testForLoop()
-		string forBlock = "for i in range loop"
-		return forBlock.contains("for ")
-
-	// Test show/hide
-	boolean testShowHide()
-		string showAttr = "show: isVisible"
-		return showAttr.contains("show:")
-
-	// Test null check
-	boolean testNullCheck()
-		string nullCheck = "if user not null"
-		return nullCheck.contains("null")
-
-	// Test empty check
-	boolean testEmptyCheck()
-		string emptyCheck = "if items length greater than 0"
-		return emptyCheck.contains("length")
-
 start:
 	printl("=== Test Suite: Conditional Rendering ===")
 	printl("")
@@ -107,3 +66,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test if conditional
+	boolean testIfConditional()
+		string ifBlock = "if isLoggedIn then show welcome"
+		return ifBlock.contains("if ")
+
+	// Test else conditional
+	boolean testElseConditional()
+		string elseBlock = "else show login"
+		return elseBlock.contains("else")
+
+	// Test ternary in HTML
+	boolean testTernaryInHtml()
+		string ternary = "condition then Yes else No"
+		return ternary.contains("then") and ternary.contains("else")
+
+	// Test each loop
+	boolean testEachLoop()
+		string eachBlock = "each item in items loop"
+		return eachBlock.contains("each ")
+
+	// Test for loop in render
+	boolean testForLoop()
+		string forBlock = "for i in range loop"
+		return forBlock.contains("for ")
+
+	// Test show/hide
+	boolean testShowHide()
+		string showAttr = "show: isVisible"
+		return showAttr.contains("show:")
+
+	// Test null check
+	boolean testNullCheck()
+		string nullCheck = "if user not null"
+		return nullCheck.contains("null")
+
+	// Test empty check
+	boolean testEmptyCheck()
+		string emptyCheck = "if items length greater than 0"
+		return emptyCheck.contains("length")
+

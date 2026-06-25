@@ -1,0 +1,240 @@
+// Test: frame.server §3 / §4 — Inline route modifiers + response helpers
+// Verifies the shape of inline modifiers ([roles] guard, cache(N),
+// middleware(A, B)), their required ordering ([guard] cache() middleware()),
+// and the canonical response helper names (json, html, redirect, notFound,
+// status, badRequest, unauthorized, httpError, httpHeader, res.download).
+
+start:
+	printl("=== Test Suite: Response Modifiers and Helpers (§3, §4) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testGuardInlineSingle()
+		printl("PASS: single-role guard [admin] shape")
+		passed = passed + 1
+	else
+		printl("FAIL: single-role guard [admin] shape")
+		failed = failed + 1
+
+	if testGuardInlineMulti()
+		printl("PASS: multi-role guard [admin, editor] shape")
+		passed = passed + 1
+	else
+		printl("FAIL: multi-role guard [admin, editor] shape")
+		failed = failed + 1
+
+	if testCacheIntegerArg()
+		printl("PASS: cache(300) integer-seconds form")
+		passed = passed + 1
+	else
+		printl("FAIL: cache(300) integer-seconds form")
+		failed = failed + 1
+
+	if testCacheDurationArg()
+		printl("PASS: cache duration form 5m / 2h / 1d")
+		passed = passed + 1
+	else
+		printl("FAIL: cache duration form 5m / 2h / 1d")
+		failed = failed + 1
+
+	if testCacheNoStore()
+		printl("PASS: cache no-store form")
+		passed = passed + 1
+	else
+		printl("FAIL: cache no-store form")
+		failed = failed + 1
+
+	if testMiddlewareSingle()
+		printl("PASS: middleware(RateLimit) single function form")
+		passed = passed + 1
+	else
+		printl("FAIL: middleware(RateLimit) single function form")
+		failed = failed + 1
+
+	if testMiddlewareMulti()
+		printl("PASS: middleware(RateLimit, VerifyJWT) multi-arg")
+		passed = passed + 1
+	else
+		printl("FAIL: middleware(RateLimit, VerifyJWT) multi-arg")
+		failed = failed + 1
+
+	if testModifierOrdering()
+		printl("PASS: modifier order is [guard] cache() middleware()")
+		passed = passed + 1
+	else
+		printl("FAIL: modifier order is [guard] cache() middleware()")
+		failed = failed + 1
+
+	if testJsonHelper()
+		printl("PASS: json(body) response helper")
+		passed = passed + 1
+	else
+		printl("FAIL: json(body) response helper")
+		failed = failed + 1
+
+	if testHtmlHelper()
+		printl("PASS: html(body) response helper")
+		passed = passed + 1
+	else
+		printl("FAIL: html(body) response helper")
+		failed = failed + 1
+
+	if testRedirectHelper()
+		printl("PASS: redirect(url) and redirect(url, code) forms")
+		passed = passed + 1
+	else
+		printl("FAIL: redirect(url) and redirect(url, code) forms")
+		failed = failed + 1
+
+	if testNotFoundHelper()
+		printl("PASS: notFound() helper")
+		passed = passed + 1
+	else
+		printl("FAIL: notFound() helper")
+		failed = failed + 1
+
+	if testFileDownloadHelper()
+		printl("PASS: res.download(path) file helper")
+		passed = passed + 1
+	else
+		printl("FAIL: res.download(path) file helper")
+		failed = failed + 1
+
+	if testStatusHelper()
+		printl("PASS: status(code, body) helper")
+		passed = passed + 1
+	else
+		printl("FAIL: status(code, body) helper")
+		failed = failed + 1
+
+	if testBadRequestHelper()
+		printl("PASS: badRequest(msg) helper")
+		passed = passed + 1
+	else
+		printl("FAIL: badRequest(msg) helper")
+		failed = failed + 1
+
+	if testUnauthorizedHelper()
+		printl("PASS: unauthorized() helper")
+		passed = passed + 1
+	else
+		printl("FAIL: unauthorized() helper")
+		failed = failed + 1
+
+	if testHttpErrorHelper()
+		printl("PASS: httpError(code, message) helper")
+		passed = passed + 1
+	else
+		printl("FAIL: httpError(code, message) helper")
+		failed = failed + 1
+
+	if testHttpHeaderHelper()
+		printl("PASS: httpHeader(name, value) helper")
+		passed = passed + 1
+	else
+		printl("FAIL: httpHeader(name, value) helper")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// [admin] inline guard
+	boolean testGuardInlineSingle()
+		string header = "GET \"/api/admin\" [admin] :"
+		integer open = header.indexOf("[")
+		integer close = header.indexOf("]")
+		return open != -1 and close > open and header.indexOf("admin") != -1
+
+	// [admin, editor] multi-role
+	boolean testGuardInlineMulti()
+		string header = "GET \"/api/posts\" [admin, editor] :"
+		return header.indexOf("[admin, editor]") != -1
+
+	// cache(300) integer seconds
+	boolean testCacheIntegerArg()
+		string header = "GET \"/api/feed\" cache(300) :"
+		return header.indexOf("cache(300)") != -1
+
+	// cache("5m") duration string
+	boolean testCacheDurationArg()
+		string a = "cache(\"5m\")"
+		string b = "cache(\"2h\")"
+		string c = "cache(\"1d\")"
+		return a.contains("cache(") and b.contains("cache(") and c.contains("cache(")
+
+	// cache("no-store")
+	boolean testCacheNoStore()
+		string call = "cache(\"no-store\")"
+		return call.contains("no-store")
+
+	// middleware(Fn)
+	boolean testMiddlewareSingle()
+		string header = "GET \"/api/data\" middleware(RateLimit) :"
+		return header.indexOf("middleware(RateLimit)") != -1
+
+	// middleware(A, B) multi
+	boolean testMiddlewareMulti()
+		string header = "GET \"/api/data\" middleware(RateLimit, VerifyJWT) :"
+		return header.indexOf("middleware(RateLimit, VerifyJWT)") != -1
+
+	// Fixed order: [guard] cache() middleware()
+	boolean testModifierOrdering()
+		string header = "GET \"/x\" [admin] cache(60) middleware(Verify) :"
+		integer guardPos = header.indexOf("[admin]")
+		integer cachePos = header.indexOf("cache(")
+		integer mwPos = header.indexOf("middleware(")
+		return guardPos != -1 and cachePos > guardPos and mwPos > cachePos
+
+	// json helper
+	boolean testJsonHelper()
+		string call = "json(payload)"
+		return call.startsWith("json(") and call.endsWith(")")
+
+	// html helper
+	boolean testHtmlHelper()
+		string call = "html(body)"
+		return call.startsWith("html(") and call.endsWith(")")
+
+	// redirect(url) and redirect(url, code)
+	boolean testRedirectHelper()
+		string one = "redirect(\"/login\")"
+		string two = "redirect(\"/login\", 302)"
+		return one.startsWith("redirect(") and two.indexOf(", 302)") != -1
+
+	// notFound()
+	boolean testNotFoundHelper()
+		string call = "notFound()"
+		return call == "notFound()"
+
+	// res.download(path)
+	boolean testFileDownloadHelper()
+		string call = "res.download(\"reports/q1.pdf\")"
+		return call.startsWith("res.download(") and call.endsWith(")")
+
+	// status(code, body) two-arg form
+	boolean testStatusHelper()
+		string call = "status(422, json(payload))"
+		return call.startsWith("status(") and call.indexOf(",") != -1
+
+	// badRequest(msg)
+	boolean testBadRequestHelper()
+		string call = "badRequest(\"invalid input\")"
+		return call.startsWith("badRequest(") and call.endsWith(")")
+
+	// unauthorized() no-arg
+	boolean testUnauthorizedHelper()
+		string call = "unauthorized()"
+		return call == "unauthorized()"
+
+	// httpError(code, msg) — renamed from error() due to reserved keyword
+	boolean testHttpErrorHelper()
+		string call = "httpError(503, \"Service unavailable\")"
+		return call.startsWith("httpError(") and call.indexOf("503") != -1
+
+	// httpHeader(name, value) — renamed from header() to avoid collision
+	boolean testHttpHeaderHelper()
+		string call = "httpHeader(\"X-Trace-Id\", traceId)"
+		return call.startsWith("httpHeader(") and call.indexOf(",") != -1

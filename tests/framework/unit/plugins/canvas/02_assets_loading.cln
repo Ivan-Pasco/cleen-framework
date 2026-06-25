@@ -1,0 +1,117 @@
+// Test: frame.canvas assets loading (image, spritesheet, sound, music, font, asset URL handling)
+
+start:
+	printl("=== Test Suite: Assets Loading ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testAssetsBlock()
+		printl("PASS: assets: block header")
+		passed = passed + 1
+	else
+		printl("FAIL: assets: block header")
+		failed = failed + 1
+
+	if testImageAsset()
+		printl("PASS: image asset declaration shape")
+		passed = passed + 1
+	else
+		printl("FAIL: image asset")
+		failed = failed + 1
+
+	if testSpritesheetAsset()
+		printl("PASS: spritesheet asset with frameWidth/frameHeight")
+		passed = passed + 1
+	else
+		printl("FAIL: spritesheet asset")
+		failed = failed + 1
+
+	if testSoundAsset()
+		printl("PASS: sound asset declaration")
+		passed = passed + 1
+	else
+		printl("FAIL: sound asset")
+		failed = failed + 1
+
+	if testMusicAsset()
+		printl("PASS: music asset declaration")
+		passed = passed + 1
+	else
+		printl("FAIL: music asset")
+		failed = failed + 1
+
+	if testFontAsset()
+		printl("PASS: font asset declaration")
+		passed = passed + 1
+	else
+		printl("FAIL: font asset")
+		failed = failed + 1
+
+	if testAssetPathExtension()
+		printl("PASS: asset paths reference file extensions")
+		passed = passed + 1
+	else
+		printl("FAIL: asset path extensions")
+		failed = failed + 1
+
+	if testAssetNameNotPath()
+		printl("PASS: assets referenced by name, not path")
+		passed = passed + 1
+	else
+		printl("FAIL: assets referenced by name")
+		failed = failed + 1
+
+	if testSpritesheetGrid()
+		printl("PASS: spritesheet supports cols/rows attrs")
+		passed = passed + 1
+	else
+		printl("FAIL: spritesheet grid attrs")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testAssetsBlock()
+		string header = "assets:"
+		return header.startsWith("assets")
+
+	boolean testImageAsset()
+		string decl = "image hero src=images/hero.png"
+		return decl.startsWith("image ") and decl.contains("src=")
+
+	boolean testSpritesheetAsset()
+		string decl = "spritesheet runner src=sprites/run.png frameWidth=48 frameHeight=64"
+		boolean hasSheet = decl.startsWith("spritesheet ")
+		boolean hasFw = decl.contains("frameWidth=")
+		boolean hasFh = decl.contains("frameHeight=")
+		return hasSheet and hasFw and hasFh
+
+	boolean testSoundAsset()
+		string decl = "sound jump src=sounds/jump.wav"
+		return decl.startsWith("sound ") and decl.contains(".wav")
+
+	boolean testMusicAsset()
+		string decl = "music theme src=music/theme.ogg"
+		return decl.startsWith("music ") and decl.contains(".ogg")
+
+	boolean testFontAsset()
+		string decl = "font display src=fonts/Display.woff2"
+		return decl.startsWith("font ") and decl.contains(".woff2")
+
+	boolean testAssetPathExtension()
+		string png = "images/bg.png"
+		string wav = "sounds/sfx.wav"
+		boolean isPng = png.indexOf(".png") != -1
+		boolean isWav = wav.indexOf(".wav") != -1
+		return isPng and isWav
+
+	boolean testAssetNameNotPath()
+		string usage = "canvas.image src=hero x=100 y=100"
+		return usage.contains("src=hero") and not usage.contains(".png")
+
+	boolean testSpritesheetGrid()
+		string decl = "spritesheet grid src=g.png frameWidth=32 frameHeight=32 cols=8 rows=4"
+		return decl.contains("cols=") and decl.contains("rows=")

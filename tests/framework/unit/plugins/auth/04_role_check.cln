@@ -1,47 +1,6 @@
 // Test: frame.auth role-based access control
 // Tests that role checking functions correctly
 
-functions:
-	// Test hasRole function
-	boolean testHasRole()
-		string roleCheck = "hasRole(\"admin\")"
-		return roleCheck.contains("hasRole")
-
-	// Test hasAnyRole function
-	boolean testHasAnyRole()
-		string roleCheck = "hasAnyRole([\"admin\", \"editor\"])"
-		return roleCheck.contains("hasAnyRole")
-
-	// Test hasAllRoles function
-	boolean testHasAllRoles()
-		string roleCheck = "hasAllRoles([\"user\", \"verified\"])"
-		return roleCheck.contains("hasAllRoles")
-
-	// Test role assignment
-	boolean testRoleAssignment()
-		string assignCall = "Auth.assignRole(userId, \"admin\")"
-		return assignCall.contains("assignRole")
-
-	// Test role removal
-	boolean testRoleRemoval()
-		string removeCall = "Auth.removeRole(userId, \"admin\")"
-		return removeCall.contains("removeRole")
-
-	// Test get user roles
-	boolean testGetUserRoles()
-		string getRoles = "Auth.getRoles(userId)"
-		return getRoles.contains("getRoles")
-
-	// Test role in guard block
-	boolean testRoleInGuard()
-		string guardBlock = "guard: hasRole(\"admin\")"
-		return guardBlock.contains("guard:") and guardBlock.contains("hasRole")
-
-	// Test 403 forbidden response
-	boolean testForbiddenResponse()
-		integer forbiddenCode = 403
-		return forbiddenCode == 403
-
 start:
 	printl("=== Test Suite: Role Check ===")
 	printl("")
@@ -107,3 +66,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test hasRole function
+	boolean testHasRole()
+		string roleCheck = "hasRole(\"admin\")"
+		return roleCheck.contains("hasRole")
+
+	// Test hasAnyRole function
+	boolean testHasAnyRole()
+		string roleCheck = "hasAnyRole([\"admin\", \"editor\"])"
+		return roleCheck.contains("hasAnyRole")
+
+	// Test hasAllRoles function
+	boolean testHasAllRoles()
+		string roleCheck = "hasAllRoles([\"user\", \"verified\"])"
+		return roleCheck.contains("hasAllRoles")
+
+	// Test role assignment
+	boolean testRoleAssignment()
+		string assignCall = "Auth.assignRole(userId, \"admin\")"
+		return assignCall.contains("assignRole")
+
+	// Test role removal
+	boolean testRoleRemoval()
+		string removeCall = "Auth.removeRole(userId, \"admin\")"
+		return removeCall.contains("removeRole")
+
+	// Test get user roles
+	boolean testGetUserRoles()
+		string getRoles = "Auth.getRoles(userId)"
+		return getRoles.contains("getRoles")
+
+	// Test role in guard block
+	boolean testRoleInGuard()
+		string guardBlock = "guard: hasRole(\"admin\")"
+		return guardBlock.contains("guard:") and guardBlock.contains("hasRole")
+
+	// Test 403 forbidden response
+	boolean testForbiddenResponse()
+		integer forbiddenCode = 403
+		return forbiddenCode == 403
+

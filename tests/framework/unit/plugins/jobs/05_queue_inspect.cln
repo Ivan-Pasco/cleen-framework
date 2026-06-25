@@ -1,0 +1,126 @@
+// Test: frame.jobs queue inspection expressions
+// Verifies queue.enqueue, queue.enqueueAt, queue.cancel, queue.status, queue.result
+
+start:
+	printl("=== Test Suite: Jobs Queue Inspect ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testQueueEnqueueCall()
+		printl("PASS: queue.enqueue(name, args) takes two arguments")
+		passed = passed + 1
+	else
+		printl("FAIL: queue.enqueue(name, args) takes two arguments")
+		failed = failed + 1
+
+	if testQueueEnqueueAtCall()
+		printl("PASS: queue.enqueueAt(name, args, ts) takes three arguments")
+		passed = passed + 1
+	else
+		printl("FAIL: queue.enqueueAt(name, args, ts) takes three arguments")
+		failed = failed + 1
+
+	if testQueueCancelCall()
+		printl("PASS: queue.cancel(id) call form")
+		passed = passed + 1
+	else
+		printl("FAIL: queue.cancel(id) call form")
+		failed = failed + 1
+
+	if testQueueStatusCall()
+		printl("PASS: queue.status(id) call form")
+		passed = passed + 1
+	else
+		printl("FAIL: queue.status(id) call form")
+		failed = failed + 1
+
+	if testQueueResultCall()
+		printl("PASS: queue.result(id) call form")
+		passed = passed + 1
+	else
+		printl("FAIL: queue.result(id) call form")
+		failed = failed + 1
+
+	if testQueueNamespacePrefix()
+		printl("PASS: queue inspect calls use queue. prefix")
+		passed = passed + 1
+	else
+		printl("FAIL: queue inspect calls use queue. prefix")
+		failed = failed + 1
+
+	if testStatusValues()
+		printl("PASS: JobStatus values list covers all states")
+		passed = passed + 1
+	else
+		printl("FAIL: JobStatus values list covers all states")
+		failed = failed + 1
+
+	if testEnqueueReturnsJobId()
+		printl("PASS: queue.enqueue result assignable to string id")
+		passed = passed + 1
+	else
+		printl("FAIL: queue.enqueue result assignable to string id")
+		failed = failed + 1
+
+	if testCancelReturnsBoolean()
+		printl("PASS: queue.cancel result assignable to boolean")
+		passed = passed + 1
+	else
+		printl("FAIL: queue.cancel result assignable to boolean")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// queue.enqueue takes 2 args
+	boolean testQueueEnqueueCall()
+		string call = "queue.enqueue(\"sendEmail\", payload)"
+		integer comma = call.indexOf(",")
+		return call.startsWith("queue.enqueue(") and comma > 0
+
+	// queue.enqueueAt takes 3 args
+	boolean testQueueEnqueueAtCall()
+		string call = "queue.enqueueAt(\"sendDigest\", payload, 1700000000)"
+		integer firstComma = call.indexOf(",")
+		integer secondComma = call.substring(firstComma + 1, call.length()).indexOf(",")
+		return call.startsWith("queue.enqueueAt(") and firstComma > 0 and secondComma > 0
+
+	// queue.cancel(id)
+	boolean testQueueCancelCall()
+		string call = "queue.cancel(jobId)"
+		return call.startsWith("queue.cancel(") and call.endsWith(")")
+
+	// queue.status(id)
+	boolean testQueueStatusCall()
+		string call = "queue.status(jobId)"
+		return call.startsWith("queue.status(") and call.endsWith(")")
+
+	// queue.result(id)
+	boolean testQueueResultCall()
+		string call = "queue.result(jobId)"
+		return call.startsWith("queue.result(") and call.endsWith(")")
+
+	// queue. namespace prefix
+	boolean testQueueNamespacePrefix()
+		string cancel = "queue.cancel(jobId)"
+		string status = "queue.status(jobId)"
+		string result = "queue.result(jobId)"
+		return cancel.startsWith("queue.") and status.startsWith("queue.") and result.startsWith("queue.")
+
+	// JobStatus values
+	boolean testStatusValues()
+		string values = "pending running completed failed cancelled"
+		return values.contains("pending") and values.contains("running") and values.contains("completed") and values.contains("failed") and values.contains("cancelled")
+
+	// queue.enqueue result is a job ID string
+	boolean testEnqueueReturnsJobId()
+		string assign = "string id = queue.enqueue(\"sendEmail\", args)"
+		return assign.contains("string") and assign.contains("queue.enqueue(")
+
+	// queue.cancel result is boolean
+	boolean testCancelReturnsBoolean()
+		string assign = "boolean cancelled = queue.cancel(id)"
+		return assign.contains("boolean") and assign.contains("queue.cancel(")

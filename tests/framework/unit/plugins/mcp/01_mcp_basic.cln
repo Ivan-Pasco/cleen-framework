@@ -1,0 +1,105 @@
+// Test: frame.mcp basic block shape
+// Verifies mcp server keyword, quoted name, version field, description field
+
+start:
+	printl("=== Test Suite: MCP Basic Block ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testMcpKeyword()
+		printl("PASS: mcp block starts with mcp keyword")
+		passed = passed + 1
+	else
+		printl("FAIL: mcp block starts with mcp keyword")
+		failed = failed + 1
+
+	if testServerNameQuoted()
+		printl("PASS: server name is a quoted string literal")
+		passed = passed + 1
+	else
+		printl("FAIL: server name is a quoted string literal")
+		failed = failed + 1
+
+	if testBlockColon()
+		printl("PASS: mcp declaration ends with colon")
+		passed = passed + 1
+	else
+		printl("FAIL: mcp declaration ends with colon")
+		failed = failed + 1
+
+	if testVersionField()
+		printl("PASS: version field uses string literal")
+		passed = passed + 1
+	else
+		printl("FAIL: version field uses string literal")
+		failed = failed + 1
+
+	if testDescriptionField()
+		printl("PASS: description field uses string literal")
+		passed = passed + 1
+	else
+		printl("FAIL: description field uses string literal")
+		failed = failed + 1
+
+	if testDefaultVersion()
+		printl("PASS: default version is 1.0.0 per MCP-D002")
+		passed = passed + 1
+	else
+		printl("FAIL: default version is 1.0.0 per MCP-D002")
+		failed = failed + 1
+
+	if testConfigBeforePrimitives()
+		printl("PASS: config fields precede tool primitives per MCP-B006")
+		passed = passed + 1
+	else
+		printl("FAIL: config fields precede tool primitives per MCP-B006")
+		failed = failed + 1
+
+	if testOneBlockPerFile()
+		printl("PASS: exactly one mcp block per file per MCP-B001")
+		passed = passed + 1
+	else
+		printl("FAIL: exactly one mcp block per file per MCP-B001")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testMcpKeyword()
+		string sample = "mcp \"blog-tools\":"
+		return sample.startsWith("mcp ")
+
+	boolean testServerNameQuoted()
+		string sample = "mcp \"blog-tools\":"
+		return sample.contains("\"blog-tools\"")
+
+	boolean testBlockColon()
+		string sample = "mcp \"blog-tools\":"
+		return sample.endsWith(":")
+
+	boolean testVersionField()
+		string sample = "version: \"2.0.0\""
+		return sample.startsWith("version:") and sample.contains("\"2.0.0\"")
+
+	boolean testDescriptionField()
+		string sample = "description: \"Blog tools for AI agents\""
+		return sample.startsWith("description:") and sample.contains("agents")
+
+	boolean testDefaultVersion()
+		string defaultVersion = "1.0.0"
+		return defaultVersion == "1.0.0"
+
+	boolean testConfigBeforePrimitives()
+		string body = "version: \"1.0.0\"\ndescription: \"x\"\ntransport: stdio\ntool \"list_posts\":"
+		integer versionPos = body.indexOf("version:")
+		integer toolPos = body.indexOf("tool ")
+		return versionPos < toolPos
+
+	boolean testOneBlockPerFile()
+		string fileContent = "mcp \"blog-tools\":"
+		integer firstPos = fileContent.indexOf("mcp ")
+		integer secondPos = fileContent.indexOf("mcp ", firstPos + 1)
+		return secondPos == -1

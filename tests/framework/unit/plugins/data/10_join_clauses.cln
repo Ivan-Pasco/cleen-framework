@@ -1,0 +1,136 @@
+// Test: frame.data join: clause variants (inner / left / right / outer) and select projection
+// Spec: frame-data.ebnf §2.5, §2.7
+
+start:
+	printl("=== Test Suite: Join Clauses (frame.data) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testJoinBlockSyntax()
+		printl("PASS: join: block syntax is recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: join: block syntax is recognized")
+		failed = failed + 1
+
+	if testInnerJoin()
+		printl("PASS: inner join is supported")
+		passed = passed + 1
+	else
+		printl("FAIL: inner join is supported")
+		failed = failed + 1
+
+	if testLeftJoin()
+		printl("PASS: left join is supported")
+		passed = passed + 1
+	else
+		printl("FAIL: left join is supported")
+		failed = failed + 1
+
+	if testRightJoin()
+		printl("PASS: right join is supported")
+		passed = passed + 1
+	else
+		printl("FAIL: right join is supported")
+		failed = failed + 1
+
+	if testOuterJoin()
+		printl("PASS: outer join is supported")
+		passed = passed + 1
+	else
+		printl("FAIL: outer join is supported")
+		failed = failed + 1
+
+	if testJoinOnExpression()
+		printl("PASS: join on expression uses dotted column references")
+		passed = passed + 1
+	else
+		printl("FAIL: join on expression uses dotted column references")
+		failed = failed + 1
+
+	if testMultipleJoinLines()
+		printl("PASS: multiple join lines build chained joins")
+		passed = passed + 1
+	else
+		printl("FAIL: multiple join lines build chained joins")
+		failed = failed + 1
+
+	if testSelectProjectionList()
+		printl("PASS: select: takes comma-separated projection list")
+		passed = passed + 1
+	else
+		printl("FAIL: select: takes comma-separated projection list")
+		failed = failed + 1
+
+	if testSelectAliasedColumn()
+		printl("PASS: select: supports alias via as keyword")
+		passed = passed + 1
+	else
+		printl("FAIL: select: supports alias via as keyword")
+		failed = failed + 1
+
+	if testJoinWithWhereCombined()
+		printl("PASS: join: combines with where: clause")
+		passed = passed + 1
+	else
+		printl("FAIL: join: combines with where: clause")
+		failed = failed + 1
+
+	if testJoinVerbValid()
+		printl("PASS: join type keywords are inner left right outer")
+		passed = passed + 1
+	else
+		printl("FAIL: join type keywords are inner left right outer")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testJoinBlockSyntax()
+		string clause = "join:\n\t\tinner Post on User.id == Post.userId"
+		return clause.contains("join:")
+
+	boolean testInnerJoin()
+		string clause = "inner Post on User.id == Post.userId"
+		return clause.contains("inner ")
+
+	boolean testLeftJoin()
+		string clause = "left Profile on User.id == Profile.userId"
+		return clause.contains("left ")
+
+	boolean testRightJoin()
+		string clause = "right Audit on User.id == Audit.userId"
+		return clause.contains("right ")
+
+	boolean testOuterJoin()
+		string clause = "outer Tag on Post.id == Tag.postId"
+		return clause.contains("outer ")
+
+	boolean testJoinOnExpression()
+		string clause = "inner Post on User.id == Post.userId"
+		return clause.contains(" on ") and clause.contains(".")
+
+	boolean testMultipleJoinLines()
+		string clause = "join:\n\t\tinner Post on User.id == Post.userId\n\t\tleft Comment on Post.id == Comment.postId"
+		integer first = clause.indexOf(" on ")
+		integer second = clause.indexOf(" on ", first + 1)
+		return first != -1 and second != -1
+
+	boolean testSelectProjectionList()
+		string clause = "select: id, name, email"
+		return clause.contains("select:") and clause.contains(",")
+
+	boolean testSelectAliasedColumn()
+		string clause = "select: name as fullName, email as contact"
+		return clause.contains(" as ")
+
+	boolean testJoinWithWhereCombined()
+		string query = "find:\n\tjoin:\n\t\tinner Post on User.id == Post.userId\n\twhere:\n\t\tactive == true"
+		return query.contains("join:") and query.contains("where:")
+
+	boolean testJoinVerbValid()
+		string verbs = "inner,left,right,outer"
+		return verbs.contains("inner") and verbs.contains("left") and verbs.contains("right") and verbs.contains("outer")

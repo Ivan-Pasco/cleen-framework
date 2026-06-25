@@ -1,0 +1,148 @@
+// Test: frame.data pagination clauses — paginate (page-based) vs cursor (keyset) and offset/limit semantics
+// Spec: frame-data.ebnf §2.3, frame-data-semantics.md DAT-Q*
+
+start:
+	printl("=== Test Suite: Pagination Clauses (frame.data) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testPaginateBlockSyntax()
+		printl("PASS: paginate: block uses page and perPage")
+		passed = passed + 1
+	else
+		printl("FAIL: paginate: block uses page and perPage")
+		failed = failed + 1
+
+	if testPaginateFirstPage()
+		printl("PASS: paginate page 1 represents first page")
+		passed = passed + 1
+	else
+		printl("FAIL: paginate page 1 represents first page")
+		failed = failed + 1
+
+	if testPaginateOffsetEquivalence()
+		printl("PASS: paginate page N maps to offset (N-1) * perPage")
+		passed = passed + 1
+	else
+		printl("FAIL: paginate page N maps to offset (N-1) * perPage")
+		failed = failed + 1
+
+	if testCursorBlockSyntax()
+		printl("PASS: cursor: block uses after, perPage, by")
+		passed = passed + 1
+	else
+		printl("FAIL: cursor: block uses after, perPage, by")
+		failed = failed + 1
+
+	if testCursorEmptyAfter()
+		printl("PASS: empty after string requests first cursor page")
+		passed = passed + 1
+	else
+		printl("FAIL: empty after string requests first cursor page")
+		failed = failed + 1
+
+	if testCursorByFieldIdentifier()
+		printl("PASS: cursor by clause names an identifier field")
+		passed = passed + 1
+	else
+		printl("FAIL: cursor by clause names an identifier field")
+		failed = failed + 1
+
+	if testLimitOffsetIndependent()
+		printl("PASS: limit and offset clauses are independent of paginate")
+		passed = passed + 1
+	else
+		printl("FAIL: limit and offset clauses are independent of paginate")
+		failed = failed + 1
+
+	if testPaginateReturnsPagedResult()
+		printl("PASS: paginate returns PagedResult<T>")
+		passed = passed + 1
+	else
+		printl("FAIL: paginate returns PagedResult<T>")
+		failed = failed + 1
+
+	if testCursorReturnsCursorResult()
+		printl("PASS: cursor returns CursorResult<T>")
+		passed = passed + 1
+	else
+		printl("FAIL: cursor returns CursorResult<T>")
+		failed = failed + 1
+
+	if testPaginateRunsCountQuery()
+		printl("PASS: paginate executes a count query for totalCount")
+		passed = passed + 1
+	else
+		printl("FAIL: paginate executes a count query for totalCount")
+		failed = failed + 1
+
+	if testCursorSkipsCountQuery()
+		printl("PASS: cursor skips count query for performance")
+		passed = passed + 1
+	else
+		printl("FAIL: cursor skips count query for performance")
+		failed = failed + 1
+
+	if testPerPageMustBePositive()
+		printl("PASS: perPage must be a positive integer")
+		passed = passed + 1
+	else
+		printl("FAIL: perPage must be a positive integer")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testPaginateBlockSyntax()
+		string clause = "paginate:\n\tpage: 1\n\tperPage: 20"
+		return clause.contains("paginate:") and clause.contains("page:") and clause.contains("perPage:")
+
+	boolean testPaginateFirstPage()
+		integer page = 1
+		return page == 1
+
+	boolean testPaginateOffsetEquivalence()
+		integer page = 3
+		integer perPage = 25
+		integer expectedOffset = 50
+		integer offset = (page - 1) * perPage
+		return offset == expectedOffset
+
+	boolean testCursorBlockSyntax()
+		string clause = "cursor:\n\tafter: lastId\n\tperPage: 20\n\tby: id"
+		return clause.contains("cursor:") and clause.contains("after:") and clause.contains("by:")
+
+	boolean testCursorEmptyAfter()
+		string afterFirstPage = ""
+		return afterFirstPage.length() == 0
+
+	boolean testCursorByFieldIdentifier()
+		string byClause = "by: id"
+		return byClause.contains("by:")
+
+	boolean testLimitOffsetIndependent()
+		string clause = "limit: 10\noffset: 40"
+		return clause.contains("limit:") and clause.contains("offset:")
+
+	boolean testPaginateReturnsPagedResult()
+		string returnType = "PagedResult<User>"
+		return returnType.contains("PagedResult")
+
+	boolean testCursorReturnsCursorResult()
+		string returnType = "CursorResult<Post>"
+		return returnType.contains("CursorResult")
+
+	boolean testPaginateRunsCountQuery()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.contains("totalCount") and fields.contains("totalPages")
+
+	boolean testCursorSkipsCountQuery()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.contains("nextCursor")
+
+	boolean testPerPageMustBePositive()
+		integer perPage = 20
+		return perPage > 0

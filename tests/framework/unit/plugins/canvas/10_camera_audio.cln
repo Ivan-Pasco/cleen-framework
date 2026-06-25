@@ -1,0 +1,176 @@
+// Test: frame.canvas camera and audio (camera block, camera.* commands, audio.play, audio.music.*)
+
+start:
+	printl("=== Test Suite: Camera and Audio ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testCameraBlock()
+		printl("PASS: camera: block header")
+		passed = passed + 1
+	else
+		printl("FAIL: camera block")
+		failed = failed + 1
+
+	if testCameraFollow()
+		printl("PASS: camera followX/followY attrs")
+		passed = passed + 1
+	else
+		printl("FAIL: camera follow")
+		failed = failed + 1
+
+	if testCameraSmoothing()
+		printl("PASS: camera smoothing attr")
+		passed = passed + 1
+	else
+		printl("FAIL: camera smoothing")
+		failed = failed + 1
+
+	if testCameraDeadzone()
+		printl("PASS: camera deadzoneWidth/deadzoneHeight")
+		passed = passed + 1
+	else
+		printl("FAIL: camera deadzone")
+		failed = failed + 1
+
+	if testCameraBounds()
+		printl("PASS: camera boundsX/boundsY/boundsWidth/boundsHeight")
+		passed = passed + 1
+	else
+		printl("FAIL: camera bounds")
+		failed = failed + 1
+
+	if testCameraZoom()
+		printl("PASS: camera zoom attr")
+		passed = passed + 1
+	else
+		printl("FAIL: camera zoom")
+		failed = failed + 1
+
+	if testCameraSetPosition()
+		printl("PASS: camera.setPosition imperative call")
+		passed = passed + 1
+	else
+		printl("FAIL: camera.setPosition")
+		failed = failed + 1
+
+	if testCameraShake()
+		printl("PASS: camera.shake intensity/duration call")
+		passed = passed + 1
+	else
+		printl("FAIL: camera.shake")
+		failed = failed + 1
+
+	if testAudioPlay()
+		printl("PASS: audio.play sound effect call")
+		passed = passed + 1
+	else
+		printl("FAIL: audio.play")
+		failed = failed + 1
+
+	if testAudioMusicPlay()
+		printl("PASS: audio.music.play with loop/volume")
+		passed = passed + 1
+	else
+		printl("FAIL: audio.music.play")
+		failed = failed + 1
+
+	if testAudioMusicControl()
+		printl("PASS: audio.music.stop/pause/resume")
+		passed = passed + 1
+	else
+		printl("FAIL: audio.music control")
+		failed = failed + 1
+
+	if testAudioCrossfade()
+		printl("PASS: audio.music.crossfade with duration")
+		passed = passed + 1
+	else
+		printl("FAIL: audio.music.crossfade")
+		failed = failed + 1
+
+	if testAudioMasterVolume()
+		printl("PASS: audio.masterVolume value=")
+		passed = passed + 1
+	else
+		printl("FAIL: audio.masterVolume")
+		failed = failed + 1
+
+	if testAudioBridgePrefix()
+		printl("PASS: audio bridge prefix _audio_")
+		passed = passed + 1
+	else
+		printl("FAIL: audio bridge prefix")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testCameraBlock()
+		string header = "camera:"
+		return header == "camera:"
+
+	boolean testCameraFollow()
+		string fx = "followX = ballX"
+		string fy = "followY = ballY"
+		return fx.contains("followX") and fy.contains("followY")
+
+	boolean testCameraSmoothing()
+		string s = "smoothing = 0.08"
+		return s.contains("smoothing")
+
+	boolean testCameraDeadzone()
+		string dw = "deadzoneWidth = 100"
+		string dh = "deadzoneHeight = 80"
+		return dw.contains("deadzoneWidth") and dh.contains("deadzoneHeight")
+
+	boolean testCameraBounds()
+		string b = "boundsX = 0"
+		string bw = "boundsWidth = 1600"
+		return b.contains("boundsX") and bw.contains("boundsWidth")
+
+	boolean testCameraZoom()
+		string z = "zoom = 1.5"
+		return z.contains("zoom")
+
+	boolean testCameraSetPosition()
+		string cmd = "camera.setPosition x=400 y=300"
+		return cmd.startsWith("camera.setPosition")
+
+	boolean testCameraShake()
+		string cmd = "camera.shake intensity=10 duration=0.5"
+		boolean hasI = cmd.contains("intensity=")
+		boolean hasD = cmd.contains("duration=")
+		return cmd.startsWith("camera.shake") and hasI and hasD
+
+	boolean testAudioPlay()
+		string cmd = "audio.play jump volume=0.8 pitch=1.0"
+		return cmd.startsWith("audio.play")
+
+	boolean testAudioMusicPlay()
+		string cmd = "audio.music.play theme loop=true volume=0.5"
+		boolean hasLoop = cmd.contains("loop=")
+		boolean hasVol = cmd.contains("volume=")
+		return cmd.startsWith("audio.music.play") and hasLoop and hasVol
+
+	boolean testAudioMusicControl()
+		string stop = "audio.music.stop"
+		string pause = "audio.music.pause"
+		string resume = "audio.music.resume"
+		return stop.contains("stop") and pause.contains("pause") and resume.contains("resume")
+
+	boolean testAudioCrossfade()
+		string cmd = "audio.music.crossfade boss duration=1.5"
+		return cmd.startsWith("audio.music.crossfade") and cmd.contains("duration=")
+
+	boolean testAudioMasterVolume()
+		string cmd = "audio.masterVolume value=0.75"
+		return cmd.startsWith("audio.masterVolume") and cmd.contains("value=")
+
+	boolean testAudioBridgePrefix()
+		string b1 = "_audio_play"
+		string b2 = "_audio_music_play"
+		return b1.startsWith("_audio_") and b2.startsWith("_audio_")

@@ -1,64 +1,6 @@
 // Test: frame.ui — global keyboard shortcut bridge functions and ShortcutEvent type
 // Spec: HOST_BRIDGE.md §UI — Global Keyboard Shortcuts
 
-functions:
-	// Bridge function names must match what the loader registers
-	boolean testShortcutRegisterName()
-		string name = "_ui_shortcut_register"
-		return name == "_ui_shortcut_register"
-
-	boolean testShortcutRemoveName()
-		string name = "_ui_shortcut_remove"
-		return name == "_ui_shortcut_remove"
-
-	boolean testShortcutClearName()
-		string name = "_ui_shortcut_clear"
-		return name == "_ui_shortcut_clear"
-
-	// _ui_shortcut_register returns an integer ID used for later removal
-	boolean testRegisterReturnsId()
-		// Return type is integer (i32); any positive integer signals success
-		integer stubId = 1
-		return stubId > 0
-
-	// Clean alias names
-	boolean testShortcutAlias()
-		string alias = "ui.shortcut"
-		return alias == "ui.shortcut"
-
-	boolean testRemoveShortcutAlias()
-		string alias = "ui.removeShortcut"
-		return alias == "ui.removeShortcut"
-
-	boolean testClearShortcutsAlias()
-		string alias = "ui.clearShortcuts"
-		return alias == "ui.clearShortcuts"
-
-	// ShortcutEvent injected type name is correct
-	boolean testShortcutEventTypeName()
-		string typeName = "ShortcutEvent"
-		return typeName == "ShortcutEvent"
-
-	// ShortcutEvent must expose keys field (e.g. "ctrl+shift+k")
-	boolean testShortcutEventHasKeys()
-		string fields = "keys,targetId"
-		return fields.indexOf("keys") != -1
-
-	// ShortcutEvent must expose targetId field
-	boolean testShortcutEventHasTargetId()
-		string fields = "keys,targetId"
-		return fields.indexOf("targetId") != -1
-
-	// The "mod" alias maps to Ctrl on Windows/Linux and Meta on macOS
-	boolean testModAliasDocumented()
-		string doc = "mod alias: ctrl on Windows/Linux, meta on macOS"
-		return doc.indexOf("mod") != -1
-
-	// Shortcut key format uses "+" as separator
-	boolean testShortcutKeyFormat()
-		string example = "ctrl+shift+k"
-		return example.indexOf("+") != -1
-
 start:
 	printl("=== Test Suite: Global Keyboard Shortcuts (frame.ui) ===")
 	printl("")
@@ -152,3 +94,61 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function names must match what the loader registers
+	boolean testShortcutRegisterName()
+		string name = "_ui_shortcut_register"
+		return name == "_ui_shortcut_register"
+
+	boolean testShortcutRemoveName()
+		string name = "_ui_shortcut_remove"
+		return name == "_ui_shortcut_remove"
+
+	boolean testShortcutClearName()
+		string name = "_ui_shortcut_clear"
+		return name == "_ui_shortcut_clear"
+
+	// _ui_shortcut_register returns an integer ID used for later removal
+	boolean testRegisterReturnsId()
+		// Return type is integer (i32); any positive integer signals success
+		integer stubId = 1
+		return stubId > 0
+
+	// Clean alias names
+	boolean testShortcutAlias()
+		string alias = "ui.shortcut"
+		return alias == "ui.shortcut"
+
+	boolean testRemoveShortcutAlias()
+		string alias = "ui.removeShortcut"
+		return alias == "ui.removeShortcut"
+
+	boolean testClearShortcutsAlias()
+		string alias = "ui.clearShortcuts"
+		return alias == "ui.clearShortcuts"
+
+	// ShortcutEvent injected type name is correct
+	boolean testShortcutEventTypeName()
+		string typeName = "ShortcutEvent"
+		return typeName == "ShortcutEvent"
+
+	// ShortcutEvent must expose keys field (e.g. "ctrl+shift+k")
+	boolean testShortcutEventHasKeys()
+		string fields = "keys,targetId"
+		return fields.indexOf("keys") != -1
+
+	// ShortcutEvent must expose targetId field
+	boolean testShortcutEventHasTargetId()
+		string fields = "keys,targetId"
+		return fields.indexOf("targetId") != -1
+
+	// The "mod" alias maps to Ctrl on Windows/Linux and Meta on macOS
+	boolean testModAliasDocumented()
+		string doc = "mod alias: ctrl on Windows/Linux, meta on macOS"
+		return doc.indexOf("mod") != -1
+
+	// Shortcut key format uses "+" as separator
+	boolean testShortcutKeyFormat()
+		string example = "ctrl+shift+k"
+		return example.indexOf("+") != -1
+

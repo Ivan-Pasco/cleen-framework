@@ -1,79 +1,6 @@
 // Test: frame.ui — browser storage (localStorage + sessionStorage) bridge functions
 // Spec: HOST_BRIDGE.md §UI — Browser Storage
 
-functions:
-	// localStorage bridge function names
-	boolean testLocalGetName()
-		string name = "_storage_local_get"
-		return name == "_storage_local_get"
-
-	boolean testLocalSetName()
-		string name = "_storage_local_set"
-		return name == "_storage_local_set"
-
-	boolean testLocalRemoveName()
-		string name = "_storage_local_remove"
-		return name == "_storage_local_remove"
-
-	boolean testLocalClearName()
-		string name = "_storage_local_clear"
-		return name == "_storage_local_clear"
-
-	// sessionStorage bridge function names
-	boolean testSessionGetName()
-		string name = "_storage_session_get"
-		return name == "_storage_session_get"
-
-	boolean testSessionSetName()
-		string name = "_storage_session_set"
-		return name == "_storage_session_set"
-
-	boolean testSessionRemoveName()
-		string name = "_storage_session_remove"
-		return name == "_storage_session_remove"
-
-	boolean testSessionClearName()
-		string name = "_storage_session_clear"
-		return name == "_storage_session_clear"
-
-	// All 8 function names are distinct
-	boolean testAllNamesDistinct()
-		string names = "_storage_local_get,_storage_local_set,_storage_local_remove,_storage_local_clear,_storage_session_get,_storage_session_set,_storage_session_remove,_storage_session_clear"
-		// Verify both get functions exist in the list
-		return names.indexOf("_storage_local_get") != -1 and names.indexOf("_storage_session_get") != -1
-
-	// get functions return string
-	boolean testLocalGetReturnsString()
-		string returnType = "string"
-		return returnType == "string"
-
-	boolean testSessionGetReturnsString()
-		string returnType = "string"
-		return returnType == "string"
-
-	// get functions return empty string when key is absent (not null)
-	boolean testGetAbsentKeyReturnsEmpty()
-		string absentResult = ""
-		return absentResult == ""
-
-	// set functions accept two string parameters (key, value)
-	boolean testLocalSetAcceptsKeyValue()
-		string contract = "_storage_local_set(key_ptr, key_len, val_ptr, val_len)"
-		return contract.indexOf("key_ptr") != -1 and contract.indexOf("val_ptr") != -1
-
-	boolean testSessionSetAcceptsKeyValue()
-		string contract = "_storage_session_set(key_ptr, key_len, val_ptr, val_len)"
-		return contract.indexOf("key_ptr") != -1 and contract.indexOf("val_ptr") != -1
-
-	// Server stubs return empty string for getters (no browser storage on server)
-	boolean testServerStubLocalGetReturnsEmpty()
-		string stub = ""
-		return stub == ""
-
-	boolean testServerStubSessionGetReturnsEmpty()
-		string stub = ""
-		return stub == ""
-
 start:
 	printl("=== Test Suite: Browser Storage (frame.ui) ===")
 	printl("")
@@ -195,3 +122,76 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// localStorage bridge function names
+	boolean testLocalGetName()
+		string name = "_storage_local_get"
+		return name == "_storage_local_get"
+
+	boolean testLocalSetName()
+		string name = "_storage_local_set"
+		return name == "_storage_local_set"
+
+	boolean testLocalRemoveName()
+		string name = "_storage_local_remove"
+		return name == "_storage_local_remove"
+
+	boolean testLocalClearName()
+		string name = "_storage_local_clear"
+		return name == "_storage_local_clear"
+
+	// sessionStorage bridge function names
+	boolean testSessionGetName()
+		string name = "_storage_session_get"
+		return name == "_storage_session_get"
+
+	boolean testSessionSetName()
+		string name = "_storage_session_set"
+		return name == "_storage_session_set"
+
+	boolean testSessionRemoveName()
+		string name = "_storage_session_remove"
+		return name == "_storage_session_remove"
+
+	boolean testSessionClearName()
+		string name = "_storage_session_clear"
+		return name == "_storage_session_clear"
+
+	// All 8 function names are distinct
+	boolean testAllNamesDistinct()
+		string names = "_storage_local_get,_storage_local_set,_storage_local_remove,_storage_local_clear,_storage_session_get,_storage_session_set,_storage_session_remove,_storage_session_clear"
+		// Verify both get functions exist in the list
+		return names.indexOf("_storage_local_get") != -1 and names.indexOf("_storage_session_get") != -1
+
+	// get functions return string
+	boolean testLocalGetReturnsString()
+		string returnType = "string"
+		return returnType == "string"
+
+	boolean testSessionGetReturnsString()
+		string returnType = "string"
+		return returnType == "string"
+
+	// get functions return empty string when key is absent (not null)
+	boolean testGetAbsentKeyReturnsEmpty()
+		string absentResult = ""
+		return absentResult == ""
+
+	// set functions accept two string parameters (key, value)
+	boolean testLocalSetAcceptsKeyValue()
+		string contract = "_storage_local_set(key_ptr, key_len, val_ptr, val_len)"
+		return contract.indexOf("key_ptr") != -1 and contract.indexOf("val_ptr") != -1
+
+	boolean testSessionSetAcceptsKeyValue()
+		string contract = "_storage_session_set(key_ptr, key_len, val_ptr, val_len)"
+		return contract.indexOf("key_ptr") != -1 and contract.indexOf("val_ptr") != -1
+
+	// Server stubs return empty string for getters (no browser storage on server)
+	boolean testServerStubLocalGetReturnsEmpty()
+		string stub = ""
+		return stub == ""
+
+	boolean testServerStubSessionGetReturnsEmpty()
+		string stub = ""
+		return stub == ""
+

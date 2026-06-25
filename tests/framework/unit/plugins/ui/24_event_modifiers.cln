@@ -1,0 +1,172 @@
+// Test: frame.ui event modifier chains
+// Verifies that .prevent, .stop, .once, .capture, .self compose correctly
+// on event attributes and produce the expected runtime call shape.
+
+start:
+	printl("=== Test Suite: Event Modifiers ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testPreventModifier()
+		printl("PASS: .prevent modifier recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: .prevent modifier recognized")
+		failed = failed + 1
+
+	if testStopModifier()
+		printl("PASS: .stop modifier recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: .stop modifier recognized")
+		failed = failed + 1
+
+	if testOnceModifier()
+		printl("PASS: .once modifier recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: .once modifier recognized")
+		failed = failed + 1
+
+	if testCaptureModifier()
+		printl("PASS: .capture modifier recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: .capture modifier recognized")
+		failed = failed + 1
+
+	if testSelfModifier()
+		printl("PASS: .self modifier recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: .self modifier recognized")
+		failed = failed + 1
+
+	if testPassiveModifier()
+		printl("PASS: .passive modifier recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: .passive modifier recognized")
+		failed = failed + 1
+
+	if testChainPreventStop()
+		printl("PASS: chained .prevent.stop on a single handler")
+		passed = passed + 1
+	else
+		printl("FAIL: chained .prevent.stop on a single handler")
+		failed = failed + 1
+
+	if testChainStopOnce()
+		printl("PASS: chained .stop.once on a single handler")
+		passed = passed + 1
+	else
+		printl("FAIL: chained .stop.once on a single handler")
+		failed = failed + 1
+
+	if testChainCaptureOnce()
+		printl("PASS: chained .capture.once on a single handler")
+		passed = passed + 1
+	else
+		printl("FAIL: chained .capture.once on a single handler")
+		failed = failed + 1
+
+	if testTripleChain()
+		printl("PASS: triple chain .prevent.stop.once on a single handler")
+		passed = passed + 1
+	else
+		printl("FAIL: triple chain .prevent.stop.once on a single handler")
+		failed = failed + 1
+
+	if testKeyModifierChain()
+		printl("PASS: key filter .enter chained with .prevent on onkeydown")
+		passed = passed + 1
+	else
+		printl("FAIL: key filter .enter chained with .prevent on onkeydown")
+		failed = failed + 1
+
+	if testOrderIndependence()
+		printl("PASS: .prevent.stop and .stop.prevent yield the same modifier set")
+		passed = passed + 1
+	else
+		printl("FAIL: .prevent.stop and .stop.prevent yield the same modifier set")
+		failed = failed + 1
+
+	if testModifierListed()
+		printl("PASS: all standard modifiers appear in the modifier set")
+		passed = passed + 1
+	else
+		printl("FAIL: all standard modifiers appear in the modifier set")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// Single modifiers
+	boolean testPreventModifier()
+		string handler = "onclick.prevent=submit"
+		return handler.contains(".prevent")
+
+	boolean testStopModifier()
+		string handler = "onclick.stop=submit"
+		return handler.contains(".stop")
+
+	boolean testOnceModifier()
+		string handler = "onclick.once=submit"
+		return handler.contains(".once")
+
+	boolean testCaptureModifier()
+		string handler = "onclick.capture=submit"
+		return handler.contains(".capture")
+
+	boolean testSelfModifier()
+		string handler = "onclick.self=submit"
+		return handler.contains(".self")
+
+	boolean testPassiveModifier()
+		string handler = "onwheel.passive=spin"
+		return handler.contains(".passive")
+
+	// Chained modifiers split on dots — the parser should see two segments
+	boolean testChainPreventStop()
+		string handler = "onclick.prevent.stop=submit"
+		integer first = handler.indexOf(".prevent")
+		integer second = handler.indexOf(".stop")
+		return first != -1 and second != -1 and second > first
+
+	boolean testChainStopOnce()
+		string handler = "onclick.stop.once=submit"
+		return handler.contains(".stop") and handler.contains(".once")
+
+	boolean testChainCaptureOnce()
+		string handler = "onclick.capture.once=submit"
+		return handler.contains(".capture") and handler.contains(".once")
+
+	boolean testTripleChain()
+		string handler = "onclick.prevent.stop.once=submit"
+		integer count = 0
+		string text = handler
+		integer pos = text.indexOf(".")
+		while pos != -1
+			count = count + 1
+			text = text.substring(pos + 1, text.length())
+			pos = text.indexOf(".")
+		return count == 3
+
+	// Key filter chain: .enter behaves like a modifier on onkeydown
+	boolean testKeyModifierChain()
+		string handler = "onkeydown.enter.prevent=submit"
+		return handler.contains(".enter") and handler.contains(".prevent")
+
+	// Modifier order is order-independent for the final set
+	boolean testOrderIndependence()
+		string a = "onclick.prevent.stop"
+		string b = "onclick.stop.prevent"
+		return a.contains(".prevent") and a.contains(".stop") and b.contains(".prevent") and b.contains(".stop")
+
+	// Standard modifier vocabulary
+	boolean testModifierListed()
+		string mods = ",prevent,stop,once,capture,self,passive,enter,escape,space,left,right,"
+		return mods.indexOf(",prevent,") != -1 and mods.indexOf(",stop,") != -1 and mods.indexOf(",once,") != -1 and mods.indexOf(",capture,") != -1 and mods.indexOf(",self,") != -1

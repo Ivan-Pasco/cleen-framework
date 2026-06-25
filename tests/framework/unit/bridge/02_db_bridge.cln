@@ -1,43 +1,6 @@
 // Test: Host Bridge database functions
 // Tests that database bridge functions work correctly
 
-functions:
-	// Test database query
-	boolean testDbQuery()
-		string queryCall = "_db_query(SELECT * FROM users)"
-		return queryCall.contains("_db_query")
-
-	// Test database execute
-	boolean testDbExecute()
-		string execCall = "_db_execute(INSERT INTO users VALUES)"
-		return execCall.contains("_db_execute")
-
-	// Test database transaction begin
-	boolean testDbBegin()
-		string beginCall = "_db_begin()"
-		return beginCall.contains("_db_begin")
-
-	// Test database transaction commit
-	boolean testDbCommit()
-		string commitCall = "_db_commit()"
-		return commitCall.contains("_db_commit")
-
-	// Test database transaction rollback
-	boolean testDbRollback()
-		string rollbackCall = "_db_rollback()"
-		return rollbackCall.contains("_db_rollback")
-
-	// Test parameterized query
-	boolean testDbQueryParams()
-		string paramQuery = "_db_query_params(SELECT * FROM users WHERE id = ?, [1])"
-		return paramQuery.contains("_db_query_params")
-
-	// Test database error codes
-	boolean testDbErrorCodes()
-		string dbError = "DB_ERROR"
-		string connError = "DB_CONNECTION_ERROR"
-		return dbError == "DB_ERROR"
-
 start:
 	printl("=== Test Suite: Database Bridge ===")
 	printl("")
@@ -96,3 +59,40 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test database query
+	boolean testDbQuery()
+		string queryCall = "_db_query(SELECT * FROM users)"
+		return queryCall.contains("_db_query")
+
+	// Test database execute
+	boolean testDbExecute()
+		string execCall = "_db_execute(INSERT INTO users VALUES)"
+		return execCall.contains("_db_execute")
+
+	// Test database transaction begin
+	boolean testDbBegin()
+		string beginCall = "_db_begin()"
+		return beginCall.contains("_db_begin")
+
+	// Test database transaction commit
+	boolean testDbCommit()
+		string commitCall = "_db_commit()"
+		return commitCall.contains("_db_commit")
+
+	// Test database transaction rollback
+	boolean testDbRollback()
+		string rollbackCall = "_db_rollback()"
+		return rollbackCall.contains("_db_rollback")
+
+	// Test parameterized query
+	boolean testDbQueryParams()
+		string paramQuery = "_db_query_params(SELECT * FROM users WHERE id = ?, [1])"
+		return paramQuery.contains("_db_query_params")
+
+	// Test database error codes
+	boolean testDbErrorCodes()
+		string dbError = "DB_ERROR"
+		string connError = "DB_CONNECTION_ERROR"
+		return dbError == "DB_ERROR"
+

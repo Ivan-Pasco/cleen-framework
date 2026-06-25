@@ -4,6 +4,36 @@ plugins:
 	frame.data
 	frame.server
 
+start:
+	printl("================================")
+	printl("  CRUD Test Application")
+	printl("================================")
+	printl("")
+
+	// Create table
+	printl("Creating items table...")
+	string sql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value INTEGER DEFAULT 0)"
+	string result = _db_execute(sql, "[]")
+	printl("Table: " + result)
+	printl("")
+
+	// Register routes
+	printl("Registering routes...")
+	integer s = 0
+	s = _http_route("GET", "/", 0)
+	printl("  GET  /")
+	s = _http_route("GET", "/api/items", 1)
+	printl("  GET  /api/items")
+	s = _http_route("POST", "/api/items", 2)
+	printl("  POST /api/items")
+	s = _http_route("GET", "/api/items/:id", 3)
+	printl("  GET  /api/items/:id")
+	s = _http_route("DELETE", "/api/items/:id", 4)
+	printl("  DELETE /api/items/:id")
+	s = _http_route("GET", "/test/json", 5)
+	printl("  GET  /test/json")
+	printl("")
+	printl("Server ready on http://localhost:3000")
 functions:
 	// HANDLER 0: Home page
 	string __route_handler_0()
@@ -204,33 +234,3 @@ functions:
 		r = r + "}"
 		return r
 
-start:
-	printl("================================")
-	printl("  CRUD Test Application")
-	printl("================================")
-	printl("")
-
-	// Create table
-	printl("Creating items table...")
-	string sql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, value INTEGER DEFAULT 0)"
-	string result = _db_execute(sql, "[]")
-	printl("Table: " + result)
-	printl("")
-
-	// Register routes
-	printl("Registering routes...")
-	integer s = 0
-	s = _http_route("GET", "/", 0)
-	printl("  GET  /")
-	s = _http_route("GET", "/api/items", 1)
-	printl("  GET  /api/items")
-	s = _http_route("POST", "/api/items", 2)
-	printl("  POST /api/items")
-	s = _http_route("GET", "/api/items/:id", 3)
-	printl("  GET  /api/items/:id")
-	s = _http_route("DELETE", "/api/items/:id", 4)
-	printl("  DELETE /api/items/:id")
-	s = _http_route("GET", "/test/json", 5)
-	printl("  GET  /test/json")
-	printl("")
-	printl("Server ready on http://localhost:3000")

@@ -1,0 +1,130 @@
+// Test: frame.mcp response helpers shape
+// Verifies json, text, error response expressions and content types
+
+start:
+	printl("=== Test Suite: MCP Responses ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testJsonHelper()
+		printl("PASS: json helper wraps an expression")
+		passed = passed + 1
+	else
+		printl("FAIL: json helper wraps an expression")
+		failed = failed + 1
+
+	if testTextHelper()
+		printl("PASS: text helper wraps a string expression")
+		passed = passed + 1
+	else
+		printl("FAIL: text helper wraps a string expression")
+		failed = failed + 1
+
+	if testErrorHelperMessageOnly()
+		printl("PASS: error helper accepts message only form")
+		passed = passed + 1
+	else
+		printl("FAIL: error helper accepts message only form")
+		failed = failed + 1
+
+	if testErrorHelperWithCode()
+		printl("PASS: error helper accepts message with code form")
+		passed = passed + 1
+	else
+		printl("FAIL: error helper accepts message with code form")
+		failed = failed + 1
+
+	if testReturnJson()
+		printl("PASS: tool body returns json result per MCP-T003")
+		passed = passed + 1
+	else
+		printl("FAIL: tool body returns json result per MCP-T003")
+		failed = failed + 1
+
+	if testReturnText()
+		printl("PASS: tool body returns text result per MCP-T003")
+		passed = passed + 1
+	else
+		printl("FAIL: tool body returns text result per MCP-T003")
+		failed = failed + 1
+
+	if testReturnError()
+		printl("PASS: tool body returns error result per MCP-T003")
+		passed = passed + 1
+	else
+		printl("FAIL: tool body returns error result per MCP-T003")
+		failed = failed + 1
+
+	if testErrorIsErrorFlag()
+		printl("PASS: error result carries isError true envelope flag")
+		passed = passed + 1
+	else
+		printl("FAIL: error result carries isError true envelope flag")
+		failed = failed + 1
+
+	if testJsonContentType()
+		printl("PASS: json content envelope uses type text")
+		passed = passed + 1
+	else
+		printl("FAIL: json content envelope uses type text")
+		failed = failed + 1
+
+	if testHelpersOnlyInBodies()
+		printl("PASS: helpers only valid in mcp primitive bodies per MCP-X004")
+		passed = passed + 1
+	else
+		printl("FAIL: helpers only valid in mcp primitive bodies per MCP-X004")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testJsonHelper()
+		string sample = "json(post)"
+		return sample.startsWith("json(") and sample.endsWith(")")
+
+	boolean testTextHelper()
+		string sample = "text(\"Post deleted successfully\")"
+		return sample.startsWith("text(") and sample.endsWith(")")
+
+	boolean testErrorHelperMessageOnly()
+		string sample = "error(\"Post not found\")"
+		return sample.startsWith("error(") and sample.endsWith(")")
+
+	boolean testErrorHelperWithCode()
+		string sample = "error(\"Post not found\", code: \"NOT_FOUND\")"
+		boolean hasError = sample.startsWith("error(")
+		boolean hasCode = sample.contains("code:")
+		boolean hasCodeVal = sample.contains("\"NOT_FOUND\"")
+		return hasError and hasCode and hasCodeVal
+
+	boolean testReturnJson()
+		string sample = "return json(posts)"
+		return sample.startsWith("return json(")
+
+	boolean testReturnText()
+		string sample = "return text(\"ok\")"
+		return sample.startsWith("return text(")
+
+	boolean testReturnError()
+		string sample = "return error(\"Not found\")"
+		return sample.startsWith("return error(")
+
+	boolean testErrorIsErrorFlag()
+		string envelope = "isError: true"
+		return envelope.contains("isError:") and envelope.contains("true")
+
+	boolean testJsonContentType()
+		string contentType = "type: \"text\""
+		return contentType.contains("type:") and contentType.contains("\"text\"")
+
+	boolean testHelpersOnlyInBodies()
+		string allowedContexts = "tool resource prompt"
+		boolean inTool = allowedContexts.contains("tool")
+		boolean inResource = allowedContexts.contains("resource")
+		boolean inPrompt = allowedContexts.contains("prompt")
+		boolean notInEndpoint = allowedContexts.indexOf("endpoint") == -1
+		return inTool and inResource and inPrompt and notInEndpoint

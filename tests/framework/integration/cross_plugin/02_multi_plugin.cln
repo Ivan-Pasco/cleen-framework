@@ -1,37 +1,6 @@
 // Integration Test: Multiple plugins working together
 // Tests plugin interoperability
 
-functions:
-	// Test plugin load order
-	boolean testPluginLoadOrder()
-		string loadOrder = "web, data, auth, ui"
-		return loadOrder.contains("web")
-
-	// Test plugin dependencies
-	boolean testPluginDependencies()
-		string deps = "auth depends on crypto bridge"
-		return deps.contains("depends")
-
-	// Test shared types across plugins
-	boolean testSharedTypes()
-		string shared = "User type shared between web and data"
-		return shared.contains("shared")
-
-	// Test plugin communication
-	boolean testPluginCommunication()
-		string comm = "web plugin calls data plugin"
-		return comm.contains("calls")
-
-	// Test error propagation
-	boolean testErrorPropagation()
-		string errorFlow = "data error propagates to web response"
-		return errorFlow.contains("propagates")
-
-	// Test plugin configuration
-	boolean testPluginConfiguration()
-		string config = "plugins configured in frame.toml"
-		return config.contains("configured")
-
 start:
 	printl("=== Integration Test: Multi-Plugin ===")
 	printl("")
@@ -83,3 +52,34 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test plugin load order
+	boolean testPluginLoadOrder()
+		string loadOrder = "web, data, auth, ui"
+		return loadOrder.contains("web")
+
+	// Test plugin dependencies
+	boolean testPluginDependencies()
+		string deps = "auth depends on crypto bridge"
+		return deps.contains("depends")
+
+	// Test shared types across plugins
+	boolean testSharedTypes()
+		string shared = "User type shared between web and data"
+		return shared.contains("shared")
+
+	// Test plugin communication
+	boolean testPluginCommunication()
+		string comm = "web plugin calls data plugin"
+		return comm.contains("calls")
+
+	// Test error propagation
+	boolean testErrorPropagation()
+		string errorFlow = "data error propagates to web response"
+		return errorFlow.contains("propagates")
+
+	// Test plugin configuration
+	boolean testPluginConfiguration()
+		string config = "plugins configured in frame.toml"
+		return config.contains("configured")
+

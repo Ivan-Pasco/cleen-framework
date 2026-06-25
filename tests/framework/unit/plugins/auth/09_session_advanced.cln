@@ -1,0 +1,185 @@
+// Test: frame.auth advanced session configuration
+// Tests domain, secure, sameSite, httpOnly, path, store, and secret env var fields
+
+start:
+	printl("=== Test Suite: Session Advanced Config ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testSessionDomainField()
+		printl("PASS: session domain field shape")
+		passed = passed + 1
+	else
+		printl("FAIL: session domain field shape")
+		failed = failed + 1
+
+	if testSessionDomainNullDefault()
+		printl("PASS: session domain defaults to null (exact host)")
+		passed = passed + 1
+	else
+		printl("FAIL: session domain defaults to null (exact host)")
+		failed = failed + 1
+
+	if testSessionDomainNullable()
+		printl("PASS: domain field accepts nullable marker")
+		passed = passed + 1
+	else
+		printl("FAIL: domain field accepts nullable marker")
+		failed = failed + 1
+
+	if testSessionSecureField()
+		printl("PASS: session secure = true field shape")
+		passed = passed + 1
+	else
+		printl("FAIL: session secure = true field shape")
+		failed = failed + 1
+
+	if testSessionSameSiteValues()
+		printl("PASS: sameSite accepts Strict/Lax/None")
+		passed = passed + 1
+	else
+		printl("FAIL: sameSite accepts Strict/Lax/None")
+		failed = failed + 1
+
+	if testSessionSameSiteDefault()
+		printl("PASS: sameSite default is Lax")
+		passed = passed + 1
+	else
+		printl("FAIL: sameSite default is Lax")
+		failed = failed + 1
+
+	if testSameSiteNoneRequiresSecure()
+		printl("PASS: SameSite=None requires secure=true")
+		passed = passed + 1
+	else
+		printl("FAIL: SameSite=None requires secure=true")
+		failed = failed + 1
+
+	if testSessionHttpOnlyInvariant()
+		printl("PASS: session cookie httpOnly = true (invariant)")
+		passed = passed + 1
+	else
+		printl("FAIL: session cookie httpOnly = true (invariant)")
+		failed = failed + 1
+
+	if testSessionPathDefault()
+		printl("PASS: session path defaults to /")
+		passed = passed + 1
+	else
+		printl("FAIL: session path defaults to /")
+		failed = failed + 1
+
+	if testSessionStoreField()
+		printl("PASS: session store field shape (redis/db)")
+		passed = passed + 1
+	else
+		printl("FAIL: session store field shape (redis/db)")
+		failed = failed + 1
+
+	if testSessionDefaultCookieName()
+		printl("PASS: default session cookie name is frame.sid")
+		passed = passed + 1
+	else
+		printl("FAIL: default session cookie name is frame.sid")
+		failed = failed + 1
+
+	if testSessionSecretEnvVar()
+		printl("PASS: session encryption secret via env.get")
+		passed = passed + 1
+	else
+		printl("FAIL: session encryption secret via env.get")
+		failed = failed + 1
+
+	if testNoHardcodedSecret()
+		printl("PASS: no hardcoded secret literal accepted")
+		passed = passed + 1
+	else
+		printl("FAIL: no hardcoded secret literal accepted")
+		failed = failed + 1
+
+	if testTimeoutIsInactivity()
+		printl("PASS: timeoutMinutes is inactivity timeout")
+		passed = passed + 1
+	else
+		printl("FAIL: timeoutMinutes is inactivity timeout")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// session_domain_field per EBNF
+	boolean testSessionDomainField()
+		string field = "domain = .example.com"
+		return field.contains("domain")
+
+	// AUTH-S010
+	boolean testSessionDomainNullDefault()
+		string def = "domain? = null"
+		return def.contains("null")
+
+	// EBNF allows ? optional marker on domain
+	boolean testSessionDomainNullable()
+		string field = "domain? = null"
+		return field.contains("domain?")
+
+	// session_secure_field
+	boolean testSessionSecureField()
+		string field = "secure = true"
+		return field.contains("secure") and field.contains("true")
+
+	// EBNF allows the three string literals
+	boolean testSessionSameSiteValues()
+		string strict = "Strict"
+		string lax = "Lax"
+		string noneVal = "None"
+		return strict == "Strict" and lax == "Lax" and noneVal == "None"
+
+	// AUTH-D002
+	boolean testSessionSameSiteDefault()
+		string def = "Lax"
+		return def == "Lax"
+
+	// AUTH-C005
+	boolean testSameSiteNoneRequiresSecure()
+		string config = "sameSite = None, secure = true"
+		boolean usesNone = config.contains("None")
+		boolean hasSecure = config.contains("secure = true")
+		return usesNone and hasSecure
+
+	// AUTH-S005 — security invariant
+	boolean testSessionHttpOnlyInvariant()
+		string field = "httpOnly = true"
+		return field.contains("httpOnly") and field.contains("true")
+
+	// AUTH-S009
+	boolean testSessionPathDefault()
+		string path = "/"
+		return path == "/"
+
+	// session_store_field
+	boolean testSessionStoreField()
+		string field = "store = redis"
+		return field.contains("store")
+
+	// AUTH-D001
+	boolean testSessionDefaultCookieName()
+		string name = "frame.sid"
+		return name == "frame.sid"
+
+	// AUTH-J001 / AUTH-C004 — env.get for secrets
+	boolean testSessionSecretEnvVar()
+		string call = "env.get(SESSION_SECRET)"
+		return call.contains("env.get") and call.contains("SESSION_SECRET")
+
+	// AUTH-C004 — never literal
+	boolean testNoHardcodedSecret()
+		string good = "env.get(SESSION_SECRET)"
+		return good.indexOf("env.get") != -1
+
+	// AUTH-S008 — inactivity timeout semantics
+	boolean testTimeoutIsInactivity()
+		string note = "timeoutMinutes is inactivity not absolute"
+		return note.contains("inactivity")

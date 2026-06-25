@@ -1,47 +1,6 @@
 // Test: frame.ui event handling
 // Tests that event handlers are correctly bound
 
-functions:
-	// Test onClick handler
-	boolean testOnClickHandler()
-		string handler = "onClick: handleClick()"
-		return handler.contains("onClick:")
-
-	// Test onSubmit handler
-	boolean testOnSubmitHandler()
-		string handler = "onSubmit: handleSubmit()"
-		return handler.contains("onSubmit:")
-
-	// Test onChange handler
-	boolean testOnChangeHandler()
-		string handler = "onChange: handleChange(event)"
-		return handler.contains("onChange:")
-
-	// Test onInput handler
-	boolean testOnInputHandler()
-		string handler = "onInput: handleInput(event)"
-		return handler.contains("onInput:")
-
-	// Test event parameter access
-	boolean testEventParameter()
-		string handler = "onClick: handleClick(event)"
-		return handler.contains("(event)")
-
-	// Test prevent default
-	boolean testPreventDefault()
-		string code = "event.preventDefault()"
-		return code.contains("preventDefault()")
-
-	// Test stop propagation
-	boolean testStopPropagation()
-		string code = "event.stopPropagation()"
-		return code.contains("stopPropagation()")
-
-	// Test inline handler
-	boolean testInlineHandler()
-		string htmlStr = "html(<button onClick={handleClick}>+</button>)"
-		return htmlStr.contains("onClick=")
-
 start:
 	printl("=== Test Suite: Event Handling ===")
 	printl("")
@@ -107,3 +66,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test onClick handler
+	boolean testOnClickHandler()
+		string handler = "onClick: handleClick()"
+		return handler.contains("onClick:")
+
+	// Test onSubmit handler
+	boolean testOnSubmitHandler()
+		string handler = "onSubmit: handleSubmit()"
+		return handler.contains("onSubmit:")
+
+	// Test onChange handler
+	boolean testOnChangeHandler()
+		string handler = "onChange: handleChange(event)"
+		return handler.contains("onChange:")
+
+	// Test onInput handler
+	boolean testOnInputHandler()
+		string handler = "onInput: handleInput(event)"
+		return handler.contains("onInput:")
+
+	// Test event parameter access
+	boolean testEventParameter()
+		string handler = "onClick: handleClick(event)"
+		return handler.contains("(event)")
+
+	// Test prevent default
+	boolean testPreventDefault()
+		string code = "event.preventDefault()"
+		return code.contains("preventDefault()")
+
+	// Test stop propagation
+	boolean testStopPropagation()
+		string code = "event.stopPropagation()"
+		return code.contains("stopPropagation()")
+
+	// Test inline handler
+	boolean testInlineHandler()
+		string htmlStr = "html(<button onClick=handleClick>+</button>)"
+		return htmlStr.contains("onClick=")
+

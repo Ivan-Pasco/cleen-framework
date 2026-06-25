@@ -1,39 +1,6 @@
 // Test: Host Bridge environment functions
 // Tests that environment bridge functions work correctly
 
-functions:
-	// Test environment get
-	boolean testEnvGet()
-		string getCall = "_env_get(DATABASE_URL)"
-		return getCall.contains("_env_get")
-
-	// Test environment set
-	boolean testEnvSet()
-		string setCall = "_env_set(KEY, value)"
-		return setCall.contains("_env_set")
-
-	// Test environment has
-	boolean testEnvHas()
-		string hasCall = "_env_has(DATABASE_URL)"
-		return hasCall.contains("_env_has")
-
-	// Test environment delete
-	boolean testEnvDelete()
-		string delCall = "_env_delete(KEY)"
-		return delCall.contains("_env_delete")
-
-	// Test common env vars
-	boolean testCommonEnvVars()
-		string dbUrl = "DATABASE_URL"
-		string port = "PORT"
-		string nodeEnv = "NODE_ENV"
-		return dbUrl == "DATABASE_URL" and port == "PORT"
-
-	// Test env not found behavior
-	boolean testEnvNotFound()
-		string defaultValue = "default"
-		return defaultValue == "default"
-
 start:
 	printl("=== Test Suite: Environment Bridge ===")
 	printl("")
@@ -85,3 +52,36 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test environment get
+	boolean testEnvGet()
+		string getCall = "_env_get(DATABASE_URL)"
+		return getCall.contains("_env_get")
+
+	// Test environment set
+	boolean testEnvSet()
+		string setCall = "_env_set(KEY, value)"
+		return setCall.contains("_env_set")
+
+	// Test environment has
+	boolean testEnvHas()
+		string hasCall = "_env_has(DATABASE_URL)"
+		return hasCall.contains("_env_has")
+
+	// Test environment delete
+	boolean testEnvDelete()
+		string delCall = "_env_delete(KEY)"
+		return delCall.contains("_env_delete")
+
+	// Test common env vars
+	boolean testCommonEnvVars()
+		string dbUrl = "DATABASE_URL"
+		string port = "PORT"
+		string nodeEnv = "NODE_ENV"
+		return dbUrl == "DATABASE_URL" and port == "PORT"
+
+	// Test env not found behavior
+	boolean testEnvNotFound()
+		string defaultValue = "default"
+		return defaultValue == "default"
+

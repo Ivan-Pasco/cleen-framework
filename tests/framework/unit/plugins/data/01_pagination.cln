@@ -1,97 +1,6 @@
 // Test: frame.data — pagination bridge functions and PagedResult / CursorResult type contracts
 // Spec: HOST_BRIDGE.md §Pagination — frame.data, frame-data.ebnf §2.3
 
-functions:
-	// Bridge function names
-	boolean testDbPaginateName()
-		string name = "_db_paginate"
-		return name == "_db_paginate"
-
-	boolean testDbCursorPageName()
-		string name = "_db_cursor_page"
-		return name == "_db_cursor_page"
-
-	boolean testDbValidFieldName()
-		string name = "_db_valid_field"
-		return name == "_db_valid_field"
-
-	// _db_paginate parameter count: model (string), where (string), page (i32), perPage (i32)
-	boolean testDbPaginateParamCount()
-		string contract = "_db_paginate(model_ptr, model_len, where_ptr, where_len, page: i32, per_page: i32)"
-		return contract.indexOf("model_ptr") != -1 and contract.indexOf("page") != -1 and contract.indexOf("per_page") != -1
-
-	// _db_cursor_page parameter count: model, where, perPage, after, by
-	boolean testDbCursorPageParamCount()
-		string contract = "_db_cursor_page(model_ptr, model_len, where_ptr, where_len, per_page: i32, after_ptr, after_len, by_ptr, by_len)"
-		return contract.indexOf("model_ptr") != -1 and contract.indexOf("per_page") != -1 and contract.indexOf("after_ptr") != -1 and contract.indexOf("by_ptr") != -1
-
-	// _db_valid_field returns 1 (valid) or 0 (invalid)
-	boolean testDbValidFieldReturnsBoolean()
-		integer valid = 1
-		integer invalid = 0
-		return valid == 1 and invalid == 0
-
-	// PagedResult type contract: items, totalCount, totalPages, currentPage, perPage, hasNext, hasPrev
-	boolean testPagedResultHasItems()
-		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
-		return fields.indexOf("items") != -1
-
-	boolean testPagedResultHasTotalCount()
-		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
-		return fields.indexOf("totalCount") != -1
-
-	boolean testPagedResultHasTotalPages()
-		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
-		return fields.indexOf("totalPages") != -1
-
-	boolean testPagedResultHasCurrentPage()
-		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
-		return fields.indexOf("currentPage") != -1
-
-	boolean testPagedResultHasPerPage()
-		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
-		return fields.indexOf("perPage") != -1
-
-	boolean testPagedResultHasHasNext()
-		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
-		return fields.indexOf("hasNext") != -1
-
-	boolean testPagedResultHasHasPrev()
-		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
-		return fields.indexOf("hasPrev") != -1
-
-	// CursorResult type contract: items, nextCursor, hasPrev, count
-	boolean testCursorResultHasItems()
-		string fields = "items,nextCursor,hasPrev,count"
-		return fields.indexOf("items") != -1
-
-	boolean testCursorResultHasNextCursor()
-		string fields = "items,nextCursor,hasPrev,count"
-		return fields.indexOf("nextCursor") != -1
-
-	boolean testCursorResultHasHasPrev()
-		string fields = "items,nextCursor,hasPrev,count"
-		return fields.indexOf("hasPrev") != -1
-
-	boolean testCursorResultHasCount()
-		string fields = "items,nextCursor,hasPrev,count"
-		return fields.indexOf("count") != -1
-
-	// paginate_clause keywords: page and perPage
-	boolean testPaginateClauseKeywords()
-		string clause = "paginate:\n\tpage: 1\n\tperPage: 20"
-		return clause.indexOf("page") != -1 and clause.indexOf("perPage") != -1
-
-	// cursor_clause keywords: after, perPage, by
-	boolean testCursorClauseKeywords()
-		string clause = "cursor:\n\tafter: \"\"\n\tperPage: 20\n\tby: id"
-		return clause.indexOf("after") != -1 and clause.indexOf("perPage") != -1 and clause.indexOf("by") != -1
-
-	// cursor_clause: empty after string fetches first page
-	boolean testCursorClauseFirstPage()
-		string afterFirstPage = ""
-		return afterFirstPage == ""
-
 start:
 	printl("=== Test Suite: Pagination (frame.data) ===")
 	printl("")
@@ -241,3 +150,94 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Bridge function names
+	boolean testDbPaginateName()
+		string name = "_db_paginate"
+		return name == "_db_paginate"
+
+	boolean testDbCursorPageName()
+		string name = "_db_cursor_page"
+		return name == "_db_cursor_page"
+
+	boolean testDbValidFieldName()
+		string name = "_db_valid_field"
+		return name == "_db_valid_field"
+
+	// _db_paginate parameter count: model (string), where (string), page (i32), perPage (i32)
+	boolean testDbPaginateParamCount()
+		string contract = "_db_paginate(model_ptr, model_len, where_ptr, where_len, page: i32, per_page: i32)"
+		return contract.indexOf("model_ptr") != -1 and contract.indexOf("page") != -1 and contract.indexOf("per_page") != -1
+
+	// _db_cursor_page parameter count: model, where, perPage, after, by
+	boolean testDbCursorPageParamCount()
+		string contract = "_db_cursor_page(model_ptr, model_len, where_ptr, where_len, per_page: i32, after_ptr, after_len, by_ptr, by_len)"
+		return contract.indexOf("model_ptr") != -1 and contract.indexOf("per_page") != -1 and contract.indexOf("after_ptr") != -1 and contract.indexOf("by_ptr") != -1
+
+	// _db_valid_field returns 1 (valid) or 0 (invalid)
+	boolean testDbValidFieldReturnsBoolean()
+		integer valid = 1
+		integer invalid = 0
+		return valid == 1 and invalid == 0
+
+	// PagedResult type contract: items, totalCount, totalPages, currentPage, perPage, hasNext, hasPrev
+	boolean testPagedResultHasItems()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("items") != -1
+
+	boolean testPagedResultHasTotalCount()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("totalCount") != -1
+
+	boolean testPagedResultHasTotalPages()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("totalPages") != -1
+
+	boolean testPagedResultHasCurrentPage()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("currentPage") != -1
+
+	boolean testPagedResultHasPerPage()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("perPage") != -1
+
+	boolean testPagedResultHasHasNext()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("hasNext") != -1
+
+	boolean testPagedResultHasHasPrev()
+		string fields = "items,totalCount,totalPages,currentPage,perPage,hasNext,hasPrev"
+		return fields.indexOf("hasPrev") != -1
+
+	// CursorResult type contract: items, nextCursor, hasPrev, count
+	boolean testCursorResultHasItems()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("items") != -1
+
+	boolean testCursorResultHasNextCursor()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("nextCursor") != -1
+
+	boolean testCursorResultHasHasPrev()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("hasPrev") != -1
+
+	boolean testCursorResultHasCount()
+		string fields = "items,nextCursor,hasPrev,count"
+		return fields.indexOf("count") != -1
+
+	// paginate_clause keywords: page and perPage
+	boolean testPaginateClauseKeywords()
+		string clause = "paginate:\n\tpage: 1\n\tperPage: 20"
+		return clause.indexOf("page") != -1 and clause.indexOf("perPage") != -1
+
+	// cursor_clause keywords: after, perPage, by
+	boolean testCursorClauseKeywords()
+		string clause = "cursor:\n\tafter: \"\"\n\tperPage: 20\n\tby: id"
+		return clause.indexOf("after") != -1 and clause.indexOf("perPage") != -1 and clause.indexOf("by") != -1
+
+	// cursor_clause: empty after string fetches first page
+	boolean testCursorClauseFirstPage()
+		string afterFirstPage = ""
+		return afterFirstPage == ""
+

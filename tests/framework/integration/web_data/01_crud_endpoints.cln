@@ -1,47 +1,6 @@
 // Integration Test: CRUD endpoints with data
 // Tests complete CRUD operations through web endpoints
 
-functions:
-	// Test create endpoint
-	boolean testCreateEndpoint()
-		string endpoint = "POST /api/users"
-		string action = "creates new user"
-		return endpoint.contains("POST")
-
-	// Test read endpoint
-	boolean testReadEndpoint()
-		string endpoint = "GET /api/users/:id"
-		string action = "returns user by id"
-		return endpoint.contains("GET")
-
-	// Test update endpoint
-	boolean testUpdateEndpoint()
-		string endpoint = "PUT /api/users/:id"
-		string action = "updates user"
-		return endpoint.contains("PUT")
-
-	// Test delete endpoint
-	boolean testDeleteEndpoint()
-		string endpoint = "DELETE /api/users/:id"
-		string action = "deletes user"
-		return endpoint.contains("DELETE")
-
-	// Test list endpoint
-	boolean testListEndpoint()
-		string endpoint = "GET /api/users"
-		string action = "returns all users"
-		return endpoint.contains("/users")
-
-	// Test create returns created
-	boolean testCreateReturnsCreated()
-		integer expectedStatus = 201
-		return expectedStatus == 201
-
-	// Test not found returns 404
-	boolean testNotFoundReturns404()
-		integer expectedStatus = 404
-		return expectedStatus == 404
-
 start:
 	printl("=== Integration Test: CRUD Endpoints ===")
 	printl("")
@@ -100,3 +59,44 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	// Test create endpoint
+	boolean testCreateEndpoint()
+		string endpoint = "POST /api/users"
+		string action = "creates new user"
+		return endpoint.contains("POST")
+
+	// Test read endpoint
+	boolean testReadEndpoint()
+		string endpoint = "GET /api/users/:id"
+		string action = "returns user by id"
+		return endpoint.contains("GET")
+
+	// Test update endpoint
+	boolean testUpdateEndpoint()
+		string endpoint = "PUT /api/users/:id"
+		string action = "updates user"
+		return endpoint.contains("PUT")
+
+	// Test delete endpoint
+	boolean testDeleteEndpoint()
+		string endpoint = "DELETE /api/users/:id"
+		string action = "deletes user"
+		return endpoint.contains("DELETE")
+
+	// Test list endpoint
+	boolean testListEndpoint()
+		string endpoint = "GET /api/users"
+		string action = "returns all users"
+		return endpoint.contains("/users")
+
+	// Test create returns created
+	boolean testCreateReturnsCreated()
+		integer expectedStatus = 201
+		return expectedStatus == 201
+
+	// Test not found returns 404
+	boolean testNotFoundReturns404()
+		integer expectedStatus = 404
+		return expectedStatus == 404
+

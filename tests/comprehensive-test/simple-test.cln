@@ -5,6 +5,35 @@ plugins:
 	frame.data
 	frame.server
 
+start:
+	printl("================================")
+	printl("  Comprehensive Test")
+	printl("================================")
+
+	// Create table (returns integer - affected rows)
+	string createSql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)"
+	integer createResult = _db_execute(createSql, "[]")
+	printl("Table created: " + createResult.toString())
+
+	// Insert test data
+	string insertSql = "INSERT INTO items (name) VALUES (?)"
+	integer r1 = _db_execute(insertSql, "[\"Apple\"]")
+	printl("Insert1: " + r1.toString())
+	integer r2 = _db_execute(insertSql, "[\"Banana\"]")
+	printl("Insert2: " + r2.toString())
+	integer r3 = _db_execute(insertSql, "[\"Cherry\"]")
+	printl("Insert3: " + r3.toString())
+
+	// Routes
+	integer s = 0
+	s = _http_route("GET", "/", 0)
+	s = _http_route("GET", "/api/items", 1)
+	s = _http_route("POST", "/api/items", 2)
+	s = _http_route("GET", "/api/items/:id", 3)
+	s = _http_route("GET", "/test/json", 4)
+
+	printl("Routes registered")
+	printl("Server ready on http://localhost:3000")
 functions:
 	// Home page
 	string __route_handler_0()
@@ -130,32 +159,3 @@ functions:
 		resp = resp + "}"
 		return resp
 
-start:
-	printl("================================")
-	printl("  Comprehensive Test")
-	printl("================================")
-
-	// Create table (returns integer - affected rows)
-	string createSql = "CREATE TABLE IF NOT EXISTS items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)"
-	integer createResult = _db_execute(createSql, "[]")
-	printl("Table created: " + createResult.toString())
-
-	// Insert test data
-	string insertSql = "INSERT INTO items (name) VALUES (?)"
-	integer r1 = _db_execute(insertSql, "[\"Apple\"]")
-	printl("Insert1: " + r1.toString())
-	integer r2 = _db_execute(insertSql, "[\"Banana\"]")
-	printl("Insert2: " + r2.toString())
-	integer r3 = _db_execute(insertSql, "[\"Cherry\"]")
-	printl("Insert3: " + r3.toString())
-
-	// Routes
-	integer s = 0
-	s = _http_route("GET", "/", 0)
-	s = _http_route("GET", "/api/items", 1)
-	s = _http_route("POST", "/api/items", 2)
-	s = _http_route("GET", "/api/items/:id", 3)
-	s = _http_route("GET", "/test/json", 4)
-
-	printl("Routes registered")
-	printl("Server ready on http://localhost:3000")

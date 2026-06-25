@@ -1,6 +1,27 @@
 // Test Application: Blog API
 // Blog with posts and comments for testing relationships
 
+start:
+	printl("Starting Blog Application...")
+	integer status = 0
+
+	// Register routes
+	status = _http_route("GET", "/", 0)
+	status = _http_route("GET", "/api/posts", 1)
+	status = _http_route("POST", "/api/posts", 2)
+	status = _http_route("GET", "/api/posts/:id", 3)
+	status = _http_route("PUT", "/api/posts/:id", 4)
+	status = _http_route("DELETE", "/api/posts/:id", 5)
+	status = _http_route("GET", "/api/posts/:id/comments", 6)
+	status = _http_route("POST", "/api/posts/:id/comments", 7)
+	status = _http_route("GET", "/api/users/:id/posts", 8)
+	status = _http_route("GET", "/api/posts/search", 9)
+	status = _http_route("GET", "/health", 10)
+
+	printl("Blog Application routes registered")
+
+	// Start listening
+	integer listenStatus = _http_listen(3000)
 functions:
 	// Handler 0: Home page
 	string __route_handler_0()
@@ -56,24 +77,3 @@ functions:
 	string __route_handler_10()
 		return "status:healthy,service:blog"
 
-start:
-	printl("Starting Blog Application...")
-	integer status = 0
-
-	// Register routes
-	status = _http_route("GET", "/", 0)
-	status = _http_route("GET", "/api/posts", 1)
-	status = _http_route("POST", "/api/posts", 2)
-	status = _http_route("GET", "/api/posts/:id", 3)
-	status = _http_route("PUT", "/api/posts/:id", 4)
-	status = _http_route("DELETE", "/api/posts/:id", 5)
-	status = _http_route("GET", "/api/posts/:id/comments", 6)
-	status = _http_route("POST", "/api/posts/:id/comments", 7)
-	status = _http_route("GET", "/api/users/:id/posts", 8)
-	status = _http_route("GET", "/api/posts/search", 9)
-	status = _http_route("GET", "/health", 10)
-
-	printl("Blog Application routes registered")
-
-	// Start listening
-	integer listenStatus = _http_listen(3000)

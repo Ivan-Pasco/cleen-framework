@@ -1,81 +1,6 @@
 // E2E Test: Authentication Flow
 // Tests complete auth workflow from registration to logout
 
-functions:
-	boolean testUserRegistration()
-		// POST /auth/register creates new user
-		string method = "POST"
-		string path = "/auth/register"
-		string body = "email and password"
-		integer statusCode = 201
-		return method == "POST" and statusCode == 201
-
-	boolean testRegistrationValidation()
-		// Registration requires valid email and password
-		string email = "invalid"
-		string password = "short"
-		integer statusCode = 400
-		string errorCode = "VALIDATION_ERROR"
-		return statusCode == 400 and errorCode.contains("VALIDATION")
-
-	boolean testUserLogin()
-		// POST /auth/login returns JWT token
-		string method = "POST"
-		string path = "/auth/login"
-		string response = "token in response"
-		return method == "POST" and response.contains("token")
-
-	boolean testLoginFailure()
-		// Invalid credentials return 401
-		string email = "wrong email"
-		string password = "wrong password"
-		integer statusCode = 401
-		string errorCode = "AUTH_ERROR"
-		return statusCode == 401 and errorCode.contains("AUTH")
-
-	boolean testAccessProtectedRoute()
-		// Protected route requires valid token
-		string authHeader = "Bearer token123"
-		string path = "/api/profile"
-		integer statusCode = 200
-		return authHeader.contains("Bearer") and statusCode == 200
-
-	boolean testUnauthorizedAccess()
-		// Protected route without token returns 401
-		string authHeader = "no token"
-		string path = "/api/profile"
-		integer statusCode = 401
-		return statusCode == 401 and authHeader == "no token"
-
-	boolean testTokenRefresh()
-		// POST /auth/refresh with refresh token gets new access token
-		string method = "POST"
-		string path = "/auth/refresh"
-		string body = "refresh_token"
-		string response = "new access_token"
-		return method == "POST" and response.contains("access_token")
-
-	boolean testUserLogout()
-		// POST /auth/logout invalidates token
-		string method = "POST"
-		string path = "/auth/logout"
-		integer statusCode = 200
-		return method == "POST" and statusCode == 200
-
-	boolean testLogoutInvalidatesToken()
-		// After logout, old token no longer works
-		string oldToken = "invalidated"
-		integer statusCode = 401
-		return oldToken == "invalidated" and statusCode == 401
-
-	boolean testPasswordChange()
-		// PUT /auth/password changes user password
-		string method = "PUT"
-		string path = "/auth/password"
-		string body = "old and new password"
-		integer statusCode = 200
-		return method == "PUT" and statusCode == 200
-
 start:
 	printl("=== E2E Test: Authentication Flow ===")
 	printl("")
@@ -155,3 +80,78 @@ start:
 
 	printl("")
 	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+functions:
+	boolean testUserRegistration()
+		// POST /auth/register creates new user
+		string method = "POST"
+		string path = "/auth/register"
+		string body = "email and password"
+		integer statusCode = 201
+		return method == "POST" and statusCode == 201
+
+	boolean testRegistrationValidation()
+		// Registration requires valid email and password
+		string email = "invalid"
+		string password = "short"
+		integer statusCode = 400
+		string errorCode = "VALIDATION_ERROR"
+		return statusCode == 400 and errorCode.contains("VALIDATION")
+
+	boolean testUserLogin()
+		// POST /auth/login returns JWT token
+		string method = "POST"
+		string path = "/auth/login"
+		string response = "token in response"
+		return method == "POST" and response.contains("token")
+
+	boolean testLoginFailure()
+		// Invalid credentials return 401
+		string email = "wrong email"
+		string password = "wrong password"
+		integer statusCode = 401
+		string errorCode = "AUTH_ERROR"
+		return statusCode == 401 and errorCode.contains("AUTH")
+
+	boolean testAccessProtectedRoute()
+		// Protected route requires valid token
+		string authHeader = "Bearer token123"
+		string path = "/api/profile"
+		integer statusCode = 200
+		return authHeader.contains("Bearer") and statusCode == 200
+
+	boolean testUnauthorizedAccess()
+		// Protected route without token returns 401
+		string authHeader = "no token"
+		string path = "/api/profile"
+		integer statusCode = 401
+		return statusCode == 401 and authHeader == "no token"
+
+	boolean testTokenRefresh()
+		// POST /auth/refresh with refresh token gets new access token
+		string method = "POST"
+		string path = "/auth/refresh"
+		string body = "refresh_token"
+		string response = "new access_token"
+		return method == "POST" and response.contains("access_token")
+
+	boolean testUserLogout()
+		// POST /auth/logout invalidates token
+		string method = "POST"
+		string path = "/auth/logout"
+		integer statusCode = 200
+		return method == "POST" and statusCode == 200
+
+	boolean testLogoutInvalidatesToken()
+		// After logout, old token no longer works
+		string oldToken = "invalidated"
+		integer statusCode = 401
+		return oldToken == "invalidated" and statusCode == 401
+
+	boolean testPasswordChange()
+		// PUT /auth/password changes user password
+		string method = "PUT"
+		string path = "/auth/password"
+		string body = "old and new password"
+		integer statusCode = 200
+		return method == "PUT" and statusCode == 200
+

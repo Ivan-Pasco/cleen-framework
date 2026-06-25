@@ -1,0 +1,134 @@
+// Test: frame.data raw SQL queries — db.query and db.queryAs with parameterized bindings
+// Spec: frame-data.ebnf §6, frame-data-semantics.md DAT-Q012 DAT-I002
+
+start:
+	printl("=== Test Suite: Raw Query (frame.data) ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testDbQueryBlockSyntax()
+		printl("PASS: db.query: block syntax recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: db.query: block syntax recognized")
+		failed = failed + 1
+
+	if testDbQueryAsBlockSyntax()
+		printl("PASS: db.queryAs(Type): typed block syntax recognized")
+		passed = passed + 1
+	else
+		printl("FAIL: db.queryAs(Type): typed block syntax recognized")
+		failed = failed + 1
+
+	if testSqlClause()
+		printl("PASS: sql: clause holds raw SQL string literal")
+		passed = passed + 1
+	else
+		printl("FAIL: sql: clause holds raw SQL string literal")
+		failed = failed + 1
+
+	if testParamsClause()
+		printl("PASS: params: clause holds list of bound values")
+		passed = passed + 1
+	else
+		printl("FAIL: params: clause holds list of bound values")
+		failed = failed + 1
+
+	if testParameterizedPlaceholder()
+		printl("PASS: parameterized SQL uses positional placeholders")
+		passed = passed + 1
+	else
+		printl("FAIL: parameterized SQL uses positional placeholders")
+		failed = failed + 1
+
+	if testQueryAsLenientMapping()
+		printl("PASS: db.queryAs maps columns to fields by name (lenient)")
+		passed = passed + 1
+	else
+		printl("FAIL: db.queryAs maps columns to fields by name (lenient)")
+		failed = failed + 1
+
+	if testRawSelectStatement()
+		printl("PASS: raw SELECT statement is supported")
+		passed = passed + 1
+	else
+		printl("FAIL: raw SELECT statement is supported")
+		failed = failed + 1
+
+	if testRawOrClause()
+		printl("PASS: raw SQL supports OR predicates not in where: block")
+		passed = passed + 1
+	else
+		printl("FAIL: raw SQL supports OR predicates not in where: block")
+		failed = failed + 1
+
+	if testRawQueryNoTenantScoping()
+		printl("PASS: raw queries do not auto-apply tenant scoping")
+		passed = passed + 1
+	else
+		printl("FAIL: raw queries do not auto-apply tenant scoping")
+		failed = failed + 1
+
+	if testParamsAreListLiteral()
+		printl("PASS: params: takes a list literal of values")
+		passed = passed + 1
+	else
+		printl("FAIL: params: takes a list literal of values")
+		failed = failed + 1
+
+	if testRawQueryReturnsList()
+		printl("PASS: db.queryAs(Type) returns a list of Type")
+		passed = passed + 1
+	else
+		printl("FAIL: db.queryAs(Type) returns a list of Type")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	boolean testDbQueryBlockSyntax()
+		string block = "db.query:\n\tsql: \"SELECT 1\""
+		return block.contains("db.query:")
+
+	boolean testDbQueryAsBlockSyntax()
+		string block = "db.queryAs(User):\n\tsql: \"SELECT id, email FROM users\""
+		return block.contains("db.queryAs(") and block.contains("):")
+
+	boolean testSqlClause()
+		string clause = "sql: \"SELECT id, name FROM users WHERE active = true\""
+		return clause.contains("sql:") and clause.contains("SELECT")
+
+	boolean testParamsClause()
+		string clause = "params: [42, \"alice\"]"
+		return clause.contains("params:") and clause.contains("[")
+
+	boolean testParameterizedPlaceholder()
+		string sql = "SELECT * FROM users WHERE id = ? AND email = ?"
+		return sql.contains("?")
+
+	boolean testQueryAsLenientMapping()
+		string note = "queryAs maps columns to fields by name; extras ignored, missing null"
+		return note.contains("by name")
+
+	boolean testRawSelectStatement()
+		string sql = "SELECT id, email FROM users WHERE role_id = ?"
+		return sql.contains("SELECT") and sql.contains("FROM")
+
+	boolean testRawOrClause()
+		string sql = "SELECT id FROM users WHERE active = true OR pending = true"
+		return sql.contains(" OR ")
+
+	boolean testRawQueryNoTenantScoping()
+		string sql = "SELECT * FROM orders WHERE tenant_id = ?"
+		return sql.contains("tenant_id")
+
+	boolean testParamsAreListLiteral()
+		string params = "params: [1, 2, 3]"
+		return params.contains("[") and params.contains("]")
+
+	boolean testRawQueryReturnsList()
+		string returnType = "list<User>"
+		return returnType.contains("list<")

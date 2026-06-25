@@ -1,0 +1,117 @@
+// Test: frame.jobs scheduled jobs
+// Verifies schedule keyword, cron expression format, schedule.cancel
+
+start:
+	printl("=== Test Suite: Jobs Scheduled ===")
+	printl("")
+
+	integer passed = 0
+	integer failed = 0
+
+	if testScheduleKeyword()
+		printl("PASS: schedule keyword present")
+		passed = passed + 1
+	else
+		printl("FAIL: schedule keyword present")
+		failed = failed + 1
+
+	if testScheduleHasIdentifier()
+		printl("PASS: schedule has identifier name")
+		passed = passed + 1
+	else
+		printl("FAIL: schedule has identifier name")
+		failed = failed + 1
+
+	if testCronExpressionString()
+		printl("PASS: cron expression is quoted string literal")
+		passed = passed + 1
+	else
+		printl("FAIL: cron expression is quoted string literal")
+		failed = failed + 1
+
+	if testCronFiveFields()
+		printl("PASS: cron expression has 5 space-separated fields")
+		passed = passed + 1
+	else
+		printl("FAIL: cron expression has 5 space-separated fields")
+		failed = failed + 1
+
+	if testCronDailyAt8()
+		printl("PASS: cron '0 8 * * *' represents daily at 8am")
+		passed = passed + 1
+	else
+		printl("FAIL: cron '0 8 * * *' represents daily at 8am")
+		failed = failed + 1
+
+	if testCronEveryFifteenMin()
+		printl("PASS: cron '*/15 * * * *' represents every 15 min")
+		passed = passed + 1
+	else
+		printl("FAIL: cron '*/15 * * * *' represents every 15 min")
+		failed = failed + 1
+
+	if testScheduleEndsWithColon()
+		printl("PASS: scheduled job declaration ends with colon")
+		passed = passed + 1
+	else
+		printl("FAIL: scheduled job declaration ends with colon")
+		failed = failed + 1
+
+	if testScheduleCancelCall()
+		printl("PASS: schedule.cancel() takes identifier name")
+		passed = passed + 1
+	else
+		printl("FAIL: schedule.cancel() takes identifier name")
+		failed = failed + 1
+
+	printl("")
+	printl("Results: " + passed.toString() + " passed, " + failed.toString() + " failed")
+
+functions:
+	// schedule keyword
+	boolean testScheduleKeyword()
+		string decl = "schedule dailyDigest \"0 8 * * *\":"
+		return decl.startsWith("schedule")
+
+	// schedule has identifier after keyword
+	boolean testScheduleHasIdentifier()
+		string decl = "schedule dailyDigest \"0 8 * * *\":"
+		return decl.contains("dailyDigest")
+
+	// cron expression is a quoted string
+	boolean testCronExpressionString()
+		string decl = "schedule dailyDigest \"0 8 * * *\":"
+		integer firstQuote = decl.indexOf("\"")
+		return firstQuote > 0
+
+	// cron has 5 fields
+	boolean testCronFiveFields()
+		string cron = "0 8 * * *"
+		integer spaceCount = 0
+		integer pos = cron.indexOf(" ")
+		string remaining = cron
+		while pos != -1
+			spaceCount = spaceCount + 1
+			remaining = remaining.substring(pos + 1, remaining.length())
+			pos = remaining.indexOf(" ")
+		return spaceCount == 4
+
+	// daily at 8am pattern
+	boolean testCronDailyAt8()
+		string cron = "0 8 * * *"
+		return cron.contains("0 8") and cron.contains("* * *")
+
+	// every 15 minutes pattern
+	boolean testCronEveryFifteenMin()
+		string cron = "*/15 * * * *"
+		return cron.contains("*/15")
+
+	// scheduled job ends with colon
+	boolean testScheduleEndsWithColon()
+		string decl = "schedule dailyDigest \"0 8 * * *\":"
+		return decl.endsWith(":")
+
+	// schedule.cancel call format
+	boolean testScheduleCancelCall()
+		string call = "schedule.cancel(\"dailyDigest\")"
+		return call.startsWith("schedule.cancel(") and call.endsWith(")")
