@@ -514,25 +514,97 @@ endpoints:
 
 ---
 
+## 23.5 Server Configuration — `server:` block
+
+The `server:` block configures the HTTP listener and its runtime policies. All fields are optional; missing fields fall back to safe defaults. The block expands into a `start:` fragment that calls the appropriate host-bridge functions before `_http_listen[_on]` opens the socket.
+
+```clean
+server:
+    host: "127.0.0.1"
+    port: 3000
+
+    cors:
+        allowedOrigins:  ["https://example.com"]
+        allowedMethods:  ["GET", "POST"]
+        allowedHeaders:  ["Content-Type"]
+        maxAge:          86400
+        allowCredentials: true
+
+    rateLimit:
+        perMinute: 60
+
+    handle:
+        any err:
+            return error("internal: " + err.message)
+```
+
+### Top-level fields
+
+| Field | Type | Default | Effect |
+|---|---|---|---|
+| `host:` | `string` | (none → `0.0.0.0`) | Bind address. When present, emits `_http_listen_on(host, port)` instead of `_http_listen(port)`. |
+| `port:` | `integer` | `3000` | Listener port. |
+| `static:` | `string` | (none) | Mount a filesystem directory at URL root `/` via `_http_serve_static`. |
+
+### `cors:` sub-block
+
+Configures Cross-Origin Resource Sharing. Empty or missing list fields are interpreted as **Any** by the server.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `allowedOrigins:` | `list<string>` | Any | Use a list literal: `["https://a.com", "https://b.com"]`. |
+| `allowedMethods:` | `list<string>` | Any | E.g. `["GET", "POST"]`. |
+| `allowedHeaders:` | `list<string>` | Any | E.g. `["Content-Type", "Authorization"]`. |
+| `maxAge:` | `integer` | `0` | Preflight cache duration in seconds. `0` omits the `Max-Age` header. |
+| `allowCredentials:` | `boolean` | `false` | Sets `Access-Control-Allow-Credentials: true` when `true`. |
+
+### `rateLimit:` sub-block
+
+Configures fixed-window rate limiting per remote IP. Supply exactly one of the three shorthands.
+
+| Field | Type | Window | Effect |
+|---|---|---|---|
+| `perSecond:` | `integer` | 1s | `_rate_limit_configure(N, 1, "ip")` |
+| `perMinute:` | `integer` | 60s | `_rate_limit_configure(N, 60, "ip")` |
+| `perHour:`   | `integer` | 3600s | `_rate_limit_configure(N, 3600, "ip")` |
+
+Requests over the limit are rejected with `429 Too Many Requests`.
+
+### `handle:` sub-block — global error handler
+
+Catches errors thrown from any endpoint that did not handle them locally via `onError`. The only clause currently materialized into a registered handler is `any err: ...`; `err.message` exposes the error string forwarded by the server in the `X-Clean-Error` request header.
+
+```clean
+handle:
+    any err:
+        return error("internal: " + err.message)
+```
+
+Per-clause typed error matching (`NotFound:`, `ValidationError as e:`, `_:`) is grammar-accepted but not yet emitted — typed errors that reach the global handler will fall through to the server's default `500 Internal Server Error`. The `any err:` catch-all should be your primary entry point.
+
+The handler is generated as a top-level function `__server_global_error_handler(string message)` and registered with `_http_set_global_error_handler("__server_global_error_handler")` during `start:`.
+
+---
+
 ## 24. Email Sending — SMTP Core
 
 **Scope:** Transactional email only. No templates, no queuing, no multi-provider. Templates and queuing are Tier 2 and will be specified in a dedicated `frame.email` spec.
 
 ### Configuration
 
-SMTP connection settings are declared in a `mail:` block in `main.cln`. String values may use `env.get("VAR_NAME")` to pull values from the host environment at startup.
+SMTP connection settings are declared in a `mail:` sub-block of `server:`. String values may use `env.get("VAR_NAME")` to pull values from the host environment at startup.
 
 ```clean
 server:
     port: 3000
 
-mail:
-    host     = env.get("SMTP_HOST")
-    port     = 587
-    secure   = true
-    username = env.get("SMTP_USER")
-    password = env.get("SMTP_PASS")
-    from     = "no-reply@myapp.com"
+    mail:
+        host:     env.get("SMTP_HOST")
+        port:     587
+        secure:   true
+        username: env.get("SMTP_USER")
+        password: env.get("SMTP_PASS")
+        from:     "no-reply@myapp.com"
 ```
 
 ### Functions

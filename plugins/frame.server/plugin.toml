@@ -53,6 +53,12 @@ functions = [
 
   # HTTP Server - Lifecycle (server-only; binds a socket)
   { name = "_http_listen", params = ["i32"], returns = "i32", description = "Start HTTP server on specified port", hosts = ["server"] },
+  { name = "_http_listen_on", params = ["string", "i32"], returns = "i32", description = "Configure HTTP server to bind host (ptr+len) and port; supersedes _http_listen when the `server: host:` field is declared", expand_strings = true, hosts = ["server"] },
+
+  # HTTP Server - Server-config bridges (server-only; populate runtime config before _http_listen)
+  { name = "_cors_configure", params = ["string", "string", "string", "i32", "boolean"], returns = "i32", description = "Configure CORS: origins, methods, headers (comma-separated; '' = Any), max_age_secs, allow_credentials", expand_strings = true, hosts = ["server"] },
+  { name = "_rate_limit_configure", params = ["i32", "i32", "string"], returns = "i32", description = "Configure fixed-window rate limiting: per_window, window_secs, strategy ('ip' or 'user')", expand_strings = true, hosts = ["server"] },
+  { name = "_http_set_global_error_handler", params = ["string"], returns = "i32", description = "Register the WASM export name invoked when a route handler errors; server forwards error message in X-Clean-Error request header", expand_strings = true, hosts = ["server"] },
 
   # HTTP Server - Route Registration (server-only; populates the router)
   { name = "_http_route", params = ["string", "string", "string"], returns = "i32", description = "Register route: method, path, handler function name", expand_strings = true, hosts = ["server"] },

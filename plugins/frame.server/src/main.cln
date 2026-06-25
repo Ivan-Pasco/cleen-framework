@@ -115,30 +115,45 @@ functions:
 // ============================================================================
 
 functions:
-	// Expand server: block into a start: fragment that registers static dirs,
-	// configures optional SMTP mail settings, and starts the HTTP listener.
+	// Expand server: block into a start: fragment (and optionally a functions:
+	// block for the global error handler) that registers static dirs, configures
+	// optional SMTP mail settings, CORS, rate limiting, the global error
+	// handler, and starts the HTTP listener.
 	//
-	// Supported fields:
+	// Supported top-level fields:
 	//   port:   3000               — listener port (default 3000)
-	//   host:   "0.0.0.0"          — bind address (informational, passed to listener)
+	//   host:   "0.0.0.0"          — bind address; when set, supersedes _http_listen with _http_listen_on
 	//   static: "public/"          — serve filesystem directory at URL root /
 	//
-	// Supported sub-block:
-	//   mail:                      — SMTP configuration sub-block
-	//     host:     "smtp.example.com"
-	//     port:     587              (default 587)
-	//     secure:   true             (default true)
-	//     username: env.get("SMTP_USER")
-	//     password: env.get("SMTP_PASS")
-	//     from:     "noreply@example.com"
+	// Supported sub-blocks:
+	//   mail:                      — SMTP configuration (host/port/secure/username/password/from)
+	//   cors:                      — CORS configuration
+	//     allowedOrigins:  ["https://example.com"]   (list; "" means Any)
+	//     allowedMethods:  ["GET", "POST"]
+	//     allowedHeaders:  ["Content-Type"]
+	//     maxAge:          86400                       (seconds; default 0)
+	//     allowCredentials: true                       (default false)
+	//   rateLimit:                 — fixed-window rate limiting (uses "ip" strategy)
+	//     perMinute: 60            (or perSecond: N, or perHour: N)
+	//   handle:                    — global error handler (catches errors from any endpoint)
+	//     any err:
+	//         return error("internal: " + err.message)
 	//
 	// Generates:
+	//   functions:                                      (only when handle: is declared)
+	//       string __server_global_error_handler(string message)
+	//           ...user body, with err.message rewritten to `message`...
+	//
 	//   start:
-	//       _email_configure("smtp.example.com", 587, true, "user", "pass", "from@example.com")
-	//       _http_serve_static("/", "public/")
-	//       _http_listen(8080)
+	//       _email_configure(...)                       (when mail:)
+	//       _cors_configure(...)                        (when cors:)
+	//       _rate_limit_configure(...)                  (when rateLimit:)
+	//       _http_set_global_error_handler("__server_global_error_handler")  (when handle:)
+	//       _http_serve_static("/", "public/")          (when static:)
+	//       _http_listen_on("0.0.0.0", 8080)            (when host:)  — or _http_listen(8080)
 	string expand_server(string body)
 		string port_str = "3000"
+		string host_str = ""
 		string static_dir = ""
 
 		// Mail configuration defaults
@@ -150,9 +165,30 @@ functions:
 		string mail_from = ""
 		boolean has_mail = false
 
+		// CORS configuration defaults — empty origin/method/header lists mean Any on the server side
+		string cors_origins = ""
+		string cors_methods = ""
+		string cors_headers = ""
+		string cors_max_age = "0"
+		string cors_credentials = "false"
+		boolean has_cors = false
+
+		// Rate limit configuration defaults
+		string rate_per_window = "0"
+		string rate_window_secs = "60"
+		boolean has_rate_limit = false
+
+		// Global error handler body — captured verbatim from `any err: ...` clause
+		string handle_body = ""
+		boolean has_handle = false
+
 		string lines = body
 		integer line_start = 0
 		boolean in_mail_block = false
+		boolean in_cors_block = false
+		boolean in_rate_limit_block = false
+		boolean in_handle_block = false
+		boolean in_handle_any_clause = false
 
 		while line_start < lines.length()
 			integer line_end = lines.indexOf("\n", line_start)
@@ -162,10 +198,38 @@ functions:
 			string line = lines.substring(line_start, line_end)
 			string trimmed = line.trim()
 
-			// Detect the start of the mail: sub-block
+			// Detect the start of a sub-block
 			if trimmed == "mail:"
 				has_mail = true
 				in_mail_block = true
+				in_cors_block = false
+				in_rate_limit_block = false
+				in_handle_block = false
+				line_start = line_end + 1
+				continue
+			if trimmed == "cors:"
+				has_cors = true
+				in_cors_block = true
+				in_mail_block = false
+				in_rate_limit_block = false
+				in_handle_block = false
+				line_start = line_end + 1
+				continue
+			if trimmed == "rateLimit:"
+				has_rate_limit = true
+				in_rate_limit_block = true
+				in_mail_block = false
+				in_cors_block = false
+				in_handle_block = false
+				line_start = line_end + 1
+				continue
+			if trimmed == "handle:"
+				has_handle = true
+				in_handle_block = true
+				in_mail_block = false
+				in_cors_block = false
+				in_rate_limit_block = false
+				in_handle_any_clause = false
 				line_start = line_end + 1
 				continue
 
@@ -191,8 +255,72 @@ functions:
 					line_start = line_end + 1
 					continue
 
+			// While inside cors: block, collect its fields
+			if in_cors_block
+				if trimmed.length() > 0 and not line.startsWith("\t") and not line.startsWith("  ")
+					in_cors_block = false
+				else
+					if trimmed.startsWith("allowedOrigins:")
+						cors_origins = parse_server_list_field(trimmed.substring(15, trimmed.length()).trim())
+					if trimmed.startsWith("allowedMethods:")
+						cors_methods = parse_server_list_field(trimmed.substring(15, trimmed.length()).trim())
+					if trimmed.startsWith("allowedHeaders:")
+						cors_headers = parse_server_list_field(trimmed.substring(15, trimmed.length()).trim())
+					if trimmed.startsWith("maxAge:")
+						cors_max_age = trimmed.substring(7, trimmed.length()).trim()
+					if trimmed.startsWith("allowCredentials:")
+						cors_credentials = trimmed.substring(17, trimmed.length()).trim()
+					line_start = line_end + 1
+					continue
+
+			// While inside rateLimit: block, collect its fields
+			if in_rate_limit_block
+				if trimmed.length() > 0 and not line.startsWith("\t") and not line.startsWith("  ")
+					in_rate_limit_block = false
+				else
+					if trimmed.startsWith("perMinute:")
+						rate_per_window = trimmed.substring(10, trimmed.length()).trim()
+						rate_window_secs = "60"
+					if trimmed.startsWith("perSecond:")
+						rate_per_window = trimmed.substring(10, trimmed.length()).trim()
+						rate_window_secs = "1"
+					if trimmed.startsWith("perHour:")
+						rate_per_window = trimmed.substring(8, trimmed.length()).trim()
+						rate_window_secs = "3600"
+					line_start = line_end + 1
+					continue
+
+			// While inside handle: block, capture the body of the `any err:` clause.
+			// Only `any err:` is supported in this pass — typed-error clauses
+			// (NotFound:, ValidationError as e:) are accepted by the parser but
+			// not yet emitted; they fall through to the catch-all server default.
+			if in_handle_block
+				if trimmed.length() > 0 and not line.startsWith("\t") and not line.startsWith("  ")
+					in_handle_block = false
+					in_handle_any_clause = false
+				else
+					// Detect the `any err:` clause (allow optional spaces around `err`)
+					if trimmed == "any err:" or trimmed.startsWith("any err:")
+						in_handle_any_clause = true
+						line_start = line_end + 1
+						continue
+					if in_handle_any_clause
+						// Capture body lines verbatim, stripping one indent level so the
+						// captured code aligns with the generated function's function body.
+						string body_line = line
+						if line.startsWith("\t\t\t")
+							body_line = line.substring(2, line.length())
+						else if line.startsWith("\t\t")
+							body_line = line.substring(1, line.length())
+						handle_body = handle_body + body_line + "\n"
+					line_start = line_end + 1
+					continue
+
 			if trimmed.startsWith("port:")
 				port_str = trimmed.substring(5, trimmed.length()).trim()
+
+			if trimmed.startsWith("host:")
+				host_str = resolve_server_config_value(trimmed.substring(5, trimmed.length()).trim())
 
 			if trimmed.startsWith("static:")
 				string dir_val = trimmed.substring(7, trimmed.length()).trim()
@@ -204,18 +332,98 @@ functions:
 
 			line_start = line_end + 1
 
-		string result = "start:\n"
+		string result = ""
+
+		// Emit the global error handler function ahead of start: so the named
+		// export exists when _http_set_global_error_handler resolves it.
+		if has_handle
+			result = result + "functions:\n"
+			result = result + "\tstring __server_global_error_handler(string message)\n"
+			// Rewrite `err.message` (the only supported field in this pass) to the
+			// function parameter so user bodies that read err.message resolve.
+			string rewritten_body = handle_body.replace("err.message", "message")
+			result = result + rewritten_body
+			result = result + "\n"
+
+		result = result + "start:\n"
 
 		// Configure SMTP before starting the server when a mail: block was found
 		if has_mail
 			result = result + "\t_email_configure(" + mail_host + ", " + mail_port + ", " + mail_secure + ", " + mail_username + ", " + mail_password + ", " + mail_from + ")\n"
 
+		// Configure CORS — must be before _http_listen so the policy is installed
+		// before the first request lands.
+		if has_cors
+			result = result + "\t_cors_configure(\"" + cors_origins + "\", \"" + cors_methods + "\", \"" + cors_headers + "\", " + cors_max_age + ", " + cors_credentials + ")\n"
+
+		// Configure rate limiting — same ordering reason as CORS.
+		if has_rate_limit
+			result = result + "\t_rate_limit_configure(" + rate_per_window + ", " + rate_window_secs + ", \"ip\")\n"
+
+		// Register the global error handler with the runtime
+		if has_handle
+			result = result + "\t_http_set_global_error_handler(\"__server_global_error_handler\")\n"
+
 		// Register static directory before opening the listener port
 		if static_dir.length() > 0
 			result = result + "\t_http_serve_static(\"/\", \"" + static_dir + "\")\n"
 
-		result = result + "\t_http_listen(" + port_str + ")"
+		// Bind: if host: was declared, use _http_listen_on(host, port); otherwise
+		// keep the original _http_listen(port) call so the default 0.0.0.0 bind path
+		// is unchanged for projects that never set host:.
+		if host_str.length() > 0
+			result = result + "\t_http_listen_on(" + host_str + ", " + port_str + ")"
+		else
+			result = result + "\t_http_listen(" + port_str + ")"
 
+		return result
+
+	// Parse a config field value that is expected to be a list literal of strings,
+	// such as `["GET", "POST"]`, into a comma-separated bare string suitable for
+	// concatenation into a generated host bridge call. The server expects an empty
+	// string to mean Any, so an empty list or a missing field both yield "".
+	//
+	// Examples:
+	//   `["GET", "POST"]`          → `GET,POST`
+	//   `["https://example.com"]`  → `https://example.com`
+	//   `[]`                       → `` (empty)
+	//   `"GET"`                    → `GET`  (bare string fallback)
+	string parse_server_list_field(string raw)
+		string val = raw
+		// Strip outer brackets if present
+		if val.startsWith("[")
+			val = val.substring(1, val.length())
+		if val.endsWith("]")
+			val = val.substring(0, val.length() - 1)
+		val = val.trim()
+		if val.length() == 0
+			return ""
+
+		// Walk character-by-character so we can dequote each comma-separated entry
+		// without splitting inside a quoted segment.
+		string result = ""
+		integer i = 0
+		boolean in_str = false
+		string current = ""
+		while i < val.length()
+			string ch = val.substring(i, i + 1)
+			if ch == "\""
+				in_str = not in_str
+			else if ch == "," and not in_str
+				string trimmed_current = current.trim()
+				if result.length() > 0
+					result = result + ","
+				result = result + trimmed_current
+				current = ""
+			else
+				current = current + ch
+			i = i + 1
+		// Tail: append the last accumulated value
+		string trimmed_tail = current.trim()
+		if trimmed_tail.length() > 0
+			if result.length() > 0
+				result = result + ","
+			result = result + trimmed_tail
 		return result
 
 	// Resolve a config value that may be a literal string, a bare value, or an
