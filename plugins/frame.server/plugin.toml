@@ -116,7 +116,7 @@ functions = [
   # Response - Core (server-only; writes to the active HTTP response)
   { name = "_http_respond", params = ["i32", "string", "string"], returns = "ptr", description = "Send response: status, content-type, body", expand_strings = true, hosts = ["server"] },
   { name = "_http_redirect", params = ["i32", "string"], returns = "ptr", description = "Send redirect: status, url", expand_strings = true, hosts = ["server"] },
-  { name = "_http_set_header", params = ["string", "string"], returns = "ptr", description = "Set response header: name, value", expand_strings = true, hosts = ["server"] },
+  { name = "_http_set_header", params = ["string", "string"], returns = "void", description = "Set response header: name, value", expand_strings = true, hosts = ["server"] },
 
   # Response - Extended (server-only)
   { name = "_res_set_header", params = ["string", "string"], returns = "boolean", description = "Set a custom response header", expand_strings = true, hosts = ["server"] },
