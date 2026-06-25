@@ -3779,7 +3779,7 @@ functions:
 
 	// Parse the theme block body and generate Clean code that:
 	//   1. Builds a :root { ... } CSS string from colors: and spacing: entries
-	//   2. Calls _ui_injectHeadCss() to insert the stylesheet into the page head
+	//   2. Calls _ui_inject_head_css() to insert the stylesheet into the page head
 	string expand_theme(string theme_block)
 		// Extract colors: and spacing: sub-sections
 		string colors_section = extract_theme_section(theme_block, "colors:")
@@ -3801,7 +3801,7 @@ functions:
 			code = code + parse_theme_section(spacing_section, "spacing")
 
 		code = code + "__theme_css = __theme_css + \"}\"\n"
-		code = code + "_ui_injectHeadCss(__theme_css)\n"
+		code = code + "_ui_inject_head_css(__theme_css)\n"
 
 		return code
 
