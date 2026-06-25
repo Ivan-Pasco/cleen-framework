@@ -66,7 +66,7 @@ functions = [
   # Cookies (server-only; HTTP request/response context)
   { name = "_req_cookie", params = ["string"], returns = "ptr", description = "Get cookie value by name", expand_strings = true, hosts = ["server"] },
   { name = "_http_set_cookie", params = ["string", "string"], returns = "boolean", description = "Set cookie: name, value (length-prefixed ptrs); server applies Path=/ HttpOnly defaults", hosts = ["server"] },
-  { name = "_http_set_header", params = ["string", "string"], returns = "boolean", description = "Set HTTP response header: name, value (length-prefixed ptrs); used by session_setCookie/session_destroy to emit Set-Cookie with full attribute control", expand_strings = true, hosts = ["server"] },
+  { name = "_http_set_header", params = ["string", "string"], returns = "void", description = "Set HTTP response header: name, value (length-prefixed ptrs); used by session_setCookie/session_destroy to emit Set-Cookie with full attribute control", expand_strings = true, hosts = ["server"] },
 
   # Roles - Registration and checking (server-only; role state held on server)
   { name = "_roles_register", params = ["string"], returns = "boolean", description = "Register roles configuration (JSON)", expand_strings = true, hosts = ["server"] },
