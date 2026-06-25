@@ -548,38 +548,60 @@ functions:
 				result = result + escape_string(remaining)
 				remaining = ""
 			else
-				integer brace_end = remaining.indexOf("}", brace_start + 1)
+				// Check if raw {!expr} or runtime placeholder {{ key }}
+				string after_brace = ""
+				if brace_start + 1 < remaining.length()
+					after_brace = remaining.substring(brace_start + 1, brace_start + 2)
 
-				if brace_end == -1
-					// No closing brace - treat as literal text
-					result = result + escape_string(remaining)
-					remaining = ""
-				else
-					// Add text before the brace
-					if brace_start > 0
-						result = result + escape_string(remaining.substring(0, brace_start))
-
-					// Check if raw interpolation {!expr}
-					string after_brace = ""
-					if brace_start + 1 < remaining.length()
-						after_brace = remaining.substring(brace_start + 1, brace_start + 2)
-
-					if after_brace == "!"
-						// Raw interpolation - no escaping
-						string expr = remaining.substring(brace_start + 2, brace_end)
-						if has_data
-							result = result + "\" + data." + strip_spaces(expr) + " + \""
-						else
-							result = result + "\" + " + strip_spaces(expr) + " + \""
+				if after_brace == "{"
+					// Double-brace {{ key }} is clean-server's runtime
+					// _ui_render_page substitution syntax. Pass through as
+					// literal text — escape_string() emits `\{` and `\}` so
+					// the braces survive Clean's compile-time string
+					// interpolation (grammar.ebnf §1.6) and reach the SSR
+					// bridge intact. Closes CMP-RENDERWITH-TEMPLATE-NOT-
+					// SUBSTITUTED (fp 46dfd3dfe1f3) and RENDERWITH-CALL-NOT-
+					// REACHING-UI-RENDER-PAGE-BRIDGE (fp c3edba496aa6) —
+					// previously generated `_html_escape({ key)` which failed
+					// to parse, blocking compilation of any page with `{{ }}`.
+					integer dbrace_end = remaining.indexOf("}}", brace_start + 2)
+					if dbrace_end == -1
+						// No closing }} — emit the rest as literal text
+						result = result + escape_string(remaining)
+						remaining = ""
 					else
-						// Escaped interpolation
-						string expr = remaining.substring(brace_start + 1, brace_end)
-						if has_data
-							result = result + "\" + _html_escape(data." + strip_spaces(expr) + ") + \""
-						else
-							result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						result = result + escape_string(remaining.substring(brace_start, dbrace_end + 2))
+						remaining = remaining.substring(dbrace_end + 2, remaining.length())
+				else
+					integer brace_end = remaining.indexOf("}", brace_start + 1)
 
-					remaining = remaining.substring(brace_end + 1, remaining.length())
+					if brace_end == -1
+						// No closing brace - treat as literal text
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						// Add text before the brace
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+
+						if after_brace == "!"
+							// Raw interpolation - no escaping
+							string expr = remaining.substring(brace_start + 2, brace_end)
+							if has_data
+								result = result + "\" + data." + strip_spaces(expr) + " + \""
+							else
+								result = result + "\" + " + strip_spaces(expr) + " + \""
+						else
+							// Escaped interpolation
+							string expr = remaining.substring(brace_start + 1, brace_end)
+							if has_data
+								result = result + "\" + _html_escape(data." + strip_spaces(expr) + ") + \""
+							else
+								result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+						remaining = remaining.substring(brace_end + 1, remaining.length())
 
 		result = result + "\"\n"
 		return result
@@ -1311,6 +1333,14 @@ functions:
 		result = result.replace("\"", "&quot;")
 		result = result.replace("\n", " ")
 		result = result.replace("\t", " ")
+		// Escape literal `{` and `}` so they survive Clean's compile-time
+		// string interpolation (grammar.ebnf §1.6 string_interpolation). The
+		// callers concatenate this output into Clean string literals and
+		// expect the braces to land verbatim in the rendered HTML — needed
+		// for SSR templates that use `{{ key }}` runtime substitution.
+		// Mirrors the escape applied to component-tag render bodies (75ebd4b).
+		result = result.replace("{", "\\{")
+		result = result.replace("}", "\\}")
 		return result
 
 // ============================================================================
@@ -1421,7 +1451,8 @@ functions:
 		return result
 
 	// Process text node for html: blocks
-	// Handles {expr} (escaped via _html_escape) and {!expr} (raw)
+	// Handles {expr} (escaped via _html_escape), {!expr} (raw), and
+	// {{ key }} (literal pass-through for runtime template substitution).
 	string process_block_text_node(string text)
 		string result = "__html = __html + \""
 		string remaining = text
@@ -1434,32 +1465,47 @@ functions:
 				result = result + escape_string(remaining)
 				remaining = ""
 			else
-				integer brace_end = remaining.indexOf("}", brace_start + 1)
+				// Look-ahead: distinguish {{...}} from {expr} / {!expr}
+				string after_brace = ""
+				if brace_start + 1 < remaining.length()
+					after_brace = remaining.substring(brace_start + 1, brace_start + 2)
 
-				if brace_end == -1
-					// No closing brace - treat as literal text
-					result = result + escape_string(remaining)
-					remaining = ""
-				else
-					// Add text before the brace
-					if brace_start > 0
-						result = result + escape_string(remaining.substring(0, brace_start))
-
-					// Check if raw interpolation {!expr}
-					string after_brace = ""
-					if brace_start + 1 < remaining.length()
-						after_brace = remaining.substring(brace_start + 1, brace_start + 2)
-
-					if after_brace == "!"
-						// Raw interpolation - no escaping
-						string expr = remaining.substring(brace_start + 2, brace_end)
-						result = result + "\" + " + strip_spaces(expr) + " + \""
+				if after_brace == "{"
+					// Double-brace {{ key }} is the SSR template-substitution
+					// syntax handled by clean-server's _ui_render_page bridge.
+					// Pass through as literal so the braces reach the bridge
+					// (escape_string emits `\{`/`\}` per grammar.ebnf §1.6).
+					integer dbrace_end = remaining.indexOf("}}", brace_start + 2)
+					if dbrace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
 					else
-						// Escaped interpolation
-						string expr = remaining.substring(brace_start + 1, brace_end)
-						result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						result = result + escape_string(remaining.substring(brace_start, dbrace_end + 2))
+						remaining = remaining.substring(dbrace_end + 2, remaining.length())
+				else
+					integer brace_end = remaining.indexOf("}", brace_start + 1)
 
-					remaining = remaining.substring(brace_end + 1, remaining.length())
+					if brace_end == -1
+						// No closing brace - treat as literal text
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						// Add text before the brace
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+
+						if after_brace == "!"
+							// Raw interpolation - no escaping
+							string expr = remaining.substring(brace_start + 2, brace_end)
+							result = result + "\" + " + strip_spaces(expr) + " + \""
+						else
+							// Escaped interpolation
+							string expr = remaining.substring(brace_start + 1, brace_end)
+							result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+						remaining = remaining.substring(brace_end + 1, remaining.length())
 
 		result = result + "\"\n"
 		return result
