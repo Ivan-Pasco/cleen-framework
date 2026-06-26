@@ -279,44 +279,57 @@ functions:
 		string field_types = extract_field_types(body)
 		boolean has_tenant = detect_tenant_field(body)
 
-		// Generate the class with static ORM methods
+		// Generate the class with static ORM methods.
+		// VISIBILITY-FLIP (>= compiler 0.30.361): class fields and methods are
+		// private by default. Wrap fields in a top-level `public:` field section
+		// (so user code can read user.name / write user.email), and wrap all
+		// methods in a `public:` sub-section of `functions:` (so user code can
+		// call user.save(), user.delete(), User.find(), etc.).
+		// Spec: foundation/spec/grammar.ebnf §6.4a public_class_fields_section,
+		// §6.4b public_class_methods_section; CLASS007 (single public: per scope).
 		string result = "class " + model_name + "\n"
+		result = result + "\tpublic:\n"
+		// fields_code lines are emitted by parse_fields with one extra tab so
+		// they nest under public: (see parse_fields below).
 		result = result + fields_code
+		// Constructor stays at top-level class scope (constructors are a separate
+		// class_body production; visibility is determined by call context).
 		result = result + generate_constructor(field_names, field_types)
 		result = result + "\n\tfunctions:\n"
+		result = result + "\t\tpublic:\n"
 
 		// Generate save() method
-		result = result + "\t\tboolean save()\n"
-		result = result + "\t\t\tif id == 0\n"
+		result = result + "\t\t\tboolean save()\n"
+		result = result + "\t\t\t\tif id == 0\n"
 		if has_tenant
 			// For tenant-aware models, auto-inject tenantId on INSERT
-			result = result + "\t\t\t\tstring __tenant_id = tenant_getId()\n"
-			result = result + "\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
-			result = result + "\t\t\t\tstring params = __to_params_with_tenant(__tenant_id)\n"
+			result = result + "\t\t\t\t\tstring __tenant_id = tenant_getId()\n"
+			result = result + "\t\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
+			result = result + "\t\t\t\t\tstring params = __to_params_with_tenant(__tenant_id)\n"
 		else
-			result = result + "\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
-			result = result + "\t\t\t\tstring params = __to_params()\n"
-		result = result + "\t\t\t\tstring result = _db_query(sql, params)\n"
-		result = result + "\t\t\t\tid = __extract_id(result)\n"
-		result = result + "\t\t\t\treturn id > 0\n"
-		result = result + "\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
-		result = result + "\t\t\tstring params = __to_update_params()\n"
-		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
-		result = result + "\t\t\treturn affected > 0\n"
+			result = result + "\t\t\t\t\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
+			result = result + "\t\t\t\t\tstring params = __to_params()\n"
+		result = result + "\t\t\t\t\tstring result = _db_query(sql, params)\n"
+		result = result + "\t\t\t\t\tid = __extract_id(result)\n"
+		result = result + "\t\t\t\t\treturn id > 0\n"
+		result = result + "\t\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
+		result = result + "\t\t\t\tstring params = __to_update_params()\n"
+		result = result + "\t\t\t\tinteger affected = _db_execute(sql, params)\n"
+		result = result + "\t\t\t\treturn affected > 0\n"
 
 		// Generate delete() instance method
-		result = result + "\n\t\tboolean delete()\n"
-		result = result + "\t\t\tif id == 0\n"
-		result = result + "\t\t\t\treturn false\n"
+		result = result + "\n\t\t\tboolean delete()\n"
+		result = result + "\t\t\t\tif id == 0\n"
+		result = result + "\t\t\t\t\treturn false\n"
 		if has_tenant
 			// Scope delete to the current tenant so cross-tenant deletes are impossible
-			result = result + "\t\t\tstring __tenant_id = tenant_getId()\n"
-			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '\" + __tenant_id + \"'\"\n"
+			result = result + "\t\t\t\tstring __tenant_id = tenant_getId()\n"
+			result = result + "\t\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '\" + __tenant_id + \"'\"\n"
 		else
-			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
-		result = result + "\t\t\tstring params = \"[\" + id.toString() + \"]\"\n"
-		result = result + "\t\t\tinteger affected = _db_execute(sql, params)\n"
-		result = result + "\t\t\treturn affected > 0\n"
+			result = result + "\t\t\t\tstring sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
+		result = result + "\t\t\t\tstring params = \"[\" + id.toString() + \"]\"\n"
+		result = result + "\t\t\t\tinteger affected = _db_execute(sql, params)\n"
+		result = result + "\t\t\t\treturn affected > 0\n"
 
 		// Generate private helper methods
 		result = result + generate_helper_methods(model_name, field_names, field_types, body, has_tenant)
@@ -413,6 +426,10 @@ functions:
 		return value
 
 	// Parse field definitions from body
+	// Emit field lines at two-tab depth so they nest under the class's
+	// `\tpublic:` field section (VISIBILITY-FLIP: fields are private by
+	// default and need an explicit `public:` wrapper to be readable from
+	// outside the class).
 	string parse_fields(string body)
 		string result = ""
 		string lines = body
@@ -427,7 +444,7 @@ functions:
 			if line.length() > 0
 				string field_code = parse_field_line(line)
 				if field_code.length() > 0
-					result = result + "\t" + field_code + "\n"
+					result = result + "\t\t" + field_code + "\n"
 
 			line_start = line_end + 1
 
@@ -645,152 +662,152 @@ functions:
 		string result = "\n"
 
 		// Static find method - returns typed list of matching model instances
-		result = result + "\n\t\tlist<" + model_name + "> find(string where_clause, string order_clause, string limit_clause)\n"
-		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
+		result = result + "\n\t\t\tlist<" + model_name + "> find(string where_clause, string order_clause, string limit_clause)\n"
+		result = result + "\t\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
 		if has_tenant
-			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
-			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
-			result = result + "\t\t\telse\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+			result = result + "\t\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\t\telse\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
-		result = result + "\t\t\tif order_clause.length() > 0\n"
-		result = result + "\t\t\t\tsql = sql + \" ORDER BY \" + order_clause\n"
-		result = result + "\t\t\tif limit_clause.length() > 0\n"
-		result = result + "\t\t\t\tsql = sql + \" LIMIT \" + limit_clause\n"
-		result = result + "\t\t\treturn __parse_as_" + model_name + "(_db_query(sql, \"[]\"))\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\t\tif order_clause.length() > 0\n"
+		result = result + "\t\t\t\t\tsql = sql + \" ORDER BY \" + order_clause\n"
+		result = result + "\t\t\t\tif limit_clause.length() > 0\n"
+		result = result + "\t\t\t\t\tsql = sql + \" LIMIT \" + limit_clause\n"
+		result = result + "\t\t\t\treturn __parse_as_" + model_name + "(_db_query(sql, \"[]\"))\n"
 
 		// Static first method - returns first matching record
-		result = result + "\n\t\tstring first(string where_clause)\n"
-		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
+		result = result + "\n\t\t\tstring first(string where_clause)\n"
+		result = result + "\t\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
 		if has_tenant
-			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
-			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
-			result = result + "\t\t\telse\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+			result = result + "\t\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\t\telse\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
-		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
-		result = result + "\t\t\treturn _db_query(sql, \"[]\")\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\t\treturn _db_query(sql, \"[]\")\n"
 
 		// Static count method - returns count of matching records
-		result = result + "\n\t\tinteger count(string where_clause)\n"
-		result = result + "\t\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		result = result + "\n\t\t\tinteger count(string where_clause)\n"
+		result = result + "\t\t\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
 		if has_tenant
-			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
-			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
-			result = result + "\t\t\telse\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+			result = result + "\t\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\t\telse\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
-		result = result + "\t\t\tstring result = _db_query(sql, \"[]\")\n"
-		result = result + "\t\t\treturn __extract_count(result)\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\t\tstring result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\t\treturn __extract_count(result)\n"
 
 		// Static exists method - returns 1 if any matching record exists, 0 otherwise
-		result = result + "\n\t\tinteger exists(string where_clause)\n"
-		result = result + "\t\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		result = result + "\n\t\t\tinteger exists(string where_clause)\n"
+		result = result + "\t\t\t\tstring sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
 		if has_tenant
-			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
-			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
-			result = result + "\t\t\telse\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+			result = result + "\t\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\t\telse\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
-		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
-		result = result + "\t\t\tstring __exists_result = _db_query(sql, \"[]\")\n"
-		result = result + "\t\t\tif __extract_count(__exists_result) > 0\n"
-		result = result + "\t\t\t\treturn 1\n"
-		result = result + "\t\t\treturn 0\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\t\tstring __exists_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\t\tif __extract_count(__exists_result) > 0\n"
+		result = result + "\t\t\t\t\treturn 1\n"
+		result = result + "\t\t\t\treturn 0\n"
 
 		// Static findOrFail method - returns first matching record or throws NOT_FOUND
-		result = result + "\n\t\tstring findOrFail(string where_clause)\n"
-		result = result + "\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
+		result = result + "\n\t\t\tstring findOrFail(string where_clause)\n"
+		result = result + "\t\t\t\tstring sql = \"SELECT * FROM " + table_name + "\"\n"
 		if has_tenant
-			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
-			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
-			result = result + "\t\t\telse\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+			result = result + "\t\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			result = result + "\t\t\t\telse\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			result = result + "\t\t\tif where_clause.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
-		result = result + "\t\t\tsql = sql + \" LIMIT 1\"\n"
-		result = result + "\t\t\tstring __fail_result = _db_query(sql, \"[]\")\n"
-		result = result + "\t\t\tif __fail_result == \"[]\"\n"
-		result = result + "\t\t\t\terror(\"NOT_FOUND\")\n"
-		result = result + "\t\t\treturn __fail_result\n"
+			result = result + "\t\t\t\tif where_clause.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + where_clause\n"
+		result = result + "\t\t\t\tsql = sql + \" LIMIT 1\"\n"
+		result = result + "\t\t\t\tstring __fail_result = _db_query(sql, \"[]\")\n"
+		result = result + "\t\t\t\tif __fail_result == \"[]\"\n"
+		result = result + "\t\t\t\t\terror(\"NOT_FOUND\")\n"
+		result = result + "\t\t\t\treturn __fail_result\n"
 
 		// Helper to extract count from query result
-		result = result + "\n\t\tinteger __extract_count(string result)\n"
-		result = result + "\t\t\tinteger count_pos = result.indexOf(\"\\\"count\\\":\")\n"
-		result = result + "\t\t\tif count_pos == -1\n"
-		result = result + "\t\t\t\treturn 0\n"
-		result = result + "\t\t\tinteger value_start = count_pos + 8\n"
-		result = result + "\t\t\tinteger value_end = value_start\n"
-		result = result + "\t\t\twhile value_end < result.length()\n"
-		result = result + "\t\t\t\tstring ch = result.substring(value_end, value_end + 1)\n"
-		result = result + "\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
-		result = result + "\t\t\t\t\tbreak\n"
-		result = result + "\t\t\t\tvalue_end = value_end + 1\n"
-		result = result + "\t\t\treturn result.substring(value_start, value_end).toInteger()\n"
+		result = result + "\n\t\t\tinteger __extract_count(string result)\n"
+		result = result + "\t\t\t\tinteger count_pos = result.indexOf(\"\\\"count\\\":\")\n"
+		result = result + "\t\t\t\tif count_pos == -1\n"
+		result = result + "\t\t\t\t\treturn 0\n"
+		result = result + "\t\t\t\tinteger value_start = count_pos + 8\n"
+		result = result + "\t\t\t\tinteger value_end = value_start\n"
+		result = result + "\t\t\t\twhile value_end < result.length()\n"
+		result = result + "\t\t\t\t\tstring ch = result.substring(value_end, value_end + 1)\n"
+		result = result + "\t\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
+		result = result + "\t\t\t\t\t\tbreak\n"
+		result = result + "\t\t\t\t\tvalue_end = value_end + 1\n"
+		result = result + "\t\t\t\treturn result.substring(value_start, value_end).toInteger()\n"
 
 		// Static migrate method - generates CREATE TABLE statement.
 		// For tenant-aware models the tenant_id column is added automatically when
 		// it is not already declared as an explicit field in the model body.
-		result = result + "\n\t\tboolean migrate()\n"
+		result = result + "\n\t\t\tboolean migrate()\n"
 		if has_tenant
-			result = result + "\t\t\tstring __field_defs = __field_definitions()\n"
-			result = result + "\t\t\tif __field_defs.indexOf(\"tenant_id\") == -1\n"
-			result = result + "\t\t\t\t__field_defs = \"tenant_id TEXT NOT NULL, \" + __field_defs\n"
-			result = result + "\t\t\tstring sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_defs + \")\"\n"
+			result = result + "\t\t\t\tstring __field_defs = __field_definitions()\n"
+			result = result + "\t\t\t\tif __field_defs.indexOf(\"tenant_id\") == -1\n"
+			result = result + "\t\t\t\t\t__field_defs = \"tenant_id TEXT NOT NULL, \" + __field_defs\n"
+			result = result + "\t\t\t\tstring sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_defs + \")\"\n"
 		else
-			result = result + "\t\t\tstring sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_definitions() + \")\"\n"
-		result = result + "\t\t\tinteger affected = _db_execute(sql, \"[]\")\n"
-		result = result + "\t\t\treturn affected >= 0\n"
+			result = result + "\t\t\t\tstring sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_definitions() + \")\"\n"
+		result = result + "\t\t\t\tinteger affected = _db_execute(sql, \"[]\")\n"
+		result = result + "\t\t\t\treturn affected >= 0\n"
 
 		// Static __raw_update method - executes UPDATE with dynamic SET and WHERE sql strings
-		result = result + "\n\t\tinteger __raw_update(string set_sql, string where_sql)\n"
-		result = result + "\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + set_sql\n"
+		result = result + "\n\t\t\tinteger __raw_update(string set_sql, string where_sql)\n"
+		result = result + "\t\t\t\tstring sql = \"UPDATE " + table_name + " SET \" + set_sql\n"
 		if has_tenant
-			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
-			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
-			result = result + "\t\t\tif where_sql.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
-			result = result + "\t\t\telse\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+			result = result + "\t\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
+			result = result + "\t\t\t\telse\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			result = result + "\t\t\tif where_sql.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_sql\n"
-		result = result + "\t\t\treturn _db_execute(sql, \"[]\")\n"
+			result = result + "\t\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + where_sql\n"
+		result = result + "\t\t\t\treturn _db_execute(sql, \"[]\")\n"
 
 		// Static __raw_delete method - executes DELETE with dynamic WHERE sql string
-		result = result + "\n\t\tinteger __raw_delete(string where_sql)\n"
+		result = result + "\n\t\t\tinteger __raw_delete(string where_sql)\n"
 		if has_tenant
-			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
-			result = result + "\t\t\tstring __tenant = tenant_getId()\n"
-			result = result + "\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
-			result = result + "\t\t\tif where_sql.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
-			result = result + "\t\t\telse\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
+			result = result + "\t\t\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
+			result = result + "\t\t\t\tstring __tenant = tenant_getId()\n"
+			result = result + "\t\t\t\tstring __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			result = result + "\t\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
+			result = result + "\t\t\t\telse\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			result = result + "\t\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
-			result = result + "\t\t\tif where_sql.length() > 0\n"
-			result = result + "\t\t\t\tsql = sql + \" WHERE \" + where_sql\n"
-		result = result + "\t\t\treturn _db_execute(sql, \"[]\")\n"
+			result = result + "\t\t\t\tstring sql = \"DELETE FROM " + table_name + "\"\n"
+			result = result + "\t\t\t\tif where_sql.length() > 0\n"
+			result = result + "\t\t\t\t\tsql = sql + \" WHERE \" + where_sql\n"
+		result = result + "\t\t\t\treturn _db_execute(sql, \"[]\")\n"
 
 		return result
 
@@ -883,10 +900,10 @@ functions:
 
 		// Build the method signature and body
 		string result = "\n"
-		result = result + "\t\tstring validate(string field_name, string value)\n"
+		result = result + "\t\t\tstring validate(string field_name, string value)\n"
 		if validate_body.length() > 0
 			result = result + validate_body
-		result = result + "\t\t\treturn \"\"\n"
+		result = result + "\t\t\t\treturn \"\"\n"
 		return result
 
 	// Generate helper methods for serialization.
@@ -896,69 +913,69 @@ functions:
 	string generate_helper_methods(string model_name, string field_names, string field_types, string body, boolean has_tenant)
 		string result = "\n"
 
-		result = result + "\t\tstring __field_list()\n"
-		result = result + "\t\t\treturn \"" + field_names.replace(",", ", ") + "\"\n\n"
+		result = result + "\t\t\tstring __field_list()\n"
+		result = result + "\t\t\t\treturn \"" + field_names.replace(",", ", ") + "\"\n\n"
 
 		// Generate __field_definitions() - returns field definitions with SQL types for CREATE TABLE
 		string field_defs = generate_field_definitions(body)
-		result = result + "\t\tstring __field_definitions()\n"
-		result = result + "\t\t\treturn \"" + field_defs + "\"\n"
+		result = result + "\t\t\tstring __field_definitions()\n"
+		result = result + "\t\t\t\treturn \"" + field_defs + "\"\n"
 
-		result = result + "\n\t\tstring __placeholder_list()\n"
-		result = result + "\t\t\treturn __generate_placeholders(" + count_fields(field_names).toString() + ")\n"
+		result = result + "\n\t\t\tstring __placeholder_list()\n"
+		result = result + "\t\t\t\treturn __generate_placeholders(" + count_fields(field_names).toString() + ")\n"
 
-		result = result + "\n\t\tstring __generate_placeholders(integer count)\n"
-		result = result + "\t\t\tstring result = \"\"\n"
-		result = result + "\t\t\tinteger i = 1\n"
-		result = result + "\t\t\twhile i <= count\n"
-		result = result + "\t\t\t\tif i > 1\n"
-		result = result + "\t\t\t\t\tresult = result + \", \"\n"
-		result = result + "\t\t\t\tresult = result + \"$\" + i.toString()\n"
-		result = result + "\t\t\t\ti = i + 1\n"
-		result = result + "\t\t\treturn result\n"
+		result = result + "\n\t\t\tstring __generate_placeholders(integer count)\n"
+		result = result + "\t\t\t\tstring result = \"\"\n"
+		result = result + "\t\t\t\tinteger i = 1\n"
+		result = result + "\t\t\t\twhile i <= count\n"
+		result = result + "\t\t\t\t\tif i > 1\n"
+		result = result + "\t\t\t\t\t\tresult = result + \", \"\n"
+		result = result + "\t\t\t\t\tresult = result + \"$\" + i.toString()\n"
+		result = result + "\t\t\t\t\ti = i + 1\n"
+		result = result + "\t\t\t\treturn result\n"
 
 		// Generate __to_params() - serializes all fields (except id) to JSON array for INSERT
-		result = result + "\n\t\tstring __to_params()\n"
-		result = result + "\t\t\tstring params = \"[\"\n"
+		result = result + "\n\t\t\tstring __to_params()\n"
+		result = result + "\t\t\t\tstring params = \"[\"\n"
 		result = result + generate_field_serialization(field_names, field_types, false)
-		result = result + "\t\t\tparams = params + \"]\"\n"
-		result = result + "\t\t\treturn params\n"
+		result = result + "\t\t\t\tparams = params + \"]\"\n"
+		result = result + "\t\t\t\treturn params\n"
 
 		// Generate __to_params_with_tenant() - same as __to_params but prepends the
 		// current tenant_id as the first parameter in the JSON array.  This is only
 		// emitted for tenant-aware models and keeps the field list in sync with the
 		// auto-expanded INSERT SQL that prepends the tenant_id column.
 		if has_tenant
-			result = result + "\n\t\tstring __to_params_with_tenant(string tenant_id)\n"
-			result = result + "\t\t\tstring params = \"[\\\"\" + tenant_id + \"\\\"\"\n"
+			result = result + "\n\t\t\tstring __to_params_with_tenant(string tenant_id)\n"
+			result = result + "\t\t\t\tstring params = \"[\\\"\" + tenant_id + \"\\\"\"\n"
 			result = result + generate_field_serialization(field_names, field_types, true)
-			result = result + "\t\t\tparams = params + \"]\"\n"
-			result = result + "\t\t\treturn params\n"
+			result = result + "\t\t\t\tparams = params + \"]\"\n"
+			result = result + "\t\t\t\treturn params\n"
 
 		// Generate __to_update_params() - serializes id first, then other fields for UPDATE
-		result = result + "\n\t\tstring __to_update_params()\n"
-		result = result + "\t\t\tstring params = \"[\" + id.toString()\n"
+		result = result + "\n\t\t\tstring __to_update_params()\n"
+		result = result + "\t\t\t\tstring params = \"[\" + id.toString()\n"
 		result = result + generate_field_serialization(field_names, field_types, true)
-		result = result + "\t\t\tparams = params + \"]\"\n"
-		result = result + "\t\t\treturn params\n"
+		result = result + "\t\t\t\tparams = params + \"]\"\n"
+		result = result + "\t\t\t\treturn params\n"
 
 		// Generate __update_set() - generates "field1 = $2, field2 = $3, ..."
-		result = result + "\n\t\tstring __update_set()\n"
-		result = result + "\t\t\treturn \"" + generate_update_set_sql(field_names) + "\"\n"
+		result = result + "\n\t\t\tstring __update_set()\n"
+		result = result + "\t\t\t\treturn \"" + generate_update_set_sql(field_names) + "\"\n"
 
 		// Generate __extract_id() - extracts id from query result JSON
-		result = result + "\n\t\tinteger __extract_id(string result)\n"
-		result = result + "\t\t\tinteger id_pos = result.indexOf(\"\\\"id\\\":\")\n"
-		result = result + "\t\t\tif id_pos == -1\n"
-		result = result + "\t\t\t\treturn 0\n"
-		result = result + "\t\t\tinteger value_start = id_pos + 5\n"
-		result = result + "\t\t\tinteger value_end = value_start\n"
-		result = result + "\t\t\twhile value_end < result.length()\n"
-		result = result + "\t\t\t\tstring ch = result.substring(value_end, value_end + 1)\n"
-		result = result + "\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
-		result = result + "\t\t\t\t\tbreak\n"
-		result = result + "\t\t\t\tvalue_end = value_end + 1\n"
-		result = result + "\t\t\treturn result.substring(value_start, value_end).toInteger()\n"
+		result = result + "\n\t\t\tinteger __extract_id(string result)\n"
+		result = result + "\t\t\t\tinteger id_pos = result.indexOf(\"\\\"id\\\":\")\n"
+		result = result + "\t\t\t\tif id_pos == -1\n"
+		result = result + "\t\t\t\t\treturn 0\n"
+		result = result + "\t\t\t\tinteger value_start = id_pos + 5\n"
+		result = result + "\t\t\t\tinteger value_end = value_start\n"
+		result = result + "\t\t\t\twhile value_end < result.length()\n"
+		result = result + "\t\t\t\t\tstring ch = result.substring(value_end, value_end + 1)\n"
+		result = result + "\t\t\t\t\tif ch == \",\" or ch == \"}\" or ch == \" \"\n"
+		result = result + "\t\t\t\t\t\tbreak\n"
+		result = result + "\t\t\t\t\tvalue_end = value_end + 1\n"
+		result = result + "\t\t\t\treturn result.substring(value_start, value_end).toInteger()\n"
 
 		return result
 
