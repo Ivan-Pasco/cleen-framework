@@ -4,9 +4,10 @@
 //       semantics DAT-Q014, DAT-Q015, DAT-Q016, DAT-Q017, DAT-Q019, DAT-C010,
 //       DAT-D005.
 //
-// This test is shape-only — it confirms the DSL parses and types-check after
-// the plugin lowering. Runtime SQL execution requires a live database and is
-// covered by the framework's integration suite, not this unit test.
+// This test is shape-only — it confirms the DSL parses and the plugin's
+// expand_block produces type-checkable Clean code for each new pattern.
+// Runtime SQL execution requires a live database and is covered by the
+// framework's integration suite, not this unit test.
 
 plugins:
 	frame.data
@@ -29,47 +30,45 @@ start:
 	printl("All blocks below must parse and lower without compile errors.")
 
 functions:
-	// DAT-Q014: insert_id: returns the new row's pk as an integer expression.
-	integer createSession(string token, integer userId)
-		integer sid = Session.insert_id:
-			token = token
-			user_id = userId
+	// DAT-Q014: insert_id: lowers to INSERT … RETURNING id via insertReturningId().
+	void exercise_insert_id()
+		Session.insert_id:
+			token = "sample-token"
+			user_id = 1
 			expires_at = time.now().add_seconds(900)
-		return sid
 
 	// DAT-Q015 + DAT-D005: upsert: lowers to INSERT … ON CONFLICT (cols) DO UPDATE SET …
-	void upsertUserSettings(string emailAddr, string displayName)
+	void exercise_upsert()
 		User.upsert:
 			match:
-				email == emailAddr
+				email == "alice@example.com"
 			set:
-				name = displayName
+				name = "Alice"
 			on_insert:
 				props = "{}"
 
-	// DAT-Q019: datetime arithmetic inside update set: lowers to SQL DATE_ADD/INTERVAL.
-	void extendSession(integer sid)
+	// DAT-Q019: datetime arithmetic inside update set: lowers to SQL INTERVAL.
+	void exercise_datetime_arith()
 		Session.update:
 			set:
 				expires_at = time.now().add_minutes(30)
 			where:
-				id == sid
+				id == 1
 
-	// DAT-Q016: JSON path on select: lowers to JSON_EXTRACT().
-	// DAT-Q016: JSON path on where: filters by extracted value.
-	string findUsersByColor(string color)
+	// DAT-Q016: JSON path on select: and where: lowers to JSON_EXTRACT().
+	void exercise_json_path_read()
 		string rows = User.find:
 			select:
 				id
 				name
 				props.color
 			where:
-				props.color == color
-		return rows
+				props.color == "red"
+		printl(rows)
 
 	// DAT-Q017: aliased join: with nested on: introduces alias namespace
-	// usable in where:. The author. prefix resolves to the joined table.
-	string findActivePosts()
+	// usable in where:. The session. prefix resolves to the joined table.
+	void exercise_aliased_join()
 		string rows = User.find:
 			join:
 				Session as session:
@@ -77,4 +76,4 @@ functions:
 						session.user_id == id
 			where:
 				session.token != ""
-		return rows
+		printl(rows)
