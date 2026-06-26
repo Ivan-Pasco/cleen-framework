@@ -1916,64 +1916,70 @@ functions:
 		if roles != ""
 			result = result + "\tstring _roles = \"" + roles + "\"\n"
 
+		// VISIBILITY-FLIP (>= compiler 0.30.361): class methods are private by
+		// default. The host bridge calls page.render() externally through
+		// _ui_render_page, so render() must sit inside a `public:` sub-section of
+		// `functions:`. Spec: foundation/spec/grammar.ebnf §6.4b
+		// public_class_methods_section; CLASS007 (one public: per scope).
 		result = result + "\n\tfunctions:\n"
+		result = result + "\t\tpublic:\n"
 
 		// Render function
-		result = result + "\t\tstring render()\n"
+		result = result + "\t\t\tstring render()\n"
 
 		// If companion has guard(), call it first
 		if companion_json != ""
 			string module_name = extract_json_field(companion_json, "module_name")
 
 			if companion_json.indexOf("\"has_guard\":true") != -1
-				result = result + "\t\t\tany guard_result = " + module_name + "_guard()\n"
-				result = result + "\t\t\tif guard_result != null\n"
-				result = result + "\t\t\t\treturn \"\"\n"
+				result = result + "\t\t\t\tany guard_result = " + module_name + "_guard()\n"
+				result = result + "\t\t\t\tif guard_result != null\n"
+				result = result + "\t\t\t\t\treturn \"\"\n"
 
 			if companion_json.indexOf("\"has_load\":true") != -1
-				result = result + "\t\t\tany data = " + module_name + "_load_impl(null)\n"
+				result = result + "\t\t\t\tany data = " + module_name + "_load_impl(null)\n"
 
-		result = result + "\t\t\tstring html = \"\"\n"
-		result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+		result = result + "\t\t\t\tstring html = \"\"\n"
+		result = result + "\t\t\t\t" + render_code.replace("\n", "\n\t\t\t\t") + "\n"
 
 		// When a layout is specified, wrap the rendered page content in the layout template.
 		// Named slots (<slot name="X">...</slot>) are extracted from the page content first
 		// and injected into their matching placeholders in the layout, then the remaining
 		// content replaces the default <slot></slot>.
 		if layout != ""
-			result = result + "\t\t\tstring __page_content = html\n"
-			result = result + "\t\t\tstring __layout_html = _ui_load_layout(\"app/ui/web/layouts/" + layout + ".html\")\n"
-			result = result + "\t\t\tif __layout_html != \"\"\n"
+			result = result + "\t\t\t\tstring __page_content = html\n"
+			result = result + "\t\t\t\tstring __layout_html = _ui_load_layout(\"app/ui/web/layouts/" + layout + ".html\")\n"
+			result = result + "\t\t\t\tif __layout_html != \"\"\n"
 			// Named slot extraction loop — runs up to 10 named slots
-			result = result + "\t\t\t\tinteger __slot_i = 0\n"
-			result = result + "\t\t\t\twhile __slot_i < 10\n"
-			result = result + "\t\t\t\t\tinteger __ns_start = __page_content.indexOf(\"<slot name='\")\n"
-			result = result + "\t\t\t\t\tif __ns_start == -1\n"
-			result = result + "\t\t\t\t\t\t__slot_i = 10\n"
-			result = result + "\t\t\t\t\telse\n"
-			result = result + "\t\t\t\t\t\tinteger __name_start = __ns_start + 12\n"
-			result = result + "\t\t\t\t\t\tinteger __name_end = __page_content.indexOf(\"'\", __name_start)\n"
-			result = result + "\t\t\t\t\t\tif __name_end == -1\n"
+			result = result + "\t\t\t\t\tinteger __slot_i = 0\n"
+			result = result + "\t\t\t\t\twhile __slot_i < 10\n"
+			result = result + "\t\t\t\t\t\tinteger __ns_start = __page_content.indexOf(\"<slot name='\")\n"
+			result = result + "\t\t\t\t\t\tif __ns_start == -1\n"
 			result = result + "\t\t\t\t\t\t\t__slot_i = 10\n"
 			result = result + "\t\t\t\t\t\telse\n"
-			result = result + "\t\t\t\t\t\t\tstring __slot_name = __page_content.substring(__name_start, __name_end)\n"
-			result = result + "\t\t\t\t\t\t\tinteger __open_end = __page_content.indexOf(\">\", __ns_start)\n"
-			result = result + "\t\t\t\t\t\t\tinteger __close_start = __page_content.indexOf(\"</slot>\", __ns_start)\n"
-			result = result + "\t\t\t\t\t\t\tif __open_end == -1 or __close_start == -1\n"
+			result = result + "\t\t\t\t\t\t\tinteger __name_start = __ns_start + 12\n"
+			result = result + "\t\t\t\t\t\t\tinteger __name_end = __page_content.indexOf(\"'\", __name_start)\n"
+			result = result + "\t\t\t\t\t\t\tif __name_end == -1\n"
 			result = result + "\t\t\t\t\t\t\t\t__slot_i = 10\n"
 			result = result + "\t\t\t\t\t\t\telse\n"
-			result = result + "\t\t\t\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
-			result = result + "\t\t\t\t\t\t\t\tstring __layout_placeholder = \"<slot name='\" + __slot_name + \"'></slot>\"\n"
-			result = result + "\t\t\t\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
-			result = result + "\t\t\t\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
-			result = result + "\t\t\t\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
-			result = result + "\t\t\t\t\t\t\t\t__page_content = __before + __after\n"
-			result = result + "\t\t\t\t\t\t\t\t__slot_i = __slot_i + 1\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __slot_name = __page_content.substring(__name_start, __name_end)\n"
+			result = result + "\t\t\t\t\t\t\t\tinteger __open_end = __page_content.indexOf(\">\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tinteger __close_start = __page_content.indexOf(\"</slot>\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tif __open_end == -1 or __close_start == -1\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __layout_placeholder = \"<slot name='\" + __slot_name + \"'></slot>\"\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__page_content = __before + __after\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__slot_i = __slot_i + 1\n"
 			// Replace default slot with remaining content after named slots are extracted
-			result = result + "\t\t\t\t__layout_html = __layout_html.replace(\"<slot></slot>\", __page_content)\n"
-			result = result + "\t\t\t\thtml = __layout_html\n"
+			result = result + "\t\t\t\t\t__layout_html = __layout_html.replace(\"<slot></slot>\", __page_content)\n"
+			result = result + "\t\t\t\t\thtml = __layout_html\n"
 
-		result = result + "\t\t\treturn html\n"
+		result = result + "\t\t\t\treturn html\n"
 
 		return result
 
@@ -2068,17 +2074,28 @@ functions:
 		if fallback_html != ""
 			result = result + "\tstring _fallback = \"" + escape_string(fallback_html) + "\"\n"
 
-		// Add state fields directly to class body (empty string if no state: block)
-		result = result + "\t" + state_fields.trim().replace("\n", "\n\t") + "\n"
+		// VISIBILITY-FLIP (>= compiler 0.30.361): class fields are private by
+		// default. Group user-shaped state fields and `inputs` into a single
+		// `public:` field section — the framework writes _comp.<state_field>
+		// and reads _comp.inputs.<key> externally during render_component.
+		// Spec: foundation/spec/grammar.ebnf §6.4a public_class_fields_section;
+		// CLASS007 (one public: per scope).
+		boolean has_inputs = (html_content != "" and before_html.indexOf("inputs:") != -1)
+		boolean has_state_fields = state_fields.trim().length() > 0
+		if has_inputs or has_state_fields
+			result = result + "\n\tpublic:\n"
+			if has_inputs
+				result = result + "\t\tInputs inputs\n"
+			if has_state_fields
+				result = result + "\t\t" + state_fields.trim().replace("\n", "\n\t\t") + "\n"
 
 		if html_content != ""
 			// html: block found - generate render() from it
+			// (inputs field declaration is emitted above inside the public:
+			// section; before_html sections like events: still emit here.)
 
-			// Declare inputs variable so render() can reference inputs.fieldName
-			if before_html.indexOf("inputs:") != -1
-				result = result + "\tInputs inputs\n"
-
-			// Add sections before html: (typically inputs:, state:, events:)
+			// Add sections before html: (typically inputs:, events:; state:
+			// has already been promoted above and stripped from before_html)
 			if before_html.trim().length() > 0
 				string norm_before = normalize_handlers(before_html)
 				result = result + "\t" + norm_before.replace("\n", "\n\t") + "\n"
@@ -2098,33 +2115,46 @@ functions:
 				render_prefix = "__html = __html + \"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\"\n"
 				render_suffix = "__html = __html + \"</div>\"\n"
 
+			// VISIBILITY-FLIP (>= compiler 0.30.361): class methods are private by
+			// default. The framework calls .render(), .setSlot(), .renderSSR(), and
+			// .onMount() externally (see render_component, render_screen_island,
+			// emit_ui_client_init), so each must live inside a `public:` sub-section
+			// of `functions:`. Spec: foundation/spec/grammar.ebnf §6.4b
+			// public_class_methods_section; CLASS007 (one public: per scope).
 			// Check if after_html contains a functions: section
 			if after_html.trim().length() > 0 and after_html.trim().startsWith("functions:")
-				// Merge render() into the existing functions: block
+				// Merge render() into the existing functions: block; wrap render +
+				// the user's remaining methods together in a single public: section
+				// so the framework can call them externally.
 				result = result + "\n\t" + after_html.trim().substring(0, 10) + "\n"
-				result = result + "\t\tstring render()\n"
-				result = result + "\t\t\tstring __html = \"\"\n"
+				result = result + "\t\tpublic:\n"
+				result = result + "\t\t\tstring render()\n"
+				result = result + "\t\t\t\tstring __html = \"\"\n"
 				if render_prefix != ""
-					result = result + "\t\t\t" + render_prefix
-				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+					result = result + "\t\t\t\t" + render_prefix
+				result = result + "\t\t\t\t" + render_code.replace("\n", "\n\t\t\t\t") + "\n"
 				if render_suffix != ""
-					result = result + "\t\t\t" + render_suffix
-				result = result + "\t\t\treturn __html\n\n"
-				// Add remaining functions after "functions:" header
+					result = result + "\t\t\t\t" + render_suffix
+				result = result + "\t\t\t\treturn __html\n\n"
+				// Add remaining functions after "functions:" header — also indented
+				// one extra tab so they sit inside the same public: section.
 				string remaining_funcs = after_html.trim().substring(10, after_html.trim().length())
 				if remaining_funcs.trim().length() > 0
-					result = result + "\t\t" + remaining_funcs.trim() + "\n"
+					result = result + "\t\t\t" + remaining_funcs.trim().replace("\n", "\n\t\t\t") + "\n"
 			else
-				// No functions: section after html - create one with render()
+				// No functions: section after html - create one with render() inside
+				// a public: section. The framework's render_component step calls
+				// instance.render() externally.
 				result = result + "\n\tfunctions:\n"
-				result = result + "\t\tstring render()\n"
-				result = result + "\t\t\tstring __html = \"\"\n"
+				result = result + "\t\tpublic:\n"
+				result = result + "\t\t\tstring render()\n"
+				result = result + "\t\t\t\tstring __html = \"\"\n"
 				if render_prefix != ""
-					result = result + "\t\t\t" + render_prefix
-				result = result + "\t\t\t" + render_code.replace("\n", "\n\t\t\t") + "\n"
+					result = result + "\t\t\t\t" + render_prefix
+				result = result + "\t\t\t\t" + render_code.replace("\n", "\n\t\t\t\t") + "\n"
 				if render_suffix != ""
-					result = result + "\t\t\t" + render_suffix
-				result = result + "\t\t\treturn __html\n"
+					result = result + "\t\t\t\t" + render_suffix
+				result = result + "\t\t\t\treturn __html\n"
 				// Add any remaining content after html:
 				if after_html.trim().length() > 0
 					result = result + "\n\t" + after_html + "\n"
@@ -2137,20 +2167,26 @@ functions:
 			result = result + "\t" + body_fields.trim().replace("\n", "\n\t") + "\n"
 			result = result + "\t" + norm_body.replace("\n", "\n\t") + "\n"
 
-		string ssr_body = "\t\t\treturn this.render()\n"
+		// Body indented one extra tab so it sits inside the public: sub-section
+		// added below (VISIBILITY-FLIP).
+		string ssr_body = "\t\t\t\treturn this.render()\n"
 
-		// Add slot setter and SSR wrapper
+		// Add slot setter and SSR wrapper. Both are called externally by the
+		// framework (setSlot from render_component, renderSSR by the SSR
+		// pipeline), so they live inside the public: section of their
+		// functions: block.
 		if html_content != "" and after_html.trim().startsWith("functions:")
-			// Functions block already exists, just append
-			result = result + "\n\t\tvoid setSlot(string content)\n"
-			result = result + "\t\t\t_slot_content = content\n"
-			result = result + "\n\t\tstring renderSSR()\n"
+			// Functions block already exists, just append into the same public: section
+			result = result + "\n\t\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t\t_slot_content = content\n"
+			result = result + "\n\t\t\tstring renderSSR()\n"
 			result = result + ssr_body
 		else
 			result = result + "\n\tfunctions:\n"
-			result = result + "\t\tvoid setSlot(string content)\n"
-			result = result + "\t\t\t_slot_content = content\n"
-			result = result + "\n\t\tstring renderSSR()\n"
+			result = result + "\t\tpublic:\n"
+			result = result + "\t\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t\t_slot_content = content\n"
+			result = result + "\n\t\t\tstring renderSSR()\n"
 			result = result + ssr_body
 
 		// HYDRATE_AUTO Gap 1 — emit module-level instance global.
