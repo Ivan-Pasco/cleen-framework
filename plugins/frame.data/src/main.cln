@@ -577,9 +577,10 @@ functions:
 			return ""
 
 		string ftype = line.substring(0, space_pos).trim()
-		// datetime has no Clean Language primitive type; report as string for constructor/parse_as generation
-		if ftype == "datetime"
-			return "string"
+		// Preserve 'datetime' so generate_field_serialization can emit the
+		// {"__type":"epoch_s","value":N} typed bind tag the host bridge expects.
+		// The class-field-type stays 'string' (see parse_fields line ~484) because
+		// users assign string values like now().toString() at runtime.
 		return ftype
 
 // ============================================================================
@@ -947,7 +948,13 @@ functions:
 				if skip_first or first_added
 					separator = ", "
 
-				if needs_quotes
+				if ftype == "datetime"
+					// Emit typed bind tag {"__type":"epoch_s","value":N} so the host
+					// binds the unix epoch as the driver's native datetime type
+					// (HOST_BRIDGE.md "Typed bind tags"). The class field is typed
+					// string at runtime, so coerce back to integer for the tag value.
+					result = result + "\t\t\tparams = params + \"" + separator + "{\\\"__type\\\":\\\"epoch_s\\\",\\\"value\\\":\" + " + safe_field_name(field) + ".toInteger().toString() + \"}\"\n"
+				else if needs_quotes
 					result = result + "\t\t\tparams = params + \"" + separator + "\\\"\" + " + safe_field_name(field) + ".toString() + \"\\\"\"\n"
 				else
 					result = result + "\t\t\tparams = params + \"" + separator + "\" + " + safe_field_name(field) + ".toString()\n"
@@ -2431,6 +2438,8 @@ functions:
 				zero_val = "0.0"
 			else if ftype == "boolean"
 				zero_val = "false"
+			else if ftype == "datetime"
+				zero_val = "\"\""
 			else if not is_primitive_type(ftype)
 				zero_val = ftype + "()"
 			result = result + "\t\t" + safe_field_name(field) + " = " + zero_val + "\n"
