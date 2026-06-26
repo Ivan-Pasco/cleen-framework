@@ -1019,11 +1019,14 @@ functions:
 					// binds the unix epoch as the driver's native datetime type
 					// (HOST_BRIDGE.md "Typed bind tags"). The class field is typed
 					// string at runtime, so coerce back to integer for the tag value.
-					result = result + "\t\t\tparams = params + \"" + separator + "{\\\"__type\\\":\\\"epoch_s\\\",\\\"value\\\":\" + " + safe_field_name(field) + ".toInteger().toString() + \"}\"\n"
+					// 4-tab depth: lines sit inside __to_params() method body
+					// (3-tab) inside public: (2-tab) inside functions: (1-tab) —
+					// see VISIBILITY-FLIP bump in generate_helper_methods.
+					result = result + "\t\t\t\tparams = params + \"" + separator + "{\\\"__type\\\":\\\"epoch_s\\\",\\\"value\\\":\" + " + safe_field_name(field) + ".toInteger().toString() + \"}\"\n"
 				else if needs_quotes
-					result = result + "\t\t\tparams = params + \"" + separator + "\\\"\" + " + safe_field_name(field) + ".toString() + \"\\\"\"\n"
+					result = result + "\t\t\t\tparams = params + \"" + separator + "\\\"\" + " + safe_field_name(field) + ".toString() + \"\\\"\"\n"
 				else
-					result = result + "\t\t\tparams = params + \"" + separator + "\" + " + safe_field_name(field) + ".toString()\n"
+					result = result + "\t\t\t\tparams = params + \"" + separator + "\" + " + safe_field_name(field) + ".toString()\n"
 				first_added = true
 
 			pos = comma_pos + 1
