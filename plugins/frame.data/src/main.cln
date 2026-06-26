@@ -116,6 +116,29 @@ functions:
 			if __m.length() > 0
 				return expand_insert(__m, body)
 
+		// insert_id: → expand_insert_id (spec §3.1 insert_id_expression, DAT-Q014)
+		// Returns the new row's pk as an integer expression. Same body grammar as
+		// insert: (assignment_pair list); only the lowering differs.
+		if __bname == "insert_id" or __bname.endsWith(".insert_id")
+			string __m = ""
+			if __bname == "insert_id"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 10)
+			if __m.length() > 0
+				return expand_insert_id(__m, body)
+
+		// upsert: → expand_upsert (spec §3.2a upsert_expression, DAT-Q015 + DAT-D005)
+		// Combines INSERT and UPDATE in one atomic statement keyed by match: columns.
+		if __bname == "upsert" or __bname.endsWith(".upsert")
+			string __m = ""
+			if __bname == "upsert"
+				__m = extract_model_name(__battr)
+			else
+				__m = __bname.substring(0, __bname.length() - 7)
+			if __m.length() > 0
+				return expand_upsert(__m, body)
+
 		// update: → expand_update
 		if __bname == "update" or __bname.endsWith(".update")
 			string __m = ""
@@ -169,6 +192,23 @@ functions:
 		if block_name == "__preamble"
 			return emit_raw_insert_helpers()
 
+		// Unknown-block guard (spec gap closure): any block of the form
+		// "<ModelName>.<verb>" that did not match a known verb above is a typo
+		// or a not-yet-implemented spec feature. Returning the body unchanged
+		// (the previous behaviour) lets the typo compile to a silent no-op,
+		// which masked the v1.1 → v1.2 gap. Emit a runtime error with the
+		// observed verb and the list of known verbs so the failure is loud,
+		// localised, and actionable.
+		integer __dot_pos = block_name.indexOf(".")
+		if __dot_pos > 0 and not block_name.startsWith("db.") and block_name != "__preamble"
+			string __unk_model = block_name.substring(0, __dot_pos)
+			string __unk_verb = block_name.substring(__dot_pos + 1, block_name.length())
+			// Skip if the suffix is empty (defensive) or if this looks like a
+			// namespaced bridge call rather than a model verb.
+			if __unk_verb.length() > 0 and is_capitalized(__unk_model)
+				string __known = "find, first, count, exists, findOrFail, select, insert, insert_id, update, upsert, delete, paginate, cursor"
+				return "error(\"frame.data: unknown verb '" + __unk_verb + "' on model '" + __unk_model + "'. Known verbs: " + __known + "\")"
+
 		return body
 
 	// Validation entry point
@@ -181,7 +221,7 @@ functions:
 
 	// Keywords for IDE support
 	string get_keywords()
-		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"update\", \"delete\", \"paginate\", \"cursor\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\", \"page\", \"perPage\", \"after\", \"by\", \"insertReturningId\"]"
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"insert_id\", \"update\", \"upsert\", \"delete\", \"paginate\", \"cursor\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"match\", \"on_insert\", \"on\", \"as\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\", \"page\", \"perPage\", \"after\", \"by\", \"insertReturningId\", \"add_seconds\", \"add_minutes\", \"add_hours\", \"add_days\", \"subtract_seconds\", \"subtract_minutes\", \"subtract_hours\", \"subtract_days\"]"
 
 	// Emit raw-INSERT helper functions injected once per build via __preamble.
 	//
@@ -479,9 +519,18 @@ functions:
 				if __first_ch != "\""
 					default_val = "\"" + default_val + "\""
 
-		// datetime has no Clean Language primitive type; store as string in generated class code
-		// (SQL schema generation uses clean_type_to_sql which still maps it to TIMESTAMP)
+		// datetime/date/uuid/text/json have no Clean Language primitive type;
+		// store the class field as string at runtime. SQL schema generation uses
+		// clean_type_to_sql which preserves the original type for the column.
 		if field_type == "datetime"
+			field_type = "string"
+		if field_type == "date"
+			field_type = "string"
+		if field_type == "text"
+			field_type = "string"
+		if field_type == "uuid"
+			field_type = "string"
+		if field_type == "json"
 			field_type = "string"
 
 		// Generate field declaration — use safe identifier if name is a reserved keyword
@@ -1026,6 +1075,7 @@ functions:
 	// VALIDATION_ERROR rather than reaching the database.
 	// Parse select: clause body into a SQL column projection list.
 	// Input lines like "id" / "name" / "email as email_addr" → "id, name, email AS email_addr".
+	// JSON path syntax ("props.color", "tags[0]") lowers to JSON_EXTRACT(...).
 	// Empty body returns "*" (no projection — select all columns).
 	string parse_select_clause(string select_body)
 		string body = select_body.trim()
@@ -1039,10 +1089,24 @@ functions:
 				line_end = body.length()
 			string line = body.substring(line_start, line_end).trim()
 			if line.length() > 0
-				string col = line.replace(" as ", " AS ")
+				// Split optional alias first ("col as name") so the alias is
+				// preserved verbatim while the column expression is lowered.
+				string lhs = line
+				string alias = ""
+				integer as_pos = line.indexOf(" as ")
+				if as_pos != -1
+					lhs = line.substring(0, as_pos).trim()
+					alias = line.substring(as_pos + 4, line.length()).trim()
+				// DAT-Q016: lower path_identifier (col.field / col[n]) to
+				// JSON_EXTRACT for reads. lower_json_path returns the input
+				// unchanged when no JSON path syntax is present.
+				string lowered = lower_json_path(lhs)
+				string col_expr = lowered
+				if alias.length() > 0
+					col_expr = col_expr + " AS " + alias
 				if result.length() > 0
 					result = result + ", "
-				result = result + col
+				result = result + col_expr
 			line_start = line_end + 1
 		if result.length() == 0
 			return "*"
@@ -1331,29 +1395,243 @@ functions:
 				if eq_pos != -1
 					string field_name = line.substring(0, eq_pos).trim()
 					string field_value = line.substring(eq_pos + 3, line.length()).trim()
+					// DAT-Q019: detect chainable datetime arithmetic so the
+					// expiry/created_at expression is computed at the database
+					// rather than in WASM (clock-skew safe).
+					string lowered_value = lower_datetime_arith(field_value)
 
 					if fields.length() > 0
 						fields = fields + ", "
 						values = values + ", "
 
 					fields = fields + field_name
-					values = values + "$" + param_idx.toString()
-
-					// Build params_expr as a Clean string-concatenation expression.
-					// params_expr accumulates: "[" + val1.toString() + "," + val2.toString()
-					// and is closed with + "]" after the loop.
-					if params_expr.length() == 0
-						params_expr = "\"[\" + " + field_value + ".toString()"
+					if lowered_value != field_value
+						// SQL fragment — inline directly in the VALUES list and
+						// do NOT consume a positional placeholder.
+						values = values + lowered_value
 					else
-						params_expr = params_expr + " + \",\" + " + field_value + ".toString()"
+						values = values + "$" + param_idx.toString()
 
-					param_idx = param_idx + 1
+						// Build params_expr as a Clean string-concatenation expression.
+						// params_expr accumulates: "[" + val1.toString() + "," + val2.toString()
+						// and is closed with + "]" after the loop.
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + field_value + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + field_value + ".toString()"
+
+						param_idx = param_idx + 1
 
 			line_start = line_end + 1
 
-		params_expr = params_expr + " + \"]\""
+		if params_expr.length() == 0
+			params_expr = "\"[]\""
+		else
+			params_expr = params_expr + " + \"]\""
 
 		string sql = "INSERT INTO " + table_name + " (" + fields + ") VALUES (" + values + ") RETURNING *"
+		return "_db_query(\"" + sql + "\", " + params_expr + ")"
+
+	// Expand Model.insert_id: block (spec §3.1 insert_id_expression, DAT-Q014).
+	// Identical body grammar to Model.insert:; differs only in return type.
+	// Lowering: INSERT INTO t (cols) VALUES (params) RETURNING id, then extract
+	// the integer id from the JSON result. Reuses the same column/value/params
+	// parsing as expand_insert so behaviour stays consistent with insert:.
+	string expand_insert_id(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		boolean has_tenant = detect_tenant_field(body)
+		string fields = ""
+		string values = ""
+		string params_expr = ""
+		integer param_idx = 1
+
+		if has_tenant
+			if body.indexOf("tenantId = ") == -1 and body.indexOf("tenant_id = ") == -1
+				fields = "tenant_id"
+				values = "$1"
+				params_expr = "\"[\" + tenant_getId()"
+				param_idx = 2
+
+		string lines = body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer eq_pos = line.indexOf(" = ")
+				if eq_pos != -1
+					string field_name = line.substring(0, eq_pos).trim()
+					string field_value = line.substring(eq_pos + 3, line.length()).trim()
+					// DAT-Q019: lower chainable datetime add/subtract methods to SQL
+					string lowered_value = lower_datetime_arith(field_value)
+					if fields.length() > 0
+						fields = fields + ", "
+						values = values + ", "
+					fields = fields + field_name
+					if lowered_value != field_value
+						// Datetime arithmetic lowered to a SQL expression — inline it
+						// in the VALUES list rather than binding as a parameter.
+						values = values + lowered_value
+					else
+						values = values + "$" + param_idx.toString()
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + field_value + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + field_value + ".toString()"
+						param_idx = param_idx + 1
+			line_start = line_end + 1
+
+		if params_expr.length() == 0
+			params_expr = "\"[]\""
+		else
+			params_expr = params_expr + " + \"]\""
+
+		// Use the preamble-emitted insertReturningId helper, which appends
+		// RETURNING id when missing and parses the id out of the JSON result.
+		string sql = "INSERT INTO " + table_name + " (" + fields + ") VALUES (" + values + ") RETURNING id"
+		return "insertReturningId(\"" + sql + "\", " + params_expr + ")"
+
+	// Expand Model.upsert: block (spec §3.2a, DAT-Q015 + DAT-D005).
+	// Required sub-blocks: match: and set:. Optional: on_insert:.
+	// Lowering: INSERT INTO t (match_cols, set_cols [, on_insert_cols])
+	//           VALUES (...)
+	//           ON CONFLICT (match_cols) DO UPDATE SET <set assignments>
+	//           RETURNING *
+	// (Postgres-style; MySQL ON DUPLICATE KEY UPDATE form is deferred — see
+	//  studio handoff for the engine support matrix.)
+	// match: provides both the conflict target AND the seed columns for the
+	// INSERT branch (the canonical row identity). set: applies in both branches.
+	// on_insert: applies only to the INSERT branch (e.g. created_at = now()).
+	// Returns the inserted/updated row as a JSON expression, like insert:.
+	string expand_upsert(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string match_clause = extract_subblock(body, "match:")
+		string set_clause = extract_subblock(body, "set:")
+		string on_insert_clause = extract_subblock(body, "on_insert:")
+
+		// DAT-D005: match: and set: are required, on_insert: is optional.
+		if match_clause.length() == 0
+			return "error(\"frame.data: upsert on " + model_name + " requires a match: sub-block (DAT-D005)\")"
+		if set_clause.length() == 0
+			return "error(\"frame.data: upsert on " + model_name + " requires a set: sub-block (DAT-D005)\")"
+
+		// Parse match: lines as "col == expr" — extract conflict columns and seed values.
+		string match_cols = ""
+		string insert_cols = ""
+		string insert_vals = ""
+		string params_expr = ""
+		integer param_idx = 1
+
+		// First pass: walk match: lines (use == as separator)
+		string mlines = match_clause
+		integer mstart = 0
+		while mstart < mlines.length()
+			integer mend = mlines.indexOf("\n", mstart)
+			if mend == -1
+				mend = mlines.length()
+			string mline = mlines.substring(mstart, mend).trim()
+			if mline.length() > 0
+				integer eq_pos = mline.indexOf(" == ")
+				if eq_pos != -1
+					string mcol = mline.substring(0, eq_pos).trim()
+					string mval = mline.substring(eq_pos + 4, mline.length()).trim()
+					string lowered_mval = lower_datetime_arith(mval)
+					if match_cols.length() > 0
+						match_cols = match_cols + ", "
+						insert_cols = insert_cols + ", "
+						insert_vals = insert_vals + ", "
+					match_cols = match_cols + mcol
+					insert_cols = insert_cols + mcol
+					if lowered_mval != mval
+						insert_vals = insert_vals + lowered_mval
+					else
+						insert_vals = insert_vals + "$" + param_idx.toString()
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + mval + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + mval + ".toString()"
+						param_idx = param_idx + 1
+			mstart = mend + 1
+
+		// Second pass: walk set: lines — emit assignments for the UPDATE branch
+		// AND extend the INSERT column/value list so the seed row contains them too.
+		string update_set = ""
+		string slines = set_clause
+		integer sstart = 0
+		while sstart < slines.length()
+			integer send = slines.indexOf("\n", sstart)
+			if send == -1
+				send = slines.length()
+			string sline = slines.substring(sstart, send).trim()
+			if sline.length() > 0
+				integer seq = sline.indexOf(" = ")
+				if seq != -1
+					string scol = sline.substring(0, seq).trim()
+					string sval = sline.substring(seq + 3, sline.length()).trim()
+					string lowered_sval = lower_datetime_arith(sval)
+					// Update branch assignment
+					if update_set.length() > 0
+						update_set = update_set + ", "
+					if lowered_sval != sval
+						update_set = update_set + scol + " = " + lowered_sval
+					else
+						update_set = update_set + scol + " = $" + param_idx.toString()
+					// Insert branch column/value
+					if insert_cols.length() > 0
+						insert_cols = insert_cols + ", "
+						insert_vals = insert_vals + ", "
+					insert_cols = insert_cols + scol
+					if lowered_sval != sval
+						insert_vals = insert_vals + lowered_sval
+					else
+						insert_vals = insert_vals + "$" + param_idx.toString()
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + sval + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + sval + ".toString()"
+						param_idx = param_idx + 1
+			sstart = send + 1
+
+		// Third pass: walk on_insert: lines — extend the INSERT column/value
+		// list only (UPDATE branch ignores them).
+		if on_insert_clause.length() > 0
+			string olines = on_insert_clause
+			integer ostart = 0
+			while ostart < olines.length()
+				integer oend = olines.indexOf("\n", ostart)
+				if oend == -1
+					oend = olines.length()
+				string oline = olines.substring(ostart, oend).trim()
+				if oline.length() > 0
+					integer oeq = oline.indexOf(" = ")
+					if oeq != -1
+						string ocol = oline.substring(0, oeq).trim()
+						string oval = oline.substring(oeq + 3, oline.length()).trim()
+						string lowered_oval = lower_datetime_arith(oval)
+						if insert_cols.length() > 0
+							insert_cols = insert_cols + ", "
+							insert_vals = insert_vals + ", "
+						insert_cols = insert_cols + ocol
+						if lowered_oval != oval
+							insert_vals = insert_vals + lowered_oval
+						else
+							insert_vals = insert_vals + "$" + param_idx.toString()
+							if params_expr.length() == 0
+								params_expr = "\"[\" + " + oval + ".toString()"
+							else
+								params_expr = params_expr + " + \",\" + " + oval + ".toString()"
+							param_idx = param_idx + 1
+				ostart = oend + 1
+
+		if params_expr.length() == 0
+			params_expr = "\"[]\""
+		else
+			params_expr = params_expr + " + \"]\""
+
+		// Final SQL: INSERT … ON CONFLICT (match_cols) DO UPDATE SET … RETURNING *
+		string sql = "INSERT INTO " + table_name + " (" + insert_cols + ") VALUES (" + insert_vals + ") ON CONFLICT (" + match_cols + ") DO UPDATE SET " + update_set + " RETURNING *"
 		return "_db_query(\"" + sql + "\", " + params_expr + ")"
 
 	// Expand Model.update: block.
@@ -1739,7 +2017,8 @@ functions:
 		integer content_start = start_pos + block_name.length()
 
 		// Find the end of this sub-block (next sub-block or end of body)
-		string subblock_markers = ",where:,order:,limit:,offset:,link:,join:,set:,sql:,params:,up:,down:,paginate:,cursor:,select:,group:,having:,include:,"
+		// New v1.2.0 markers: match:, on_insert: (upsert sub-blocks)
+		string subblock_markers = ",where:,order:,limit:,offset:,link:,join:,set:,sql:,params:,up:,down:,paginate:,cursor:,select:,group:,having:,include:,match:,on_insert:,"
 		integer end_pos = body.length()
 
 		integer search_pos = content_start
@@ -1748,7 +2027,7 @@ functions:
 			if body.substring(search_pos, search_pos + 1) == "\n"
 				string after_newline = body.substring(search_pos + 1, body.length()).trim()
 				// Check if next line starts a new sub-block
-				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:") or after_newline.startsWith("paginate:") or after_newline.startsWith("cursor:") or after_newline.startsWith("select:") or after_newline.startsWith("group:") or after_newline.startsWith("having:") or after_newline.startsWith("include:")
+				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:") or after_newline.startsWith("paginate:") or after_newline.startsWith("cursor:") or after_newline.startsWith("select:") or after_newline.startsWith("group:") or after_newline.startsWith("having:") or after_newline.startsWith("include:") or after_newline.startsWith("match:") or after_newline.startsWith("on_insert:")
 					end_pos = search_pos
 					break
 			search_pos = search_pos + 1
@@ -1844,8 +2123,18 @@ functions:
 		if op_pos == -1
 			return "\"" + parse_condition(condition) + "\""
 
-		string lhs = condition.substring(0, op_pos).trim()
+		string lhs_raw = condition.substring(0, op_pos).trim()
 		string rhs = condition.substring(op_pos + op_len, condition.length()).trim()
+		// DAT-Q016: lower path_identifier (col.field / col[n]) on the LHS to
+		// JSON_EXTRACT for reads. lower_json_path is a no-op for plain columns.
+		string lhs = lower_json_path(lhs_raw)
+
+		// DAT-Q019: datetime arithmetic on the RHS lowers to an inlined SQL
+		// expression (NOW() ± INTERVAL '<n> <unit>'). The comparison stays in
+		// the database — no parameter binding, no WASM-side timestamp.
+		string lowered_rhs = lower_datetime_arith(rhs)
+		if lowered_rhs != rhs
+			return "\"" + lhs + " " + op_sql + " " + lowered_rhs + "\""
 
 		if rhs == "null" or rhs == "NULL"
 			if op_sql == "<>"
@@ -1920,9 +2209,54 @@ functions:
 				string assign_expr = ""
 				integer eq_pos = line.indexOf(" = ")
 				if eq_pos != -1
-					string col = line.substring(0, eq_pos).trim()
+					string col_raw = line.substring(0, eq_pos).trim()
 					string val = line.substring(eq_pos + 3, line.length()).trim()
-					if val == "null" or val == "NULL"
+					// DAT-Q016: detect JSON path on the LHS.  When present, the
+					// assignment becomes <col> = JSON_SET(<col>, '$.path', <value>)
+					// rather than <col> = <value>.
+					string json_split = split_json_path_lhs(col_raw)
+					string col = col_raw
+					string col_lhs_for_set = ""    // Empty means plain assignment
+					string col_target = col_raw
+					string json_path_for_set = ""
+					if json_split.length() > 0
+						integer __sep = json_split.indexOf("|")
+						col = json_split.substring(0, __sep)
+						col_target = col   // The column being updated
+						json_path_for_set = json_split.substring(__sep + 1, json_split.length())
+						col_lhs_for_set = col
+					// DAT-Q019: datetime arithmetic lowers to a SQL expression
+					// that is inlined directly (no string quoting, no parameter).
+					string lowered = lower_datetime_arith(val)
+					if col_lhs_for_set.length() > 0
+						// JSON_SET path — the RHS is the bound value, but the
+						// outer SQL expression is JSON_SET(col, '$.path', value).
+						// For string literal RHS we inline (quoted); otherwise
+						// dynamic concatenation through .toString().
+						string json_rhs = ""
+						if lowered != val
+							json_rhs = lowered
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', " + json_rhs + ")\""
+						else if val == "null" or val == "NULL"
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', NULL)\""
+						else if val == "true" or val == "false"
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', " + val + ")\""
+						else if val.startsWith("\"") and val.length() >= 2
+							string inner = val.substring(1, val.length() - 1)
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', '" + inner + "')\""
+						else
+							string digits_chars2 = "0123456789"
+							boolean val_is_num2 = false
+							if val.length() > 0
+								if digits_chars2.indexOf(val.substring(0, 1)) != -1
+									val_is_num2 = true
+							if val_is_num2
+								assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', " + val + ")\""
+							else
+								assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', '\" + " + val + ".toString() + \"')\""
+					else if lowered != val
+						assign_expr = "\"" + col + " = " + lowered + "\""
+					else if val == "null" or val == "NULL"
 						assign_expr = "\"" + col + " = NULL\""
 					else if val == "true" or val == "false"
 						assign_expr = "\"" + col + " = " + val + "\""
@@ -2117,7 +2451,26 @@ functions:
 
 		return result
 
-	// Parse join: clause (inner/left/right ModelName on condition) into SQL JOIN statements.
+	// Parse join: clause (spec §2.5 + DAT-Q017) into SQL JOIN statements.
+	//
+	// Two supported forms in v1.2.0:
+	//
+	//   Multi-line aliased form (DAT-Q017):
+	//     join:
+	//         User as author:
+	//             on:
+	//                 author.id == fk_id
+	//         Tag as tag left:
+	//             on:
+	//                 tag.id == post.tag_id
+	//
+	//   Legacy flat form (still supported for back-compat):
+	//     join:
+	//         inner Tag on tag.id == post.tag_id
+	//         left User on user.id == post.author_id
+	//
+	// The aliased form is preferred; aliases become a namespace usable in the
+	// surrounding where:, select:, order:, group:, having:.
 	string parse_join_clause(string join_body, string primary_model)
 		string result = ""
 		string lines = join_body
@@ -2128,6 +2481,64 @@ functions:
 				line_end = lines.length()
 			string line = lines.substring(line_start, line_end).trim()
 			if line.length() > 0
+				// Aliased form: "<Model> as <alias>[ left| right]:"
+				// Detected by trailing ":" — flat form lacks the colon.
+				if line.endsWith(":") and line.indexOf(" as ") != -1
+					integer as_pos = line.indexOf(" as ")
+					string join_model = line.substring(0, as_pos).trim()
+					string after_as = line.substring(as_pos + 4, line.length() - 1).trim()  // drop trailing ":"
+					string join_type = "INNER JOIN"
+					string alias = after_as
+					if after_as.endsWith(" left")
+						join_type = "LEFT JOIN"
+						alias = after_as.substring(0, after_as.length() - 5).trim()
+					else if after_as.endsWith(" right")
+						join_type = "RIGHT JOIN"
+						alias = after_as.substring(0, after_as.length() - 6).trim()
+					// Collect lines following this entry until the next entry or
+					// end of the join body. We don't track indent levels exactly;
+					// we simply gather every non-empty line that does not look
+					// like a new entry header. The on: marker introduces the
+					// predicate list. We accept either:
+					//   on:
+					//       a.b == c.d
+					// or a single-line on: a.b == c.d.
+					string join_cond = ""
+					integer scan = line_end + 1
+					while scan < lines.length()
+						integer s_end = lines.indexOf("\n", scan)
+						if s_end == -1
+							s_end = lines.length()
+						string s_line = lines.substring(scan, s_end).trim()
+						if s_line.length() > 0
+							// If this line looks like a new entry header (ends ":" AND contains " as "),
+							// stop collecting for this entry.
+							if s_line.endsWith(":") and s_line.indexOf(" as ") != -1
+								break
+							// "on:" marker — drop it; subsequent lines are conditions.
+							if s_line == "on:"
+								scan = s_end + 1
+								continue
+							// "on: <expr>" inline form — strip the marker.
+							if s_line.startsWith("on:")
+								s_line = s_line.substring(3, s_line.length()).trim()
+							if s_line.length() > 0
+								if join_cond.length() > 0
+									join_cond = join_cond + " AND "
+								join_cond = join_cond + s_line
+						scan = s_end + 1
+					// Translate join_cond:
+					//   - alias.field stays as alias.field (SQL alias works)
+					//   - primary-model refs (Model.field) lower to table.field
+					//   - "==" becomes "="
+					string join_table = pluralize(to_snake_case(join_model))
+					join_cond = resolve_model_refs(join_cond, primary_model, join_body)
+					join_cond = join_cond.replace(" == ", " = ")
+					result = result + join_type + " " + join_table + " " + alias + " ON " + join_cond + " "
+					// Advance the outer loop past the consumed inner lines.
+					line_start = scan
+					continue
+				// Legacy flat form: "inner Model on cond" / "left Model on cond"
 				string join_type = "INNER JOIN"
 				string rest = line
 				if line.startsWith("left ")
@@ -2142,13 +2553,11 @@ functions:
 					join_type = "FULL JOIN"
 					rest = line.substring(5, line.length()).trim()
 
-				// rest is "ModelName on condition"
 				integer on_pos = rest.indexOf(" on ")
 				if on_pos != -1
 					string join_model = rest.substring(0, on_pos).trim()
 					string join_table = pluralize(to_snake_case(join_model))
 					string join_cond = rest.substring(on_pos + 4, rest.length()).trim()
-					// Resolve ModelName. references and convert == to =
 					join_cond = resolve_model_refs(join_cond, primary_model, join_body)
 					join_cond = join_cond.replace(" == ", " = ")
 					result = result + join_type + " " + join_table + " ON " + join_cond + " "
@@ -2204,6 +2613,174 @@ functions:
 			return "__" + name
 		return name
 
+	// Returns true when name begins with an uppercase ASCII letter (model name
+	// convention: PascalCase). Used by the unknown-block guard to distinguish
+	// "<ModelName>.<verb>" — a frame.data shape — from other plugins' blocks.
+	boolean is_capitalized(string name)
+		if name.length() == 0
+			return false
+		string first = name.substring(0, 1)
+		if first >= "A" and first <= "Z"
+			return true
+		return false
+
+	// Lower a Clean expression to a SQL fragment when it matches the datetime
+	// arithmetic patterns recognised by DAT-Q019:
+	//   time.now().add_seconds(N)    → (NOW() + INTERVAL '<N> seconds')
+	//   time.now().add_minutes(N)    → (NOW() + INTERVAL '<N> minutes')
+	//   time.now().add_hours(N)      → (NOW() + INTERVAL '<N> hours')
+	//   time.now().add_days(N)       → (NOW() + INTERVAL '<N> days')
+	//   time.now().subtract_seconds(N) → (NOW() - INTERVAL '<N> seconds')
+	//   (and minutes / hours / days variants)
+	// Returns the original expression unchanged when no pattern matches.
+	// The output uses Postgres INTERVAL syntax; MySQL's DATE_ADD form is a
+	// known-deferred dialect (see studio handoff).
+	//
+	// Parameter parsing is intentionally narrow: only integer literals and
+	// bare identifier expressions are accepted as the argument. More complex
+	// expressions (function calls, arithmetic) fall through to the unchanged
+	// passthrough — they will execute in WASM and bind as a literal value,
+	// losing the at-database evaluation benefit described in DAT-Q019.
+	string lower_datetime_arith(string expr)
+		string e = expr.trim()
+		if not e.startsWith("time.now().")
+			return expr
+		// Try each suffix in order: add_* then subtract_*.
+		string rest = e.substring(11, e.length())
+		string op = ""
+		string time_unit = ""
+		string arg_body = ""
+		if rest.startsWith("add_seconds(")
+			op = "+"
+			time_unit = "seconds"
+			arg_body = rest.substring(12, rest.length())
+		else if rest.startsWith("add_minutes(")
+			op = "+"
+			time_unit = "minutes"
+			arg_body = rest.substring(12, rest.length())
+		else if rest.startsWith("add_hours(")
+			op = "+"
+			time_unit = "hours"
+			arg_body = rest.substring(10, rest.length())
+		else if rest.startsWith("add_days(")
+			op = "+"
+			time_unit = "days"
+			arg_body = rest.substring(9, rest.length())
+		else if rest.startsWith("subtract_seconds(")
+			op = "-"
+			time_unit = "seconds"
+			arg_body = rest.substring(17, rest.length())
+		else if rest.startsWith("subtract_minutes(")
+			op = "-"
+			time_unit = "minutes"
+			arg_body = rest.substring(17, rest.length())
+		else if rest.startsWith("subtract_hours(")
+			op = "-"
+			time_unit = "hours"
+			arg_body = rest.substring(15, rest.length())
+		else if rest.startsWith("subtract_days(")
+			op = "-"
+			time_unit = "days"
+			arg_body = rest.substring(14, rest.length())
+		else
+			return expr
+		// arg_body now ends with ")" — strip it
+		if not arg_body.endsWith(")")
+			return expr
+		string arg = arg_body.substring(0, arg_body.length() - 1).trim()
+		if arg.length() == 0
+			return expr
+		// Only integer literals lower to a fully-baked SQL expression.
+		// Identifiers (variables) also lower but with string concatenation
+		// performed at runtime by the caller — for now we only inline literals
+		// to keep the lowering as a pure SQL fragment string.
+		if is_numeric(arg)
+			return "(NOW() " + op + " INTERVAL '" + arg + " " + time_unit + "')"
+		// Identifier fallback: leave unchanged. The caller will bind the value
+		// as a parameter and lose the at-database evaluation, which is the
+		// documented behaviour for non-literal arguments.
+		return expr
+
+	// Detect a JSON path_identifier expression (DAT-Q016 / DAT-M014) and lower it
+	// to a JSON_EXTRACT SQL fragment for reads.
+	//   props.color             → JSON_EXTRACT(props, '$.color')
+	//   props.layers[2].opacity → JSON_EXTRACT(props, '$.layers[2].opacity')
+	//   tags[0]                 → JSON_EXTRACT(tags, '$[0]')
+	// A path_identifier qualifies when it contains either a "." after the leading
+	// identifier OR a "[" — both are illegal in plain SQL column references and
+	// in the where/set DSL, so detection by syntax is sufficient.
+	//
+	// DAT-C010 enforcement (compile-time column-type check) is deferred — the
+	// plugin does not currently have model schema context inside per-clause
+	// expansions. Mis-applied path access surfaces as a database error at query
+	// time (e.g. "JSON_EXTRACT requires a JSON column"). See studio handoff for
+	// the planned column-typed enforcement.
+	//
+	// Returns the original token unchanged when no path syntax is present.
+	string lower_json_path(string token)
+		string t = token.trim()
+		integer dot_pos = t.indexOf(".")
+		integer brk_pos = t.indexOf("[")
+		// No path syntax — return as-is.
+		if dot_pos == -1 and brk_pos == -1
+			return token
+		// Find the column name (leading identifier — first segment before . or [)
+		integer cut = t.length()
+		if dot_pos != -1 and dot_pos < cut
+			cut = dot_pos
+		if brk_pos != -1 and brk_pos < cut
+			cut = brk_pos
+		string col = t.substring(0, cut).trim()
+		if col.length() == 0
+			return token
+		// Defensive: leading identifier must be a bare identifier (letters/digits/_).
+		// If the column starts with a digit or contains a space, it's not a
+		// path_identifier — bail out.
+		string first_ch = col.substring(0, 1)
+		if not ((first_ch >= "a" and first_ch <= "z") or (first_ch >= "A" and first_ch <= "Z") or first_ch == "_")
+			return token
+		// Build JSON path: prepend $., translate "[" → "[" and "." → "." as-is.
+		// The grammar guarantees path segments are simple — no need to escape.
+		string path_suffix = t.substring(cut, t.length())
+		string json_path = "$"
+		if path_suffix.startsWith(".")
+			json_path = json_path + path_suffix
+		else if path_suffix.startsWith("[")
+			json_path = json_path + path_suffix
+		else
+			return token
+		return "JSON_EXTRACT(" + col + ", '" + json_path + "')"
+
+	// Lower a JSON path_identifier on the LHS of a set: assignment to a
+	// JSON_SET target. Returns a pair encoded as "<col>|<json_path>" when the
+	// LHS is a JSON path, or an empty string when it is a plain column.
+	//
+	// The caller then emits:  <col> = JSON_SET(<col>, '<json_path>', <value>)
+	// instead of:              <col> = <value>
+	//
+	// This split exists because the SET-clause caller already produces a
+	// "<col> = <expr>" string; we need to substitute both sides.
+	string split_json_path_lhs(string lhs)
+		string t = lhs.trim()
+		integer dot_pos = t.indexOf(".")
+		integer brk_pos = t.indexOf("[")
+		if dot_pos == -1 and brk_pos == -1
+			return ""
+		integer cut = t.length()
+		if dot_pos != -1 and dot_pos < cut
+			cut = dot_pos
+		if brk_pos != -1 and brk_pos < cut
+			cut = brk_pos
+		string col = t.substring(0, cut).trim()
+		if col.length() == 0
+			return ""
+		string first_ch = col.substring(0, 1)
+		if not ((first_ch >= "a" and first_ch <= "z") or (first_ch >= "A" and first_ch <= "Z") or first_ch == "_")
+			return ""
+		string path_suffix = t.substring(cut, t.length())
+		string json_path = "$" + path_suffix
+		return col + "|" + json_path
+
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
@@ -2217,10 +2794,21 @@ functions:
 			return "REAL"
 		if clean_type == "string"
 			return "TEXT"
+		if clean_type == "text"
+			return "TEXT"
 		if clean_type == "boolean"
 			return "BOOLEAN"
 		if clean_type == "datetime"
 			return "TIMESTAMP"
+		if clean_type == "date"
+			return "DATE"
+		if clean_type == "uuid"
+			return "UUID"
+		// DAT-M014: json column type — engine-native JSON (JSON on MySQL ≥5.7,
+		// JSONB on Postgres). The plugin emits JSON as the SQL column type and
+		// trusts the engine driver to pick the right native representation.
+		if clean_type == "json"
+			return "JSON"
 		// Foreign key or unknown type - default to INTEGER (FK reference)
 		return "INTEGER"
 
@@ -2236,7 +2824,9 @@ functions:
 		return result
 
 	// Determine whether a Clean Language type name is a primitive scalar
-	// Returns true for integer, number, string, boolean, datetime; false for model refs
+	// Returns true for spec-listed data_type primitives (frame-data.ebnf §1):
+	// integer, number, string, text, boolean, date, datetime, uuid, json.
+	// False for relation types (class names) which become FK references.
 	boolean is_primitive_type(string type_name)
 		if type_name == "integer"
 			return true
@@ -2244,9 +2834,17 @@ functions:
 			return true
 		if type_name == "string"
 			return true
+		if type_name == "text"
+			return true
 		if type_name == "boolean"
 			return true
 		if type_name == "datetime"
+			return true
+		if type_name == "date"
+			return true
+		if type_name == "uuid"
+			return true
+		if type_name == "json"
 			return true
 		return false
 

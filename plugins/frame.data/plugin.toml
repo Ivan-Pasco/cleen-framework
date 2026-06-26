@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.data"
-version = "2.1.6"
-description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries"
+version = "2.2.0"
+description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries. v2.2.0: implements frame-data spec v1.2.0 — insert_id:, upsert: (match/set/on_insert), datetime arithmetic (time.now().add_seconds/minutes/hours/days), JSON path access (JSON_EXTRACT/JSON_SET), aliased join: blocks, and loud rejection of unknown Model.<verb>: blocks."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -31,7 +31,9 @@ expressions = [
   "*.first:",
   "*.count:",
   "*.insert:",
+  "*.insert_id:",
   "*.update:",
+  "*.upsert:",
   "*.delete:",
   "*.migrate",
   "*.paginate:",
@@ -108,8 +110,12 @@ keywords = [
   { name = "findOrFail", description = "Find first matching record or raise NOT_FOUND error", context = "expression" },
   { name = "count", description = "Count matching records", context = "expression" },
   { name = "insert", description = "Insert new record(s)", context = "expression" },
+  { name = "insert_id", description = "Insert new record and return the new row's pk (DAT-Q014)", context = "expression" },
   { name = "update", description = "Update existing record(s)", context = "expression" },
+  { name = "upsert", description = "Insert-or-update keyed by match: columns (DAT-Q015)", context = "expression" },
   { name = "delete", description = "Delete record(s)", context = "expression" },
+  { name = "match", description = "Conflict-target columns for upsert: (DAT-Q015, DAT-C009)", context = "block" },
+  { name = "on_insert", description = "Assignments applied only on the INSERT branch of an upsert: (DAT-D005)", context = "block" },
   { name = "migrate", description = "Run model schema migration (expression) or define a versioned migration file (block)", context = "both" },
   { name = "where", description = "Filter query conditions", context = "block" },
   { name = "order", description = "Sort query results", context = "block" },
@@ -155,7 +161,9 @@ functions = [
   { name = "Model.first", signature = "Model.first:\n\twhere:\n\t\tcondition", description = "Get first matching record (adds LIMIT 1)" },
   { name = "Model.count", signature = "Model.count:\n\twhere:\n\t\tcondition", description = "Count matching records" },
   { name = "Model.insert", signature = "Model.insert:\n\tfield = value", description = "Insert a new record with field assignments" },
+  { name = "Model.insert_id", signature = "Model.insert_id:\n\tfield = value", description = "Insert a new record and return the new row's pk as integer (DAT-Q014)" },
   { name = "Model.update", signature = "Model.update:\n\tset:\n\t\tfield = value\n\twhere:\n\t\tcondition", description = "Update records matching the where clause" },
+  { name = "Model.upsert", signature = "Model.upsert:\n\tmatch:\n\t\tcol == value\n\tset:\n\t\tfield = value\n\ton_insert:\n\t\tfield = value", description = "Atomic INSERT-OR-UPDATE keyed by match: columns; set: applies in both branches; on_insert: applies only on the INSERT branch (DAT-Q015, DAT-D005)" },
   { name = "Model.migrate", signature = "Model.migrate()", description = "Create table if not exists based on model definition" },
   { name = "tenant_getId", signature = "tenant_getId()", description = "Get current tenant ID from session claims (requires frame.auth)" },
   { name = "Model.paginate", signature = "Model.paginate:\n\twhere:\n\t\tcondition\n\tpaginate:\n\t\tpage 1\n\t\tperPage 20", description = "Offset-based paginated query returning PagedResult<Model> with totalCount, totalPages, currentPage, perPage, hasNext, hasPrev" },
@@ -185,6 +193,8 @@ completions = [
   { trigger = ".exists:", insert = "exists:\n\twhere:\n\t\t${1:condition}" },
   { trigger = ".findOrFail:", insert = "findOrFail:\n\twhere:\n\t\t${1:condition}" },
   { trigger = ".insert:", insert = "insert:\n\t${1:field} = ${2:value}" },
+  { trigger = ".insert_id:", insert = "insert_id:\n\t${1:field} = ${2:value}" },
+  { trigger = ".upsert:", insert = "upsert:\n\tmatch:\n\t\t${1:col} == ${2:value}\n\tset:\n\t\t${3:field} = ${4:value}\n\ton_insert:\n\t\t${5:field} = ${6:value}" },
   { trigger = "transaction:", insert = "transaction:\n\t${1:// transaction code}" },
   { trigger = "migrate ", insert = "migrate \"${1:001_migration_name}\":\n\tup:\n\t\t${2:CREATE TABLE ...}\n\tdown:\n\t\t${3:DROP TABLE ...}" },
   { trigger = ".paginate:", insert = "paginate:\n\twhere:\n\t\t${1:condition}\n\tpaginate:\n\t\tpage ${2:1}\n\t\tperPage ${3:20}" },

@@ -1,0 +1,80 @@
+// Test: frame.data v1.2.0 DSL gap closure — insert_id, upsert, datetime arith,
+// JSON path access, aliased join, and unknown-block rejection.
+// Spec: frame-data.ebnf §3.1 (insert_id), §3.2a (upsert), §2.5 (join_entry),
+//       semantics DAT-Q014, DAT-Q015, DAT-Q016, DAT-Q017, DAT-Q019, DAT-C010,
+//       DAT-D005.
+//
+// This test is shape-only — it confirms the DSL parses and types-check after
+// the plugin lowering. Runtime SQL execution requires a live database and is
+// covered by the framework's integration suite, not this unit test.
+
+plugins:
+	frame.data
+
+data User:
+	id: integer pk auto
+	email: string unique
+	name: string
+	props: json
+	tags: json
+
+data Session:
+	id: integer pk auto
+	token: string unique
+	user_id: integer
+	expires_at: datetime
+
+start:
+	printl("frame.data v1.2.0 DSL gap closure — compile smoke test")
+	printl("All blocks below must parse and lower without compile errors.")
+
+functions:
+	// DAT-Q014: insert_id: returns the new row's pk as an integer expression.
+	integer createSession(string token, integer userId)
+		integer sid = Session.insert_id:
+			token = token
+			user_id = userId
+			expires_at = time.now().add_seconds(900)
+		return sid
+
+	// DAT-Q015 + DAT-D005: upsert: lowers to INSERT … ON CONFLICT (cols) DO UPDATE SET …
+	void upsertUserSettings(string emailAddr, string displayName)
+		User.upsert:
+			match:
+				email == emailAddr
+			set:
+				name = displayName
+			on_insert:
+				props = "{}"
+
+	// DAT-Q019: datetime arithmetic inside update set: lowers to SQL DATE_ADD/INTERVAL.
+	void extendSession(integer sid)
+		Session.update:
+			set:
+				expires_at = time.now().add_minutes(30)
+			where:
+				id == sid
+
+	// DAT-Q016: JSON path on select: lowers to JSON_EXTRACT().
+	// DAT-Q016: JSON path on where: filters by extracted value.
+	string findUsersByColor(string color)
+		string rows = User.find:
+			select:
+				id
+				name
+				props.color
+			where:
+				props.color == color
+		return rows
+
+	// DAT-Q017: aliased join: with nested on: introduces alias namespace
+	// usable in where:. The author. prefix resolves to the joined table.
+	string findActivePosts()
+		string rows = User.find:
+			join:
+				Session as session:
+					on:
+						session.user_id == id
+			where:
+				session.token != ""
+		return rows

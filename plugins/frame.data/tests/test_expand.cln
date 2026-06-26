@@ -13,6 +13,17 @@ start:
 	test_model_validation_missing_name()
 	test_model_validation_missing_fields()
 	test_unknown_block_passthrough()
+	// v1.2.0 — spec gap closure
+	test_insert_id_emits_returning_id()
+	test_upsert_emits_on_conflict_do_update()
+	test_upsert_missing_match_errors()
+	test_upsert_missing_set_errors()
+	test_datetime_arith_lowers_to_interval()
+	test_json_path_lowers_to_json_extract()
+	test_json_path_lhs_lowers_to_json_set()
+	test_join_alias_emits_inner_join_with_alias()
+	test_join_alias_left_emits_left_join()
+	test_unknown_model_verb_emits_error()
 
 functions:
 	void test_model_expansion()
@@ -62,5 +73,76 @@ functions:
 		assert(result.contains("at least one field is required"))
 
 	void test_unknown_block_passthrough()
+		// Bare (non-dotted) block names belong to other plugins — passthrough.
 		string result = expand_block("unknown", "", "original body")
 		assert(result == "original body")
+
+	// --- v1.2.0 spec gap closure ---
+
+	void test_insert_id_emits_returning_id()
+		// DAT-Q014: insert_id: lowers to an INSERT … RETURNING id call wrapped
+		// in the preamble-emitted insertReturningId() helper.
+		string result = expand_block("User.insert_id", "", "email = userEmail\nname = userName")
+		assert(result.contains("INSERT INTO users"))
+		assert(result.contains("RETURNING id"))
+		assert(result.contains("insertReturningId"))
+
+	void test_upsert_emits_on_conflict_do_update()
+		// DAT-Q015: upsert: lowers to INSERT … ON CONFLICT (cols) DO UPDATE SET …
+		string body = "match:\n\temail == userEmail\nset:\n\tname = userName\non_insert:\n\tcreated_at = now()"
+		string result = expand_block("User.upsert", "", body)
+		assert(result.contains("INSERT INTO users"))
+		assert(result.contains("ON CONFLICT (email) DO UPDATE SET"))
+		assert(result.contains("RETURNING *"))
+
+	void test_upsert_missing_match_errors()
+		// DAT-D005: upsert without match: is a compile-time error
+		string result = expand_block("User.upsert", "", "set:\n\tname = userName")
+		assert(result.contains("error("))
+		assert(result.contains("match:"))
+
+	void test_upsert_missing_set_errors()
+		// DAT-D005: upsert without set: is a compile-time error
+		string result = expand_block("User.upsert", "", "match:\n\temail == userEmail")
+		assert(result.contains("error("))
+		assert(result.contains("set:"))
+
+	void test_datetime_arith_lowers_to_interval()
+		// DAT-Q019: time.now().add_seconds(900) inside insert: lowers to
+		// (NOW() + INTERVAL '900 seconds') — inlined in the SQL, not bound.
+		string result = expand_block("Session.insert", "", "token = sessionToken\nexpires_at = time.now().add_seconds(900)")
+		assert(result.contains("NOW() + INTERVAL '900 seconds'"))
+
+	void test_json_path_lowers_to_json_extract()
+		// DAT-Q016: where: with col.field lowers to JSON_EXTRACT for the read.
+		// We exercise this by extracting just the select projection path.
+		string result = parse_select_clause("id\nprops.color\ntags[0]")
+		assert(result.contains("JSON_EXTRACT(props, '$.color')"))
+		assert(result.contains("JSON_EXTRACT(tags, '$[0]')"))
+
+	void test_json_path_lhs_lowers_to_json_set()
+		// DAT-Q016: set: with col.field LHS lowers to JSON_SET on writes.
+		string set_expr = build_set_expr("props.color = userColor")
+		assert(set_expr.contains("JSON_SET(props, '$.color'"))
+
+	void test_join_alias_emits_inner_join_with_alias()
+		// DAT-Q017: aliased join lowers to INNER JOIN <table> <alias> ON …
+		string body = "join:\n\tUser as author:\n\t\ton:\n\t\t\tauthor.id == author_id\nwhere:\n\tauthor.active == true"
+		string result = expand_block("Post.find", "", body)
+		assert(result.contains("INNER JOIN users author"))
+		assert(result.contains("author.id = author_id"))
+
+	void test_join_alias_left_emits_left_join()
+		// DAT-Q017: inline `left` keyword between alias and `:` selects LEFT JOIN.
+		string body = "join:\n\tUser as author left:\n\t\ton:\n\t\t\tauthor.id == author_id"
+		string result = expand_block("Post.find", "", body)
+		assert(result.contains("LEFT JOIN users author"))
+
+	void test_unknown_model_verb_emits_error()
+		// Unknown <Model>.<verb>: now produces a runtime error() call instead
+		// of silently passing the body through. The error message lists the
+		// known verbs so the user can fix the typo.
+		string result = expand_block("User.completely_fake_op", "", "nonsense = stuff")
+		assert(result.contains("error("))
+		assert(result.contains("completely_fake_op"))
+		assert(result.contains("User"))
