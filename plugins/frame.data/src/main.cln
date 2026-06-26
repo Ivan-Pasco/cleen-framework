@@ -856,8 +856,8 @@ functions:
 										break
 									min_end = min_end + 1
 								string min_val = constraints.substring(min_pos + 4, min_end).trim()
-								validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\" and value.length() < " + min_val + "\n"
-								validate_body = validate_body + "\t\t\t\treturn \"" + field_name + " must be at least " + min_val + " characters\"\n"
+								validate_body = validate_body + "\t\t\t\tif field_name == \"" + field_name + "\" and value.length() < " + min_val + "\n"
+								validate_body = validate_body + "\t\t\t\t\treturn \"" + field_name + " must be at least " + min_val + " characters\"\n"
 
 							// max=N constraint (string length maximum)
 							integer max_pos = constraints.indexOf("max=")
@@ -869,13 +869,13 @@ functions:
 										break
 									max_end = max_end + 1
 								string max_val = constraints.substring(max_pos + 4, max_end).trim()
-								validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\" and value.length() > " + max_val + "\n"
-								validate_body = validate_body + "\t\t\t\treturn \"" + field_name + " must be at most " + max_val + " characters\"\n"
+								validate_body = validate_body + "\t\t\t\tif field_name == \"" + field_name + "\" and value.length() > " + max_val + "\n"
+								validate_body = validate_body + "\t\t\t\t\treturn \"" + field_name + " must be at most " + max_val + " characters\"\n"
 
 							// email constraint (presence of @ character)
 							if constraints.indexOf("email") != -1
-								validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\" and value.indexOf(\"@\") == -1\n"
-								validate_body = validate_body + "\t\t\t\treturn \"" + field_name + " must be a valid email address\"\n"
+								validate_body = validate_body + "\t\t\t\tif field_name == \"" + field_name + "\" and value.indexOf(\"@\") == -1\n"
+								validate_body = validate_body + "\t\t\t\t\treturn \"" + field_name + " must be a valid email address\"\n"
 
 							// range=N..M constraint (numeric range check)
 							integer range_pos = constraints.indexOf("range=")
@@ -891,10 +891,10 @@ functions:
 								if dots_pos != -1
 									string range_min = range_expr.substring(0, dots_pos).trim()
 									string range_max = range_expr.substring(dots_pos + 2, range_expr.length()).trim()
-									validate_body = validate_body + "\t\t\tif field_name == \"" + field_name + "\"\n"
-									validate_body = validate_body + "\t\t\t\tinteger __range_val = value.toInteger()\n"
-									validate_body = validate_body + "\t\t\t\tif __range_val < " + range_min + " or __range_val > " + range_max + "\n"
-									validate_body = validate_body + "\t\t\t\t\treturn \"" + field_name + " must be between " + range_min + " and " + range_max + "\"\n"
+									validate_body = validate_body + "\t\t\t\tif field_name == \"" + field_name + "\"\n"
+									validate_body = validate_body + "\t\t\t\t\tinteger __range_val = value.toInteger()\n"
+									validate_body = validate_body + "\t\t\t\t\tif __range_val < " + range_min + " or __range_val > " + range_max + "\n"
+									validate_body = validate_body + "\t\t\t\t\t\treturn \"" + field_name + " must be between " + range_min + " and " + range_max + "\"\n"
 
 			line_start = line_end + 1
 
