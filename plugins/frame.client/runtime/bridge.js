@@ -121,6 +121,10 @@
 
 	rt.registerEnv({
 
+		int64_to_string: (value) => {
+			return rt.writeString((typeof value === 'bigint' ? value : BigInt(value)).toString());
+		},
+
 		// ========== API: HTTP Requests ==========
 
 		_api_get: (urlPtr, urlLen, handlerPtr, handlerLen) => {

@@ -872,6 +872,14 @@
 				return writeString(String(value));
 			},
 
+			int_to_string: (value) => {
+				return writeString(String(value));
+			},
+
+			int64_to_string: (value) => {
+				return writeString((typeof value === 'bigint' ? value : BigInt(value)).toString());
+			},
+
 			string_to_float: (ptr, len) => {
 				const n = parseFloat(readString(ptr, len));
 				return Number.isNaN(n) ? 0.0 : n;

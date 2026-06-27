@@ -55,6 +55,35 @@ functions:
 		string __bname = block_name
 		string __battr = attributes
 
+		// Typed-expression binding-header preservation (compiler workaround).
+		//
+		// When the user writes `<type> <name> = Model.<verb>:` for a verb that
+		// is NOT in the compiler's direct-dispatch whitelist (insert_id, upsert,
+		// select today), the compiler prepends the binding header to the body
+		// it hands the plugin but does NOT reassemble the assignment on the way
+		// back out — it parses the plugin's returned RHS expression as a bare
+		// statement, dropping the variable binding. The variable is then
+		// undefined and SEM007 fires at every later use.
+		//
+		// We compensate by:
+		//   1. Detecting the `<type> <name> =` header on the first body line.
+		//   2. Stripping it before dispatch so verb-specific expanders see the
+		//      same body shape they would for the statement form.
+		//   3. Prepending the captured header to the verb's return value so the
+		//      compiler's plugin-code parser sees a complete VariableDecl.
+		//
+		// Direct-dispatch verbs (find, first, count, exists, insert, update,
+		// delete, paginate, cursor) never reach this code with a header — the
+		// compiler strips and reassembles for them in wasm_adapter.rs. The
+		// workaround is therefore a no-op for those verbs and only kicks in
+		// for the v1.2 expression-returning verbs the compiler doesn't yet
+		// handle directly. Tracked upstream against compiler as
+		// FRAME-DATA-TYPED-EXPR-BINDING-DROPPED.
+		string __binding_header = extract_binding_header(body)
+		string __dispatch_body = body
+		if __binding_header.length() > 0
+			__dispatch_body = strip_binding_header(body)
+
 		// find: → expand_find
 		if __bname == "find" or __bname.endsWith(".find")
 			string __m = ""
@@ -63,7 +92,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 5)
 			if __m.length() > 0
-				return expand_find(__m, body)
+				return prepend_binding(__binding_header, expand_find(__m, __dispatch_body))
 
 		// select: → expand_find (spec query_verb="select"; same machinery,
 		// projection is driven by the select: sub-block inside the body).
@@ -74,7 +103,7 @@ functions:
 			else
 				__ms = __bname.substring(0, __bname.length() - 7)
 			if __ms.length() > 0
-				return expand_find(__ms, body)
+				return prepend_binding(__binding_header, expand_find(__ms, __dispatch_body))
 
 		// first: → expand_first
 		if __bname == "first" or __bname.endsWith(".first")
@@ -84,7 +113,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 6)
 			if __m.length() > 0
-				return expand_first(__m, body)
+				return prepend_binding(__binding_header, expand_first(__m, __dispatch_body))
 
 		// count: → expand_count
 		if __bname == "count" or __bname.endsWith(".count")
@@ -94,7 +123,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 6)
 			if __m.length() > 0
-				return expand_count(__m, body)
+				return prepend_binding(__binding_header, expand_count(__m, __dispatch_body))
 
 		// exists: → expand_exists
 		if __bname == "exists" or __bname.endsWith(".exists")
@@ -104,7 +133,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 7)
 			if __m.length() > 0
-				return expand_exists(__m, body)
+				return prepend_binding(__binding_header, expand_exists(__m, __dispatch_body))
 
 		// insert: → expand_insert
 		if __bname == "insert" or __bname.endsWith(".insert")
@@ -114,7 +143,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 7)
 			if __m.length() > 0
-				return expand_insert(__m, body)
+				return prepend_binding(__binding_header, expand_insert(__m, __dispatch_body))
 
 		// insert_id: → expand_insert_id (spec §3.1 insert_id_expression, DAT-Q014)
 		// Returns the new row's pk as an integer expression. Same body grammar as
@@ -126,7 +155,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 10)
 			if __m.length() > 0
-				return expand_insert_id(__m, body)
+				return prepend_binding(__binding_header, expand_insert_id(__m, __dispatch_body))
 
 		// upsert: → expand_upsert (spec §3.2a upsert_expression, DAT-Q015 + DAT-D005)
 		// Combines INSERT and UPDATE in one atomic statement keyed by match: columns.
@@ -137,7 +166,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 7)
 			if __m.length() > 0
-				return expand_upsert(__m, body)
+				return prepend_binding(__binding_header, expand_upsert(__m, __dispatch_body))
 
 		// update: → expand_update
 		if __bname == "update" or __bname.endsWith(".update")
@@ -147,7 +176,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 7)
 			if __m.length() > 0
-				return expand_update(__m, body)
+				return prepend_binding(__binding_header, expand_update(__m, __dispatch_body))
 
 		// delete: → expand_delete
 		if __bname == "delete" or __bname.endsWith(".delete")
@@ -157,7 +186,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 7)
 			if __m.length() > 0
-				return expand_delete(__m, body)
+				return prepend_binding(__binding_header, expand_delete(__m, __dispatch_body))
 
 		// paginate: → expand_paginate
 		if __bname == "paginate" or __bname.endsWith(".paginate")
@@ -167,7 +196,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 9)
 			if __m.length() > 0
-				return expand_paginate(__m, body)
+				return prepend_binding(__binding_header, expand_paginate(__m, __dispatch_body))
 
 		// cursor: → expand_cursor
 		if __bname == "cursor" or __bname.endsWith(".cursor")
@@ -177,7 +206,7 @@ functions:
 			else
 				__m = __bname.substring(0, __bname.length() - 7)
 			if __m.length() > 0
-				return expand_cursor(__m, body)
+				return prepend_binding(__binding_header, expand_cursor(__m, __dispatch_body))
 
 		// Preamble — emit raw-INSERT helpers so apps that use db.query for inserts
 		// have a working path to the new row's auto-increment id. Closes
@@ -257,6 +286,49 @@ functions:
 		if verb == "cursor"
 			return true
 		return false
+
+	// Detect a typed-binding header on the first line of body.
+	// Returns "<type> <name>" (e.g. "integer x") when the first line has the
+	// shape `<type> <name> =` with nothing after the equals sign. Returns ""
+	// otherwise. Used by expand_block to compensate for the compiler not
+	// reassembling assignment statements for v1.2 expression-returning verbs.
+	string extract_binding_header(string body)
+		integer nl_pos = body.indexOf("\n")
+		if nl_pos == -1
+			return ""
+		string first_line = body.substring(0, nl_pos).trim()
+		if not first_line.endsWith("=")
+			return ""
+		string before_eq = first_line.substring(0, first_line.length() - 1).trim()
+		// Must have at least two whitespace-separated tokens for a typed binding.
+		// One-token form (`page_id =`) is a normal field assignment, not a header.
+		if before_eq.indexOf(" ") == -1
+			return ""
+		// Reject any line that contains a field-assignment delimiter — the field
+		// parsers in expand_insert et al. look for " = " (space-eq-space). A
+		// header has the shape "<tokens> =" with no embedded " = ", because the
+		// equals sign is at end-of-line.
+		return before_eq
+
+	// Strip the binding header (first line) from body when present. Returns
+	// body unchanged when no header is detected.
+	string strip_binding_header(string body)
+		string h = extract_binding_header(body)
+		if h.length() == 0
+			return body
+		integer nl_pos = body.indexOf("\n")
+		return body.substring(nl_pos + 1, body.length())
+
+	// Reattach a binding header to the verb expansion's return string when
+	// present. The verb expansion returns a bare expression (e.g.
+	// `_db_query(...)` or `insertReturningId(...)`). With a header, the
+	// emitted code is `<type> <name> = <expression>` so the compiler's
+	// plugin-code parser produces a VariableDecl statement that preserves
+	// the binding. With no header, the expression is returned unchanged.
+	string prepend_binding(string header, string expansion)
+		if header.length() == 0
+			return expansion
+		return header + " = " + expansion
 
 	// Validation entry point
 	string validate_block(string block_name, string attributes, string body)

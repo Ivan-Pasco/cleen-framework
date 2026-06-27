@@ -37,6 +37,17 @@ functions:
 			user_id = 1
 			expires_at = time.now().add_seconds(900)
 
+	// DAT-Q014 typed-expression form. Closes Gap 1 of
+	// framework-frame-data-two-residual-v1-2-gaps.md. See plugin source
+	// (expand_block binding-header preservation) and studio handoff for
+	// the full rationale.
+	integer exercise_insert_id_typed()
+		integer id = Session.insert_id:
+			token = "typed-form-token"
+			user_id = 1
+			expires_at = time.now().add_seconds(900)
+		return id
+
 	// DAT-Q015 + DAT-D005: upsert: lowers to INSERT … ON CONFLICT (cols) DO UPDATE SET …
 	void exercise_upsert()
 		User.upsert:
@@ -46,6 +57,26 @@ functions:
 				name = "Alice"
 			on_insert:
 				props = "{}"
+
+	// DAT-Q015 typed-expression form. Same binding-preservation contract as
+	// insert_id (exercise_insert_id_typed above).
+	string exercise_upsert_typed()
+		string row = User.upsert:
+			match:
+				email == "bob@example.com"
+			set:
+				name = "Bob"
+			on_insert:
+				props = "{}"
+		return row
+
+	// DAT-Q014: select: typed-expression form. Same binding workaround
+	// applies (select: routes through the plugin's generic dispatch path).
+	string exercise_select_typed()
+		string rows = User.select:
+			where:
+				name == "Alice"
+		return rows
 
 	// DAT-Q019: datetime arithmetic inside update set: lowers to SQL INTERVAL.
 	void exercise_datetime_arith()
@@ -94,3 +125,12 @@ functions:
 			where:
 				session.token != ""
 		printl(rows)
+
+	// Unknown-verb guard contract. Compiles green today because the
+	// compiler does not dispatch typo verbs to the plugin (the plugin
+	// manifest only lists known verbs under handles.expressions). Tracked
+	// upstream against compiler. See studio-frame-data-residual-gaps-status
+	// for the byte-level verification step and current status.
+	void exercise_unknown_verb_trap_contract()
+		User.totally_made_up_verb:
+			nonsense = "stuff"

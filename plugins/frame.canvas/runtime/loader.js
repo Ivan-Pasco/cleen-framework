@@ -418,6 +418,11 @@
           return self.writeString(str, outPtr);
         },
 
+        int64_to_string(value, outPtr) {
+          const str = (typeof value === 'bigint' ? value : BigInt(value)).toString();
+          return self.writeString(str, outPtr);
+        },
+
         float_to_string(value, outPtr) {
           const str = value.toString();
           return self.writeString(str, outPtr);
