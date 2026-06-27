@@ -192,24 +192,71 @@ functions:
 		if block_name == "__preamble"
 			return emit_raw_insert_helpers()
 
-		// Unknown-block guard (spec gap closure): any block of the form
-		// "<ModelName>.<verb>" that did not match a known verb above is a typo
-		// or a not-yet-implemented spec feature. Returning the body unchanged
-		// (the previous behaviour) lets the typo compile to a silent no-op,
-		// which masked the v1.1 → v1.2 gap. Emit a runtime error with the
-		// observed verb and the list of known verbs so the failure is loud,
-		// localised, and actionable.
+		// Unknown-block guard (spec gap closure): any block that names a Model
+		// but did not match a known verb above is a typo or a not-yet-implemented
+		// spec feature. Returning the body unchanged (the previous behaviour) lets
+		// the typo compile to a silent no-op, which masked the v1.1 → v1.2 gap.
+		// Emit a runtime error with the observed verb and the list of known verbs
+		// so the failure is loud, localised, and actionable.
+		//
+		// Both dispatch conventions must be handled (see lines 51-53):
+		//   Convention A: block_name="<verb>",         attributes="<Model>"
+		//   Convention B: block_name="<Model>.<verb>", attributes=""
+		// Convention A is what the compiler actually emits for `Model.verb:`
+		// today, so missing it leaves the guard unreachable for the typo case
+		// reported in framework-frame-data-unknown-verb-guard-misses-convention-a.md.
+		string __unk_model = ""
+		string __unk_verb = ""
 		integer __dot_pos = block_name.indexOf(".")
 		if __dot_pos > 0 and not block_name.startsWith("db.") and block_name != "__preamble"
-			string __unk_model = block_name.substring(0, __dot_pos)
-			string __unk_verb = block_name.substring(__dot_pos + 1, block_name.length())
-			// Skip if the suffix is empty (defensive) or if this looks like a
-			// namespaced bridge call rather than a model verb.
-			if __unk_verb.length() > 0 and is_capitalized(__unk_model)
-				string __known = "find, first, count, exists, findOrFail, select, insert, insert_id, update, upsert, delete, paginate, cursor"
-				return "error(\"frame.data: unknown verb '" + __unk_verb + "' on model '" + __unk_model + "'. Known verbs: " + __known + "\")"
+			__unk_model = block_name.substring(0, __dot_pos)
+			__unk_verb = block_name.substring(__dot_pos + 1, block_name.length())
+		else if attributes.length() > 0 and block_name != "__preamble" and not block_name.startsWith("db.")
+			// Convention A: caller passed Model as attributes; we got here
+			// because none of the known-verb branches matched.
+			string __maybe_model = extract_model_name(attributes)
+			if is_capitalized(__maybe_model)
+				__unk_model = __maybe_model
+				__unk_verb = block_name
+
+		if __unk_verb.length() > 0 and is_capitalized(__unk_model) and not is_known_verb(__unk_verb)
+			string __known = "find, first, count, exists, findOrFail, select, insert, insert_id, update, upsert, delete, paginate, cursor"
+			return "error(\"frame.data: unknown verb '" + __unk_verb + "' on model '" + __unk_model + "'. Known verbs: " + __known + "\")"
 
 		return body
+
+	// Return true when verb is one of the 13 known model verbs. Used by the
+	// unknown-block guard to distinguish legitimate fallthrough (another
+	// plugin's block routed here, or a non-verb block name) from a real typo
+	// on a Model.verb invocation.
+	boolean is_known_verb(string verb)
+		if verb == "find"
+			return true
+		if verb == "first"
+			return true
+		if verb == "count"
+			return true
+		if verb == "exists"
+			return true
+		if verb == "findOrFail"
+			return true
+		if verb == "select"
+			return true
+		if verb == "insert"
+			return true
+		if verb == "insert_id"
+			return true
+		if verb == "update"
+			return true
+		if verb == "upsert"
+			return true
+		if verb == "delete"
+			return true
+		if verb == "paginate"
+			return true
+		if verb == "cursor"
+			return true
+		return false
 
 	// Validation entry point
 	string validate_block(string block_name, string attributes, string body)

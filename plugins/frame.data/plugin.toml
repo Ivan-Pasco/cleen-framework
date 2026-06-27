@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.data"
-version = "2.2.0"
-description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries. v2.2.0: implements frame-data spec v1.2.0 — insert_id:, upsert: (match/set/on_insert), datetime arithmetic (time.now().add_seconds/minutes/hours/days), JSON path access (JSON_EXTRACT/JSON_SET), aliased join: blocks, and loud rejection of unknown Model.<verb>: blocks."
+version = "2.2.1"
+description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries. v2.2.1: unknown-verb guard now handles both compiler dispatch conventions, so Model.<typo>: blocks fail loudly at runtime as documented. v2.2.0: implements frame-data spec v1.2.0 — insert_id:, upsert: (match/set/on_insert), datetime arithmetic (time.now().add_seconds/minutes/hours/days), JSON path access (JSON_EXTRACT/JSON_SET), aliased join: blocks, and loud rejection of unknown Model.<verb>: blocks."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -284,4 +284,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.30.361"
+built_with_compiler = "0.30.367"
