@@ -1352,19 +1352,30 @@ functions:
 
 functions:
 	// Entry point for standalone html: blocks (inside functions).
-	// Emits a single chained-RHS assignment instead of N per-fragment
-	// statements so the compiler's 0.30.368 accumulator matcher rewrites
-	// the whole assignment to one string_builder_new() + N×append +
-	// finalize() in WASM (avoids O(N) string.concat allocations that
-	// drove heavy-page SSR OOM on the website build, where helpers like
-	// tutorialCard emitted ~46 separate `__html = __html + frag` statements
-	// and each materialised an intermediate string under the bump allocator).
 	//
-	// Default mode: `string __html = ""` + chained assign + `return __html`.
+	// Two emission shapes, gated by operand count:
+	//
+	// 1. Chain shape (operand count ≤ 40): `__html = __html + a + b + ...`
+	//    as one chained assignment so the compiler's 0.30.368 accumulator
+	//    matcher rewrites it to one string_builder_new + N×append + finalize
+	//    in WASM. Used for loop-called helpers (tutorialCard, renderCard,
+	//    renderHeader, renderCta, renderCodeWindow) where per-call concat
+	//    pressure compounds and drove SSR OOM on the website build.
+	//
+	// 2. Statement shape (operand count > 40): one `__html = __html + frag`
+	//    line per fragment. Avoids the matcher's ~50-operand recursion
+	//    ceiling for once-per-page helpers (nav / head / footer / layouts)
+	//    where the per-call cost doesn't compound. Safe at any size.
+	//
+	// Threshold of 40 leaves a safety margin under 50 to account for
+	// adjacent-literal fusion the matcher may apply downstream.
+	//
+	// Default mode: `string __html = ""` + body + `return __html`.
 	// Named var mode (var="name"): same shape, into the named var, no return.
 	string expand_html_block(string attributes, string body)
 		string cleaned = strip_block_indent(body)
 		string chain = html_block_to_code(cleaned)
+		integer operand_count = count_chain_pluses(chain) + 1
 		string var_name = get_attr(attributes, "var", "")
 
 		string target = "__html"
@@ -1373,7 +1384,15 @@ functions:
 
 		string result = "string " + target + " = \"\"\n"
 		if chain != ""
-			result = result + target + " = " + target + " + " + chain + "\n"
+			if operand_count <= 40
+				// Chain shape — matcher rewrites to StringBuilder
+				result = result + target + " = " + target + " + " + chain + "\n"
+			else
+				// Statement shape — safe at any size
+				string stmts = html_block_to_statements(cleaned)
+				if target != "__html"
+					stmts = stmts.replace("__html", target)
+				result = result + stmts
 		if var_name == ""
 			result = result + "return __html\n"
 		return result
@@ -1536,6 +1555,162 @@ functions:
 		// Close tag (unless void element)
 		if is_void_element(tag_name) == false
 			result = result + " + \"</" + tag_name + ">\""
+
+		return result
+
+	// ------------------------------------------------------------------
+	// SAFE-SHAPE FALLBACK (operand-count guard)
+	// ------------------------------------------------------------------
+	// The compiler's accumulator matcher (cln 0.30.368+) walks the chained
+	// RHS spine recursively and bails at ~50 operands. For html: blocks
+	// whose chain stays below ~40 + operators total we emit one chained
+	// statement (`__html = __html + a + b + ...`) so the matcher rewrites
+	// it to one string_builder_new + N×append + finalize. Above the gate
+	// we fall back to the N-statement shape (one `__html = __html + frag`
+	// per piece) which is safe at any size — each statement is small enough
+	// that the per-statement string.concat is the dominant cost, and the
+	// matcher never needs to traverse a deep operand spine.
+	//
+	// Rule of thumb (from website-build wasm2wat data):
+	// - tutorialCard / renderCard / renderHeader / renderCta etc.
+	//   sit at 20–46 underlying concats → take the chain path.
+	// - nav / head / footer / full-page layouts sit above 50 and have
+	//   no compounding (called once per page) → take the statement path.
+
+	// Count `+` operators in a chain string. Operand count = this + 1.
+	// `+` only appears as join glue in the emitted chain — text-node
+	// interpolation uses `\" + expr + \"` (also `+` operators) — so all
+	// `+` characters are real Clean operators that count against the
+	// matcher's recursion depth.
+	integer count_chain_pluses(string chain)
+		integer count = 0
+		integer pos = chain.indexOf(" + ")
+		while pos != -1
+			count = count + 1
+			pos = chain.indexOf(" + ", pos + 3)
+		return count
+
+	// ------------------------------------------------------------------
+	// STATEMENT-SHAPE EMITTER (fallback for large html: blocks)
+	// ------------------------------------------------------------------
+	// Parallel to html_block_to_code but emits one `__html = __html + frag\n`
+	// per fragment instead of joining with ` + `. Used when the chained-RHS
+	// shape would exceed the accumulator matcher's operand ceiling.
+	string html_block_to_statements(string html)
+		string result = ""
+		string remaining = html
+
+		while remaining.length() > 0
+			integer tag_start = remaining.indexOf("<")
+
+			if tag_start == -1
+				string text = remaining.trim()
+				if text.length() > 0
+					result = result + process_block_text_node_stmt(text)
+				remaining = ""
+			else if tag_start > 0
+				string text = remaining.substring(0, tag_start)
+				if text.trim().length() > 0
+					result = result + process_block_text_node_stmt(text)
+				remaining = remaining.substring(tag_start, remaining.length())
+			else
+				integer tag_end = find_tag_end(remaining)
+				if tag_end == -1
+					remaining = ""
+				else
+					string tag_content = remaining.substring(1, tag_end)
+					string tag_name = extract_tag_name(tag_content)
+
+					boolean self_closing = tag_content.endsWith("/") or is_void_element(tag_name)
+
+					if tag_content.startsWith("/")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if tag_name.startsWith("!")
+						result = result + "__html = __html + \"<" + tag_content + ">\"\n"
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if self_closing
+						result = result + process_block_element_stmt(tag_content, "")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else
+						string close_tag = "</" + tag_name + ">"
+						integer close_pos = find_matching_close(remaining, tag_name)
+						if close_pos == -1
+							result = result + process_block_element_stmt(tag_content, "")
+							remaining = remaining.substring(tag_end + 1, remaining.length())
+						else
+							string inner = remaining.substring(tag_end + 1, close_pos)
+							result = result + process_block_element_stmt(tag_content, inner)
+							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+
+		return result
+
+	// Text-node emitter, statement shape. One `__html = __html + ...\n` line
+	// per text node (interpolations stay inline within the line).
+	string process_block_text_node_stmt(string text)
+		string result = "__html = __html + \""
+		string remaining = text
+
+		while remaining.length() > 0
+			integer brace_start = remaining.indexOf("{")
+
+			if brace_start == -1
+				result = result + escape_string(remaining)
+				remaining = ""
+			else
+				string after_brace = ""
+				if brace_start + 1 < remaining.length()
+					after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+
+				if after_brace == "{"
+					integer dbrace_end = remaining.indexOf("}}", brace_start + 2)
+					if dbrace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						result = result + escape_string(remaining.substring(brace_start, dbrace_end + 2))
+						remaining = remaining.substring(dbrace_end + 2, remaining.length())
+				else
+					integer brace_end = remaining.indexOf("}", brace_start + 1)
+
+					if brace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+
+						if after_brace == "!"
+							string expr = remaining.substring(brace_start + 2, brace_end)
+							result = result + "\" + " + strip_spaces(expr) + " + \""
+						else
+							string expr = remaining.substring(brace_start + 1, brace_end)
+							result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+
+						remaining = remaining.substring(brace_end + 1, remaining.length())
+
+		result = result + "\"\n"
+		return result
+
+	// Element emitter, statement shape. Open tag → recurse into inner →
+	// close tag, all as separate `__html = __html + ...\n` statements.
+	string process_block_element_stmt(string tag_content, string inner_html)
+		string tag_name = extract_tag_name(tag_content)
+
+		string result = "__html = __html + \"<" + tag_name
+
+		string attrs = extract_block_attributes(tag_content)
+		if attrs != ""
+			result = result + " " + attrs
+
+		result = result + ">\"\n"
+
+		if inner_html.trim().length() > 0
+			result = result + html_block_to_statements(inner_html)
+
+		if is_void_element(tag_name) == false
+			result = result + "__html = __html + \"</" + tag_name + ">\"\n"
 
 		return result
 
@@ -2107,22 +2282,27 @@ functions:
 				result = result + "\t" + norm_before.replace("\n", "\n\t") + "\n"
 
 			// Generate render() function from html: block content.
-			// html_block_to_code now returns a single chained-RHS expression
-			// (e.g. `"<a>" + _html_escape(x) + "</a>"`) — emit it as ONE
-			// `__html = __html + <chain>` so the compiler's accumulator
-			// matcher (cln 0.30.368+) rewrites the whole assignment to one
-			// string_builder_new + N×append + finalize, eliminating the
-			// O(N) string.concat allocations that drove SSR OOM on heavy
-			// component renders (tutorialCard, renderCard, renderHeader, etc.).
+			//
+			// Two emission shapes, gated by operand count (see expand_html_block
+			// for the rationale): chain shape ≤40 operands → accumulator
+			// matcher rewrites to one string_builder; statement shape > 40 →
+			// safe per-fragment statements that never hit the matcher's
+			// recursion ceiling. The fallback-wrapper div is folded into
+			// whichever shape we emit.
 			string cleaned_html = strip_block_indent(html_content)
 			string render_chain = html_block_to_code(cleaned_html)
 			render_chain = remove_state_dot(render_chain)
 
+			// Operand count for the gate. Includes the +2 operands the
+			// fallback wrapper will add (open + close) so the gate sees the
+			// final shape that will be emitted.
+			integer render_operand_count = count_chain_pluses(render_chain) + 1
+			if fallback_html != ""
+				render_operand_count = render_operand_count + 2
+
 			// When a fallback: section is present, wrap the rendered output in a
 			// data-component / data-fallback div so the error boundary runtime can
 			// locate the fallback content and render it on component failure.
-			// Folded into the chain (not separate statements) so the whole
-			// render() body remains a single chained-RHS for the matcher.
 			if fallback_html != ""
 				string escaped_fb = escape_string(fallback_html).replace("'", "&#39;")
 				string fb_open = "\"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\""
@@ -2132,10 +2312,25 @@ functions:
 				else
 					render_chain = fb_open + " + " + render_chain + " + " + fb_close
 
-			// Build the single assign statement (or skip if chain is empty).
+			// Choose shape based on operand count.
 			string render_assign = ""
 			if render_chain != ""
-				render_assign = "__html = __html + " + render_chain + "\n"
+				if render_operand_count <= 40
+					// Chain shape — matcher rewrites to StringBuilder
+					render_assign = "__html = __html + " + render_chain + "\n"
+				else
+					// Statement shape — safe at any size. Re-emit from
+					// cleaned_html as statements, then add fallback wrapper
+					// as bracket statements around it.
+					string body_stmts = html_block_to_statements(cleaned_html)
+					body_stmts = remove_state_dot(body_stmts)
+					if fallback_html != ""
+						string escaped_fb2 = escape_string(fallback_html).replace("'", "&#39;")
+						render_assign = "__html = __html + \"<div data-component='" + name + "' data-fallback='" + escaped_fb2 + "'>\"\n"
+						render_assign = render_assign + body_stmts
+						render_assign = render_assign + "__html = __html + \"</div>\"\n"
+					else
+						render_assign = body_stmts
 
 			// VISIBILITY-FLIP (>= compiler 0.30.361): class methods are private by
 			// default. The framework calls .render(), .setSlot(), .renderSSR(), and
@@ -2153,7 +2348,12 @@ functions:
 				result = result + "\t\t\tstring render()\n"
 				result = result + "\t\t\t\tstring __html = \"\"\n"
 				if render_assign != ""
-					result = result + "\t\t\t\t" + render_assign
+					// Indent every line of render_assign to 4 tabs (chain
+					// shape is one line; statement shape is many).
+					result = result + "\t\t\t\t" + render_assign.replace("\n", "\n\t\t\t\t")
+					// Trim the trailing indent left after the final \n.
+					if result.endsWith("\t\t\t\t")
+						result = result.substring(0, result.length() - 4)
 				result = result + "\t\t\t\treturn __html\n\n"
 				// Add remaining functions after "functions:" header — also indented
 				// one extra tab so they sit inside the same public: section.
@@ -2169,7 +2369,12 @@ functions:
 				result = result + "\t\t\tstring render()\n"
 				result = result + "\t\t\t\tstring __html = \"\"\n"
 				if render_assign != ""
-					result = result + "\t\t\t\t" + render_assign
+					// Indent every line of render_assign to 4 tabs (chain
+					// shape is one line; statement shape is many).
+					result = result + "\t\t\t\t" + render_assign.replace("\n", "\n\t\t\t\t")
+					// Trim the trailing indent left after the final \n.
+					if result.endsWith("\t\t\t\t")
+						result = result.substring(0, result.length() - 4)
 				result = result + "\t\t\t\treturn __html\n"
 				// Add any remaining content after html:
 				if after_html.trim().length() > 0
