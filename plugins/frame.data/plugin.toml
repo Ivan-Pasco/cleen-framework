@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.data"
-version = "2.2.1"
-description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries. v2.2.1: unknown-verb guard now handles both compiler dispatch conventions, so Model.<typo>: blocks fail loudly at runtime as documented. v2.2.0: implements frame-data spec v1.2.0 — insert_id:, upsert: (match/set/on_insert), datetime arithmetic (time.now().add_seconds/minutes/hours/days), JSON path access (JSON_EXTRACT/JSON_SET), aliased join: blocks, and loud rejection of unknown Model.<verb>: blocks."
+version = "2.2.2"
+description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries. v2.2.2: bare now() / time.now() inside Model.update: set: blocks now lower to SQL NOW(), so MySQL DATETIME columns receive a server-evaluated timestamp instead of a raw unix-second integer. v2.2.1: unknown-verb guard now handles both compiler dispatch conventions, so Model.<typo>: blocks fail loudly at runtime as documented. v2.2.0: implements frame-data spec v1.2.0 — insert_id:, upsert: (match/set/on_insert), datetime arithmetic (time.now().add_seconds/minutes/hours/days), JSON path access (JSON_EXTRACT/JSON_SET), aliased join: blocks, and loud rejection of unknown Model.<verb>: blocks."
 author = "Clean Language Team"
 license = "MIT"
 

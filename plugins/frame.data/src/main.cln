@@ -2710,6 +2710,12 @@ functions:
 	// losing the at-database evaluation benefit described in DAT-Q019.
 	string lower_datetime_arith(string expr)
 		string e = expr.trim()
+		// Bare now() / time.now(): lower to SQL NOW() so MySQL DATETIME columns
+		// receive a server-evaluated timestamp instead of the WASM-side integer
+		// epoch. Without this, build_set_expr inlines the epoch as a quoted
+		// number → "Incorrect datetime value: '1782514879'".
+		if e == "now()" or e == "time.now()"
+			return "NOW()"
 		if not e.startsWith("time.now().")
 			return expr
 		// Try each suffix in order: add_* then subtract_*.

@@ -19,6 +19,7 @@ start:
 	test_upsert_missing_match_errors()
 	test_upsert_missing_set_errors()
 	test_datetime_arith_lowers_to_interval()
+	test_bare_now_lowers_to_sql_now()
 	test_json_path_lowers_to_json_extract()
 	test_json_path_lhs_lowers_to_json_set()
 	test_join_alias_emits_inner_join_with_alias()
@@ -112,6 +113,20 @@ functions:
 		// (NOW() + INTERVAL '900 seconds') — inlined in the SQL, not bound.
 		string result = expand_block("Session.insert", "", "token = sessionToken\nexpires_at = time.now().add_seconds(900)")
 		assert(result.contains("NOW() + INTERVAL '900 seconds'"))
+
+	void test_bare_now_lowers_to_sql_now()
+		// FRAME-DATA-SET-BLOCK-EPOCH-NOT-LOWERED: bare now() and time.now()
+		// must lower to SQL NOW() so MySQL DATETIME columns receive a
+		// server-evaluated timestamp, not a quoted integer epoch.
+		string lowered_bare = lower_datetime_arith("now()")
+		assert(lowered_bare == "NOW()")
+		string lowered_ns = lower_datetime_arith("time.now()")
+		assert(lowered_ns == "NOW()")
+		// Inside an update: set: block, the generated SET clause must contain
+		// the literal NOW() rather than ".toString()" concatenation.
+		string set_expr = build_set_expr("updated_at = now()")
+		assert(set_expr.contains("NOW()"))
+		assert(not set_expr.contains(".toString()"))
 
 	void test_json_path_lowers_to_json_extract()
 		// DAT-Q016: where: with col.field lowers to JSON_EXTRACT for the read.

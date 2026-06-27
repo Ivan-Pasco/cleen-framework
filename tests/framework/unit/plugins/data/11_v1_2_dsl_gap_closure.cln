@@ -55,6 +55,23 @@ functions:
 			where:
 				id == 1
 
+	// FRAME-DATA-SET-BLOCK-EPOCH-NOT-LOWERED: bare now() and time.now()
+	// inside update set: must lower to SQL NOW(), not the WASM-side integer
+	// epoch (which MySQL DATETIME columns reject as "Incorrect datetime
+	// value: '1782514879'"). The expanded code must contain the literal
+	// "NOW()" so the database evaluates the timestamp.
+	void exercise_bare_now()
+		Session.update:
+			set:
+				expires_at = now()
+			where:
+				id == 1
+		Session.update:
+			set:
+				expires_at = time.now()
+			where:
+				id == 2
+
 	// DAT-Q016: JSON path on select: and where: lowers to JSON_EXTRACT().
 	void exercise_json_path_read()
 		string rows = User.find:
