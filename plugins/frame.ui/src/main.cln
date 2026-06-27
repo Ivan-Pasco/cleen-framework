@@ -1351,70 +1351,61 @@ functions:
 // Output variable is __html, escape function is _html_escape().
 
 functions:
-	// Entry point for standalone html: blocks (inside functions)
-	// Default mode: generates string __html = "" + building code + return __html
-	// Named var mode (var="name"): generates string name = "" + building code (no return)
+	// Entry point for standalone html: blocks (inside functions).
+	// Emits a single chained-RHS assignment instead of N per-fragment
+	// statements so the compiler's 0.30.368 accumulator matcher rewrites
+	// the whole assignment to one string_builder_new() + N×append +
+	// finalize() in WASM (avoids O(N) string.concat allocations that
+	// drove heavy-page SSR OOM on the website build, where helpers like
+	// tutorialCard emitted ~46 separate `__html = __html + frag` statements
+	// and each materialised an intermediate string under the bump allocator).
+	//
+	// Default mode: `string __html = ""` + chained assign + `return __html`.
+	// Named var mode (var="name"): same shape, into the named var, no return.
 	string expand_html_block(string attributes, string body)
 		string cleaned = strip_block_indent(body)
-		string code = fuse_literal_concats(html_block_to_code(cleaned))
+		string chain = html_block_to_code(cleaned)
 		string var_name = get_attr(attributes, "var", "")
 
+		string target = "__html"
+		if var_name != ""
+			target = var_name
+
+		string result = "string " + target + " = \"\"\n"
+		if chain != ""
+			result = result + target + " = " + target + " + " + chain + "\n"
 		if var_name == ""
-			// Default mode: build __html and return it
-			string result = "string __html = \"\"\n"
-			result = result + code
 			result = result + "return __html\n"
-			return result
-		else
-			// Named variable mode: build into named var, no return
-			string result = "string " + var_name + " = \"\"\n"
-			result = result + code.replace("__html", var_name)
-			return result
+		return result
 
-	// Post-process html_block_to_code output. Currently a passthrough.
+	// Core transformer: walks HTML and delegates to text/element processors.
+	// Returns a chained-RHS expression fragment (no leading `__html = __html + `,
+	// no trailing newline). Caller wraps in a single assignment so the
+	// compiler's accumulator matcher (cln 0.30.368+) can rewrite to one
+	// string_builder_new + N×append + finalize. Each sub-call also returns
+	// a chain fragment; joins use ` + ` so the entire walk produces ONE
+	// chained RHS for the whole html: block.
 	//
-	// Earlier (d60abc1 / v2.12.43) this function fused consecutive
-	// `__html = __html + "..."` statements to cut bump-allocator pressure for
-	// FRAME-UI-HTML-BLOCK-LOOP-128MB-EXHAUSTION (fp 0506d9c4d77e). That
-	// implementation regressed with FRAME-UI-V2.12.23-FUSE-LITERAL-CONCATS-OOB-TRAP
-	// (fp 2d9c7dca297d) — any multi-line html: block traps inside expand
-	// with `wasm trap: out of bounds memory access`, blocking real builds.
-	//
-	// Multiple replacement implementations were tested; the trap survived
-	// every variant including a one-line `return code` body, indicating the
-	// failure is sensitive to compiled function layout under cln 0.30.326
-	// rather than to the fusion logic itself.
-	//
-	// Fusion is disabled (reverting to v2.12.22 codegen) until the durable
-	// fix COMPILER-MEM-ALLOC-NO-GROW lands; that fix removes the runtime
-	// allocator ceiling, so the optimization this function existed to
-	// provide stops mattering. Kept as a single-call seam so a future
-	// re-enable can drop a tested implementation in without touching the
-	// call sites in `expand_html_block` and the component render-body
-	// generator.
-	string fuse_literal_concats(string code)
-		return code
-
-	// Core transformer: walks HTML and delegates to text/element processors
-	// Parallel to html_to_render but uses {expr} syntax and __html variable
+	// Parallel to html_to_render but uses {expr} syntax and __html variable.
 	string html_block_to_code(string html)
 		string result = ""
 		string remaining = html
 
 		while remaining.length() > 0
 			integer tag_start = remaining.indexOf("<")
+			string piece = ""
 
 			if tag_start == -1
 				// No more tags - process remaining text
 				string text = remaining.trim()
 				if text.length() > 0
-					result = result + process_block_text_node(text)
+					piece = process_block_text_node(text)
 				remaining = ""
 			else if tag_start > 0
 				// Text before tag
 				string text = remaining.substring(0, tag_start)
 				if text.trim().length() > 0
-					result = result + process_block_text_node(text)
+					piece = process_block_text_node(text)
 				remaining = remaining.substring(tag_start, remaining.length())
 			else
 				// At a tag
@@ -1432,29 +1423,38 @@ functions:
 						remaining = remaining.substring(tag_end + 1, remaining.length())
 					else if tag_name.startsWith("!")
 						// Declarations like <!DOCTYPE html> — emit as raw literal, no closing tag
-						result = result + "__html = __html + \"<" + tag_content + ">\"\n"
+						piece = "\"<" + tag_content + ">\""
 						remaining = remaining.substring(tag_end + 1, remaining.length())
 					else if self_closing
-						result = result + process_block_element(tag_content, "")
+						piece = process_block_element(tag_content, "")
 						remaining = remaining.substring(tag_end + 1, remaining.length())
 					else
 						string close_tag = "</" + tag_name + ">"
 						integer close_pos = find_matching_close(remaining, tag_name)
 						if close_pos == -1
-							result = result + process_block_element(tag_content, "")
+							piece = process_block_element(tag_content, "")
 							remaining = remaining.substring(tag_end + 1, remaining.length())
 						else
 							string inner = remaining.substring(tag_end + 1, close_pos)
-							result = result + process_block_element(tag_content, inner)
+							piece = process_block_element(tag_content, inner)
 							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+
+			if piece != ""
+				if result == ""
+					result = piece
+				else
+					result = result + " + " + piece
 
 		return result
 
-	// Process text node for html: blocks
+	// Process text node for html: blocks.
 	// Handles {expr} (escaped via _html_escape), {!expr} (raw), and
 	// {{ key }} (literal pass-through for runtime template substitution).
+	//
+	// Returns a chain fragment (RHS only), e.g. `"hello " + _html_escape(name)`,
+	// suitable for splicing into the html_block_to_code chained-RHS output.
 	string process_block_text_node(string text)
-		string result = "__html = __html + \""
+		string result = "\""
 		string remaining = text
 
 		while remaining.length() > 0
@@ -1507,29 +1507,35 @@ functions:
 
 						remaining = remaining.substring(brace_end + 1, remaining.length())
 
-		result = result + "\"\n"
+		result = result + "\""
 		return result
 
-	// Process an HTML element for html: blocks
+	// Process an HTML element for html: blocks.
+	// Returns a chain fragment: `"<tag attrs>" + <inner_chain> + "</tag>"`.
+	// Caller (html_block_to_code) splices into the surrounding chain.
 	string process_block_element(string tag_content, string inner_html)
 		string tag_name = extract_tag_name(tag_content)
 
-		string result = "__html = __html + \"<" + tag_name
+		string open_tag = "\"<" + tag_name
 
 		// Add attributes
 		string attrs = extract_block_attributes(tag_content)
 		if attrs != ""
-			result = result + " " + attrs
+			open_tag = open_tag + " " + attrs
 
-		result = result + ">\"\n"
+		open_tag = open_tag + ">\""
 
-		// Process inner content recursively
+		string result = open_tag
+
+		// Process inner content recursively (already a chain fragment)
 		if inner_html.trim().length() > 0
-			result = result + html_block_to_code(inner_html)
+			string inner_chain = html_block_to_code(inner_html)
+			if inner_chain != ""
+				result = result + " + " + inner_chain
 
 		// Close tag (unless void element)
 		if is_void_element(tag_name) == false
-			result = result + "__html = __html + \"</" + tag_name + ">\"\n"
+			result = result + " + \"</" + tag_name + ">\""
 
 		return result
 
@@ -2100,20 +2106,36 @@ functions:
 				string norm_before = normalize_handlers(before_html)
 				result = result + "\t" + norm_before.replace("\n", "\n\t") + "\n"
 
-			// Generate render() function from html: block content
+			// Generate render() function from html: block content.
+			// html_block_to_code now returns a single chained-RHS expression
+			// (e.g. `"<a>" + _html_escape(x) + "</a>"`) — emit it as ONE
+			// `__html = __html + <chain>` so the compiler's accumulator
+			// matcher (cln 0.30.368+) rewrites the whole assignment to one
+			// string_builder_new + N×append + finalize, eliminating the
+			// O(N) string.concat allocations that drove SSR OOM on heavy
+			// component renders (tutorialCard, renderCard, renderHeader, etc.).
 			string cleaned_html = strip_block_indent(html_content)
-			string render_code = fuse_literal_concats(html_block_to_code(cleaned_html))
-			render_code = remove_state_dot(render_code)
+			string render_chain = html_block_to_code(cleaned_html)
+			render_chain = remove_state_dot(render_chain)
 
 			// When a fallback: section is present, wrap the rendered output in a
 			// data-component / data-fallback div so the error boundary runtime can
 			// locate the fallback content and render it on component failure.
-			string render_prefix = ""
-			string render_suffix = ""
+			// Folded into the chain (not separate statements) so the whole
+			// render() body remains a single chained-RHS for the matcher.
 			if fallback_html != ""
 				string escaped_fb = escape_string(fallback_html).replace("'", "&#39;")
-				render_prefix = "__html = __html + \"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\"\n"
-				render_suffix = "__html = __html + \"</div>\"\n"
+				string fb_open = "\"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\""
+				string fb_close = "\"</div>\""
+				if render_chain == ""
+					render_chain = fb_open + " + " + fb_close
+				else
+					render_chain = fb_open + " + " + render_chain + " + " + fb_close
+
+			// Build the single assign statement (or skip if chain is empty).
+			string render_assign = ""
+			if render_chain != ""
+				render_assign = "__html = __html + " + render_chain + "\n"
 
 			// VISIBILITY-FLIP (>= compiler 0.30.361): class methods are private by
 			// default. The framework calls .render(), .setSlot(), .renderSSR(), and
@@ -2130,11 +2152,8 @@ functions:
 				result = result + "\t\tpublic:\n"
 				result = result + "\t\t\tstring render()\n"
 				result = result + "\t\t\t\tstring __html = \"\"\n"
-				if render_prefix != ""
-					result = result + "\t\t\t\t" + render_prefix
-				result = result + "\t\t\t\t" + render_code.replace("\n", "\n\t\t\t\t") + "\n"
-				if render_suffix != ""
-					result = result + "\t\t\t\t" + render_suffix
+				if render_assign != ""
+					result = result + "\t\t\t\t" + render_assign
 				result = result + "\t\t\t\treturn __html\n\n"
 				// Add remaining functions after "functions:" header — also indented
 				// one extra tab so they sit inside the same public: section.
@@ -2149,11 +2168,8 @@ functions:
 				result = result + "\t\tpublic:\n"
 				result = result + "\t\t\tstring render()\n"
 				result = result + "\t\t\t\tstring __html = \"\"\n"
-				if render_prefix != ""
-					result = result + "\t\t\t\t" + render_prefix
-				result = result + "\t\t\t\t" + render_code.replace("\n", "\n\t\t\t\t") + "\n"
-				if render_suffix != ""
-					result = result + "\t\t\t\t" + render_suffix
+				if render_assign != ""
+					result = result + "\t\t\t\t" + render_assign
 				result = result + "\t\t\t\treturn __html\n"
 				// Add any remaining content after html:
 				if after_html.trim().length() > 0

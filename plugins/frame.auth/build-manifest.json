@@ -1,9 +1,9 @@
 {
   "schema_version": "1.0.0",
-  "compiler_version": "0.30.369",
+  "compiler_version": "0.30.378",
   "contract_version": "1.0.0",
   "runtime_abi_version": "1.0.0",
-  "generated_at_epoch_seconds": 1782525466,
+  "generated_at_epoch_seconds": 1782588026,
   "artifacts": [
     {
       "name": "plugin.wasm",
@@ -11,8 +11,8 @@
       "purpose": "main_module",
       "public": false,
       "content_type": "application/wasm",
-      "size_bytes": 38553,
-      "sha256": "69262da8990fb6994aa1341dc03bb4578bf84439eddd1cf5a0c308a44b432bad",
+      "size_bytes": 39063,
+      "sha256": "3651965f7a1294def793930c8f85ddd4738e24d5fe01cfa530d98b9f53940a2b",
       "source_plugin": null
     }
   ],

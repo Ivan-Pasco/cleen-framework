@@ -211,4 +211,4 @@ required_blocks = []
 block_folder_rules = []
 
 [build]
-built_with_compiler = "0.30.369"
+built_with_compiler = "0.30.378"
