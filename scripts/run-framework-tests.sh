@@ -17,8 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRAMEWORK_DIR="$(dirname "$SCRIPT_DIR")"
 TEST_DIR="$FRAMEWORK_DIR/tests/framework"
 OUTPUT_DIR="$TEST_DIR/output"
-COMPILER="$HOME/.cleen/bin/cln"
-SERVER="$HOME/Documents/Dev/Clean Language/clean-server/target/release/clean-server"
+COMPILER="${CLEEN_CLN:-$HOME/.cleen/bin/cln}"
+SERVER="${CLEEN_SERVER:-$HOME/Documents/Dev/Clean Language/clean-server/target/release/clean-server}"
 
 # Counters
 TOTAL_TESTS=0

@@ -1,0 +1,80 @@
+name: Test Frame Framework
+
+# Runs the real-bridge test suite (tests/framework/runtime/) on every push and PR.
+# Legacy placeholder tests under tests/framework/{unit,integration,e2e}/ are NOT
+# gated here; they will be migrated into runtime/ over Phases 2–5 of the
+# remediation plan and added to this workflow's scope as they are converted.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'documents/**'
+      - 'foundation/**'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-tests:
+    name: Runtime tests (real bridge)
+    runs-on: ubuntu-latest
+
+    # Postgres service for frame.data integration tests (Phase 2+).
+    # SQLite in-memory is the default for unit tests; Postgres covers parity.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cleen_test
+          POSTGRES_PASSWORD: cleen_test
+          POSTGRES_DB: cleen_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cleen_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      CLEEN_TEST_PG_URL: postgres://cleen_test:cleen_test@localhost:5432/cleen_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cleen (Clean Language version manager)
+        run: |
+          curl -fsSL https://github.com/Ivan-Pasco/clean-language-manager/releases/latest/download/install.sh | bash
+          # cleen itself goes to ~/.local/bin; cln (the compiler) goes to ~/.cleen/bin after `cleen install`.
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cleen/bin" >> "$GITHUB_PATH"
+
+      - name: Install latest Clean Language compiler
+        run: cleen install latest
+
+      - name: Install latest Frame plugins
+        run: cleen frame install latest
+
+      - name: Download clean-server (linux x64 binary)
+        run: |
+          mkdir -p "$HOME/.cleen/server"
+          curl -fsSL -o /tmp/clean-server.tar.gz \
+            https://github.com/Ivan-Pasco/clean-server/releases/latest/download/clean-server-linux-x64.tar.gz
+          tar -xzf /tmp/clean-server.tar.gz -C "$HOME/.cleen/server"
+          chmod +x "$HOME/.cleen/server/clean-server"
+          echo "CLEEN_SERVER=$HOME/.cleen/server/clean-server" >> "$GITHUB_ENV"
+
+      - name: Print toolchain versions
+        run: |
+          cleen --version || true
+          cln --version || true
+          "$CLEEN_SERVER" --version || true
+
+      - name: Run framework runtime tests
+        run: ./scripts/run-framework-tests.sh runtime
