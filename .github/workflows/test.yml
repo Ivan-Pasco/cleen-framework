@@ -56,7 +56,11 @@ jobs:
           echo "$HOME/.cleen/bin" >> "$GITHUB_PATH"
 
       - name: Install latest Clean Language compiler
-        run: cleen install latest
+        run: |
+          cleen install latest
+          # cleen install does not auto-activate; `cleen use` is required.
+          cleen use latest
+          cln --version
 
       - name: Install latest Frame plugins
         run: cleen frame install latest
