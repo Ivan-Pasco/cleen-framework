@@ -1,18 +1,18 @@
 {
   "schema_version": "1.0.0",
-  "compiler_version": "0.30.357",
+  "compiler_version": "0.30.381",
   "contract_version": "1.0.0",
   "runtime_abi_version": "1.0.0",
-  "generated_at_epoch_seconds": 1782400163,
+  "generated_at_epoch_seconds": 1782666901,
   "artifacts": [
     {
-      "name": "e2e_05_client_app.wasm",
-      "path_relative": "e2e_05_client_app.wasm",
+      "name": "runtime_smoke-test.wasm",
+      "path_relative": "runtime_smoke-test.wasm",
       "purpose": "main_module",
       "public": false,
       "content_type": "application/wasm",
-      "size_bytes": 27877,
-      "sha256": "cc8f6197aee2ea36dada35c0d335662a1b3e1b1c2a04d36d32b29ec1438a7572",
+      "size_bytes": 19646,
+      "sha256": "c1c5127295a08b1868e1617527641711c2ffd917287147a342e4cb3096970089",
       "source_plugin": null
     }
   ],

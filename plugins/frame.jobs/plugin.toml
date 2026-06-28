@@ -119,4 +119,4 @@ anti_pattern = "triggering cleanup from a user-facing endpoint with a cron-like 
 example = "patterns/scheduled-cleanup.cln"
 
 [build]
-built_with_compiler = "0.30.380"
+built_with_compiler = "0.30.381"
