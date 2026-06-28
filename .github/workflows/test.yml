@@ -1,14 +1,5 @@
 name: Test Frame Framework
 
-# DISABLED — pending upstream fix for compiler bug #5c1153782d23.
-# The cln-linux-x86_64 binary (v0.30.381) fails to execute on a stock
-# ubuntu-latest runner ('Binary failed to execute: exit code -1'), so this
-# workflow cannot install the toolchain. Filename ends in `.disabled-pending-…`
-# so GitHub Actions ignores it (only `.yml`/`.yaml` are picked up).
-# When the compiler bug is fixed and verified on Linux, rename back to test.yml.
-#
-# Tracking: clean-language MCP report 5c1153782d23.
-#
 # Runs the real-bridge test suite (tests/framework/runtime/) on every push and PR.
 # Legacy placeholder tests under tests/framework/{unit,integration,e2e}/ are NOT
 # gated here; they will be migrated into runtime/ over Phases 2–5 of the
@@ -67,8 +58,12 @@ jobs:
       - name: Install latest Clean Language compiler
         run: |
           cleen install latest
-          # cleen install does not auto-activate; `cleen use` is required.
-          cleen use latest
+          # cleen install does not auto-activate, and `cleen use` requires a
+          # concrete version (rejects "latest"). Resolve the installed version
+          # from the versions dir and activate it.
+          ver="$(ls -1 "$HOME/.cleen/versions" | sort -V | tail -n1)"
+          echo "Activating Clean Language compiler $ver"
+          cleen use "$ver"
           cln --version
 
       - name: Install latest Frame plugins
