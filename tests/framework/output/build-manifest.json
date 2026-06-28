@@ -3,7 +3,7 @@
   "compiler_version": "0.30.385",
   "contract_version": "1.0.0",
   "runtime_abi_version": "1.0.0",
-  "generated_at_epoch_seconds": 1782683089,
+  "generated_at_epoch_seconds": 1782683362,
   "artifacts": [
     {
       "name": "runtime_smoke-test.wasm",
@@ -12,7 +12,7 @@
       "public": false,
       "content_type": "application/wasm",
       "size_bytes": 19646,
-      "sha256": "f740ddfe148a64ed00245e8d0e9d701e21044f2349fae58d4206240903fde5e5",
+      "sha256": "ad21fbfce80b47485f518b25f39ed7a9cf41182ca5d082b804fb18cd3a470fa4",
       "source_plugin": null
     }
   ],

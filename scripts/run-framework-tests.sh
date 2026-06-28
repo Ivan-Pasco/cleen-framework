@@ -306,7 +306,10 @@ run_test_category() {
         local relative_path="${test_file#$TEST_DIR/}"
         local test_name="${relative_path%.cln}"
 
-        ((TOTAL_TESTS++))
+        # NB: use VAR=$((VAR+1)) not ((VAR++)) — the latter returns the
+        # pre-increment value as exit code, which trips `set -e` when the
+        # counter is 0 and silently aborts the runner before the first test.
+        TOTAL_TESTS=$((TOTAL_TESTS+1))
 
         if [ "$DRY_RUN" = true ]; then
             print_info "[DRY RUN] Would run: $test_name"
@@ -318,12 +321,12 @@ run_test_category() {
         if wasm_file=$(compile_test "$test_file"); then
             # Run the test
             if run_test "$wasm_file" "$test_name"; then
-                ((PASSED_TESTS++))
+                PASSED_TESTS=$((PASSED_TESTS+1))
             else
-                ((FAILED_TESTS++))
+                FAILED_TESTS=$((FAILED_TESTS+1))
             fi
         else
-            ((FAILED_TESTS++))
+            FAILED_TESTS=$((FAILED_TESTS+1))
         fi
     done <<< "$test_files"
 }
