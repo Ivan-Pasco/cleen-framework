@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.70"
+version = "2.12.71"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -231,8 +231,8 @@ functions = [
   { name = "_ui_set_timeout", params = ["string", "integer"], returns = "integer", description = "Call exported handler function by name after delay ms: handler name, delay_ms", expand_strings = true, signature = "_ui_set_timeout(handlerName, delayMs)", hosts = ["browser"] },
 
   # Theming
-  { name = "_ui_inject_head_css", params = ["string"], returns = "i32", description = "Inject CSS string into the page <head> as a <style> element", expand_strings = true, signature = "_ui_inject_head_css(css)", hosts = ["browser"] },
-  { name = "_ui_inject_head_link", params = ["string"], returns = "i32", description = "Inject <link rel=stylesheet href=...> into page <head>; deduplicated by href", expand_strings = true, signature = "_ui_inject_head_link(href)", hosts = ["browser"] },
+  { name = "_ui_inject_head_css", params = ["string"], returns = "i32", description = "Inject CSS string into the page <head> as a <style> element (browser: live DOM insertion; server: accumulate into response <head>)", expand_strings = true, signature = "_ui_inject_head_css(css)", hosts = ["browser", "server"] },
+  { name = "_ui_inject_head_link", params = ["string"], returns = "i32", description = "Inject <link rel=stylesheet href=...> into page <head>; deduplicated by href (browser: live DOM insertion; server: accumulate into response <head>)", expand_strings = true, signature = "_ui_inject_head_link(href)", hosts = ["browser", "server"] },
 
   # Form Helpers
   { name = "_ui_input_value", params = ["string"], returns = "string", description = "Get value of input/textarea/select matching selector", expand_strings = true, signature = "_ui_input_value(selector) -> string", hosts = ["browser", "server"], browser_impl = "real", server_impl = "stub", server_stub = { returns = "\"\"" } },
@@ -525,14 +525,24 @@ block_folder_rules = [
 ]
 
 [ai]
-description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. CSS goes in public/css/ files. Never write inline JavaScript."
+description = "HTML-first UI plugin. Define pages as .html files with Clean directives (cl-if, cl-iterate, cl-bind). Define reusable elements as component: blocks. All CSS authoring lives in public/css/*.css files; theme values (colors, spacing, radii) live in public/css/theme.css as CSS custom properties on :root and are consumed from other stylesheets via var(--color-*) / var(--spacing-*). Never write inline JavaScript, inline <style> tags, or style=\"...\" attributes."
 constraints = [
   "Pages go in app/ui/web/pages/ as .html files — not as .cln files",
   "Reusable elements belong in component: blocks in app/ui/web/components/ or app/ui/shared/ for cross-platform components",
   "Use cl-iterate for lists — never build HTML strings by concatenation",
   "Use ui.formJson() to collect form inputs — never access DOM fields manually",
   "Event handlers must be exported Clean functions — never inline JS",
+  "All CSS authoring lives in public/css/*.css — never write <style> tags or style=\"...\" attributes in pages or component html: blocks",
+  "All theme values (colors, spacing, radii, shadows, font sizes) live in public/css/theme.css as CSS custom properties on :root — never declare them in .cln files, never hard-code them in other .css files; consume them via var(--color-name), var(--spacing-md), etc.",
+  "Per-component CSS goes in public/css/components/<tag>.css — auto-linked by frame.ui the first time a component with that tag renders, deduplicated across instances",
+  "Runtime style changes must use ui.setStyle / ui.setCssVar / ui.applyCssVars from a component event handler — never inject <style> elements or swap stylesheets at runtime",
 ]
+
+[[ai.patterns]]
+name = "css-and-theming"
+use_when = "styling any app — the canonical rule for where CSS files live, where theme values are declared (public/css/theme.css), and how to consume them; read this before writing any .css or before adding class names to an html: block"
+anti_pattern = "writing <style> tags or style=\"...\" attributes inside pages or component html: blocks, declaring theme values in .cln files, hard-coding colors and spacing in stylesheets instead of declaring them on :root in public/css/theme.css, putting CSS files anywhere other than public/css/, or injecting <style> elements at runtime — use public/css/theme.css for theme values, public/css/*.css for all other styling, and ui.setCssVar for runtime theme changes"
+example = "patterns/css-and-theming.cln"
 
 [[ai.patterns]]
 name = "ssr-page-with-islands"
@@ -565,4 +575,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.378"
+built_with_compiler = "0.30.380"
