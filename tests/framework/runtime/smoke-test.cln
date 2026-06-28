@@ -1,0 +1,10 @@
+// Runtime smoke test — verifies the harness itself works.
+// Compiles, runs inside clean-server, emits an explicit PASS: line.
+// If this test fails, the runner or compiler is broken — not the framework.
+
+start:
+	integer two = 1 + 1
+	if two == 2
+		printl("PASS: runtime-smoke")
+	else
+		printl("FAIL: runtime-smoke")

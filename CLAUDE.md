@@ -254,11 +254,11 @@ Reference: [09_frame_dev_guidelines.md](documents/specification/09_frame_dev_gui
 
 Test location: `/tests/<module>/`
 
-**Testing Philosophy**:
-- 100% test coverage for critical paths
-- Test both success and error cases
-- Use mock Host Bridge for testing WASM modules
-- Snapshot testing for UI components
+**Testing Philosophy** (see [tests/CONVENTIONS.md](tests/CONVENTIONS.md) for the authoritative rules):
+- Real bridge only — every test runs inside `clean-server`; no mocks.
+- Test both success and error cases.
+- Coverage is measured, not asserted. Current measured coverage lives in CI artifacts; there is no historical "100%" claim — that was aspirational and has been removed. See `tests/CONVENTIONS.md` and the testing remediation plan for what's actually tested today.
+- When a test reveals a bug in the compiler/server/plugins, call `report_error` and stop — do not patch around it in the test.
 
 ### Error Handling
 

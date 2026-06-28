@@ -96,12 +96,17 @@ check_prerequisites() {
     fi
     print_success "Compiler found: $COMPILER"
 
-    # Check server (optional)
+    # Check server — REQUIRED. Tests run against the real host bridge via clean-server.
+    # Compiled-only fallback is no longer acceptable; see tests/CONVENTIONS.md §2.
     if [ -f "$SERVER" ]; then
         print_success "Server found: $SERVER"
     else
-        print_warning "Server not found at: $SERVER"
+        print_error "Server not found at: $SERVER"
         print_info "Install with: cleen server install"
+        print_info "Override with --compile-only for compile-only mode (legacy)."
+        if [ "$COMPILE_ONLY" != "true" ]; then
+            exit 1
+        fi
     fi
 
     # Create output directory
@@ -205,19 +210,14 @@ run_test() {
         rm -f "$server_log"
         return 1
     else
-        # No explicit PASS/FAIL - check if it ran without errors
-        if echo "$output" | grep -q "Server error"; then
-            print_error "$test_name (server error)"
-            if [ "$VERBOSE" = true ]; then
-                echo "    $(echo "$output" | tail -5)"
-            fi
-            rm -f "$server_log"
-            return 1
-        else
-            print_success "$test_name (executed)"
-            rm -f "$server_log"
-            return 0
+        # No explicit PASS/FAIL — by convention this is a failure (see tests/CONVENTIONS.md §6).
+        # Every test must end with an explicit "PASS: <suite>" line.
+        print_error "$test_name (no PASS: line emitted — see tests/CONVENTIONS.md §6)"
+        if [ "$VERBOSE" = true ]; then
+            echo "    $(echo "$output" | tail -10)"
         fi
+        rm -f "$server_log"
+        return 1
     fi
 }
 
@@ -394,7 +394,7 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
-        -c|--compile)
+        -c|--compile|--compile-only)
             COMPILE_ONLY=true
             shift
             ;;
