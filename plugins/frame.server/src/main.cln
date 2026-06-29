@@ -142,6 +142,47 @@ functions:
 		return "{\"statements\":\"" + escaped + "\"}"
 
 // ============================================================================
+// LIFECYCLE SLOT — server_init (Plugin Contracts v2)
+// ============================================================================
+// Declared in plugin.toml [lifecycle].server_init = "emit_server_init".
+// foundation/spec/plugins/contracts/lifecycle.md §3.4.
+//
+// Server builds only. Migration.md §1.2 calls for moving per-route
+// _http_route(...) registration calls currently emitted inside
+// expand_endpoints' `start:` block into this slot. That move is deferred
+// to a follow-up cycle: the current expand_endpoints emits route
+// registration into start:, and re-emitting the same calls from here
+// would double-register every route. Once expand_endpoints is reworked to
+// produce route handler declarations only (no registration), this slot
+// will read the route table from build_state and emit the registrations.
+//
+// Until then the slot returns an empty body — the declaration itself is
+// what migration.md requires; behavior stays on the legacy path.
+
+functions:
+	string emit_server_init(string context_json)
+		return "{\"statements\":\"\"}"
+
+// ============================================================================
+// LIFECYCLE SLOT — per_request (Plugin Contracts v2)
+// ============================================================================
+// Declared in plugin.toml [lifecycle].per_request = "emit_per_request".
+// foundation/spec/plugins/contracts/lifecycle.md §3.5.
+//
+// Per-request prelude (session lookup, header parsing) prepended to every
+// HTTP route handler. frame.server currently has no inlined per-route
+// prelude — generated handlers run user code directly — so this slot
+// returns an empty body. Compiler-side splicing into route handlers is a
+// follow-up commit (see clean-language-compiler expander.rs §3.5
+// "per_request lifecycle splicing into route handlers — follow-up
+// commit"); the slot is declared so plugin-contracts v2 tooling sees a
+// complete manifest.
+
+functions:
+	string emit_per_request(string context_json)
+		return "{\"statements\":\"\"}"
+
+// ============================================================================
 // SERVER BLOCK EXPANSION
 // ============================================================================
 
