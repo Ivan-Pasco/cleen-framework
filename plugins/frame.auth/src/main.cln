@@ -4,6 +4,54 @@
 // Implements: Frame Auth Specification v1.0
 
 // ============================================================================
+// LIFECYCLE SLOTS (Plugin Contracts v2)
+// ============================================================================
+// foundation/spec/plugins/contracts/lifecycle.md
+// foundation/spec/plugins/contracts/migration.md §1.4
+//
+// frame.auth differs from frame.server / frame.data: it has no `__preamble`
+// magic block. The helpers (session_create, hasRole, jwt_sign, currentUser,
+// isAuthenticated, ...) are emitted by generate_auth_helpers() inline from
+// inside expand_auth_config(), and they reference config constants
+// (__session_cookie, __jwt_secret, __csrf_enabled, ...) that are only set
+// when the user writes an `auth:` block.
+//
+// Emitting those helpers unconditionally from the module_helpers slot would
+// either duplicate them (when an auth: block is present) or reference unset
+// constants (when no auth: block exists). Both outcomes are wrong. Moving
+// auth-config into build_state so the slot can consume it is a follow-up
+// cycle; until then the slot is a manifest-surface placeholder.
+//
+// server_init / per_request: today these have no inlined work to move —
+// session store init is lazy in clean-server, JWT key is read per-call,
+// cookie parsing is handled by the request context. The slots return empty
+// bodies; the declarations complete the v2 manifest surface required by
+// migration.md §1.4.
+
+functions:
+	// JSON-escape a string for embedding inside a JSON string literal.
+	// Order matters: backslash first, then quote, then control chars.
+	string __auth_slot_json_escape(string s)
+		string r = s.replace("\\", "\\\\")
+		r = r.replace("\"", "\\\"")
+		r = r.replace("\n", "\\n")
+		r = r.replace("\r", "\\r")
+		r = r.replace("\t", "\\t")
+		return r
+
+	// [lifecycle].module_helpers — see header above for rationale on the empty body.
+	string emit_auth_helpers(string context_json)
+		return "{\"statements\":\"\"}"
+
+	// [lifecycle].server_init — see header above for rationale on the empty body.
+	string emit_auth_server_init(string context_json)
+		return "{\"statements\":\"\"}"
+
+	// [lifecycle].per_request — see header above for rationale on the empty body.
+	string emit_auth_per_request(string context_json)
+		return "{\"statements\":\"\"}"
+
+// ============================================================================
 // MAIN ENTRY POINTS
 // ============================================================================
 
