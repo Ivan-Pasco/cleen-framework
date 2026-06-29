@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.12"
+version = "2.7.13"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -8,6 +8,11 @@ license = "MIT"
 [compatibility]
 min_compiler_version = "0.15.0"
 requires = "clean-server"
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/runtime-abi.md.
+# Compiler stamps plugin.wasm with this value in the `clean.abi_version`
+# custom section. Loaders use it to reject WASM compiled against an
+# incompatible ABI. Bumped per runtime-abi.md §4 when the ABI changes.
+abi_version = "1.0.0"
 
 [lifecycle]
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
@@ -175,8 +180,13 @@ functions = [
   { name = "http_post_form", params = ["string", "string"], returns = "string", description = "POST form-urlencoded body; returns response body", expand_strings = true, hosts = ["server"] },
   { name = "http_get_with_headers", params = ["string", "string"], returns = "string", description = "GET with custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
   { name = "http_post_with_headers", params = ["string", "string", "string"], returns = "string", description = "POST with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
-  { name = "http_put_with_headers", params = ["string", "string", "string"], returns = "string", description = "PUT with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
-  { name = "http_patch_with_headers", params = ["string", "string", "string"], returns = "string", description = "PATCH with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
+  # Plugin Contracts v2 — migration.md §1.2 closes BRIDGE001 by declaring
+  # putWithHeaders/patchWithHeaders with hosts = ["all"]. Other http_* outbound
+  # client bridges remain hosts = ["server"] (current scoping) until host
+  # runtimes confirm cross-host parity; see migration.md §1.2 deviation note in
+  # the rollout report.
+  { name = "http_put_with_headers", params = ["string", "string", "string"], returns = "string", description = "PUT with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["all"] },
+  { name = "http_patch_with_headers", params = ["string", "string", "string"], returns = "string", description = "PATCH with body and custom headers (JSON object); returns response body", expand_strings = true, hosts = ["all"] },
   { name = "http_delete_with_headers", params = ["string", "string"], returns = "string", description = "DELETE with custom headers (JSON object); returns response body", expand_strings = true, hosts = ["server"] },
 
   # HTTP Client - Configuration (server-only)
@@ -437,4 +447,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.396"
+built_with_compiler = "0.30.401"
