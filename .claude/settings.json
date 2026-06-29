@@ -48,7 +48,9 @@
       "Bash(ls *.toml *.json VERSION version.txt)",
       "Bash(git describe *)",
       "Bash(grep -E \"^version\" plugins/frame.data/plugin.toml plugins/frame.auth/plugin.toml plugins/frame.server/plugin.toml VERSION)",
-      "Bash(exit 1)"
+      "Bash(exit 1)",
+      "Bash(mkdir -p /tmp/repro835d)",
+      "Bash(python3 -c ' *)"
     ],
     "additionalDirectories": [
       "/tmp"

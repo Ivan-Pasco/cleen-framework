@@ -1,21 +1,31 @@
 {
   "schema_version": "1.0.0",
-  "compiler_version": "0.30.385",
+  "compiler_version": "0.30.396",
   "contract_version": "1.0.0",
   "runtime_abi_version": "1.0.0",
-  "generated_at_epoch_seconds": 1782683362,
+  "generated_at_epoch_seconds": 1782740195,
   "artifacts": [
     {
-      "name": "runtime_smoke-test.wasm",
-      "path_relative": "runtime_smoke-test.wasm",
+      "name": "unit_ui_html_doctype_ssr.wasm",
+      "path_relative": "unit_ui_html_doctype_ssr.wasm",
       "purpose": "main_module",
       "public": false,
       "content_type": "application/wasm",
-      "size_bytes": 19646,
-      "sha256": "ad21fbfce80b47485f518b25f39ed7a9cf41182ca5d082b804fb18cd3a470fa4",
+      "size_bytes": 20275,
+      "sha256": "6611077bbcf239f66f88726e579aebda9136ed3d8079e1d75823f91bc0850d80",
       "source_plugin": null
     }
   ],
-  "callbacks": [],
+  "callbacks": [
+    {
+      "bridge": "_ui_render_page",
+      "purpose": "component_tag_render",
+      "plugin_target": "frame.ui",
+      "discovery": "exports_matching",
+      "export_pattern": "{tagname}_render",
+      "fallback": "passthrough",
+      "declared_by_plugin": "frame.ui"
+    }
+  ],
   "build_state": {}
 }

@@ -652,15 +652,7 @@
 				return 0;
 			},
 
-			// ========== Theming ==========
-
-			_ui_inject_head_css: (cssPtr, cssLen) => {
-				const css = readString(cssPtr, cssLen);
-				const style = document.createElement('style');
-				style.textContent = css;
-				document.head.appendChild(style);
-				return 0;
-			},
+			// ========== Stylesheet linking (auto-link for theme.css and components/<tag>.css) ==========
 
 			_ui_inject_head_link: (hrefPtr, hrefLen) => {
 				const href = readString(hrefPtr, hrefLen);

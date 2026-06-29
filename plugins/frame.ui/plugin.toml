@@ -230,8 +230,7 @@ functions = [
   # Timers
   { name = "_ui_set_timeout", params = ["string", "integer"], returns = "integer", description = "Call exported handler function by name after delay ms: handler name, delay_ms", expand_strings = true, signature = "_ui_set_timeout(handlerName, delayMs)", hosts = ["browser"] },
 
-  # Theming
-  { name = "_ui_inject_head_css", params = ["string"], returns = "i32", description = "Inject CSS string into the page <head> as a <style> element (browser: live DOM insertion; server: accumulate into response <head>)", expand_strings = true, signature = "_ui_inject_head_css(css)", hosts = ["browser", "server"] },
+  # Stylesheet linking (auto-link for public/css/theme.css and public/css/components/<tag>.css)
   { name = "_ui_inject_head_link", params = ["string"], returns = "i32", description = "Inject <link rel=stylesheet href=...> into page <head>; deduplicated by href (browser: live DOM insertion; server: accumulate into response <head>)", expand_strings = true, signature = "_ui_inject_head_link(href)", hosts = ["browser", "server"] },
 
   # Form Helpers
@@ -324,9 +323,6 @@ keywords = [
   { name = "slot", description = "Slot for content projection", context = "directive" },
   { name = "show", description = "Conditional visibility", context = "directive" },
   { name = "validate", description = "Form validation directive", context = "directive" },
-  { name = "theme", description = "Theme configuration sub-block inside ui:", context = "block" },
-  { name = "colors", description = "Color variables sub-block inside theme:", context = "block" },
-  { name = "spacing", description = "Spacing variables sub-block inside theme:", context = "block" },
   { name = "layout", description = "Page layout name (used in <page layout='name'> attribute)", context = "page-attribute" },
   { name = "auth", description = "Require authentication for page", context = "page-attribute" },
   { name = "roles", description = "Required roles for page access", context = "page-attribute" },
@@ -575,4 +571,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.385"
+built_with_compiler = "0.30.396"
