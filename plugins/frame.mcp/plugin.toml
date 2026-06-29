@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.mcp"
-version = "1.0.2"
-description = "MCP server plugin — define AI-callable tools, resources, and prompts inside mcp: blocks. Handles the full MCP lifecycle: capability negotiation, JSON-RPC 2.0 dispatch, param deserialization, and stdio/HTTP+SSE transports."
+version = "1.0.3"
+description = "MCP server plugin — define AI-callable tools, resources, and prompts inside mcp: blocks. Handles the full MCP lifecycle: capability negotiation, JSON-RPC 2.0 dispatch, param deserialization, and stdio/HTTP+SSE transports. v1.0.3: plugin contracts v2 sub-cycle 1 — declares [compatibility].abi_version = \"1.0.0\" and [lifecycle].module_helpers = \"emit_mcp_helpers\" per migration.md §1.5. Slot is a manifest-surface placeholder; behavioral move deferred."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -10,6 +10,34 @@ license = "MIT"
 # compiler (see foundation/management/cross-component-prompts/compiler-v0.32-version-track-correction.md).
 # Raise to "0.32.0" once that release ships.
 min_compiler_version = "0.30.357"
+# Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
+# compile time when built with --target=plugin; loader verifies it when
+# present. "1.0.0" is the initial declared value per migration.md §1.5.
+abi_version = "1.0.0"
+
+[lifecycle]
+# Plugin Contracts v2 — lifecycle.md §3.1. MCP dispatch helpers (json(), text(),
+# error() response functions) are emitted by expand_mcp inline per mcp: block.
+# module_helpers_are_roots ensures any helpers the slot emits in a future cycle
+# are not tree-shaken when only reachable from plugin-generated dispatch code.
+module_helpers_are_roots = true
+
+# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
+# emit_mcp_helpers(context_json) once per source file that loads frame.mcp,
+# splices the returned `statements` into the file's symbol table.
+#
+# Deviation from migration.md §1.5 (documented inline in src/main.cln):
+# frame.mcp has no __preamble magic block. The json(), text(), and error()
+# response helpers are generated inline by expand_mcp() per mcp: block —
+# they reference the mcp server name and transport extracted from that
+# block's attributes. Emitting them from module_helpers unconditionally
+# would produce helpers that reference unset constants (no mcp: block
+# present) or duplicate helpers (mcp: block present). Moving them into
+# the slot requires the block-level config to land in build_state so the
+# slot can consume it; that is a follow-up cycle. The slot returns an
+# empty body; the declaration completes the migration.md §1.5 manifest
+# surface.
+module_helpers = "emit_mcp_helpers"
 
 [exports]
 expand = "expand_block"

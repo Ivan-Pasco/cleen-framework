@@ -50,7 +50,15 @@
       "Bash(grep -E \"^version\" plugins/frame.data/plugin.toml plugins/frame.auth/plugin.toml plugins/frame.server/plugin.toml VERSION)",
       "Bash(exit 1)",
       "Bash(mkdir -p /tmp/repro835d)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show 790367e --stat)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show edda1c5 --stat)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show ddaba1b --stat)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show edda1c5 -- plugins/frame.server/plugin.toml)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show edda1c5 -- plugins/frame.server/src/main.cln)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show ddaba1b -- plugins/frame.server/plugin.toml)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show ddaba1b -- plugins/frame.server/src/main.cln)",
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" diff --stat)"
     ],
     "additionalDirectories": [
       "/tmp"

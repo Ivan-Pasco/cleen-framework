@@ -1,12 +1,47 @@
 [plugin]
 name = "frame.jobs"
-version = "1.0.2"
-description = "Background job queue with retry, scheduling, and monitoring"
+version = "1.0.3"
+description = "Background job queue with retry, scheduling, and monitoring. v1.0.3: plugin contracts v2 sub-cycle 1 — declares [compatibility].abi_version = \"1.0.0\", [lifecycle].module_helpers = \"emit_jobs_helpers\", and [lifecycle].server_init = \"emit_jobs_server_init\" per migration.md §1.5. All slots are manifest-surface placeholders; the behavioral move (job worker-loop registration into server_init, Job/JobStatus type emission into module_helpers) is deferred pending build_state coordination with expand_jobs."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
 min_compiler_version = "0.15.0"
+# Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
+# compile time when built with --target=plugin; loader verifies it when
+# present. "1.0.0" is the initial declared value per migration.md §1.5.
+abi_version = "1.0.0"
+
+[lifecycle]
+# Plugin Contracts v2 — lifecycle.md §3.1. Tag Job/JobStatus helpers as BFS
+# roots so their bridge imports stay reachable when user code only reaches
+# them through plugin-generated job handler functions that the BFS cannot
+# statically trace back to user code.
+module_helpers_are_roots = true
+
+# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
+# emit_jobs_helpers(context_json) once per source file that loads frame.jobs,
+# splices the returned `statements` into the file's symbol table.
+#
+# Deviation from migration.md §1.5 (documented inline in src/main.cln):
+# frame.jobs has no __preamble magic block. The Job/JobStatus type helpers
+# are emitted inline by expand_jobs() via _job_register() calls in start:.
+# Emitting them unconditionally from the slot would add duplicates when a
+# jobs: block is present, or dangling references when absent. Moving them
+# into module_helpers requires the job-handler registry (built during
+# expand_jobs) to land in build_state so the slot can consume it; that
+# is a follow-up cycle. The slot returns an empty body; the declaration
+# completes the migration.md §1.5 manifest surface.
+module_helpers = "emit_jobs_helpers"
+
+# Plugin Contracts v2 — lifecycle.md §3.4. Server builds only.
+# migration.md §1.5 calls for worker-loop registration to live here.
+# Today the worker-loop is started by clean-server at process startup,
+# not by a WASM-emitted call — there is no startup call in start: to move.
+# When a WASM-side worker-loop registration call is added, it will move
+# from expand_jobs → start: into this slot. Declaring the slot now
+# completes the migration.md §1.5 manifest surface.
+server_init = "emit_jobs_server_init"
 
 [handles]
 blocks = ["jobs"]

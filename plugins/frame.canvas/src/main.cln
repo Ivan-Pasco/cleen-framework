@@ -1,7 +1,50 @@
 // frame.canvas plugin - Canvas Rendering and Animation DSL
 // Provides: canvasScene, assets, layers, state, init, animSprite, tween, timeline,
 //           animState, path, gradient, customEase, camera, draw, and all event handlers
-// Version: 2.4.0
+// Version: 2.4.4
+
+// ============================================================================
+// LIFECYCLE SLOTS (Plugin Contracts v2)
+// ============================================================================
+// foundation/spec/plugins/contracts/lifecycle.md
+// foundation/spec/plugins/contracts/migration.md §1.5
+//
+// frame.canvas has no __preamble magic block. The canvas helpers (deltaTime(),
+// time(), Canvas/Sprite/Sound/Music/Image/Font/Tween/Timeline/AnimState/
+// Particles/Gradient/Path type stubs) are generated inline by expand_canvas_scene()
+// per canvasScene: block. They reference scene-specific state (canvas ID,
+// registered assets, declared layers) that is only known when the block is
+// expanded.
+//
+// Emitting them unconditionally from module_helpers would produce helpers that
+// reference an unset canvas ID (no canvasScene: present) or duplicate helpers
+// (canvasScene: present). Moving them into the slot requires scene-level config
+// (canvas ID, asset list, layer declarations) to land in build_state so the
+// slot can consume it; that is a follow-up cycle.
+//
+// build.sh fix: --target=plugin flag was missing, producing an unstamped
+// plugin.wasm (same issue as frame.auth fixed in 4a7c195). Fixed in this
+// commit so wasm-tools dump shows clean.abi_version = "1.0.0".
+
+// JSON-escape a string for embedding inside a JSON string literal.
+// Order matters: backslash first, then quote, then control chars.
+functions:
+	string __canvas_slot_json_escape(string s)
+		string r = s.replace("\\", "\\\\")
+		r = r.replace("\"", "\\\"")
+		r = r.replace("\n", "\\n")
+		r = r.replace("\r", "\\r")
+		r = r.replace("\t", "\\t")
+		return r
+
+functions:
+	// [lifecycle].module_helpers — see header above for rationale on the empty body.
+	string emit_canvas_helpers(string context_json)
+		return "{\"statements\":\"\"}"
+
+// ============================================================================
+// MAIN ENTRY POINTS
+// ============================================================================
 
 functions:
 	// =====================================================================

@@ -1,12 +1,42 @@
 [plugin]
 name = "frame.client"
-version = "1.2.3"
-description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, SSE feeds, and declarative blocks (load:, form:, send:)"
+version = "1.2.4"
+description = "Client-side communication plugin - HTTP API calls, WebSocket live connections, SSE feeds, and declarative blocks (load:, form:, send:). v1.2.4: plugin contracts v2 sub-cycle 1 — declares [compatibility].abi_version = \"1.0.0\" and [lifecycle].module_helpers = \"emit_client_helpers\" per migration.md §1.5. All bridge functions already carry hosts = [\"browser\"]; after this migration the compiler enforces BRIDGE-HOST-MISMATCH at compile time for server-mode builds calling api.get/post/live.*/feed.* etc. Slot is a manifest-surface placeholder; behavioral move deferred."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
 min_compiler_version = "0.15.0"
+# Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
+# compile time when built with --target=plugin; loader verifies it when
+# present. "1.0.0" is the initial declared value per migration.md §1.5.
+abi_version = "1.0.0"
+
+[lifecycle]
+# Plugin Contracts v2 — lifecycle.md §3.1. api.*, live.*, feed.* aliases and
+# any generated wrapper functions are tagged as BFS roots so they are not
+# tree-shaken when only reachable from plugin-generated load:/form:/send:
+# block output that the static BFS cannot trace back to user-authored code.
+module_helpers_are_roots = true
+
+# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
+# emit_client_helpers(context_json) once per source file that loads frame.client,
+# splices the returned `statements` into the file's symbol table.
+#
+# Deviation from migration.md §1.5 (documented inline in src/main.cln):
+# frame.client has no __preamble magic block. The api.*/live.*/feed.* aliases
+# are bridge aliases resolved from [aliases] in plugin.toml (not Clean source);
+# the load:/form:/send: block outputs are emitted by expand_block per-file.
+# Emitting them from module_helpers unconditionally would duplicate alias
+# declarations. Moving alias resolution into slot output is a Phase D change.
+# The slot returns an empty body; the declaration completes the migration.md
+# §1.5 manifest surface.
+#
+# Host-class enforcement: ALL bridge functions in this plugin carry
+# hosts = ["browser"]. This means after this migration, server-mode builds
+# that call any api.*/live.*/feed.* function will fail with BRIDGE-HOST-MISMATCH
+# at compile time — which is the intended behavior per migration.md §1.5.
+module_helpers = "emit_client_helpers"
 
 [handles]
 blocks = ["load", "form", "send"]
