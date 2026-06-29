@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.7.13"
+version = "2.7.14"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
 author = "Clean Language Team"
 license = "MIT"
@@ -22,6 +22,12 @@ abi_version = "1.0.0"
 # only calls them through plugin-generated route handler code.
 # Closes GEN003.
 module_helpers_are_roots = true
+
+# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
+# emit_server_helpers(context_json) once per source file that loads
+# frame.server, splices the returned `statements` into the file's symbol
+# table. Mirrors the legacy __preamble branch in expand_block.
+module_helpers = "emit_server_helpers"
 
 [handles]
 blocks = ["endpoints", "middleware", "routes", "server"]

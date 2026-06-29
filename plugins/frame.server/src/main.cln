@@ -111,6 +111,36 @@ functions:
 		result = result + "\t\treturn data\n\n"
 		return result
 
+	// JSON-escape a string for embedding inside a JSON string literal.
+	// Order matters: backslash first, then quote, then control chars.
+	string __slot_json_escape(string s)
+		string r = s.replace("\\", "\\\\")
+		r = r.replace("\"", "\\\"")
+		r = r.replace("\n", "\\n")
+		r = r.replace("\r", "\\r")
+		r = r.replace("\t", "\\t")
+		return r
+
+// ============================================================================
+// LIFECYCLE SLOT — module_helpers (Plugin Contracts v2)
+// ============================================================================
+// Declared in plugin.toml [lifecycle].module_helpers = "emit_server_helpers".
+// foundation/spec/plugins/contracts/lifecycle.md §3.1.
+//
+// Called once per source file that loads frame.server. Returns the same body
+// emit_response_helpers() emits via __preamble, wrapped in the expansion-output
+// envelope {"statements": "..."} expected by the v2 lifecycle dispatcher.
+//
+// The __preamble branch in expand_block above is preserved for the duration
+// of Phase C. Once [lifecycle].module_helpers is declared, the compiler runs
+// the slot path; __preamble becomes dead in this plugin.
+
+functions:
+	string emit_server_helpers(string context_json)
+		string body = emit_response_helpers()
+		string escaped = __slot_json_escape(body)
+		return "{\"statements\":\"" + escaped + "\"}"
+
 // ============================================================================
 // SERVER BLOCK EXPANSION
 // ============================================================================
