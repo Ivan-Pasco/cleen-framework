@@ -84,6 +84,49 @@ functions:
 		result = result + "\t\treturn _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", data)\n\n"
 		return result
 
+	// Plugin Contracts v2 — module_helpers lifecycle slot.
+	// foundation/spec/plugins/contracts/lifecycle.md §3.1.
+	// The compiler invokes this once per build. With module_helpers_are_roots
+	// = true, the returned functions are treated as BFS roots so the bridge
+	// imports they call (_ui_render_page) survive DCE even when user code
+	// has no static call site. Body parity with the __preamble path is the
+	// migration contract — both paths emit the same SSR helpers during the
+	// Phase C window. Phase D deletes the __preamble call site in expand_block.
+	string emit_ui_helpers(string context_json)
+		return emit_ssr_helpers()
+
+	// Plugin Contracts v2 — artifact_emitters lifecycle slot.
+	// foundation/spec/plugins/contracts/lifecycle.md §3.4 +
+	// foundation/spec/plugins/contracts/artifacts.md §6.
+	// The compiler invokes this once per build between block expansion and
+	// artifact emission. The plugin uses this hook to finalize any
+	// build_state entries that back its [[artifacts]] declarations.
+	//
+	// Today the heavy lifting (per-component build_state writes for
+	// frame.ui:components and frame.ui.components.json) happens during
+	// expand_component because components are discovered there. This slot
+	// guarantees a default theme.css exists even when the project did not
+	// override one — the static_asset emitter then reads
+	// build_state["frame.ui.theme.css"] and writes the bytes to disk.
+	//
+	// Return shape: same `{"statements": "..."}` envelope as other slots.
+	// We emit no Clean statements — the side effect is the build_state write.
+	string emit_ui_artifacts(string context_json)
+		// Provide a minimal default theme.css if no other plugin or user
+		// hook has written one. This is a safety net so the artifact emitter
+		// never produces an empty file (which would warn under
+		// ARTIFACT_STATIC_ASSET_EMPTY_SOURCE).
+		string existing = _build_state_get("frame.ui.theme.css")
+		if existing == ""
+			string default_css = "/* frame.ui default theme — override in public/css/theme.css */\n"
+			default_css = default_css + ":root {\n"
+			default_css = default_css + "\t--color-bg: #ffffff;\n"
+			default_css = default_css + "\t--color-fg: #111111;\n"
+			default_css = default_css + "\t--spacing-md: 1rem;\n"
+			default_css = default_css + "}\n"
+			_build_state_set("frame.ui.theme.css", default_css)
+		return "{\"statements\": \"\"}"
+
 	// Plugin Contracts v2 — client_init lifecycle slot.
 	// foundation/spec/plugins/contracts/lifecycle.md §3.3.
 	//
@@ -2223,6 +2266,26 @@ functions:
 				_build_state_set("frame.ui:components", entry)
 			else
 				_build_state_set("frame.ui:components", components_state + ";" + entry)
+
+			// Plugin Contracts v2 — components.json manifest artifact backing.
+			// Per artifacts.md §4.3, manifest-purpose artifacts read bytes from
+			// build_state under "<source_plugin>.<artifact_name>", i.e.
+			// "frame.ui.components.json". Each component is appended as a JSON
+			// object inside a top-level array. clean-server reads this manifest
+			// to dispatch the component_tag_render callback declared on
+			// _ui_render_page (closes SRV001 end-to-end).
+			// Per plugin.toml [bridge]._ui_render_page.callback.export_pattern,
+			// the export name is "{tagname}_render". Tags are already lowercase
+			// kebab-case; replace hyphens with underscores for valid identifier.
+			string render_export = tag.replace("-", "_") + "_render"
+			string component_obj = "{\"tag\":\"" + tag + "\",\"class\":\"" + name + "\",\"hydration\":\"" + client + "\",\"render_export\":\"" + render_export + "\"}"
+			string manifest_state = _build_state_get("frame.ui.components.json")
+			if manifest_state == ""
+				_build_state_set("frame.ui.components.json", "[" + component_obj + "]")
+			else
+				// Strip trailing "]", append ",<obj>]"
+				string without_close = manifest_state.substring(0, manifest_state.length() - 1)
+				_build_state_set("frame.ui.components.json", without_close + "," + component_obj + "]")
 
 		string result = "// __frame_ui_expanded__\n"
 		result = result + "class " + name + "\n"

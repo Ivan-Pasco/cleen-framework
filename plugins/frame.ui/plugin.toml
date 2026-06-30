@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.71"
+version = "2.12.72"
 description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
 author = "Clean Language Team"
 license = "MIT"
@@ -18,6 +18,11 @@ license = "MIT"
 # 4 bare-name exports in frontend.wasm.
 min_compiler_version = "0.30.275"
 
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/runtime-abi.md §4.
+# Floor declaration. Stamped into plugin.wasm's clean.abi_version custom
+# section by compiler >= 0.30.401. Bumped per the v2 ABI versioning policy.
+abi_version = "1.0.0"
+
 [lifecycle]
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
 # frame.ui's preamble emits SSR helpers (render, renderWith) that call
@@ -25,6 +30,23 @@ min_compiler_version = "0.30.275"
 # (and their bridge import) when user code doesn't statically call render().
 # Added in v2.10.138 alongside the move of _ui_render_page from frame.server.
 module_helpers_are_roots = true
+
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
+# Module helpers slot. Wraps the existing __preamble emission so the compiler
+# can adopt slot-based dispatch once it deletes the magic __preamble block.
+# Body is identical to the __preamble path during the migration window;
+# behavioral parity is verified by the existing render()/renderWith() tests.
+module_helpers = "emit_ui_helpers"
+
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/artifacts.md §6.
+# Artifact emitters slot. The compiler invokes this once per build to give
+# the plugin a chance to populate build_state entries that back the
+# [[artifacts]] declarations below (theme.css, components.json). Bytes are
+# read by the compiler-side emitter from build_state["frame.ui.<name>"].
+# Phase C: the slot is a no-op trigger — the build_state entries are
+# populated during expand_block (per-component) and at file-end. Phase D
+# may move that population into this slot for cleaner ordering.
+artifact_emitters = "emit_ui_artifacts"
 
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.3.
 # Client-mode build: the compiler invokes this slot once and splices the
@@ -53,6 +75,36 @@ output_relative = "{output_dir}/frontend.wasm"
 required_when   = "has_build_state.frame.ui:components"
 public          = true
 content_type    = "application/wasm"
+
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/artifacts.md §4.2.
+# Theme CSS as a static asset. Bytes come from build_state under
+# `frame.ui.theme.css` (populated by the plugin during expand) per
+# compiler/src/plugin_artifacts.rs::emit_static_asset_from_build_state.
+# Emitted only when at least one component is registered, matching
+# frontend.wasm's gate — UI-less server apps don't need a theme file.
+[[artifacts]]
+name            = "theme.css"
+purpose         = "static_asset"
+emit            = "emit_ui_artifacts"
+output_relative = "{output_dir}/theme.css"
+required_when   = "has_build_state.frame.ui:components"
+public          = true
+content_type    = "text/css"
+
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/artifacts.md §4.3.
+# Component manifest. Compiler reads bytes from build_state under
+# `frame.ui.components.json` (populated during expand for each registered
+# component) per compiler/src/plugin_artifacts.rs::emit_manifest_bytes.
+# This is the structured surface clean-server consumes to power the
+# `component_tag_render` callback declared on _ui_render_page (SRV001).
+[[artifacts]]
+name            = "components.json"
+purpose         = "manifest"
+emit            = { from_module = "manifest" }
+output_relative = "{output_dir}/components.json"
+required_when   = "has_build_state.frame.ui:components"
+public          = false
+content_type    = "application/json"
 
 # SSR HTML rendering can exhaust the 32 MB standard tier on large pages.
 # Honored by compiler >= 0.30.57; older compilers silently use target defaults.
@@ -571,4 +623,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.30.401"
+built_with_compiler = "0.30.403"
