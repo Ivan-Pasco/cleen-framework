@@ -1,52 +1,53 @@
 [plugin]
 name = "frame.server"
-version = "2.7.15"
-description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards"
+version = "2.8.0"
+description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.15.0"
+min_compiler_version = "0.30.412"
 requires = "clean-server"
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/runtime-abi.md.
 # Compiler stamps plugin.wasm with this value in the `clean.abi_version`
 # custom section. Loaders use it to reject WASM compiled against an
 # incompatible ABI. Bumped per runtime-abi.md §4 when the ABI changes.
 abi_version = "1.0.0"
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# Atomic migration: this plugin.wasm is v3-only. No v1 exports are present.
+# emission_ops_hash verified against SHA-256 of
+# foundation/spec/plugins/contracts/typed-emission-ops.toml (2026-07-01).
+expansion_version = "3.0.0"
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
 
 [lifecycle]
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
-# Tells the compiler's import-minimality BFS to treat preamble-emitted
-# helpers (redirect, json, error response builders) as roots. Without this,
-# bridge imports those helpers reference get tree-shaken when user code
-# only calls them through plugin-generated route handler code.
-# Closes GEN003.
+# Plugin Contracts v3 — lifecycle.md §3.1 + typed-emission.md §7.
+# module_helpers_are_roots: response helpers (jsonResponse, badRequest, etc.)
+# are emitted via _emit_function in emit_module_helpers_typed. The flag is
+# preserved so the BFS treats all emitted functions as roots (bit 2 in
+# _emit_function flags also sets this per-function, providing dual coverage).
 module_helpers_are_roots = true
 
-# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
-# emit_server_helpers(context_json) once per source file that loads
-# frame.server, splices the returned `statements` into the file's symbol
-# table. Mirrors the legacy __preamble branch in expand_block.
-module_helpers = "emit_server_helpers"
-
-# Plugin Contracts v2 — lifecycle.md §3.4. Server builds only. The slot
-# currently returns an empty body; the route-registration move from
-# expand_endpoints into server_init is deferred (see emit_server_init
-# comment in src/main.cln). Declaring the slot satisfies the migration.md
-# §1.2 manifest requirement without changing route-registration semantics.
-server_init = "emit_server_init"
-
-# Plugin Contracts v2 — lifecycle.md §3.5. Prepended to every HTTP route
-# handler. frame.server has no inlined per-route prelude today, so the slot
-# returns an empty body. Compiler-side splicing into route handlers is a
-# follow-up; declaring the slot completes the v2 manifest surface.
-per_request = "emit_per_request"
+# v3 typed variants — typed-emission.md §7.
+module_helpers = "emit_module_helpers_typed"
+server_init    = "emit_server_init_typed"
+per_request    = "emit_per_request_typed"
 
 [handles]
 blocks = ["endpoints", "middleware", "routes", "server"]
 
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# expand_block_typed is the single v3 entry point for all blocks.
+# version = 3 is required on every block when expansion_version = "3.0.0".
+[blocks]
+endpoints  = { expand = "expand_block_typed", version = 3 }
+server     = { expand = "expand_block_typed", version = 3 }
+routes     = { expand = "expand_block_typed", version = 3 }
+middleware = { expand = "expand_block_typed", version = 3 }
+
 [exports]
-expand = "expand_block"
+# v1 `expand` entry is NOT listed here — v3-only plugin.wasm has no v1 exports.
+# The compiler dispatches to expand_block_typed via [blocks] entries.
 validate = "validate_block"
 get_keywords = "get_keywords"
 
@@ -466,4 +467,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.30.401"
+built_with_compiler = "0.30.412"
