@@ -1,16 +1,23 @@
 [plugin]
 name = "frame.jobs"
-version = "1.0.3"
-description = "Background job queue with retry, scheduling, and monitoring. v1.0.3: plugin contracts v2 sub-cycle 1 — declares [compatibility].abi_version = \"1.0.0\", [lifecycle].module_helpers = \"emit_jobs_helpers\", and [lifecycle].server_init = \"emit_jobs_server_init\" per migration.md §1.5. All slots are manifest-surface placeholders; the behavioral move (job worker-loop registration into server_init, Job/JobStatus type emission into module_helpers) is deferred pending build_state coordination with expand_jobs."
+version = "1.1.0"
+description = "Background job queue with retry, scheduling, and monitoring. v1.1.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. User-authored job handler bodies pass through _emit_stmt_from_source (§3.11). Also fixes MANIFEST-DRIFT-002 by aligning [handles].expressions with declared aliases. See foundation/spec/plugins/contracts/typed-emission.md."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.15.0"
+# Landing B floor: _emit_stmt_from_source available.
+min_compiler_version = "0.30.412"
 # Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
 # compile time when built with --target=plugin; loader verifies it when
 # present. "1.0.0" is the initial declared value per migration.md §1.5.
 abi_version = "1.0.0"
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# Atomic migration: this plugin.wasm is v3-only. No v1 exports are present.
+# emission_ops_hash verified against SHA-256 of
+# foundation/spec/plugins/contracts/typed-emission-ops.toml (2026-07-01).
+expansion_version = "3.0.0"
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
 
 [lifecycle]
 # Plugin Contracts v2 — lifecycle.md §3.1. Tag Job/JobStatus helpers as BFS
@@ -19,36 +26,33 @@ abi_version = "1.0.0"
 # statically trace back to user code.
 module_helpers_are_roots = true
 
-# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
-# emit_jobs_helpers(context_json) once per source file that loads frame.jobs,
-# splices the returned `statements` into the file's symbol table.
-#
-# Deviation from migration.md §1.5 (documented inline in src/main.cln):
-# frame.jobs has no __preamble magic block. The Job/JobStatus type helpers
-# are emitted inline by expand_jobs() via _job_register() calls in start:.
-# Emitting them unconditionally from the slot would add duplicates when a
-# jobs: block is present, or dangling references when absent. Moving them
-# into module_helpers requires the job-handler registry (built during
-# expand_jobs) to land in build_state so the slot can consume it; that
-# is a follow-up cycle. The slot returns an empty body; the declaration
-# completes the migration.md §1.5 manifest surface.
-module_helpers = "emit_jobs_helpers"
+# Plugin Contracts v3 — typed-emission.md §7. Called once per source file that
+# loads frame.jobs. frame.jobs has no module-scope helpers to emit; the slot
+# returns 0 with no emissions. Declared to satisfy the atomic-migration
+# requirement (every lifecycle slot must be typed under expansion_version = 3).
+module_helpers = "emit_module_helpers_typed"
 
-# Plugin Contracts v2 — lifecycle.md §3.4. Server builds only.
-# migration.md §1.5 calls for worker-loop registration to live here.
-# Today the worker-loop is started by clean-server at process startup,
-# not by a WASM-emitted call — there is no startup call in start: to move.
-# When a WASM-side worker-loop registration call is added, it will move
-# from expand_jobs → start: into this slot. Declaring the slot now
-# completes the migration.md §1.5 manifest surface.
-server_init = "emit_jobs_server_init"
+# Plugin Contracts v3 — typed-emission.md §7. Server builds only. The
+# worker-loop is started by clean-server at process startup, not by a
+# WASM-emitted call. Job registration statements are emitted from
+# expand_block_typed via _emit_statement_into_start. This slot is a no-op
+# placeholder — declared to satisfy the atomic-migration requirement.
+server_init = "emit_server_init_typed"
 
 [handles]
 blocks = ["jobs"]
-expressions = ["queue.enqueue", "queue.schedule"]
+# Aligned with [aliases] entries below (MANIFEST-DRIFT-002 fix): only expressions
+# that actually resolve through the alias table belong here.
+expressions = ["queue.enqueue", "queue.enqueueAt", "queue.cancel", "queue.status", "queue.result", "schedule.cron", "schedule.cancel"]
+
+# Plugin Contracts v3 — typed-emission.md §2.1. Every block routes through
+# expand_block_typed; version = 3 is required when expansion_version = "3.0.0".
+[blocks]
+jobs = { expand = "expand_block_typed", version = 3 }
 
 [exports]
-expand = "expand"
+# v1 `expand` entry is NOT listed here — v3-only plugin.wasm has no v1 exports.
+# The compiler dispatches to expand_block_typed via [blocks.jobs].
 get_keywords = "get_keywords"
 
 # Bridge function declarations
@@ -154,4 +158,4 @@ anti_pattern = "triggering cleanup from a user-facing endpoint with a cron-like 
 example = "patterns/scheduled-cleanup.cln"
 
 [build]
-built_with_compiler = "0.30.401"
+built_with_compiler = "0.30.412"

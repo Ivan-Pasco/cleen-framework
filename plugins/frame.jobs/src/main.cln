@@ -1,66 +1,84 @@
 // frame.jobs plugin - Background Job Queue DSL
 // Provides: jobs block with named handlers, retry config, scheduling, and monitoring
-// Version: 1.0.3
+// Version: 1.1.0
+// ABI: Plugin Contracts v3 — typed AST emission (typed-emission.md)
 
 // ============================================================================
-// LIFECYCLE SLOTS (Plugin Contracts v2)
+// TYPED EMISSION BRIDGE DECLARATIONS (Plugin Contracts v3)
 // ============================================================================
-// foundation/spec/plugins/contracts/lifecycle.md
-// foundation/spec/plugins/contracts/migration.md §1.5
+// foundation/spec/plugins/contracts/typed-emission.md §2.3, §3, §5
 //
-// frame.jobs differs from frame.server / frame.data: it has no __preamble
-// magic block. The Job/JobStatus type helpers and worker-loop registration
-// calls are emitted inline by expand_jobs() via _job_register() and
-// _schedule_cron() calls in start:, after parsing each handler declared in
-// the jobs: block.
+// Bridges used by frame.jobs:
+//   Expression constructors — for _job_register / _schedule_cron args
+//     _expr_string_lit, _expr_int_lit
+//   Statement constructors — group user body into a function body block
+//     _stmt_call, _stmt_block
+//   Type constructor — void return type for handler functions
+//     _type_void
+//   Declaration emitters
+//     _emit_function          — emit each __job_handler_<name>() wrapper
+//     _emit_statement_into_start — emit _job_register / _schedule_cron calls
+//   Pass-through for user-authored handler bodies (§3.11)
+//     _emit_stmt_from_source
+//   Diagnostics
+//     _emit_error
 //
-// Emitting Job/JobStatus from module_helpers unconditionally would produce
-// type stubs that reference job-handler names (only known after expand_jobs
-// runs) or duplicate them when a jobs: block is present. Moving them into
-// the slot requires the job-handler registry to land in build_state so the
-// slot can consume it; that is a follow-up cycle.
+// These are env imports provided by the compiler's typed-emission sandbox only.
+// They MUST NOT appear in plugin.toml [bridge].functions.
+
+external:
+	// Expression constructors (typed-emission.md §3.9)
+	integer _expr_string_lit(integer ctx, string value)
+	integer _expr_int_lit(integer ctx, integer value_lo, integer value_hi)
+	// Statement constructors (typed-emission.md §3.8)
+	integer _stmt_call(integer ctx, string callee, string args_json)
+	integer _stmt_block(integer ctx, string stmts_json)
+	// Type constructor (typed-emission.md §3.10)
+	integer _type_void(integer ctx)
+	// Declaration emitters (typed-emission.md §3.1, §3.5)
+	integer _emit_function(integer ctx, string name, string params_json, integer return_type, integer body_stmt, integer flags)
+	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
+	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
+	// Pass-through bridge for user-authored handler bodies (typed-emission.md §3.11)
+	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
+
+// ============================================================================
+// V3 LIFECYCLE SLOT — emit_module_helpers_typed (Plugin Contracts v3)
+// ============================================================================
+// foundation/spec/plugins/contracts/typed-emission.md §7
+// foundation/spec/plugins/contracts/lifecycle.md §3.1
 //
-// server_init: the worker-loop is started by clean-server at process startup,
-// not by a WASM-emitted call — there is no initialization call in start: to
-// move. Declaring the slot completes the migration.md §1.5 manifest surface
-// without changing behavior.
-
-// JSON-escape a string for embedding inside a JSON string literal.
-// Order matters: backslash first, then quote, then control chars.
-functions:
-	string __jobs_slot_json_escape(string s)
-		string r = s.replace("\\", "\\\\")
-		r = r.replace("\"", "\\\"")
-		r = r.replace("\n", "\\n")
-		r = r.replace("\r", "\\r")
-		r = r.replace("\t", "\\t")
-		return r
+// frame.jobs has no module-scope helpers to emit. Job handler functions are
+// user-authored and emitted per-jobs-block from expand_block_typed; the
+// Job/JobStatus types are declarative descriptors that the runtime consumes
+// via _job_register's arguments.
+//
+// This slot exists to satisfy the atomic-migration requirement (every
+// lifecycle slot must be typed when expansion_version = "3.0.0").
 
 functions:
-	// [lifecycle].module_helpers — see header above for rationale on the empty body.
-	string emit_jobs_helpers(string context_json)
-		return "{\"statements\":\"\"}"
-
-	// [lifecycle].server_init — see header above for rationale on the empty body.
-	string emit_jobs_server_init(string context_json)
-		return "{\"statements\":\"\"}"
+	integer emit_module_helpers_typed(integer ctx, string ctx_json)
+		return 0
 
 // ============================================================================
-// MAIN ENTRY POINTS
+// V3 LIFECYCLE SLOT — emit_server_init_typed (Plugin Contracts v3)
 // ============================================================================
+// foundation/spec/plugins/contracts/typed-emission.md §7
+//
+// The worker-loop is started by clean-server at process startup, not by a
+// WASM-emitted call. Job registration statements are emitted directly into
+// the start: slot from expand_block_typed via _emit_statement_into_start,
+// which routes them into whichever entry point the lifecycle wires (per
+// lifecycle.md §3). This slot is a no-op placeholder.
 
 functions:
-	string expand(string block_name, string attributes, string body)
-		if block_name == "jobs"
-			return expand_jobs(body)
-		return body
-
-	string get_keywords()
-		return "[\"jobs\", \"schedule\", \"retry\", \"maxAttempts\", \"backoff\", \"delay\", \"timeout\", \"queue\", \"job.id\", \"job.args\", \"job.attempt\", \"job.retryAfter\", \"job.fail\", \"job.succeed\", \"queue.enqueue\", \"queue.enqueueAt\", \"queue.cancel\", \"queue.status\", \"queue.result\", \"schedule.cron\", \"schedule.cancel\"]"
+	integer emit_server_init_typed(integer ctx, string ctx_json)
+		return 0
 
 // ============================================================================
-// JOBS BLOCK EXPANSION
+// V3 BLOCK EXPAND ENTRY POINT: expand_block_typed
 // ============================================================================
+// foundation/spec/plugins/contracts/typed-emission.md §2.2
 //
 // Parses a jobs: block containing named job handlers and schedule entries.
 //
@@ -76,16 +94,41 @@ functions:
 //   schedule JobName "cron expression":
 //     ... handler body ...
 //
-// Each named handler becomes a generated function __job_handler_<Name>.
-// Regular jobs emit _job_register(...) in start:.
-// Schedule entries emit _schedule_cron(...) in start:.
+// For each named handler:
+//   1. The user-authored body is passed verbatim to _emit_stmt_from_source
+//      (§3.11) — no plugin string construction of the body.
+//   2. A _job_register(name, handler_ref, maxAttempts, backoff, delay,
+//      timeout, queue) call statement is emitted into start:.
+//
+// For each schedule entry:
+//   1. Same pass-through of the user body.
+//   2. A _schedule_cron(name, cron_expr, handler_ref) call is emitted.
+//
+// Handler bodies are wired into _job_register / _schedule_cron by reference
+// name (string). The runtime resolves the string handle to the Clean function
+// registered by the user's own `functions:` block. This mirrors the v1
+// behavior; the typed-emission migration only changes the AST-emission path.
 
 functions:
-	string expand_jobs(string body)
-		string fn_block = "functions:\n"
-		string start_block = "start:\n"
-		integer handler_count = 0
+	integer expand_block_typed(integer ctx, string block_name, string attrs_json, string body)
+		if block_name == "jobs"
+			return expand_jobs_typed(ctx, body)
+		return 0
 
+// ============================================================================
+// KEYWORD DISCOVERY EXPORT
+// ============================================================================
+
+functions:
+	string get_keywords()
+		return "[\"jobs\", \"schedule\", \"retry\", \"maxAttempts\", \"backoff\", \"delay\", \"timeout\", \"queue\", \"job.id\", \"job.args\", \"job.attempt\", \"job.retryAfter\", \"job.fail\", \"job.succeed\", \"queue.enqueue\", \"queue.enqueueAt\", \"queue.cancel\", \"queue.status\", \"queue.result\", \"schedule.cron\", \"schedule.cancel\"]"
+
+// ============================================================================
+// JOBS BLOCK TYPED EXPANSION
+// ============================================================================
+
+functions:
+	integer expand_jobs_typed(integer ctx, string body)
 		string remaining = body
 		integer safety = 0
 
@@ -106,20 +149,18 @@ functions:
 			if trimmed.length() == 0
 				continue
 
-			// Detect "schedule JobName "cron" :" entry
+			// Detect "schedule JobName "cron":" entry
 			if trimmed.startsWith("schedule ")
 				string after_schedule = trimmed.substring(9, trimmed.length()).trim()
 				string sched_name = ""
 				string cron_expr = ""
 
-				// Extract job name (first non-quoted token)
 				integer space_in_after = after_schedule.indexOf(" ")
 				if space_in_after == -1
 					continue
 				sched_name = after_schedule.substring(0, space_in_after).trim()
 				string rest_sched = after_schedule.substring(space_in_after + 1, after_schedule.length()).trim()
 
-				// Extract cron expression (quoted string)
 				if rest_sched.startsWith("\"")
 					integer cron_close = rest_sched.indexOf("\"", 1)
 					if cron_close == -1
@@ -128,35 +169,38 @@ functions:
 				else
 					continue
 
-				// Collect handler body — all indented lines following this entry
 				string handler_body = collect_handler_body(remaining)
-				// Advance remaining past the consumed body
 				remaining = skip_handler_body(remaining)
 
-				string func_name = "__job_handler_" + sched_name
-				fn_block = fn_block + "\tvoid " + func_name + "()\n"
 				string body_code = reindent_job_body(handler_body)
-				if body_code.length() > 0
-					fn_block = fn_block + body_code
-				fn_block = fn_block + "\n"
+				string handler_name = "__job_handler_" + sched_name
 
-				start_block = start_block + "\t_schedule_cron(\"" + sched_name + "\", \"" + cron_expr + "\", \"" + func_name + "\")\n"
-				handler_count = handler_count + 1
+				// Emit user body via _emit_stmt_from_source (§3.11) — pass-through only.
+				// The body is a verbatim extract from body_lp with no plugin string
+				// construction. origin_offset = 0: diagnostics will point to the
+				// start of body_lp rather than the exact byte, which is acceptable
+				// for a first landing (see typed-emission.md §3.11 "Pass `0` if
+				// translation is not needed").
+				integer emit_fn_err = emit_handler_function(ctx, handler_name, body_code, sched_name, true)
+				if emit_fn_err != 0
+					return emit_fn_err
+
+				// _schedule_cron(sched_name, cron_expr, "__job_handler_<sched_name>")
+				integer reg_err = emit_schedule_register(ctx, sched_name, cron_expr, handler_name)
+				if reg_err != 0
+					return reg_err
 				continue
 
-			// Detect named job handler: identifier followed by optional ":" on same line
-			// A named job starts with an unindented non-keyword identifier
+			// Detect named job handler: identifier followed by optional ":"
 			boolean is_job_name = is_valid_identifier(trimmed.replace(":", "").trim())
 			if is_job_name and not trimmed.startsWith("retry") and not trimmed.startsWith("maxAttempts") and not trimmed.startsWith("backoff") and not trimmed.startsWith("delay") and not trimmed.startsWith("timeout") and not trimmed.startsWith("queue")
 				string job_name = trimmed
 				if job_name.endsWith(":")
 					job_name = job_name.substring(0, job_name.length() - 1).trim()
 
-				// Parse sub-block: collect everything indented under this job name
 				string job_section = collect_handler_body(remaining)
 				remaining = skip_handler_body(remaining)
 
-				// Extract retry/timeout/queue config and handler body from job_section
 				integer max_attempts = 3
 				string backoff = "fixed"
 				integer delay_secs = 5
@@ -183,12 +227,10 @@ functions:
 					if sec_trimmed.length() == 0
 						continue
 
-					// Detect retry: sub-block start
 					if sec_trimmed == "retry:"
 						in_retry = true
 						continue
 
-					// Inside retry: block — indented lines are retry fields
 					if in_retry
 						if sec_line.startsWith("\t\t") or sec_line.startsWith("    ")
 							if sec_trimmed.startsWith("maxAttempts:")
@@ -201,10 +243,8 @@ functions:
 								delay_secs = val.toInteger()
 							continue
 						else
-							// End of retry block — fall through to check other keywords
 							in_retry = false
 
-					// Top-level job config fields
 					if sec_trimmed.startsWith("timeout:")
 						string val = sec_trimmed.substring(8, sec_trimmed.length()).trim()
 						timeout_secs = val.toInteger()
@@ -218,27 +258,127 @@ functions:
 							queue_name = val
 						continue
 
-					// Everything else is handler body code
 					handler_lines = handler_lines + sec_line + "\n"
 
-				string func_name = "__job_handler_" + job_name
-				fn_block = fn_block + "\tvoid " + func_name + "()\n"
 				string body_code = reindent_job_body(handler_lines)
-				if body_code.length() > 0
-					fn_block = fn_block + body_code
-				fn_block = fn_block + "\n"
+				string handler_name = "__job_handler_" + job_name
 
-				start_block = start_block + "\t_job_register(\"" + job_name + "\", \"" + func_name + "\", " + max_attempts.toString() + ", \"" + backoff + "\", " + delay_secs.toString() + ", " + timeout_secs.toString() + ", \"" + queue_name + "\")\n"
-				handler_count = handler_count + 1
+				// Emit user body wrapped as a top-level function (§3.1 + §3.11).
+				integer emit_fn_err = emit_handler_function(ctx, handler_name, body_code, job_name, false)
+				if emit_fn_err != 0
+					return emit_fn_err
 
-		if handler_count == 0
-			return ""
+				// _job_register(job_name, "__job_handler_<job_name>", max_attempts, backoff, delay_secs, timeout_secs, queue_name)
+				integer reg_err = emit_job_register(ctx, job_name, handler_name, max_attempts, backoff, delay_secs, timeout_secs, queue_name)
+				if reg_err != 0
+					return reg_err
 
-		string result = fn_block
-		result = result + start_block
-		return result
+		return 0
 
-	// Collect all lines that are more indented than the base level (the handler body).
+	// Emit a __job_handler_<name>() function wrapping the user-authored body.
+	// body_code is a verbatim extract of the DSL body; it goes through
+	// _emit_stmt_from_source (§3.11) to preserve the pass-through-only contract.
+	// If body_code is empty, the emitted function has an empty body block.
+	integer emit_handler_function(integer ctx, string handler_name, string body_code, string diag_label, boolean is_schedule)
+		string body_stmts_json = "[]"
+		if body_code.length() > 0
+			integer body_stmt = _emit_stmt_from_source(ctx, body_code, 0)
+			if body_stmt == 0
+				if is_schedule
+					_emit_error(ctx, 2, "FRAME-JOBS-E001", "syntax error in schedule handler body for " + diag_label, "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
+				else
+					_emit_error(ctx, 2, "FRAME-JOBS-E003", "syntax error in job handler body for " + diag_label, "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
+				return 1
+			body_stmts_json = "[" + body_stmt.toString() + "]"
+
+		integer body_block = _stmt_block(ctx, body_stmts_json)
+		if body_block == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E005", "failed to build handler body block for " + diag_label, "{\"source\":\"plugin\"}")
+			return 1
+
+		integer void_t = _type_void(ctx)
+		// Flags bit 2 = BFS root: the handler is only referenced by string name
+		// through _job_register; the BFS cannot statically trace back to user
+		// code, so mark the emitted function as a root.
+		integer fn_err = _emit_function(ctx, handler_name, "[]", void_t, body_block, 2)
+		if fn_err != 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E006", "failed to emit handler function " + handler_name, "{\"source\":\"plugin\"}")
+			return 1
+		return 0
+
+	// Emit _job_register(name, handler_ref, max_attempts, backoff, delay, timeout, queue) into start:.
+	// handler_ref is the string name of the emitted __job_handler_<name> function.
+	// The runtime resolves it dynamically when a job of that name is dequeued.
+	integer emit_job_register(integer ctx, string job_name, string handler_name, integer max_attempts, string backoff, integer delay_secs, integer timeout_secs, string queue_name)
+		integer name_expr = _expr_string_lit(ctx, job_name)
+		if name_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E010", "failed to build job name literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer handler_expr = _expr_string_lit(ctx, handler_name)
+		if handler_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E011", "failed to build handler ref literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer max_attempts_expr = _expr_int_lit(ctx, max_attempts, 0)
+		if max_attempts_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E012", "failed to build maxAttempts literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer backoff_expr = _expr_string_lit(ctx, backoff)
+		if backoff_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E013", "failed to build backoff literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer delay_expr = _expr_int_lit(ctx, delay_secs, 0)
+		if delay_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E014", "failed to build delay literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer timeout_expr = _expr_int_lit(ctx, timeout_secs, 0)
+		if timeout_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E015", "failed to build timeout literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer queue_expr = _expr_string_lit(ctx, queue_name)
+		if queue_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E016", "failed to build queue literal", "{\"source\":\"plugin\"}")
+			return 1
+
+		string args_json = "[" + name_expr.toString() + "," + handler_expr.toString() + "," + max_attempts_expr.toString() + "," + backoff_expr.toString() + "," + delay_expr.toString() + "," + timeout_expr.toString() + "," + queue_expr.toString() + "]"
+		integer reg_stmt = _stmt_call(ctx, "_job_register", args_json)
+		if reg_stmt == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E017", "failed to build _job_register statement", "{\"source\":\"plugin\"}")
+			return 1
+
+		integer emit_err = _emit_statement_into_start(ctx, reg_stmt)
+		if emit_err != 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E018", "failed to emit _job_register into start", "{\"source\":\"plugin\"}")
+			return 1
+		return 0
+
+	// Emit _schedule_cron(name, cron_expr, handler_ref) into start:.
+	integer emit_schedule_register(integer ctx, string sched_name, string cron_expr, string handler_name)
+		integer name_expr = _expr_string_lit(ctx, sched_name)
+		if name_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E020", "failed to build schedule name literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer cron_expr_lit = _expr_string_lit(ctx, cron_expr)
+		if cron_expr_lit == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E021", "failed to build cron literal", "{\"source\":\"plugin\"}")
+			return 1
+		integer handler_expr = _expr_string_lit(ctx, handler_name)
+		if handler_expr == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E022", "failed to build schedule handler ref literal", "{\"source\":\"plugin\"}")
+			return 1
+
+		string args_json = "[" + name_expr.toString() + "," + cron_expr_lit.toString() + "," + handler_expr.toString() + "]"
+		integer reg_stmt = _stmt_call(ctx, "_schedule_cron", args_json)
+		if reg_stmt == 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E023", "failed to build _schedule_cron statement", "{\"source\":\"plugin\"}")
+			return 1
+
+		integer emit_err = _emit_statement_into_start(ctx, reg_stmt)
+		if emit_err != 0
+			_emit_error(ctx, 2, "FRAME-JOBS-E024", "failed to emit _schedule_cron into start", "{\"source\":\"plugin\"}")
+			return 1
+		return 0
+
+	// Collect all lines that are indented (part of the current sub-block body).
 	// Returns raw lines without consuming them from the source — call skip_handler_body after.
 	string collect_handler_body(string text)
 		string result = ""
@@ -254,11 +394,9 @@ functions:
 			else
 				line = rem.substring(0, nl)
 				rem = rem.substring(nl + 1, rem.length())
-			// A line that starts with a tab or spaces is part of the body
 			if line.startsWith("\t") or line.startsWith("    ") or line.trim().length() == 0
 				result = result + line + "\n"
 			else
-				// Non-indented, non-empty line = next job or end of block
 				return result
 		return result
 
@@ -271,7 +409,6 @@ functions:
 			integer nl = rem.indexOf("\n")
 			string line = ""
 			if nl == -1
-				// Last line — consume it, return empty
 				return ""
 			else
 				line = rem.substring(0, nl)
@@ -281,7 +418,9 @@ functions:
 					return rem
 		return rem
 
-	// Re-indent handler body lines to \t\t base.
+	// Re-indent handler body lines to no leading indent — the fragment is passed
+	// to _emit_stmt_from_source, which expects a statement or block at column 0
+	// (the compiler wraps as `start:\n\t<line>` per typed-emission.md §3.11).
 	string reindent_job_body(string section)
 		integer min_tabs = 99
 		string scan = section
@@ -323,7 +462,7 @@ functions:
 				while orig_tabs < line.length() and line.substring(orig_tabs, orig_tabs + 1) == "\t"
 					orig_tabs = orig_tabs + 1
 				integer rel_depth = orig_tabs - min_tabs
-				string indent = "\t\t"
+				string indent = ""
 				integer d = 0
 				while d < rel_depth
 					indent = indent + "\t"
