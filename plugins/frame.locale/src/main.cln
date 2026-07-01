@@ -1,7 +1,7 @@
 // frame.locale plugin - Internationalization DSL
 // Provides: locale block for BCP 47 locale configuration, t() and tc() translation functions,
 //           locale.formatNumber, locale.formatCurrency, locale.formatDate helpers
-// Version: 1.0.3
+// Version: 1.0.4
 // Implements: Frame i18n Specification §16
 //
 // Plugin Contracts v3 pilot: this plugin is the first to migrate from v1
