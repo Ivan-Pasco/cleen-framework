@@ -1,81 +1,45 @@
 [plugin]
 name = "frame.locale"
-version = "1.0.5"
-description = "Internationalization: translation keys, locale detection, number/currency/date formatting. v1.0.5: Plugin Contracts v3 pilot outcome — v3 typed-emission source was drafted and verified to compile (see commit 2e11f95), then reverted after the pilot surfaced two blocking compiler gaps: f4b7d6977f05 (v3 linker missing stdlib env imports) and 1edabe431cad (dual-ship blocked by disjoint linker surfaces). Plugin ships v1 string emission only until both bugs are resolved. See foundation/spec/plugins/contracts/typed-emission.md and migration.md §1.5."
+version = "1.0.6"
+description = "Internationalization: translation keys, locale detection, number/currency/date formatting. v1.0.6: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes compiler gaps f4b7d6977f05 (linker now provides stdlib) and 1edabe431cad (atomic migration, no dual-ship). See foundation/spec/plugins/contracts/typed-emission.md."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.15.0"
+min_compiler_version = "0.30.411"
 # Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
 # compile time when built with --target=plugin; loader verifies it when
-# present. "1.0.0" is the initial declared value per migration.md §1.5.
+# present.
 abi_version = "1.0.0"
 # Plugin Contracts v3 — typed-emission.md §2.1.
-#
-# STATUS: v3 opt-in DEFERRED. The v3 expand_block_typed and
-# emit_module_helpers_typed exports are present in plugin.wasm and ready to
-# use, but the plugin cannot be activated on v3 yet due to a compiler-side
-# gap: the typed-emission linker (build_typed_emission_linker in
-# clean-language-compiler/src/plugins/wasm_adapter.rs) registers only the
-# 30 typed-emission bridges and does NOT provide the stdlib env imports
-# (env::print, env::printl, env::string.concat, env::string_compare, etc.)
-# that the plugin's own Clean-language code compiles to. As a result,
-# instantiation fails with "unknown import: env::print" the moment a v3
-# plugin is dispatched, even if the expand function itself does not call
-# print.
-#
-# Reported: bug f4b7d6977f05 (report dc978895-e834-4376-997e-2e9987064131),
-# component=compiler, error=TYPED-EMISSION-LINKER-INCOMPLETE.
-#
-# When the compiler ships the fix (the v3 linker registering the compiler
-# stdlib alongside the typed-emission bridges), uncomment the two lines
-# below to activate v3 dispatch. The exports and emission_ops_hash are
-# already in plugin.wasm — no plugin rebuild is required at that point.
-#
-# expansion_version = "3.0.0"
-# emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
+# Atomic migration: this plugin.wasm is v3-only. No v1 exports are present.
+# emission_ops_hash verified against build.rs SHA-256 of
+# clean-language-compiler/src/plugins/typed-emission-ops.toml (2026-07-01).
+expansion_version = "3.0.0"
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
 
-# [blocks.locale] intentionally omitted while v3 is deferred — with
-# expansion_version absent the loader defaults every block to v1, and
-# [exports].expand ("expand") remains the sole dispatch target.
+[blocks]
+locale = { expand = "expand_block_typed", version = 3 }
 
 [lifecycle]
-# Plugin Contracts v2 — lifecycle.md §3.1. t()/tc() and locale.* helpers are
-# called from user code directly (they are bridge aliases, not generated code).
-# module_helpers_are_roots is set so any wrapper functions the slot emits in
-# a future cycle are not tree-shaken when only reachable from plugin-generated
-# code paths.
+# Plugin Contracts v3 — lifecycle.md §3.1 + typed-emission.md §7.
+# module_helpers_are_roots: t()/tc() and locale.* helpers are bridge aliases;
+# the typed slot emits nothing, but the flag is preserved so the loader
+# correctly treats any future helper emissions as BFS roots.
 module_helpers_are_roots = true
+# v3 typed variant — emit_module_helpers_typed(ctx, ctx_json) -> integer.
+# Returns 0 (no module-scope declarations to emit for frame.locale).
+module_helpers = "emit_module_helpers_typed"
 
-# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
-# emit_locale_helpers(context_json) once per source file that loads frame.locale,
-# splices the returned `statements` into the file's symbol table.
-#
-# Deviation from migration.md §1.5 (documented inline in src/main.cln):
-# frame.locale has no __preamble magic block. The t() and tc() functions are
-# bridge aliases resolved from [aliases] in plugin.toml — they emit no extra
-# Clean source. The Locale type is a plain string typedef, which the compiler
-# currently inlines. Emitting them unconditionally from this slot would either
-# duplicate alias declarations (compile error) or produce an empty type stub.
-# Moving alias resolution into module_helpers output requires the compiler's
-# alias table to consume slot output; that is a Phase D change. The slot
-# returns an empty body; the declaration completes the migration.md §1.5
-# manifest surface.
-module_helpers = "emit_locale_helpers"
-
-# Note on [[artifacts]]: migration.md §1.5 marks locales.json as OPTIONAL —
-# "declare only if the plugin actually generates one". frame.locale does NOT
-# produce a locales.json at build time. Translation files are loaded at
-# runtime by _i18n_load calls emitted into start: by expand_locale, pointing
-# at user-supplied JSON files under app/i18n/. No [[artifacts]] entry is
-# declared.
+# Note on [[artifacts]]: frame.locale does NOT produce a locales.json at
+# build time. Translation files are loaded at runtime by _i18n_load calls
+# emitted into start: by expand_locale_typed().
 
 [handles]
 blocks = ["locale"]
 
 [exports]
-expand = "expand"
+expand = "expand_block_typed"
 get_keywords = "get_keywords"
 
 # Bridge function declarations
@@ -160,4 +124,4 @@ anti_pattern = "hardcoding number formatting (e.g. '$' + price.toString()) — d
 example = "patterns/locale-aware-formatting.cln"
 
 [build]
-built_with_compiler = "0.30.409"
+built_with_compiler = "0.30.411"
