@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.locale"
-version = "1.0.2"
-description = "Internationalization: translation keys, locale detection, number/currency/date formatting. v1.0.2: plugin contracts v2 sub-cycle 1 — declares [compatibility].abi_version = \"1.0.0\" and [lifecycle].module_helpers = \"emit_locale_helpers\" per migration.md §1.5. Slot is a manifest-surface placeholder; the behavioral move (t()/tc() alias declarations and Locale type into module_helpers) is deferred pending expand_locale build_state coordination. No [[artifacts]] declared: frame.locale does not produce a locales.json at build time — translation files are loaded at runtime via _i18n_load calls emitted by expand_locale into start:."
+version = "1.0.3"
+description = "Internationalization: translation keys, locale detection, number/currency/date formatting. v1.0.3: Plugin Contracts v3 pilot — first plugin migrated from v1 string emission to v3 typed AST emission. Declares [compatibility].expansion_version = \"3.0.0\" and per-block dispatch selecting expand_block_typed for the locale: block. The v1 expand and emit_locale_helpers exports are preserved for pre-v3 compilers. See foundation/spec/plugins/contracts/typed-emission.md and migration.md §1.5."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -11,6 +11,21 @@ min_compiler_version = "0.15.0"
 # compile time when built with --target=plugin; loader verifies it when
 # present. "1.0.0" is the initial declared value per migration.md §1.5.
 abi_version = "1.0.0"
+# Plugin Contracts v3 — typed-emission.md §2.1. Opts this plugin into typed
+# AST emission at the plugin level. Per-block dispatch below selects which
+# ABI a specific expand entry point uses.
+expansion_version = "3.0.0"
+# SHA-256 (lowercase hex, 64 chars) of foundation/spec/plugins/contracts/typed-emission-ops.toml
+# as of this plugin build. Validated by the loader against the compiler's
+# EMISSION_OPS_HASH constant (typed-emission.md §3.10, wasm_loader.rs three-case check).
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
+
+# Plugin Contracts v3 per-block dispatch — typed-emission.md §2.1 and §6.
+# The `locale:` block uses v3 typed emission (expand_block_typed); older
+# compilers that do not understand [blocks] fall back to [exports].expand.
+[blocks.locale]
+expand = "expand_block_typed"
+version = 3
 
 [lifecycle]
 # Plugin Contracts v2 — lifecycle.md §3.1. t()/tc() and locale.* helpers are
@@ -34,7 +49,7 @@ module_helpers_are_roots = true
 # alias table to consume slot output; that is a Phase D change. The slot
 # returns an empty body; the declaration completes the migration.md §1.5
 # manifest surface.
-module_helpers = "emit_locale_helpers"
+module_helpers = "emit_module_helpers_typed"
 
 # Note on [[artifacts]]: migration.md §1.5 marks locales.json as OPTIONAL —
 # "declare only if the plugin actually generates one". frame.locale does NOT
@@ -132,4 +147,4 @@ anti_pattern = "hardcoding number formatting (e.g. '$' + price.toString()) — d
 example = "patterns/locale-aware-formatting.cln"
 
 [build]
-built_with_compiler = "0.30.401"
+built_with_compiler = "0.30.409"
