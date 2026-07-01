@@ -1,59 +1,52 @@
-// Tests for frame.client plugin — load:, form:, and send: block expansion
-// These functions (expand_block, build_json_body, etc.) are defined in src/main.cln.
+// Tests for frame.client plugin — v3 typed emission (Plugin Contracts v3)
+// Tests cover: pure DSL parser helpers, URL segment compiler helpers, and
+// field-record helper functions that feed the typed emitter.
+//
+// Tests are split into two categories:
+//   1. Pure helper functions (no ctx required) — runnable in type-check mode
+//   2. Typed emitter entry points (require live compiler ctx) — validated by
+//      compiling a real browser-target app in the CI integration test.
 //
 // To type-check:
 //   cat tests/test_expand.cln src/main.cln > /tmp/combined.cln && cln check /tmp/combined.cln
 //
 // (test file must come first so start: appears before functions:)
-// Runtime execution requires the full server bridge stack.
+// Note: v1 expand_block and compile_url/compile_send_url no longer exist.
+//       Tests that called those functions are now covered by the new
+//       compile_url_segments / compile_send_url_segments helpers and by
+//       the CI smoke compile (tests/test_app/).
 
 start:
-	test_unknown_block_passthrough()
-	test_load_basic()
-	test_load_at_path()
-	test_load_no_at_path()
-	test_load_multiple_decls()
-	test_load_on_error()
-	test_load_url_interpolation()
-	test_load_empty_body()
+	// ---- parse_load_decl ----
+	test_parse_decl_basic()
+	test_parse_decl_with_at()
+	test_parse_decl_with_on_error()
 	test_parse_decl_missing_from()
+	// ---- get_field ----
 	test_get_field()
-	test_compile_url_static()
-	test_compile_url_interpolated()
-	test_form_no_method()
-	test_form_basic_post()
-	test_form_required_guard()
-	test_form_clear_on_success()
-	test_form_emit_on_success()
-	test_form_get_no_body()
-	test_form_default_value()
-	test_form_empty_body()
-	test_build_json_body_single()
-	test_build_json_body_multi()
+	// ---- compile_url_segments ----
+	test_compile_url_segments_static()
+	test_compile_url_segments_interpolated()
+	test_compile_url_segments_no_query_prefix()
+	// ---- compile_send_url_segments ----
+	test_compile_send_url_segments_static()
+	test_compile_send_url_segments_interpolated()
+	test_compile_send_url_segments_multiple_placeholders()
+	// ---- parse_form_method ----
 	test_parse_form_method()
+	// ---- parse_form_url ----
 	test_parse_form_url()
+	// ---- parse_form_field ----
 	test_parse_form_field_required()
+	test_parse_form_field_optional()
 	test_parse_form_field_default()
-	// send: block tests
-	test_send_missing_params()
-	test_send_generates_state_vars()
-	test_send_generates_function()
-	test_send_pending_guard()
-	test_send_delete_no_body()
-	test_send_post_empty_body()
-	test_send_patch_empty_body()
-	test_send_on_success_emit()
-	test_send_on_error_emit()
-	test_send_with_single_field()
-	test_send_with_multiple_fields()
-	test_send_url_static()
-	test_send_url_interpolated()
+	test_parse_form_field_on_line_skipped()
+	// ---- parse_send_name ----
 	test_parse_send_name()
+	// ---- parse_send_method ----
 	test_parse_send_method_normalises_case()
+	// ---- parse_send_url ----
 	test_parse_send_url()
-	test_compile_send_url_static()
-	test_compile_send_url_interpolated()
-	test_compile_send_url_multiple_placeholders()
 
 functions:
 	// Minimal assert helper — prints a failure message if condition is false.
@@ -61,139 +54,87 @@ functions:
 		if condition == false
 			print("FAIL")
 
-	void test_unknown_block_passthrough()
-		string result = expand_block("unknown", "{}", "original body")
-		assert(result == "original body")
+	// ======== parse_load_decl tests ========
 
-	void test_load_basic()
-		string result = expand_block("load", "{}", "users from \"/api/users\"")
-		assert(result.contains("boolean loading = true"))
-		assert(result.contains("string loadError = \"\""))
-		assert(result.contains("any users = null"))
-		assert(result.contains("start:"))
-		assert(result.contains("__res_users"))
-		assert(result.contains("api.get(\"/api/users\")"))
-		assert(result.contains("loading = false"))
+	void test_parse_decl_basic()
+		string rec = parse_load_decl("users from \"/api/users\"")
+		assert(get_field(rec, 0) == "users")
+		assert(get_field(rec, 1) == "/api/users")
+		assert(get_field(rec, 2) == "")
+		assert(get_field(rec, 3) == "")
 
-	void test_load_at_path()
-		string result = expand_block("load", "{}", "items from \"/api/items\" at \"data\"")
-		assert(result.contains(".json(\"data\")"))
+	void test_parse_decl_with_at()
+		string rec = parse_load_decl("items from \"/api/items\" at \"data\"")
+		assert(get_field(rec, 0) == "items")
+		assert(get_field(rec, 1) == "/api/items")
+		assert(get_field(rec, 2) == "data")
+		assert(get_field(rec, 3) == "")
 
-	void test_load_no_at_path()
-		string result = expand_block("load", "{}", "raw from \"/api/raw\"")
-		assert(result.contains(".json()"))
-
-	void test_load_multiple_decls()
-		string body = "users from \"/api/users\" at \"data\"\nposts from \"/api/posts\" at \"items\""
-		string result = expand_block("load", "{}", body)
-		assert(result.contains("any users = null"))
-		assert(result.contains("any posts = null"))
-		assert(result.contains("__res_users"))
-		assert(result.contains("__res_posts"))
-		assert(result.contains("Failed to load users"))
-		assert(result.contains("Failed to load posts"))
-
-	void test_load_on_error()
-		string result = expand_block("load", "{}", "cfg from \"/api/cfg\" on error: \"handleErr\"")
-		assert(result.contains("handleErr()"))
-
-	void test_load_url_interpolation()
-		string result = expand_block("load", "{}", "posts from \"/api/posts/\{query.cat\}\"")
-		assert(result.contains("query.cat"))
-		assert(result.contains("\"/api/posts/\""))
-
-	void test_load_empty_body()
-		string result = expand_block("load", "{}", "")
-		assert(result.contains("no valid declarations"))
+	void test_parse_decl_with_on_error()
+		string rec = parse_load_decl("cfg from \"/api/cfg\" on error: \"handleErr\"")
+		assert(get_field(rec, 0) == "cfg")
+		assert(get_field(rec, 1) == "/api/cfg")
+		assert(get_field(rec, 3) == "handleErr")
 
 	void test_parse_decl_missing_from()
-		// A line without " from " should return empty and be skipped
-		string result = expand_block("load", "{}", "not-a-declaration")
-		assert(result.contains("no valid declarations"))
+		string rec = parse_load_decl("not-a-declaration")
+		assert(rec == "")
+
+	// ======== get_field tests ========
 
 	void test_get_field()
-		// Directly test the tilde-separated field extractor
 		string record = "name~/api/url~path~handler"
 		assert(get_field(record, 0) == "name")
 		assert(get_field(record, 1) == "/api/url")
 		assert(get_field(record, 2) == "path")
 		assert(get_field(record, 3) == "handler")
+		// Out of bounds returns ""
+		assert(get_field(record, 4) == "")
 
-	void test_compile_url_static()
-		assert(compile_url("/api/users") == "\"/api/users\"")
+	// ======== compile_url_segments tests ========
+	// compile_url_segments returns "static:TEXT" or "static:A|query:FIELD|static:B" etc.
 
-	void test_compile_url_interpolated()
-		string result = compile_url("/api/posts/\{query.cat\}")
-		assert(result.contains("query.cat"))
-		assert(result.contains("\"/api/posts/\""))
+	void test_compile_url_segments_static()
+		// No {query.*} placeholders — single static segment
+		string seg = compile_url_segments("/api/users")
+		assert(seg == "static:/api/users")
 
-	// ========== form: block tests ==========
+	void test_compile_url_segments_interpolated()
+		// {query.cat} becomes a query segment
+		string seg = compile_url_segments("/api/posts/\{query.cat\}")
+		assert(seg.contains("static:/api/posts/"))
+		assert(seg.contains("query:cat"))
+		assert(seg.contains("|"))
 
-	void test_form_no_method()
-		string result = expand_block("form", "badvalue", "title required")
-		assert(result.contains("requires method and url"))
+	void test_compile_url_segments_no_query_prefix()
+		// {plain} without query. prefix is not replaced — treated as a static rest
+		string seg = compile_url_segments("/api/users/\{plain\}")
+		assert(seg.contains("static:"))
+		// No query: segment since there's no query. prefix
+		assert(seg.contains("query:") == false)
 
-	void test_form_basic_post()
-		string result = expand_block("form", "post \"/api/tasks\"", "title required")
-		assert(result.contains("string title = \"\""))
-		assert(result.contains("boolean submitting = false"))
-		assert(result.contains("string formError = \"\""))
-		assert(result.contains("string formSuccess = \"\""))
-		assert(result.contains("void submit()"))
-		assert(result.contains("api.post(\"/api/tasks\""))
-		assert(result.contains("__body"))
+	// ======== compile_send_url_segments tests ========
 
-	void test_form_required_guard()
-		string result = expand_block("form", "post \"/api/tasks\"", "title required\ndescription")
-		assert(result.contains("if title.trim() == \"\""))
-		assert(result.contains("formError = \"title is required\""))
-		// description is not required — no guard for it
-		assert(result.contains("string description = \"\""))
+	void test_compile_send_url_segments_static()
+		// No {varName} placeholders — single static segment
+		string seg = compile_send_url_segments("/api/clear")
+		assert(seg == "static:/api/clear")
 
-	void test_form_clear_on_success()
-		string result = expand_block("form", "post \"/api/tasks\"", "title required\non success: clear")
-		assert(result.contains("title = \"\""))
-		assert(result.contains("formSuccess = \"Saved\""))
+	void test_compile_send_url_segments_interpolated()
+		// {taskId} becomes a var segment
+		string seg = compile_send_url_segments("/api/tasks/\{taskId\}")
+		assert(seg.contains("static:/api/tasks/"))
+		assert(seg.contains("var:taskId"))
 
-	void test_form_emit_on_success()
-		string result = expand_block("form", "post \"/api/tasks\"", "title required\non success: clear emit \"loadTasks\"")
-		assert(result.contains("loadTasks()"))
+	void test_compile_send_url_segments_multiple_placeholders()
+		// Multiple placeholders: /api/{org}/tasks/{taskId}
+		string seg = compile_send_url_segments("/api/\{org\}/tasks/\{taskId\}")
+		assert(seg.contains("static:/api/"))
+		assert(seg.contains("var:org"))
+		assert(seg.contains("static:/tasks/"))
+		assert(seg.contains("var:taskId"))
 
-	void test_form_get_no_body()
-		string result = expand_block("form", "get \"/api/search\"", "query required")
-		assert(result.contains("api.get(\"/api/search\")"))
-		// GET has no body — __body should not be generated
-		assert(result.contains("__body") == false)
-
-	void test_form_default_value()
-		string result = expand_block("form", "post \"/api/tasks\"", "priority default=\"medium\"")
-		assert(result.contains("string priority = \"medium\""))
-
-	void test_form_empty_body()
-		string result = expand_block("form", "post \"/api/tasks\"", "")
-		assert(result.contains("no field declarations"))
-
-	void test_build_json_body_single()
-		// Single field: should produce "{\"title\":\"" + title + "\"}"
-		string result = build_json_body("title~true~")
-		assert(result.contains("\\\"title\\\":\\\"\""))
-		assert(result.contains("+ title +"))
-		// The opening and closing quotes must bound the expression correctly
-		assert(result.substring(0, 2) == "\"{")
-		assert(result.substring(result.length() - 2, result.length()) == "}\"")
-
-	void test_build_json_body_multi()
-		// Two fields: should produce "{\"title\":\"" + title + "\",\"desc\":\"" + desc + "\"}"
-		string result = build_json_body("title~true~|desc~false~")
-		assert(result.contains("+ title +"))
-		assert(result.contains("+ desc +"))
-		assert(result.contains(",\\\"desc\\\""))
-		// Both fields must be present and the expression must open and close with quotes
-		assert(result.substring(0, 2) == "\"{")
-		assert(result.substring(result.length() - 2, result.length()) == "}\"")
-		// The comma separator between fields must appear before desc
-		integer comma_pos = result.indexOf(",\\\"desc")
-		assert(comma_pos != -1)
+	// ======== parse_form_method tests ========
 
 	void test_parse_form_method()
 		assert(parse_form_method("post \"/api/\"") == "post")
@@ -203,9 +144,13 @@ functions:
 		assert(parse_form_method("DELETE \"/api/\"") == "delete")
 		assert(parse_form_method("badword \"/api/\"") == "")
 
+	// ======== parse_form_url tests ========
+
 	void test_parse_form_url()
 		assert(parse_form_url("post \"/api/tasks\"") == "/api/tasks")
 		assert(parse_form_url("post") == "")
+
+	// ======== parse_form_field tests ========
 
 	void test_parse_form_field_required()
 		string rec = parse_form_field("title required")
@@ -213,121 +158,32 @@ functions:
 		assert(get_field(rec, 1) == "true")
 		assert(get_field(rec, 2) == "")
 
+	void test_parse_form_field_optional()
+		string rec = parse_form_field("description")
+		assert(get_field(rec, 0) == "description")
+		assert(get_field(rec, 1) == "false")
+
 	void test_parse_form_field_default()
 		string rec = parse_form_field("priority default=\"medium\"")
 		assert(get_field(rec, 0) == "priority")
 		assert(get_field(rec, 1) == "false")
 		assert(get_field(rec, 2) == "medium")
 
-	// ========== send: block tests ==========
+	void test_parse_form_field_on_line_skipped()
+		// Lines starting with "on " are not fields
+		string rec = parse_form_field("on success: clear")
+		assert(rec == "")
 
-	void test_send_missing_params()
-		// Missing name — returns error comment
-		string r1 = expand_block("send", "delete \"/api/tasks\"", "")
-		assert(r1.contains("requires name method url"))
-		// Missing URL — returns error comment
-		string r2 = expand_block("send", "deleteTask delete", "")
-		assert(r2.contains("requires name method url"))
-		// Invalid method — returns error comment
-		string r3 = expand_block("send", "deleteTask badverb \"/api/tasks\"", "")
-		assert(r3.contains("requires name method url"))
-
-	void test_send_generates_state_vars()
-		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", "")
-		assert(result.contains("deleteTaskPending"))
-		assert(result.contains("deleteTaskSuccess"))
-		assert(result.contains("deleteTaskError"))
-		assert(result.contains("boolean deleteTaskPending = false"))
-		assert(result.contains("boolean deleteTaskSuccess = false"))
-		assert(result.contains("string deleteTaskError = \"\""))
-
-	void test_send_generates_function()
-		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", "")
-		assert(result.contains("void deleteTask()"))
-
-	void test_send_pending_guard()
-		// The generated function must guard against concurrent calls
-		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", "")
-		assert(result.contains("if deleteTaskPending"))
-		assert(result.contains("return"))
-		assert(result.contains("deleteTaskPending = true"))
-		assert(result.contains("deleteTaskPending = false"))
-
-	void test_send_delete_no_body()
-		// DELETE must use api.delete(url) — no body argument
-		string result = expand_block("send", "removeItem delete \"/api/items\"", "")
-		assert(result.contains("api.delete("))
-		assert(result.contains("__body") == false)
-
-	void test_send_post_empty_body()
-		// POST without with: must use api.post(url, "{}") — empty JSON body
-		string result = expand_block("send", "publishItem post \"/api/items/publish\"", "")
-		assert(result.contains("api.post("))
-		assert(result.contains("\"{}\""))
-		assert(result.contains("__body") == false)
-
-	void test_send_patch_empty_body()
-		// PATCH without with: must use api.patch(url, "{}") — empty JSON body
-		string result = expand_block("send", "archiveItem patch \"/api/items/archive\"", "")
-		assert(result.contains("api.patch("))
-		assert(result.contains("\"{}\""))
-
-	void test_send_on_success_emit()
-		string body = "on success: emit \"taskDeleted\""
-		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", body)
-		assert(result.contains("taskDeleted()"))
-		// Callback must appear inside the ok branch
-		integer ok_pos = result.indexOf("if __res.ok")
-		integer cb_pos = result.indexOf("taskDeleted()")
-		assert(ok_pos != -1)
-		assert(cb_pos > ok_pos)
-
-	void test_send_on_error_emit()
-		string body = "on error: emit \"handleError\""
-		string result = expand_block("send", "deleteTask delete \"/api/tasks\"", body)
-		assert(result.contains("handleError()"))
-		// Error callback must appear inside the else branch
-		integer else_pos = result.indexOf("\t\telse")
-		integer cb_pos = result.indexOf("handleError()")
-		assert(else_pos != -1)
-		assert(cb_pos > else_pos)
-
-	void test_send_with_single_field()
-		// with: field generates a JSON body from that module-level variable
-		string body = "with: archiveReason"
-		string result = expand_block("send", "archiveTask patch \"/api/tasks/archive\"", body)
-		assert(result.contains("__body"))
-		assert(result.contains("archiveReason"))
-		assert(result.contains("api.patch("))
-		// Must NOT use the empty body fallback
-		assert(result.contains("\"{}\"") == false)
-
-	void test_send_with_multiple_fields()
-		// with: field1 field2 generates JSON with both fields
-		string body = "with: reason assignee"
-		string result = expand_block("send", "escalateTask patch \"/api/tasks/escalate\"", body)
-		assert(result.contains("reason"))
-		assert(result.contains("assignee"))
-		assert(result.contains("__body"))
-
-	void test_send_url_static()
-		// Static URL is passed as a quoted string literal
-		string result = expand_block("send", "clearAll delete \"/api/clear\"", "")
-		assert(result.contains("\"/api/clear\""))
-
-	void test_send_url_interpolated()
-		// {taskId} placeholder resolves to the module-level variable taskId
-		string result = expand_block("send", "deleteTask delete \"/api/tasks/\{taskId\}\"", "")
-		assert(result.contains("taskId"))
-		// Must not contain the literal placeholder text
-		assert(result.contains("\{taskId\}") == false)
+	// ======== parse_send_name tests ========
 
 	void test_parse_send_name()
 		assert(parse_send_name("deleteUser delete \"/api/users\"") == "deleteUser")
 		assert(parse_send_name("archivePost patch \"/api/posts/\{id\}/archive\"") == "archivePost")
-		// Missing method/url — still parses first word
+		// No space means no name extractable (returns "")
 		assert(parse_send_name("deleteUser") == "")
 		assert(parse_send_name("") == "")
+
+	// ======== parse_send_method tests ========
 
 	void test_parse_send_method_normalises_case()
 		assert(parse_send_method("deleteUser delete \"/api/users\"") == "delete")
@@ -336,29 +192,10 @@ functions:
 		assert(parse_send_method("updateItem PUT \"/api/items\"") == "put")
 		assert(parse_send_method("badMethod badverb \"/api/x\"") == "")
 
+	// ======== parse_send_url tests ========
+
 	void test_parse_send_url()
 		assert(parse_send_url("deleteUser delete \"/api/users\"") == "/api/users")
 		assert(parse_send_url("deleteTask delete \"/api/tasks/\{taskId\}\"") == "/api/tasks/\{taskId\}")
 		// No URL present
 		assert(parse_send_url("deleteUser delete") == "")
-
-	void test_compile_send_url_static()
-		// Static URL — wrapped in quotes
-		assert(compile_send_url("/api/users") == "\"/api/users\"")
-		assert(compile_send_url("/api/clear") == "\"/api/clear\"")
-
-	void test_compile_send_url_interpolated()
-		// {varName} becomes a bare variable reference concatenated in
-		string result = compile_send_url("/api/tasks/\{taskId\}")
-		assert(result.contains("taskId"))
-		assert(result.contains("\"/api/tasks/\""))
-		// The literal placeholder must not appear in the output
-		assert(result.contains("\{taskId\}") == false)
-
-	void test_compile_send_url_multiple_placeholders()
-		// Multiple placeholders: /api/{org}/tasks/{taskId}
-		string result = compile_send_url("/api/\{org\}/tasks/\{taskId\}")
-		assert(result.contains("org"))
-		assert(result.contains("taskId"))
-		assert(result.contains("\"/api/\""))
-		assert(result.contains("\"/tasks/\""))
