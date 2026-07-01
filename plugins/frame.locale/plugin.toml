@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.locale"
-version = "1.0.4"
-description = "Internationalization: translation keys, locale detection, number/currency/date formatting. v1.0.4: Plugin Contracts v3 pilot — first plugin with v3 typed-emission expand entry points (expand_block_typed, emit_module_helpers_typed) shipped in plugin.wasm. v3 activation is DEFERRED at the manifest level pending compiler fix f4b7d6977f05 (typed-emission linker missing stdlib env imports); the v3 exports are dormant until activation. The v1 expand / emit_locale_helpers path remains authoritative today. See foundation/spec/plugins/contracts/typed-emission.md and migration.md §1.5."
+version = "1.0.5"
+description = "Internationalization: translation keys, locale detection, number/currency/date formatting. v1.0.5: Plugin Contracts v3 pilot outcome — v3 typed-emission source was drafted and verified to compile (see commit 2e11f95), then reverted after the pilot surfaced two blocking compiler gaps: f4b7d6977f05 (v3 linker missing stdlib env imports) and 1edabe431cad (dual-ship blocked by disjoint linker surfaces). Plugin ships v1 string emission only until both bugs are resolved. See foundation/spec/plugins/contracts/typed-emission.md and migration.md §1.5."
 author = "Clean Language Team"
 license = "MIT"
 
