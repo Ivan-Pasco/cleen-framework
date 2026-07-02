@@ -1,68 +1,59 @@
 [plugin]
 name = "frame.auth"
-version = "2.1.2"
-description = "Authentication and authorization plugin for Clean Language - provides sessions, JWT, roles/permissions, CSRF, and password hashing. v2.1.2: plugin contracts v2 sub-cycle 1 — declares [compatibility].abi_version = \"1.0.0\", [lifecycle].module_helpers = \"emit_auth_helpers\", [lifecycle].server_init = \"emit_auth_server_init\", and [lifecycle].per_request = \"emit_auth_per_request\" per migration.md §1.4. All slots are manifest-surface placeholders; the behavioral move from generate_auth_helpers (inline in expand_auth_config) into the slot is deferred (see emit_auth_helpers comment in src/main.cln)."
+version = "2.2.0"
+description = "Authentication and authorization plugin — v2.2.0: plugin contracts v3 typed-emission migration. Atomic switch from v1 string emission to v3 typed AST emission via batch-spec builder API (typed-emission.md Amendment 4 §3.14). Closes bug #4790d26673d1. Bridges: 18 batch-builder families, _emit_helpers_batch, _emit_statement_into_start. Helper functions emitted by expand_block_typed via emit_auth_helpers_batch (one _emit_helpers_batch call, 18 synthetic functions). Config vars emitted via _emit_statement_into_start typed assignments. login: block emits FRAME-AUTH-W001 warning (ORM query expression deferred, tracked separately)."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.15.0"
-# Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
-# compile time when built with --target=plugin; loader verifies it when
-# present. "1.0.0" is the initial declared value per migration.md §1.4.
+min_compiler_version = "0.30.416"
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# expansion_version = "3.0.0" opts into typed emission. Atomic migration:
+# every block and lifecycle slot is a v3 typed variant in this release.
+# v1 string-emission exports (expand_block, emit_auth_helpers, etc.) removed.
+expansion_version = "3.0.0"
+# SHA-256 of foundation/spec/plugins/contracts/typed-emission-ops.toml
+# at compiler 0.30.416 — same value as frame.jobs (verified peer).
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
 abi_version = "1.0.0"
 
 [lifecycle]
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
-# Tag helpers (currentUser, hasRole, session_get, etc.) as BFS roots so
-# their bridge imports stay reachable when user code only reaches them
-# through plugin-generated guards. Applies to v1.0.0 inline-helpers output.
+# Plugin Contracts v3 — typed-emission.md §7.
+# module_helpers_are_roots: auth helpers are emitted inside expand_block_typed
+# via _emit_helpers_batch with flags=0 (not BFS roots). Kept true to ensure
+# bridge import reachability for helpers called from user code via plugin-emitted
+# guards (same rationale as v2, now applies to batch-emitted functions).
 module_helpers_are_roots = true
 
-# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
-# emit_auth_helpers(context_json) once per source file that loads frame.auth,
-# splices the returned `statements` into the file's symbol table.
-#
-# Deviation from migration.md §1.4 (documented in src/main.cln): unlike
-# frame.server / frame.data, frame.auth has no `__preamble` magic block.
-# The helper functions (session_create, hasRole, jwt_sign, currentUser,
-# isAuthenticated, ...) are emitted by generate_auth_helpers() inline
-# inside expand_auth_config — they reference config constants
-# (__session_cookie, __jwt_secret, __csrf_enabled, ...) that are only set
-# when the user writes an `auth:` block. Emitting them unconditionally
-# from this slot would either duplicate them (when auth: is present) or
-# reference unset constants (when auth: is absent). The slot returns an
-# empty body until the auth-config-state coordination lands (config moves
-# into build_state, slot reads it). Declaring the slot satisfies the
-# migration.md §1.4 manifest surface without changing behavior.
-module_helpers = "emit_auth_helpers"
-
-# Plugin Contracts v2 — lifecycle.md §3.4. Server builds only.
-# migration.md §1.4 calls for session-store initialization and JWT key
-# loading to live here. Today both are handled lazily by clean-server
-# (sessions on demand, JWT key resolved from env.get on each sign/verify
-# call) — there is no startup-time initialization to move. The slot
-# returns an empty body; the declaration completes the v2 manifest
-# surface per migration.md §1.4.
-server_init = "emit_auth_server_init"
-
-# Plugin Contracts v2 — lifecycle.md §3.5. Prepended to every HTTP route
-# handler. migration.md §1.4 calls for per-request session cookie parsing
-# and CSRF token verification to live here. Today both are handled by
-# clean-server's request context (cookie parsing) and by inline-emitted
-# helpers (csrf_validate called from user handler code) — there is no
-# inlined per-route prelude to move. Compiler-side splicing into route
-# handlers is itself a follow-up commit (see frame.server's per_request
-# precedent in ddaba1b). The slot returns an empty body until that lands.
-per_request = "emit_auth_per_request"
+# Typed lifecycle slot variants — typed-emission.md §7.
+# All three are no-op placeholders (same rationale as v2 — auth config state
+# is managed inside expand_block_typed, not in lifecycle slots).
+module_helpers = "emit_module_helpers_typed"
+server_init = "emit_server_init_typed"
+per_request = "emit_per_request_typed"
 
 [exports]
-expand = "expand_block"
+# v3 typed entry point — typed-emission.md §2.2.
+expand = "expand_block_typed"
 validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
 blocks = ["auth", "login", "roles"]
+
+# Per-block typed-emission declarations (typed-emission.md §2.1).
+# version = 3 required for every block when expansion_version = "3.0.0".
+[blocks.auth]
+expand = "expand_block_typed"
+version = 3
+
+[blocks.login]
+expand = "expand_block_typed"
+version = 3
+
+[blocks.roles]
+expand = "expand_block_typed"
+version = 3
 
 # Bridge function declarations - auth-specific functions provided by the runtime
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §2:
@@ -275,4 +266,4 @@ anti_pattern = "no CSRF protection on POST endpoints — a third-party site can 
 example = "patterns/csrf-protection.cln"
 
 [build]
-built_with_compiler = "0.30.401"
+built_with_compiler = "0.30.416"
