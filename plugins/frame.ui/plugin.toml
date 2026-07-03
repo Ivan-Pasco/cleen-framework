@@ -1,65 +1,44 @@
 [plugin]
 name = "frame.ui"
-version = "2.12.72"
-description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions"
+version = "3.0.0-alpha.1"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.0.0: plugin contracts v3 typed-emission (WIP on v3/frame.ui internal branch — sub-cycles 1/3; Sub-cycle 1 ships skeleton + factories only, not shippable until Sub-cycle 3)."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-# Bumped to 0.30.273 for HYDRATE_AUTO Gap 2 closure. Requires the compiler to:
-#   1. Recognize events: as a class-body section (shipped in 0.30.271 — earlier
-#      claim was correct; my misread of a stale install state caused the v2.12.5
-#      rollback panic).
-#   2. Tag each events:-method's compiler-synthesized bare-name thunk with
-#      PLUGIN_OUTPUT_V2_ROOT_MARKER so it survives BFS exclusion + DCE. Shipped
-#      in 0.30.273 — the actual gap the verification protocol caught.
-# With this floor in place, normalize_handlers can safely pass events: through
-# to the compiler. End-to-end verified locally: 4-handler events: block produces
-# 4 bare-name exports in frontend.wasm.
-min_compiler_version = "0.30.275"
+# Landing C4 + Amendments 5, 6, 7, 8, 9, 10 all required (0.30.423 minimum) —
+# matches the data/canvas v3 floor. Amendment 6 (§3.16 _emit_expr_from_source)
+# is the structural prerequisite for user-fragment expression sites
+# ({{ expr }}, cl-if / cl-iterate / cl-bind / cl-show / cl-validate values).
+# Amendment 3 (§3.13 _emit_class_full) collapses the component/page class
+# envelopes; Amendment 10 (§3.18 _emit_class_methods_from_spec via extended
+# class-spec method-entry union) covers accessor scaffolding where applicable.
+min_compiler_version = "0.30.423"
 
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/runtime-abi.md §4.
 # Floor declaration. Stamped into plugin.wasm's clean.abi_version custom
 # section by compiler >= 0.30.401. Bumped per the v2 ABI versioning policy.
 abi_version = "1.0.0"
 
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# Atomic migration: this plugin.wasm will be v3-only once Sub-cycle 3 lands.
+# emission_ops_hash verified against SHA-256 of
+# foundation/spec/plugins/contracts/typed-emission-ops.toml at compiler 0.30.423
+# (matches canvas v3.0.0 and data v3.0.0 stamps).
+expansion_version = "3.0.0"
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
+
 [lifecycle]
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
-# frame.ui's preamble emits SSR helpers (render, renderWith) that call
-# _ui_render_page. Without this flag, the BFS would tree-shake the helpers
-# (and their bridge import) when user code doesn't statically call render().
-# Added in v2.10.138 alongside the move of _ui_render_page from frame.server.
+# Plugin Contracts v3 — typed-emission.md §7. Under atomic-migration, every
+# declared slot MUST be a typed variant. frame.ui's SSR helpers (render,
+# renderWith), theme.css/components.json artifact staging, and client_init
+# hydration wiring all migrate to typed slots by Sub-cycle 3. Sub-cycle 1
+# ships typed no-op stubs so cln check passes on the skeleton; Sub-cycles
+# 2/3 fill the bodies.
 module_helpers_are_roots = true
-
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
-# Module helpers slot. Wraps the existing __preamble emission so the compiler
-# can adopt slot-based dispatch once it deletes the magic __preamble block.
-# Body is identical to the __preamble path during the migration window;
-# behavioral parity is verified by the existing render()/renderWith() tests.
-module_helpers = "emit_ui_helpers"
-
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/artifacts.md §6.
-# Artifact emitters slot. The compiler invokes this once per build to give
-# the plugin a chance to populate build_state entries that back the
-# [[artifacts]] declarations below (theme.css, components.json). Bytes are
-# read by the compiler-side emitter from build_state["frame.ui.<name>"].
-# Phase C: the slot is a no-op trigger — the build_state entries are
-# populated during expand_block (per-component) and at file-end. Phase D
-# may move that population into this slot for cleaner ordering.
-artifact_emitters = "emit_ui_artifacts"
-
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.3.
-# Client-mode build: the compiler invokes this slot once and splices the
-# returned statements into the synthetic client `_start` body. For each
-# component class with `client != "off"`, the slot emits an instantiation
-# call and an onMount() invocation. Closes HYDRATE_AUTO.
-#
-# History:
-#   v2.10.139 — reverted (param-convention mismatch, fixed in compiler 0.30.259).
-#   v2.10.141 — reverted (return-type mismatch, fixed in compiler 0.30.260).
-#   v2.10.143 — reverted (runtime trap, fixed in compiler 0.30.261).
-#   v2.10.145 — fourth attempt, this version. Re-applied on top of 0.30.261.
-client_init = "emit_ui_client_init"
+module_helpers = "emit_ui_helpers_typed"
+artifact_emitters = "emit_ui_artifacts_typed"
+client_init = "emit_ui_client_init_typed"
 
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/artifacts.md §4.1.
 # Declares `frontend.wasm` as a side-channel build artifact. Produced only
@@ -113,31 +92,42 @@ content_type    = "application/json"
 tier = "heavy"
 
 [exports]
-# HTML page processing (main entry point for pages)
-process_html = "process_html"
-
-# Component block expansion (for .cln component definitions)
-expand = "expand_block"
-
-# Block-level validation for component/page/layout (returns error message or "")
+# v3 typed entry point — typed-emission.md §2.2.
+# process_html (HTML page emission) and assemble (source-file scanning + route
+# synthesis) remain their own exports — they process file-level artifacts, not
+# in-source blocks, so they aren't unified under expand_block_typed. Both are
+# migrated to typed emission in Sub-cycles 2/3.
+process_html = "process_html_typed"
+expand = "expand_block_typed"
 validate = "validate_block"
-
-# HTML validation against component registry
 validate_html = "validate_html"
-
-# Page metadata extraction
 get_page_meta = "get_page_meta"
-
-# IDE keyword support
 get_keywords = "get_keywords"
-
-# Plugin assembly hook — scans source files for page companions, prefixes their
-# load()/guard() functions, and generates a synthetic route module when
-# has_frame_server=true. Required by compiler >= 0.30.213.
-assemble = "assemble"
+assemble = "assemble_typed"
 
 [handles]
 blocks = ["component", "page", "html", "ui"]
+
+# Per-block typed-emission declarations (typed-emission.md §2.1).
+# version = 3 is required when expansion_version = "3.0.0". Every block the
+# compiler routes through this plugin's expand_block_typed must be listed here
+# — otherwise the loader treats the block as v1 and refuses the plugin under
+# atomic-migration.
+[blocks.component]
+expand = "expand_block_typed"
+version = 3
+
+[blocks.page]
+expand = "expand_block_typed"
+version = 3
+
+[blocks.html]
+expand = "expand_block_typed"
+version = 3
+
+[blocks.ui]
+expand = "expand_block_typed"
+version = 3
 
 [html]
 # File extensions processed as HTML pages
