@@ -130,7 +130,31 @@ functions:
 		if block_name == "migrate"
 			return 0
 
-		// Verb blocks (Model.find:, Model.insert:, etc.) — Sub-cycles 3 and 4
+		// Verb blocks: <Model>.<verb>. The block_name is "<Model>.<verb>".
+		// Sub-cycle 3 wires the 7 read verbs. Write verbs (insert/insert_id/
+		// update/upsert) come in Sub-cycle 4. Other verbs (transaction/raw_query/
+		// typed_query) come in Sub-cycle 5.
+		integer dot_pos = block_name.indexOf(".")
+		if dot_pos != -1
+			string vmodel = block_name.substring(0, dot_pos)
+			string verb = block_name.substring(dot_pos + 1, block_name.length())
+			if verb == "find"
+				return expand_find(ctx, vmodel, body)
+			if verb == "first"
+				return expand_first(ctx, vmodel, body)
+			if verb == "count"
+				return expand_count(ctx, vmodel, body)
+			if verb == "exists"
+				return expand_exists(ctx, vmodel, body)
+			if verb == "delete"
+				return expand_delete(ctx, vmodel, body)
+			if verb == "paginate"
+				return expand_paginate(ctx, vmodel, body)
+			if verb == "cursor"
+				return expand_cursor(ctx, vmodel, body)
+			// Write verbs and misc — Sub-cycles 4 and 5
+			return 0
+
 		return 0
 
 // ============================================================================
@@ -2130,3 +2154,999 @@ functions:
 // The data arm routes to expand_data_model. The migrate arm is a stub
 // returning 0 (Sub-cycle 5 will fill it). Verb blocks (*.find, *.insert,
 // etc.) remain 0 until Sub-cycles 3 and 4.
+
+// ============================================================================
+// SUB-CYCLE 3: DSL SUB-BLOCK EXTRACTION + PARSING HELPERS (verbatim from v1)
+// ============================================================================
+// Pure string-manipulation helpers used by the read verb expanders. No bridge
+// calls, no typed emission. Verbatim ports of the v1 originals (main.v1.cln
+// lines ~2208-3195). Semantics preserved so runtime SQL output is identical
+// to v1 for the same DSL body.
+//
+// These helpers implement the DSL surface that expand_find/expand_first/etc.
+// walk over: extract a named sub-block, parse where/order/set/join/link/select/
+// group/include/paginate/cursor lines into SQL fragments or Clean-source
+// expressions, and lower DAT-Q019 datetime arithmetic and DAT-Q016 JSON path
+// syntax to SQL.
+
+functions:
+	// Extract a named sub-block ("where:", "order:", etc.) content from a DSL body.
+	// Returns the trimmed body of that sub-block, or "" when not present.
+	string extract_subblock(string body, string block_name)
+		integer start_pos = body.indexOf(block_name)
+		if start_pos == -1
+			return ""
+		integer content_start = start_pos + block_name.length()
+		integer end_pos = body.length()
+		integer search_pos = content_start
+		while search_pos < body.length()
+			if body.substring(search_pos, search_pos + 1) == "\n"
+				string after_newline = body.substring(search_pos + 1, body.length()).trim()
+				if after_newline.startsWith("where:") or after_newline.startsWith("order:") or after_newline.startsWith("limit:") or after_newline.startsWith("offset:") or after_newline.startsWith("link:") or after_newline.startsWith("join:") or after_newline.startsWith("set:") or after_newline.startsWith("sql:") or after_newline.startsWith("params:") or after_newline.startsWith("up:") or after_newline.startsWith("down:") or after_newline.startsWith("paginate:") or after_newline.startsWith("cursor:") or after_newline.startsWith("select:") or after_newline.startsWith("group:") or after_newline.startsWith("having:") or after_newline.startsWith("include:") or after_newline.startsWith("match:") or after_newline.startsWith("on_insert:")
+					end_pos = search_pos
+					break
+			search_pos = search_pos + 1
+		return body.substring(content_start, end_pos).trim()
+
+	// Simple integer literal check for RHS numeric detection.
+	boolean is_numeric(string s)
+		if s.length() == 0
+			return false
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch != "0" and ch != "1" and ch != "2" and ch != "3" and ch != "4" and ch != "5" and ch != "6" and ch != "7" and ch != "8" and ch != "9" and ch != "." and ch != "-"
+				return false
+			i = i + 1
+		return true
+
+	// Replace double-quoted string literals with single-quoted SQL strings.
+	string sql_quote_strings(string s)
+		string result = ""
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch == "\""
+				integer j = i + 1
+				string inner = ""
+				while j < s.length()
+					string c = s.substring(j, j + 1)
+					if c == "\""
+						break
+					inner = inner + c
+					j = j + 1
+				result = result + "'" + inner + "'"
+				if j < s.length()
+					i = j + 1
+				else
+					i = j
+			else
+				result = result + ch
+				i = i + 1
+		return result
+
+	// Lower a Clean expression to a SQL fragment when it matches DAT-Q019
+	// datetime arithmetic patterns. Returns the original expression unchanged
+	// when no pattern matches.
+	string lower_datetime_arith(string expr)
+		string e = expr.trim()
+		if e == "now()" or e == "time.now()"
+			return "NOW()"
+		if not e.startsWith("time.now().")
+			return expr
+		string rest = e.substring(11, e.length())
+		string op = ""
+		string time_unit = ""
+		string arg_body = ""
+		if rest.startsWith("add_seconds(")
+			op = "+"
+			time_unit = "seconds"
+			arg_body = rest.substring(12, rest.length())
+		else if rest.startsWith("add_minutes(")
+			op = "+"
+			time_unit = "minutes"
+			arg_body = rest.substring(12, rest.length())
+		else if rest.startsWith("add_hours(")
+			op = "+"
+			time_unit = "hours"
+			arg_body = rest.substring(10, rest.length())
+		else if rest.startsWith("add_days(")
+			op = "+"
+			time_unit = "days"
+			arg_body = rest.substring(9, rest.length())
+		else if rest.startsWith("subtract_seconds(")
+			op = "-"
+			time_unit = "seconds"
+			arg_body = rest.substring(17, rest.length())
+		else if rest.startsWith("subtract_minutes(")
+			op = "-"
+			time_unit = "minutes"
+			arg_body = rest.substring(17, rest.length())
+		else if rest.startsWith("subtract_hours(")
+			op = "-"
+			time_unit = "hours"
+			arg_body = rest.substring(15, rest.length())
+		else if rest.startsWith("subtract_days(")
+			op = "-"
+			time_unit = "days"
+			arg_body = rest.substring(14, rest.length())
+		else
+			return expr
+		if not arg_body.endsWith(")")
+			return expr
+		string arg = arg_body.substring(0, arg_body.length() - 1).trim()
+		if arg.length() == 0
+			return expr
+		if is_numeric(arg)
+			return "(NOW() " + op + " INTERVAL '" + arg + " " + time_unit + "')"
+		return expr
+
+	// Lower a JSON path_identifier (DAT-Q016) on the read side to JSON_EXTRACT.
+	// Returns the original token unchanged when no path syntax is present.
+	string lower_json_path(string token)
+		string t = token.trim()
+		integer dot_pos = t.indexOf(".")
+		integer brk_pos = t.indexOf("[")
+		if dot_pos == -1 and brk_pos == -1
+			return token
+		integer cut = t.length()
+		if dot_pos != -1 and dot_pos < cut
+			cut = dot_pos
+		if brk_pos != -1 and brk_pos < cut
+			cut = brk_pos
+		string col = t.substring(0, cut).trim()
+		if col.length() == 0
+			return token
+		string first_ch = col.substring(0, 1)
+		if not ((first_ch >= "a" and first_ch <= "z") or (first_ch >= "A" and first_ch <= "Z") or first_ch == "_")
+			return token
+		string path_suffix = t.substring(cut, t.length())
+		string json_path = "$"
+		if path_suffix.startsWith(".")
+			json_path = json_path + path_suffix
+		else if path_suffix.startsWith("[")
+			json_path = json_path + path_suffix
+		else
+			return token
+		return "JSON_EXTRACT(" + col + ", '" + json_path + "')"
+
+	// Detect a JSON path_identifier on the LHS of a set: assignment. Returns
+	// "<col>|<json_path>" when the LHS is a JSON path, or "" when plain column.
+	string split_json_path_lhs(string lhs)
+		string t = lhs.trim()
+		integer dot_pos = t.indexOf(".")
+		integer brk_pos = t.indexOf("[")
+		if dot_pos == -1 and brk_pos == -1
+			return ""
+		integer cut = t.length()
+		if dot_pos != -1 and dot_pos < cut
+			cut = dot_pos
+		if brk_pos != -1 and brk_pos < cut
+			cut = brk_pos
+		string col = t.substring(0, cut).trim()
+		if col.length() == 0
+			return ""
+		string first_ch = col.substring(0, 1)
+		if not ((first_ch >= "a" and first_ch <= "z") or (first_ch >= "A" and first_ch <= "Z") or first_ch == "_")
+			return ""
+		string path_suffix = t.substring(cut, t.length())
+		string json_path = "$" + path_suffix
+		return col + "|" + json_path
+
+	// Determine whether an order: value is a dynamic (runtime variable) reference
+	// rather than a static SQL column. Heuristic: single bare word containing at
+	// least one uppercase letter (camelCase variable convention).
+	boolean is_dynamic_order(string order_val)
+		if order_val.indexOf(" ") != -1
+			return false
+		integer i = 0
+		while i < order_val.length()
+			string ch = order_val.substring(i, i + 1)
+			if ch >= "A" and ch <= "Z"
+				return true
+			i = i + 1
+		return false
+
+	// Parse a single condition. Converts Clean operators to SQL and quotes strings.
+	string parse_condition(string condition)
+		string result = condition
+		result = result.replace(" == null", " IS NULL")
+		result = result.replace(" == NULL", " IS NULL")
+		result = result.replace(" != null", " IS NOT NULL")
+		result = result.replace(" != NULL", " IS NOT NULL")
+		result = result.replace(" == ", " = ")
+		result = result.replace(" != ", " <> ")
+		result = result.replace(" and ", " AND ")
+		result = result.replace(" or ", " OR ")
+		result = sql_quote_strings(result)
+		return result
+
+	// Parse where: body into a SQL fragment (AND-joined conditions).
+	string parse_where_clause(string where_body)
+		string result = ""
+		string lines = where_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + " AND "
+				result = result + parse_condition(line)
+			line_start = line_end + 1
+		return result
+
+	// Parse order: body into a SQL ORDER BY column list.
+	string parse_order_clause(string order_body)
+		string result = ""
+		string lines = order_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				integer dir_pos = line.indexOf(" ")
+				if dir_pos != -1
+					string field = line.substring(0, dir_pos)
+					string direction = line.substring(dir_pos + 1, line.length()).trim().toUpperCase()
+					result = result + field + " " + direction
+				else
+					result = result + line
+			line_start = line_end + 1
+		return result
+
+	// Parse select: body into a SQL projection list. Falls back to "*" when empty.
+	string parse_select_clause(string select_body)
+		string body = select_body.trim()
+		if body.length() == 0
+			return "*"
+		string result = ""
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string lhs = line
+				string alias = ""
+				integer as_pos = line.indexOf(" as ")
+				if as_pos != -1
+					lhs = line.substring(0, as_pos).trim()
+					alias = line.substring(as_pos + 4, line.length()).trim()
+				string lowered = lower_json_path(lhs)
+				string col_expr = lowered
+				if alias.length() > 0
+					col_expr = col_expr + " AS " + alias
+				if result.length() > 0
+					result = result + ", "
+				result = result + col_expr
+			line_start = line_end + 1
+		if result.length() == 0
+			return "*"
+		return result
+
+	// Parse group: body into a SQL GROUP BY column list.
+	string parse_group_clause(string group_body)
+		string body = group_body.trim()
+		string result = ""
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				result = result + line
+			line_start = line_end + 1
+		return result
+
+	// Parse include: body into LEFT JOIN clauses for eager-loading related rows.
+	string parse_include_clause(string include_body, string parent_table)
+		string body = include_body.trim()
+		string result = ""
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string rel_table = pluralize(to_snake_case(line))
+				string fk = to_snake_case(parent_table) + "_id"
+				if fk.endsWith("s_id")
+					fk = fk.substring(0, fk.length() - 4) + "_id"
+				result = result + " LEFT JOIN " + rel_table + " ON " + rel_table + "." + fk + " = " + parent_table + ".id"
+			line_start = line_end + 1
+		return result
+
+	// Parse link: body (legacy join form) into JOIN statements against base_table.
+	string parse_link_clause(string link_body, string base_table)
+		string result = ""
+		string lines = link_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer space_pos = line.indexOf(" ")
+				if space_pos != -1
+					string join_model = line.substring(0, space_pos)
+					string join_table = pluralize(to_snake_case(join_model))
+					string join_condition = line.substring(space_pos + 1, line.length()).trim()
+					join_condition = join_condition.replace(" == ", " = ")
+					if join_condition.indexOf(base_table + ".") == -1
+						join_condition = join_condition.replace(" id", " " + base_table + ".id")
+						join_condition = join_condition.replace("id ", base_table + ".id ")
+					result = result + "JOIN " + join_table + " ON " + join_condition + " "
+			line_start = line_end + 1
+		return result
+
+	// Replace <ModelName>. → <table>. in a SQL fragment, using join_body's alias
+	// entries as the alias source list (primary_model plus every joined model).
+	string resolve_model_refs(string sql, string primary_model, string join_body)
+		string result = sql
+		if primary_model.length() > 0
+			string primary_table = pluralize(to_snake_case(primary_model))
+			result = result.replace(primary_model + ".", primary_table + ".")
+		if join_body.length() > 0
+			string lines = join_body
+			integer line_start = 0
+			while line_start < lines.length()
+				integer line_end = lines.indexOf("\n", line_start)
+				if line_end == -1
+					line_end = lines.length()
+				string line = lines.substring(line_start, line_end).trim()
+				if line.length() > 0
+					integer sp1 = line.indexOf(" ")
+					if sp1 != -1
+						string first_word = line.substring(0, sp1)
+						string join_model = ""
+						if first_word == "inner" or first_word == "left" or first_word == "right" or first_word == "full"
+							string rest = line.substring(sp1 + 1, line.length()).trim()
+							integer sp2 = rest.indexOf(" ")
+							if sp2 != -1
+								join_model = rest.substring(0, sp2)
+							else
+								join_model = rest
+						else
+							join_model = first_word
+						if join_model.length() > 0
+							string join_table = pluralize(to_snake_case(join_model))
+							result = result.replace(join_model + ".", join_table + ".")
+				line_start = line_end + 1
+			return result
+		return result
+
+	// Parse join: body (spec §2.5 + DAT-Q017) into SQL JOIN statements.
+	// Supports aliased form ("Model as alias:") and legacy flat form
+	// ("inner Model on cond"). Runs resolve_model_refs on each join condition.
+	string parse_join_clause(string join_body, string primary_model)
+		string result = ""
+		string lines = join_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if line.endsWith(":") and line.indexOf(" as ") != -1
+					integer as_pos = line.indexOf(" as ")
+					string join_model = line.substring(0, as_pos).trim()
+					string after_as = line.substring(as_pos + 4, line.length() - 1).trim()
+					string join_type = "INNER JOIN"
+					string alias = after_as
+					if after_as.endsWith(" left")
+						join_type = "LEFT JOIN"
+						alias = after_as.substring(0, after_as.length() - 5).trim()
+					else if after_as.endsWith(" right")
+						join_type = "RIGHT JOIN"
+						alias = after_as.substring(0, after_as.length() - 6).trim()
+					string join_cond = ""
+					integer scan = line_end + 1
+					while scan < lines.length()
+						integer s_end = lines.indexOf("\n", scan)
+						if s_end == -1
+							s_end = lines.length()
+						string s_line = lines.substring(scan, s_end).trim()
+						if s_line.length() > 0
+							if s_line.endsWith(":") and s_line.indexOf(" as ") != -1
+								break
+							if s_line == "on:"
+								scan = s_end + 1
+								continue
+							if s_line.startsWith("on:")
+								s_line = s_line.substring(3, s_line.length()).trim()
+							if s_line.length() > 0
+								if join_cond.length() > 0
+									join_cond = join_cond + " AND "
+								join_cond = join_cond + s_line
+						scan = s_end + 1
+					string join_table = pluralize(to_snake_case(join_model))
+					join_cond = resolve_model_refs(join_cond, primary_model, join_body)
+					join_cond = join_cond.replace(" == ", " = ")
+					result = result + join_type + " " + join_table + " " + alias + " ON " + join_cond + " "
+					line_start = scan
+					continue
+				string join_type2 = "INNER JOIN"
+				string rest = line
+				if line.startsWith("left ")
+					join_type2 = "LEFT JOIN"
+					rest = line.substring(5, line.length()).trim()
+				else if line.startsWith("inner ")
+					rest = line.substring(6, line.length()).trim()
+				else if line.startsWith("right ")
+					join_type2 = "RIGHT JOIN"
+					rest = line.substring(6, line.length()).trim()
+				else if line.startsWith("full ")
+					join_type2 = "FULL JOIN"
+					rest = line.substring(5, line.length()).trim()
+				integer on_pos = rest.indexOf(" on ")
+				if on_pos != -1
+					string join_model2 = rest.substring(0, on_pos).trim()
+					string join_table2 = pluralize(to_snake_case(join_model2))
+					string join_cond2 = rest.substring(on_pos + 4, rest.length()).trim()
+					join_cond2 = resolve_model_refs(join_cond2, primary_model, join_body)
+					join_cond2 = join_cond2.replace(" == ", " = ")
+					result = result + join_type2 + " " + join_table2 + " ON " + join_cond2 + " "
+			line_start = line_end + 1
+		return result
+
+	// Extract a named field value from a paginate: or cursor: sub-block.
+	// Lines have form "<fieldName> <value>" (space-separated single line each).
+	string extract_paginate_field(string clause_body, string field_name)
+		string lines = clause_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.startsWith(field_name + " ")
+				return line.substring(field_name.length() + 1, line.length()).trim()
+			if line.startsWith(field_name + "\t")
+				return line.substring(field_name.length() + 1, line.length()).trim()
+			line_start = line_end + 1
+		return ""
+
+// ============================================================================
+// SUB-CYCLE 3: build_*_expr — Clean-source expression builders (Am 6 fed)
+// ============================================================================
+// These helpers produce Clean-language expression strings that, when handed
+// to _emit_expr_from_source, parse into typed expressions containing runtime
+// concatenation of SQL fragments with user-authored value expressions. This
+// is the marquee-bug closure discipline:
+//
+//   - No plugin-side triangular string sum of user data. Each builder walks
+//     the DSL body once (O(n) linear) and appends a bounded per-condition
+//     tail.
+//   - User-authored value expressions (rhs of ==, !=, etc.) flow through as
+//     Clean-source fragments — the runtime does the ".toString() + '"
+//     concatenation, not the plugin.
+//   - The compiler receives a single parsed expression per verb call, not a
+//     runtime-assembled SQL string. When Sub-cycle 4 lands write verbs and
+//     Sub-cycle 5 ships, `expand_find` becomes structurally incapable of
+//     producing the OOM shape that bug a648b4e6a8ec exposed in v1.
+
+functions:
+	// Build a Clean-source expression for a single SQL condition. Detects
+	// literal vs variable RHS: literals emit static SQL string; variables emit
+	// runtime concatenation via .toString() so the value is bound at call time.
+	// Verbatim port of v1 build_condition_expr semantics.
+	string build_condition_expr(string condition)
+		condition = condition.trim()
+		string op_sql = ""
+		integer op_pos = -1
+		integer op_len = 0
+		integer p = condition.indexOf(" == ")
+		if p != -1 and op_pos == -1
+			op_sql = "="
+			op_pos = p
+			op_len = 4
+		p = condition.indexOf(" != ")
+		if p != -1 and op_pos == -1
+			op_sql = "<>"
+			op_pos = p
+			op_len = 4
+		p = condition.indexOf(" >= ")
+		if p != -1 and op_pos == -1
+			op_sql = ">="
+			op_pos = p
+			op_len = 4
+		p = condition.indexOf(" <= ")
+		if p != -1 and op_pos == -1
+			op_sql = "<="
+			op_pos = p
+			op_len = 4
+		p = condition.indexOf(" > ")
+		if p != -1 and op_pos == -1
+			op_sql = ">"
+			op_pos = p
+			op_len = 3
+		p = condition.indexOf(" < ")
+		if p != -1 and op_pos == -1
+			op_sql = "<"
+			op_pos = p
+			op_len = 3
+		if op_pos == -1
+			return "\"" + parse_condition(condition) + "\""
+		string lhs_raw = condition.substring(0, op_pos).trim()
+		string rhs = condition.substring(op_pos + op_len, condition.length()).trim()
+		string lhs = lower_json_path(lhs_raw)
+		string lowered_rhs = lower_datetime_arith(rhs)
+		if lowered_rhs != rhs
+			return "\"" + lhs + " " + op_sql + " " + lowered_rhs + "\""
+		if rhs == "null" or rhs == "NULL"
+			if op_sql == "<>"
+				return "\"" + lhs + " IS NOT NULL\""
+			return "\"" + lhs + " IS NULL\""
+		if rhs == "true" or rhs == "false"
+			return "\"" + lhs + " " + op_sql + " " + rhs + "\""
+		if rhs.startsWith("\"") and rhs.length() >= 2
+			string inner = rhs.substring(1, rhs.length() - 1)
+			return "\"" + lhs + " " + op_sql + " '" + inner + "'\""
+		string digits_chars = "0123456789"
+		boolean rhs_is_num = false
+		if rhs.length() > 0
+			if digits_chars.indexOf(rhs.substring(0, 1)) != -1
+				rhs_is_num = true
+			if rhs.substring(0, 1) == "-" and rhs.length() > 1
+				if digits_chars.indexOf(rhs.substring(1, 2)) != -1
+					rhs_is_num = true
+		if rhs_is_num
+			return "\"" + lhs + " " + op_sql + " " + rhs + "\""
+		return "\"" + lhs + " " + op_sql + " '\" + " + rhs + ".toString() + \"'\""
+
+	// Build a Clean-source expression for a full WHERE clause. Iterates lines,
+	// calls build_condition_expr on each, joins with " AND " concatenation.
+	// The returned expression evaluates at runtime to the SQL fragment string.
+	string build_where_expr(string where_body)
+		string result = ""
+		string lines = where_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string cond_expr = build_condition_expr(line)
+				if result.length() == 0
+					result = cond_expr
+				else
+					result = result + " + \" AND \" + " + cond_expr
+			line_start = line_end + 1
+		if result.length() == 0
+			return "\"\""
+		return result
+
+	// Build a Clean-source expression for a full SET clause. Handles JSON-path
+	// LHS (DAT-Q016), datetime arithmetic RHS (DAT-Q019), literal vs variable
+	// RHS discrimination. Sub-cycle 4 write verbs will consume this helper.
+	string build_set_expr(string set_body)
+		string result = ""
+		string lines = set_body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string assign_expr = ""
+				integer eq_pos = line.indexOf(" = ")
+				if eq_pos != -1
+					string col_raw = line.substring(0, eq_pos).trim()
+					string val = line.substring(eq_pos + 3, line.length()).trim()
+					string json_split = split_json_path_lhs(col_raw)
+					string col = col_raw
+					string col_lhs_for_set = ""
+					string col_target = col_raw
+					string json_path_for_set = ""
+					if json_split.length() > 0
+						integer __sep = json_split.indexOf("|")
+						col = json_split.substring(0, __sep)
+						col_target = col
+						json_path_for_set = json_split.substring(__sep + 1, json_split.length())
+						col_lhs_for_set = col
+					string lowered = lower_datetime_arith(val)
+					if col_lhs_for_set.length() > 0
+						string json_rhs = ""
+						if lowered != val
+							json_rhs = lowered
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', " + json_rhs + ")\""
+						else if val == "null" or val == "NULL"
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', NULL)\""
+						else if val == "true" or val == "false"
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', " + val + ")\""
+						else if val.startsWith("\"") and val.length() >= 2
+							string inner = val.substring(1, val.length() - 1)
+							assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', '" + inner + "')\""
+						else
+							string digits_chars2 = "0123456789"
+							boolean val_is_num2 = false
+							if val.length() > 0
+								if digits_chars2.indexOf(val.substring(0, 1)) != -1
+									val_is_num2 = true
+							if val_is_num2
+								assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', " + val + ")\""
+							else
+								assign_expr = "\"" + col_target + " = JSON_SET(" + col_target + ", '" + json_path_for_set + "', '\" + " + val + ".toString() + \"')\""
+					else if lowered != val
+						assign_expr = "\"" + col + " = " + lowered + "\""
+					else if val == "null" or val == "NULL"
+						assign_expr = "\"" + col + " = NULL\""
+					else if val == "true" or val == "false"
+						assign_expr = "\"" + col + " = " + val + "\""
+					else if val.startsWith("\"") and val.length() >= 2
+						string inner = val.substring(1, val.length() - 1)
+						assign_expr = "\"" + col + " = '" + inner + "'\""
+					else
+						string digits_chars = "0123456789"
+						boolean val_is_num = false
+						if val.length() > 0
+							if digits_chars.indexOf(val.substring(0, 1)) != -1
+								val_is_num = true
+							if val.substring(0, 1) == "-" and val.length() > 1
+								if digits_chars.indexOf(val.substring(1, 2)) != -1
+									val_is_num = true
+						if val_is_num
+							assign_expr = "\"" + col + " = " + val + "\""
+						else
+							assign_expr = "\"" + col + " = '\" + " + val + ".toString() + \"'\""
+				else
+					assign_expr = "\"" + sql_quote_strings(line) + "\""
+				if result.length() == 0
+					result = assign_expr
+				else
+					result = result + " + \", \" + " + assign_expr
+			line_start = line_end + 1
+		if result.length() == 0
+			return "\"\""
+		return result
+
+	// Build a Clean-source expression that evaluates to a JSON object string
+	// representing the WHERE conditions for the where_json argument of
+	// _db_paginate and _db_cursor_page. Returns "\"{}\"" when where clause is empty.
+	string build_where_json_expr(string where_clause)
+		if where_clause.length() == 0
+			return "\"{}\""
+		string where_sql_expr = build_where_expr(where_clause)
+		return "\"{\\\"__where\\\":\\\"\" + " + where_sql_expr + " + \"\\\"}\""
+
+// ============================================================================
+// SUB-CYCLE 3: READ VERB EXPANDERS
+// ============================================================================
+// Each expand_<verb> returns an integer expression handle produced by
+// _emit_expr_from_source (Am 6, §3.16) fed a Clean-source expression string.
+// The Clean-source expression:
+//   - For plain single-expression paths (no-tenant, no-dynamic-order): is a
+//     single call chain ending in _db_query / __<Model>_<helper> that the
+//     compiler parses to one expression AST.
+//   - For multi-branch paths (tenant, dynamic-order, paginate, cursor): is
+//     emitted as one or more statements via _emit_stmt_from_source and the
+//     final expression value flows through a synthetic local variable.
+//
+// Am 9 fit analysis per verb (per typed-emission.md §3.17 predictive-power
+// note): find/first have multi-branch tenant/order conditionals. paginate/
+// cursor emit multi-statement preambles. count/exists/delete are single-
+// expression call sites. For the single-expression branches we use Am 6
+// pass-through (simplest, correct, avoids Am 9 spec-JSON assembly for what is
+// already a Clean-authored expression). For multi-branch cases we compose the
+// v1 shape into a statement source pass-through. Sub-cycle 5 will re-visit
+// the shape-matching branches with Am 9 spec-JSON once the DSL parsers are
+// migrated and integration-tested.
+//
+// Sticky-error idiom: one _ctx_set_error_context at entry per verb; one
+// _ctx_had_error check at exit. Emission failure surfaces via plugin_error.
+
+functions:
+	// Expand <Model>.find: block. Returns an integer expression handle for a
+	// _db_query call chain wrapped in json.get(json.get(..., "data"), "rows").
+	// Multi-branch (tenant / dynamic-order / with-where) shapes emit statement
+	// preambles via _emit_stmt_from_source and return the trailing expression
+	// handle. See v1 expand_find (main.v1.cln:1349) for the DSL semantics.
+	integer expand_find(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E003", "expand_find for " + model_name)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		string order_clause = extract_subblock(body, "order:")
+		string limit_clause = extract_subblock(body, "limit:")
+		string link_clause = extract_subblock(body, "link:")
+		string join_clause = extract_subblock(body, "join:")
+		string select_clause = extract_subblock(body, "select:")
+		string group_clause = extract_subblock(body, "group:")
+		string having_clause = extract_subblock(body, "having:")
+		string include_clause = extract_subblock(body, "include:")
+		string offset_clause = extract_subblock(body, "offset:")
+
+		string projection = "*"
+		if select_clause.length() > 0
+			projection = parse_select_clause(select_clause)
+		string include_join = ""
+		if include_clause.length() > 0
+			include_join = parse_include_clause(include_clause, table_name)
+		string group_sql = ""
+		if group_clause.length() > 0
+			group_sql = " GROUP BY " + parse_group_clause(group_clause)
+		string having_sql = ""
+		if having_clause.length() > 0
+			having_sql = " HAVING " + parse_where_clause(having_clause)
+		boolean has_tenant = detect_tenant_field(body)
+
+		string resolved_where = where_clause
+		string resolved_order = order_clause
+		if join_clause.length() > 0
+			resolved_where = resolve_model_refs(where_clause, model_name, join_clause)
+			resolved_order = resolve_model_refs(order_clause, model_name, join_clause)
+		else if link_clause.length() > 0
+			resolved_where = resolve_model_refs(where_clause, model_name, link_clause)
+
+		string sql_prefix = "SELECT " + projection + " FROM " + table_name
+		if join_clause.length() > 0
+			sql_prefix = sql_prefix + " " + parse_join_clause(join_clause, model_name)
+		if link_clause.length() > 0
+			sql_prefix = sql_prefix + " " + parse_link_clause(link_clause, table_name)
+		if include_join.length() > 0
+			sql_prefix = sql_prefix + include_join
+
+		// Non-tenant path with no where clause AND static (or no) order:
+		// single-expression case.
+		boolean order_is_dynamic = false
+		if resolved_order.length() > 0 and is_dynamic_order(resolved_order.trim())
+			order_is_dynamic = true
+		if not has_tenant and resolved_where.length() == 0 and not order_is_dynamic
+			string sql = sql_prefix
+			if group_sql.length() > 0
+				sql = sql + group_sql
+			if having_sql.length() > 0
+				sql = sql + having_sql
+			if resolved_order.length() > 0
+				sql = sql + " ORDER BY " + parse_order_clause(resolved_order)
+			if limit_clause.length() > 0
+				sql = sql + " LIMIT " + limit_clause.trim()
+			if offset_clause.length() > 0
+				sql = sql + " OFFSET " + offset_clause.trim()
+			string src = "json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\")"
+			integer expr = _emit_expr_from_source(ctx, src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find failed for " + model_name)
+			return expr
+
+		// Multi-branch path: emit statement preamble + trailing expression.
+		// The preamble accumulates the SQL string; the final _db_query call is
+		// wrapped in the json.get chain. Everything is fed to
+		// _emit_stmt_from_source so the compiler parses the block once.
+		string preamble = ""
+		if resolved_order.length() > 0 and is_dynamic_order(resolved_order.trim())
+			string dyn_var = resolved_order.trim()
+			preamble = preamble + "if not _db_valid_field(\"" + table_name + "\", " + dyn_var + ")\n"
+			preamble = preamble + "\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + dyn_var + " + \"\\\"}}\"\n"
+		preamble = preamble + "string __find_sql = \"" + sql_prefix + "\"\n"
+		if has_tenant
+			preamble = preamble + "string __find_tenant = tenant_getId()\n"
+			preamble = preamble + "string __find_tf = \"tenant_id = '\" + __find_tenant + \"'\"\n"
+			if resolved_where.length() > 0
+				preamble = preamble + "__find_sql = __find_sql + \" WHERE \" + __find_tf + \" AND \" + (" + build_where_expr(resolved_where) + ")\n"
+			else
+				preamble = preamble + "__find_sql = __find_sql + \" WHERE \" + __find_tf\n"
+		else if resolved_where.length() > 0
+			preamble = preamble + "__find_sql = __find_sql + \" WHERE \" + (" + build_where_expr(resolved_where) + ")\n"
+		if group_sql.length() > 0
+			preamble = preamble + "__find_sql = __find_sql + \"" + group_sql + "\"\n"
+		if having_sql.length() > 0
+			preamble = preamble + "__find_sql = __find_sql + \"" + having_sql + "\"\n"
+		if resolved_order.length() > 0
+			if is_dynamic_order(resolved_order.trim())
+				preamble = preamble + "__find_sql = __find_sql + \" ORDER BY \" + " + resolved_order.trim() + "\n"
+			else
+				preamble = preamble + "__find_sql = __find_sql + \" ORDER BY " + parse_order_clause(resolved_order) + "\"\n"
+		if limit_clause.length() > 0
+			preamble = preamble + "__find_sql = __find_sql + \" LIMIT " + limit_clause.trim() + "\"\n"
+		if offset_clause.length() > 0
+			preamble = preamble + "__find_sql = __find_sql + \" OFFSET " + offset_clause.trim() + "\"\n"
+		// Emit the preamble as statements; the trailing expression is the
+		// json.get chain over _db_query.
+		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E003", "expand_find failed for " + model_name)
+		string tail = "json.get(json.get(_db_query(__find_sql, \"[]\"), \"data\"), \"rows\")"
+		integer tail_expr = _emit_expr_from_source(ctx, tail, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E003", "expand_find failed for " + model_name)
+		return tail_expr
+
+	// Expand <Model>.first: block. Returns an integer expression handle
+	// producing json.get(..., "0") over the _db_query result with LIMIT 1.
+	integer expand_first(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E004", "expand_first for " + model_name)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		string order_clause = extract_subblock(body, "order:")
+		boolean has_tenant = detect_tenant_field(body)
+
+		// Non-tenant path: single-expression when where is empty and no dynamic order.
+		if not has_tenant and where_clause.length() == 0
+			string sql = "SELECT * FROM " + table_name
+			if order_clause.length() > 0
+				sql = sql + " ORDER BY " + parse_order_clause(order_clause)
+			sql = sql + " LIMIT 1"
+			string src = "json.get(json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\"), \"0\")"
+			integer expr = _emit_expr_from_source(ctx, src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first failed for " + model_name)
+			return expr
+
+		// Multi-branch path (tenant or dynamic where): emit preamble + tail expr.
+		string preamble = "string __first_sql = \"SELECT * FROM " + table_name + "\"\n"
+		if has_tenant
+			preamble = preamble + "string __first_tenant = tenant_getId()\n"
+			preamble = preamble + "string __first_tf = \"tenant_id = '\" + __first_tenant + \"'\"\n"
+			if where_clause.length() > 0
+				preamble = preamble + "__first_sql = __first_sql + \" WHERE \" + __first_tf + \" AND \" + (" + build_where_expr(where_clause) + ")\n"
+			else
+				preamble = preamble + "__first_sql = __first_sql + \" WHERE \" + __first_tf\n"
+		else if where_clause.length() > 0
+			preamble = preamble + "__first_sql = __first_sql + \" WHERE \" + (" + build_where_expr(where_clause) + ")\n"
+		if order_clause.length() > 0
+			preamble = preamble + "__first_sql = __first_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
+		preamble = preamble + "__first_sql = __first_sql + \" LIMIT 1\"\n"
+		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first failed for " + model_name)
+		string tail = "json.get(json.get(json.get(_db_query(__first_sql, \"[]\"), \"data\"), \"rows\"), \"0\")"
+		integer tail_expr = _emit_expr_from_source(ctx, tail, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first failed for " + model_name)
+		return tail_expr
+
+	// Expand <Model>.count: block. Returns an integer expression handle
+	// for a call to the generated __<Model>_count helper (single expression).
+	integer expand_count(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E005", "expand_count for " + model_name)
+		string where_clause = extract_subblock(body, "where:")
+		string src = ""
+		if where_clause.length() > 0
+			src = "__" + model_name + "_count(" + build_where_expr(where_clause) + ")"
+		else
+			src = "__" + model_name + "_count(\"\")"
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E005", "expand_count failed for " + model_name)
+		return expr
+
+	// Expand <Model>.exists: block. Returns an integer expression handle
+	// for a call to the generated __<Model>_exists helper (single expression).
+	integer expand_exists(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E006", "expand_exists for " + model_name)
+		string where_clause = extract_subblock(body, "where:")
+		string src = ""
+		if where_clause.length() > 0
+			src = "__" + model_name + "_exists(" + build_where_expr(where_clause) + ")"
+		else
+			src = "__" + model_name + "_exists(\"\")"
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E006", "expand_exists failed for " + model_name)
+		return expr
+
+	// Expand <Model>.delete: block. Returns an integer expression handle
+	// for a call to the generated __<Model>_raw_delete helper. This is the
+	// read-verb sibling of the block-level delete; the row-instance .delete()
+	// method is emitted by the class in Sub-cycle 2.
+	integer expand_delete(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E007", "expand_delete for " + model_name)
+		string where_clause = extract_subblock(body, "where:")
+		string src = ""
+		if where_clause.length() > 0
+			src = "__" + model_name + "_raw_delete(" + build_where_expr(where_clause) + ")"
+		else
+			src = "__" + model_name + "_raw_delete(\"\")"
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E007", "expand_delete failed for " + model_name)
+		return expr
+
+	// Expand <Model>.paginate: block. Emits preamble statements (where JSON
+	// composition, dynamic-order guard) and returns json.parse(<paged_json>).
+	integer expand_paginate(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E008", "expand_paginate for " + model_name)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		string order_clause = extract_subblock(body, "order:")
+		string paginate_clause = extract_subblock(body, "paginate:")
+
+		string page_expr = "1"
+		string per_page_expr = "20"
+		if paginate_clause.length() > 0
+			string pg_val = extract_paginate_field(paginate_clause, "page")
+			if pg_val.length() > 0
+				page_expr = pg_val
+			string pp_val = extract_paginate_field(paginate_clause, "perPage")
+			if pp_val.length() > 0
+				per_page_expr = pp_val
+
+		string where_json_expr = build_where_json_expr(where_clause)
+
+		string order_out = "\"\""
+		boolean order_is_dynamic = false
+		if order_clause.length() > 0
+			string parsed_order = parse_order_clause(order_clause)
+			order_is_dynamic = is_dynamic_order(order_clause.trim())
+			if order_is_dynamic
+				order_out = order_clause.trim()
+			else
+				order_out = "\"" + parsed_order + "\""
+
+		string preamble = ""
+		if order_is_dynamic
+			preamble = preamble + "if not _db_valid_field(\"" + table_name + "\", " + order_out + ")\n"
+			preamble = preamble + "\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + order_out + " + \"\\\"}}\"\n"
+		preamble = preamble + "string __where_json_pg = " + where_json_expr + "\n"
+		if order_clause.length() > 0
+			preamble = preamble + "if __where_json_pg == \"{}\"\n"
+			preamble = preamble + "\t__where_json_pg = \"{\\\"__order\\\":\\\"\" + " + order_out + " + \"\\\"}\"\n"
+			preamble = preamble + "else\n"
+			preamble = preamble + "\t__where_json_pg = __where_json_pg.substring(0, __where_json_pg.length() - 1) + \",\\\"__order\\\":\\\"\" + " + order_out + " + \"\\\"}\"\n"
+		preamble = preamble + "string __paged_json = _db_paginate(\"" + table_name + "\", __where_json_pg, " + page_expr + ", " + per_page_expr + ")\n"
+		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate failed for " + model_name)
+		string tail = "json.parse(__paged_json)"
+		integer tail_expr = _emit_expr_from_source(ctx, tail, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate failed for " + model_name)
+		return tail_expr
+
+	// Expand <Model>.cursor: block. Emits preamble statements (where JSON,
+	// cursor field extraction) and returns json.parse(<cursor_json>).
+	integer expand_cursor(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E009", "expand_cursor for " + model_name)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(body, "where:")
+		string cursor_clause = extract_subblock(body, "cursor:")
+
+		string per_page_expr = "20"
+		string after_expr = "\"\""
+		string by_expr = "\"id\""
+		if cursor_clause.length() > 0
+			string pp_val = extract_paginate_field(cursor_clause, "perPage")
+			if pp_val.length() > 0
+				per_page_expr = pp_val
+			string after_val = extract_paginate_field(cursor_clause, "after")
+			if after_val.length() > 0
+				after_expr = after_val
+			string by_val = extract_paginate_field(cursor_clause, "by")
+			if by_val.length() > 0
+				by_expr = by_val
+
+		string where_json_expr = build_where_json_expr(where_clause)
+		string preamble = "string __where_json_cur = " + where_json_expr + "\n"
+		preamble = preamble + "string __cursor_json = _db_cursor_page(\"" + table_name + "\", __where_json_cur, " + per_page_expr + ", " + after_expr + ", " + by_expr + ")\n"
+		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor failed for " + model_name)
+		string tail = "json.parse(__cursor_json)"
+		integer tail_expr = _emit_expr_from_source(ctx, tail, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor failed for " + model_name)
+		return tail_expr
+
+// ============================================================================
+// END OF SUB-CYCLE 3 CONTENT
+// ============================================================================
+// Sub-cycle 4 adds write verbs (expand_insert, expand_insert_id, expand_update,
+// expand_upsert) + wires them into expand_block_typed's verb dispatch. Sub-
+// cycle 4 will reuse build_set_expr (defined here) and build_where_expr for
+// the write verbs' clause assembly.
