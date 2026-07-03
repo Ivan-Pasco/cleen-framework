@@ -1,50 +1,69 @@
 [plugin]
 name = "frame.data"
-version = "2.2.4"
-description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries. v2.2.4: plugin contracts v2 sub-cycles 1+2 — declares [compatibility].abi_version = \"1.0.0\", [lifecycle].module_helpers = \"emit_data_helpers\", and [lifecycle].server_init = \"emit_data_server_init\" per migration.md §1.3. v2.2.3: typed-expression binding preservation for v1.2 verbs the compiler doesn't direct-dispatch (insert_id:, upsert:, select:) — `integer x = Model.insert_id: ...` and friends now compile correctly instead of dropping the binding and failing with SEM007. v2.2.2: bare now() / time.now() inside Model.update: set: blocks now lower to SQL NOW(), so MySQL DATETIME columns receive a server-evaluated timestamp instead of a raw unix-second integer. v2.2.1: unknown-verb guard now handles both compiler dispatch conventions, so Model.<typo>: blocks fail loudly at runtime as documented. v2.2.0: implements frame-data spec v1.2.0 — insert_id:, upsert: (match/set/on_insert), datetime arithmetic (time.now().add_seconds/minutes/hours/days), JSON path access (JSON_EXTRACT/JSON_SET), aliased join: blocks, and loud rejection of unknown Model.<verb>: blocks."
+version = "3.0.0"
+description = "ORM and database plugin for Clean Language — plugin contracts v3 typed-emission. Atomic migration across 5 sub-cycles on branch v3/frame.data (Amendment 1 atomic per plugin). Closes marquee bug a648b4e6a8ec (find/join OOM) structurally: user-authored where/join/set/on_insert/match fragments route through _emit_expr_from_source (Am 6); no plugin-built triangular SQL concat. Predecessor v2.2.4 retained at git tag frame.data-v2.2.4."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.15.0"
+# Amendment 10 (§3.18 `_emit_class_methods_from_spec`) required — Sub-cycle 2
+# uses it for template-generator method emission. 0.30.423 is the compiler
+# cycle in which Am 10 landed.
+min_compiler_version = "0.30.423"
 # Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
-# compile time; loader verifies it when present. "1.0.0" is the initial
-# declared value per migration.md §1.3 for frame.data.
+# compile time; loader verifies it when present.
 abi_version = "1.0.0"
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# Atomic migration: this plugin.wasm will be v3-only once Sub-cycle 5 lands.
+# emission_ops_hash verified against SHA-256 of
+# foundation/spec/plugins/contracts/typed-emission-ops.toml at compiler 0.30.423.
+# Same hash as frame.canvas v3.0.0 (both stamped against the same ops table).
+expansion_version = "3.0.0"
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
 
 [lifecycle]
-# Plugin Contracts v2 — foundation/spec/plugins/contracts/lifecycle.md §3.1.
-# Preamble-emitted helpers (the insertReturningId helper) are called from
-# plugin-generated CRUD code that the Import Minimality BFS cannot statically
-# trace back to user code. Treat them as roots so their bridge imports stay
-# reachable. Same shape as frame.server's flip. Closes GEN003 for frame.data.
+# Plugin Contracts v3 — typed-emission.md §7. Under atomic-migration, every
+# declared slot MUST be a typed variant. Sub-cycle 1 ships a no-op stub for
+# emit_module_helpers_typed; the legacy emit_data_helpers preamble content
+# (insertReturningId helper) will be re-emitted from expand_data_model /
+# expand_block_typed in Sub-cycles 2–4 via _emit_statement_into_start, matching
+# frame.canvas's inline-emission pattern (see canvas main.cln:83–85 rationale).
 module_helpers_are_roots = true
+module_helpers = "emit_module_helpers_typed"
 
-# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
-# emit_data_helpers(context_json) once per source file that loads frame.data,
-# splices the returned `statements` into the file's symbol table. Mirrors the
-# legacy __preamble branch in expand_block.
-module_helpers = "emit_data_helpers"
-
-# Plugin Contracts v2 — lifecycle.md §3.4. Server builds only.
-# migration.md §1.3 calls for connection-pool setup and migration auto-apply
-# on startup to live here. That logic currently resides in clean-server and
-# is invoked by _db_configure / _db_run_migrations calls emitted by
+# Plugin Contracts v2 — lifecycle.md §3.4. Server-init slot retained (still
+# server-only) but renamed to the typed variant. Body remains empty pending the
+# expand_data_config rework called out in the v1 comment below — Sub-cycles
+# 2–4 do not touch this slot; it stays a stub through the v3 migration.
+# Original v1 note preserved:
+# migration.md §1.3 calls for connection-pool setup and migration auto-apply on
+# startup to live here. That logic currently resides in clean-server and is
+# invoked by _db_configure / _db_run_migrations calls emitted by
 # expand_data_config; moving it into this slot is deferred — the slot would
 # need to re-emit those calls while expand_data_config still emits them into
 # start:, causing double-execution. Declaring the slot now satisfies the
-# migration.md §1.3 manifest requirement. The slot returns an empty body
-# until the expand_data_config rework lands in a follow-up cycle.
-server_init = "emit_data_server_init"
+# migration.md §1.3 manifest requirement.
+server_init = "emit_server_init_typed"
 
 [exports]
-expand = "expand_block"
+# v3 typed entry point — typed-emission.md §2.2.
+expand = "expand_block_typed"
 validate = "validate_block"
 get_keywords = "get_keywords"
 
 [handles]
 # Model definitions and migration definitions
 blocks = ["data", "migrate"]
+
+# Per-block typed-emission declarations (typed-emission.md §2.1).
+# version = 3 is required when expansion_version = "3.0.0".
+[blocks.data]
+expand = "expand_block_typed"
+version = 3
+
+[blocks.migrate]
+expand = "expand_block_typed"
+version = 3
 
 # CRUD operations (these are expression-level, handled by compiler calling expand functions)
 # Audit note: *.select: and *.exists: were dispatched by expand_block but absent
@@ -311,4 +330,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.30.401"
+built_with_compiler = "0.30.423"
