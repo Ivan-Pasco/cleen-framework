@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.canvas"
-version = "3.0.0-alpha.1"
-description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects. v3.0.0-alpha.1: plugin contracts v3 typed-emission migration in progress on internal branch v3/frame.canvas. Sub-cycle 1 of 3: branch setup, plugin.toml v3 stub, and main.cln skeleton with tooling. Sub-cycles 2 and 3 will land the full v3 dispatcher and the remaining expanders. Not shippable until Sub-cycle 3 completes and merges atomically to main. See foundation/spec/plugins/contracts/typed-emission.md and reports/2026-07-03-session-3-frame-canvas-deferred-v4.md §5."
+version = "3.0.0"
+description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects. v3.0.0: plugin contracts v3 typed-emission complete — full typed AST emission, all 32 draw commands, 8 multi-instance expanders, 14 DSL body commands, DSL parsers, attribute helpers, scene state loops, validation, and complete dispatcher."
 author = "Clean Language Team"
 license = "MIT"
 

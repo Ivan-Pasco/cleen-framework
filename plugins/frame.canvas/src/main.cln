@@ -1,19 +1,10 @@
 // frame.canvas plugin - Canvas / animation / rendering DSL
-// Version: 3.0.0-alpha.1 (Sub-cycle 1 of 3 — SKELETON ONLY, not shippable)
+// Version: 3.0.0
 // ABI: Plugin Contracts v3 — typed AST emission (typed-emission.md)
 //
-// STATUS: Skeleton. Sub-cycle 1 of the internal-branch migration plan defined
-// in reports/2026-07-03-session-3-frame-canvas-deferred-v4.md §5. This file
-// contains the header, external: bridge declarations, tooling (plugin_error,
-// tiny factory helpers, canvas-specific arity-specialized sc1..sc8 helpers),
-// and empty typed lifecycle slots. Sub-cycle 2 will add expand_canvas_scene
-// and the 11 event-handler emitters. Sub-cycle 3 will add expand_canvas_command
-// and the 32 draw-command emitters, migrate the DSL parsers and attribute
-// helpers verbatim from main.v1.cln, then run comita and merge to main.
-//
-// Reference: plugins/frame.canvas/src/main.v1.cln is the v1 source (renamed
-// from main.cln at Sub-cycle 1). It stays in the tree as authoritative
-// documentation of the v1 semantics until Sub-cycle 3 completes.
+// STATUS: Complete. All three sub-cycles (1: skeleton, 2: scene/event handlers,
+// 3a: draw commands/expanders, 3b: DSL parsers/attribute helpers/dispatcher fold)
+// delivered and merged. This is the shipping version of the plugin.
 //
 // Recipe: reports/2026-07-02-session-3-frame-canvas-deferred-v2.md §5 (LOC
 // projection and file structure) and reports/2026-07-03-session-3-frame-canvas
@@ -104,6 +95,54 @@ functions:
 
 functions:
 	integer expand_block_typed(integer ctx, string block_name, string attrs_json, string body)
+		// Scene root
+		if block_name.startsWith("canvasScene")
+			return expand_canvas_scene(ctx, attrs_json, body)
+		// Event handlers
+		if block_name.startsWith("onPointerDown")
+			return expand_on_pointer_down(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerMove")
+			return expand_on_pointer_move(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerUp")
+			return expand_on_pointer_up(ctx, attrs_json, body)
+		if block_name.startsWith("onKeyDown")
+			return expand_on_key_down(ctx, attrs_json, body)
+		if block_name.startsWith("onKeyUp")
+			return expand_on_key_up(ctx, attrs_json, body)
+		if block_name.startsWith("onFrame")
+			return expand_on_frame(ctx, attrs_json, body)
+		if block_name.startsWith("onExit")
+			return expand_on_exit(ctx, attrs_json, body)
+		if block_name.startsWith("onPause")
+			return expand_on_pause(ctx, attrs_json, body)
+		if block_name.startsWith("onResume")
+			return expand_on_resume(ctx, attrs_json, body)
+		if block_name.startsWith("draw")
+			return expand_draw(ctx, attrs_json, body)
+		if block_name.startsWith("init")
+			return expand_init(ctx, attrs_json, body)
+		// Draw commands (32 ops)
+		if block_name.startsWith("canvas.")
+			return expand_canvas_command(ctx, block_name, attrs_json, body)
+		// Multi-instance definitions
+		if block_name.startsWith("animSprite")
+			return expand_anim_sprite(ctx, attrs_json, body)
+		if block_name.startsWith("animState")
+			return expand_anim_state(ctx, attrs_json, body)
+		if block_name.startsWith("tween")
+			return expand_tween(ctx, attrs_json, body)
+		if block_name.startsWith("timeline")
+			return expand_timeline(ctx, attrs_json, body)
+		if block_name.startsWith("particles")
+			return expand_particles(ctx, attrs_json, body)
+		if block_name.startsWith("path")
+			return expand_path(ctx, attrs_json, body)
+		if block_name.startsWith("gradient")
+			return expand_gradient(ctx, attrs_json, body)
+		if block_name.startsWith("customEase")
+			return expand_custom_ease(ctx, attrs_json, body)
+		if block_name.startsWith("camera")
+			return expand_camera(ctx, attrs_json, body)
 		return 0
 
 // ============================================================================
@@ -115,10 +154,12 @@ functions:
 
 functions:
 	string validate_block(string block_name, string attributes, string body)
+		if block_name.startsWith("canvasScene")
+			return validate_canvas_scene(attributes, body)
 		return ""
 
 	string get_keywords()
-		return "[]"
+		return "[\"canvasScene\",\"assets\",\"layers\",\"state\",\"init\",\"animSprite\",\"tween\",\"timeline\",\"animState\",\"particles\",\"path\",\"gradient\",\"customEase\",\"camera\",\"draw\",\"onFrame\",\"onPointerDown\",\"onPointerMove\",\"onPointerUp\",\"onKeyDown\",\"onKeyUp\",\"onExit\",\"onPause\",\"onResume\",\"canvas\",\"audio\",\"input\",\"collision\",\"scene\",\"page\",\"animate\",\"play\",\"pause\",\"stop\",\"seek\",\"emit\",\"start\",\"deltaTime\",\"time\",\"clear\",\"circle\",\"rect\",\"line\",\"triangle\",\"ellipse\",\"text\",\"image\",\"sprite\",\"group\",\"clip\",\"alpha\",\"shadow\",\"blur\",\"glow\",\"blend\",\"save\",\"restore\",\"translate\",\"rotate\",\"scale\",\"moveTo\",\"lineTo\",\"curveTo\",\"arcTo\",\"closePath\",\"layer\",\"sheet\",\"frames\",\"fps\",\"loop\",\"duration\",\"ease\",\"repeat\",\"yoyo\",\"delay\",\"along\",\"orient\",\"initial\",\"transitions\",\"when\",\"at\",\"after\",\"together\",\"stagger\",\"overlap\",\"gap\",\"src\",\"frameWidth\",\"frameHeight\",\"filled\",\"radius\",\"width\",\"height\",\"stroke\",\"color\",\"from\",\"to\",\"font\",\"align\",\"baseline\",\"cornerRadius\",\"tint\",\"tintStrength\",\"flipX\",\"flipY\",\"scaleX\",\"scaleY\",\"rotation\",\"anchorX\",\"anchorY\"]"
 
 // ============================================================================
 // PLUGIN-LEVEL DIAGNOSTIC HELPER
@@ -321,21 +362,198 @@ functions:
 // from main.v1.cln at the noted line range.
 
 functions:
-	// STUB3 (main.v1.cln:2170) — attribute lookup with default.
+	// v1 verbatim (main.v1.cln:1217) — attribute lookup from JSON attrs string.
 	string get_attr(string attrs, string key, string default_value)
-		return default_value
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_value
+		return extract_value(attrs, pos)
 
-	// STUB3 (main.v1.cln:1413) — extract single-instance scene sub-block body.
-	string extract_scene_subblock(string body, string kind)
-		return ""
+	string extract_value(string json, integer key_pos)
+		integer colon_pos = json.indexOf(":", key_pos)
+		if colon_pos == -1
+			return ""
+		integer quote_start = json.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			return extract_number(json, colon_pos + 1)
+		integer quote_end = json.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return ""
+		return json.substring(quote_start + 1, quote_end)
 
-	// STUB3 (main.v1.cln:1450) — extract sub-block attribute with default.
-	string extract_scene_subblock_attr(string body, string kind, string key, string default_value)
-		return default_value
+	string extract_number(string json, integer start_pos)
+		string digits = ""
+		integer i = start_pos
+		while i < json.length()
+			string c = json.substring(i, i + 1)
+			if is_digit_char(c)
+				digits = digits + c
+			else
+				if c == " " or c == "\t"
+					i = i + 1
+					continue
+				break
+			i = i + 1
+		return digits
 
-	// STUB3 (main.v1.cln:2321) — scan multi-instance definitions of `kind`.
-	string scan_multi_instance(string body, string kind, integer kind_id)
-		return ""
+	boolean is_digit_char(string c)
+		if c == "0"
+			return true
+		if c == "1"
+			return true
+		if c == "2"
+			return true
+		if c == "3"
+			return true
+		if c == "4"
+			return true
+		if c == "5"
+			return true
+		if c == "6"
+			return true
+		if c == "7"
+			return true
+		if c == "8"
+			return true
+		if c == "9"
+			return true
+		if c == "."
+			return true
+		if c == "-"
+			return true
+		return false
+
+	// v1 verbatim (main.v1.cln:1413) — extract single-instance scene sub-block body.
+	string extract_scene_subblock(string body, string keyword)
+		// If body has no newlines, use flat extraction
+		if body.indexOf("\n") == -1
+			return extract_scene_subblock_flat(body.replace("\t", " "), keyword)
+		// Multi-line mode
+		string result = ""
+		integer scan = 0
+		integer len = body.length()
+		boolean in_block = false
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string trimmed = line.trim()
+			if in_block
+				if is_scene_subblock_header(trimmed)
+					return result
+				if trimmed.length() > 0
+					result = result + trimmed + "\n"
+			else
+				if trimmed.startsWith(keyword + ":")
+					in_block = true
+				else if trimmed.startsWith(keyword + " ")
+					in_block = true
+			scan = next_scan
+		return result
+
+	// v1 verbatim (main.v1.cln:1450) — extract sub-block attribute with default.
+	string extract_scene_subblock_attr(string body, string keyword, string attr, string default_val)
+		// Flat body mode
+		if body.indexOf("\n") == -1
+			return extract_scene_subblock_attr_flat(body.replace("\t", " "), keyword, attr, default_val)
+		// Multi-line mode
+		integer scan = 0
+		integer len = body.length()
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith(keyword + " ") or trimmed.startsWith(keyword + ":")
+				string pat = attr + "=\""
+				integer pos = trimmed.indexOf(pat)
+				if pos != -1
+					integer vs = pos + pat.length()
+					integer ve = trimmed.indexOf("\"", vs)
+					if ve != -1
+						return trimmed.substring(vs, ve)
+			scan = next_scan
+		return default_val
+
+	// v3 typed (main.v1.cln:2321 adapted) — scan multi-instance definitions of `keyword`
+	// and dispatch to v3 typed expanders. kind_id selects the expander:
+	//   1=tween, 2=timeline, 3=animSprite, 4=animState, 5=particles, 6=path, 7=gradient, 8=customEase
+	integer scan_multi_instance(integer ctx, string body, string keyword, integer kind_id)
+		integer scan = 0
+		integer len = body.length()
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string trimmed = line.trim()
+			boolean is_target = false
+			if trimmed.startsWith(keyword + " ")
+				is_target = true
+			else if trimmed == keyword + ":"
+				is_target = true
+			if is_target
+				string header_rest = trimmed.substring(keyword.length(), trimmed.length()).trim()
+				if header_rest.endsWith(":")
+					header_rest = header_rest.substring(0, header_rest.length() - 1).trim()
+				string attrs_json = parse_inline_attrs(header_rest)
+				// Collect body until next sub-block header
+				string sub_body = ""
+				integer s2 = next_scan
+				while s2 < len
+					integer nl2 = body.indexOf("\n", s2)
+					string l2 = ""
+					integer ns2 = 0
+					if nl2 == -1
+						l2 = body.substring(s2, len)
+						ns2 = len
+					else
+						l2 = body.substring(s2, nl2)
+						ns2 = nl2 + 1
+					string t2 = l2.trim()
+					if is_scene_subblock_header(t2)
+						break
+					if t2.length() > 0
+						sub_body = sub_body + t2 + "\n"
+					s2 = ns2
+				if kind_id == 1
+					expand_tween(ctx, attrs_json, sub_body)
+				if kind_id == 2
+					expand_timeline(ctx, attrs_json, sub_body)
+				if kind_id == 3
+					expand_anim_sprite(ctx, attrs_json, sub_body)
+				if kind_id == 4
+					expand_anim_state(ctx, attrs_json, sub_body)
+				if kind_id == 5
+					expand_particles(ctx, attrs_json, sub_body)
+				if kind_id == 6
+					expand_path(ctx, attrs_json, sub_body)
+				if kind_id == 7
+					expand_gradient(ctx, attrs_json, sub_body)
+				if kind_id == 8
+					expand_custom_ease(ctx, attrs_json, sub_body)
+				scan = s2
+			else
+				scan = next_scan
+		return 0
 
 	// Sub-cycle 3a: process_assets_body — typed emission (replaces STUB3).
 	// Emits per-asset _asset_preload_image / _sprite_register_sheet / _audio_preload
@@ -613,29 +831,317 @@ functions:
 			return plugin_error(ctx, "FRAME-CANVAS-E550", "scene_state_init sticky-error tripped")
 		return 0
 
-	// STUB3 (main.v1.cln:1996) — line-oriented body expander (dispatches to
-	// scene_expand_cmd for canvas.* lines). Sub-cycle 3b writes typed version.
-	// scene_expand_cmd is now typed (integer ctx, string line) -> integer handle,
-	// so 3b scene_expand_lines(ctx, body_arr, body) -> integer.
-	string scene_expand_lines(string body)
-		return body
+	// v3 typed — line-oriented body expander. Walks body line by line; canvas.*
+	// lines are dispatched to scene_expand_cmd (typed: returns stmt handle) and
+	// pushed into body_arr. Other lines are emitted via _emit_stmt_from_source.
+	// Handles "on layer" routing (layer_begin/layer_end around groups).
+	integer scene_expand_lines(integer ctx, integer body_arr, string body)
+		if body.indexOf("\n") == -1 and body.trim().length() > 0
+			return scene_expand_lines_flat(ctx, body_arr, body.replace("\t", " "))
+		integer scan = 0
+		integer len = body.length()
+		string current_layer = ""
+		while scan < len
+			integer nl = body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = body.substring(scan, len)
+				next_scan = len
+			else
+				line = body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("on layer ")
+					// Layer routing
+					if current_layer != ""
+						integer le_h = _emit_stmt_from_source(ctx, "_layer_end()", 0)
+						_batch_arrayPush(ctx, body_arr, le_h)
+					integer q1 = t.indexOf("\"")
+					integer q2 = t.indexOf("\"", q1 + 1)
+					if q1 != -1 and q2 != -1
+						current_layer = t.substring(q1 + 1, q2)
+						integer lb_h = _emit_stmt_from_source(ctx, "_layer_begin(\"" + current_layer + "\")", 0)
+						_batch_arrayPush(ctx, body_arr, lb_h)
+				else if t.startsWith("canvas.")
+					integer cmd_h = scene_expand_cmd(ctx, t)
+					if cmd_h != 0
+						_batch_arrayPush(ctx, body_arr, cmd_h)
+					else
+						integer fb_h = _emit_stmt_from_source(ctx, t, 0)
+						_batch_arrayPush(ctx, body_arr, fb_h)
+				else
+					integer src_h = _emit_stmt_from_source(ctx, t, 0)
+					_batch_arrayPush(ctx, body_arr, src_h)
+			scan = next_scan
+		if current_layer != ""
+			integer le2_h = _emit_stmt_from_source(ctx, "_layer_end()", 0)
+			_batch_arrayPush(ctx, body_arr, le2_h)
+		return 0
 
-	// STUB3 (main.v1.cln:2034) — line-oriented start:-block expander.
-	string scene_expand_lines_start(string body)
-		return body
+	// v3 typed flat — handles space-joined (no-newline) body format.
+	// Walks tokens dispatching canvas.* via scene_expand_cmd, others via source.
+	integer scene_expand_lines_flat(integer ctx, integer body_arr, string body)
+		string rem = body.trim()
+		integer safety = 0
+		while rem.length() > 0 and safety < 80
+			safety = safety + 1
+			if rem.startsWith("canvas.")
+				integer cmd_end = rem.length()
+				integer next_c = rem.indexOf(" canvas.", 1)
+				if next_c >= 0 and next_c < cmd_end
+					cmd_end = next_c
+				integer next_i = rem.indexOf(" if ", 0)
+				if next_i >= 0 and next_i < cmd_end
+					cmd_end = next_i
+				integer blk_end = flat_find_next_block_end(rem)
+				if blk_end < cmd_end
+					cmd_end = blk_end
+				string cmd = rem.substring(0, cmd_end).trim()
+				integer cmd_h = scene_expand_cmd(ctx, cmd)
+				if cmd_h != 0
+					_batch_arrayPush(ctx, body_arr, cmd_h)
+				else
+					integer fb2_h = _emit_stmt_from_source(ctx, cmd, 0)
+					_batch_arrayPush(ctx, body_arr, fb2_h)
+				rem = rem.substring(cmd_end, rem.length()).trim()
+			else
+				integer next = flat_find_next_stmt(rem, 0)
+				string stmt = rem.substring(0, next).trim()
+				if stmt.length() > 0
+					integer src2_h = _emit_stmt_from_source(ctx, stmt, 0)
+					_batch_arrayPush(ctx, body_arr, src2_h)
+				rem = rem.substring(next, rem.length()).trim()
+		return 0
 
-	// STUB3 (main.v1.cln:2181) — parse "px,py"-style param string; index 0 or 1.
+	// v1 verbatim (main.v1.cln:2181) — parse "px,py"-style param string; index 0 or 1.
 	string scene_param_part(string params, integer idx)
+		string p = params.trim()
+		integer comma = p.indexOf(",")
+		if comma == -1
+			if idx == 0
+				return p
+			return "py"
 		if idx == 0
-			return params
-		return params
+			return p.substring(0, comma).trim()
+		return p.substring(comma + 1, p.length()).trim()
 
-	// STUB3 (main.v1.cln:2299) — prepend "\t" to every non-empty line.
-	string indent_lines(string s)
-		return s
+	// v1 verbatim (main.v1.cln:2299) — prepend "\t" to every non-empty line.
+	string indent_lines(string code)
+		string out = ""
+		integer i = 0
+		integer len = code.length()
+		while i < len
+			integer nl = code.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = code.substring(i, len)
+				next_i = len
+			else
+				line = code.substring(i, nl)
+				next_i = nl + 1
+			if line.length() > 0
+				out = out + "\t" + line + "\n"
+			i = next_i
+		return out
 
-	// STUB3 (main.v1.cln:803) — canvasScene: pre-emission validation.
+	// v1 verbatim (main.v1.cln:803) — canvasScene: pre-emission validation.
 	string validate_canvas_scene(string attrs, string body)
+		// Item 4 — canvas.* calls in init: block forbidden (CVS-X001)
+		string init_body = extract_scene_subblock(body, "init")
+		if init_body.indexOf("canvas.") != -1
+			return "canvasScene: init: block must not contain canvas.* drawing calls (CVS-X001) — use onFrame for rendering"
+
+		// Item 5 — state mutation in draw: block forbidden (CVS-L002)
+		string draw_body = extract_scene_subblock(body, "draw")
+		integer draw_start = 0
+		boolean draw_keep_going = true
+		while draw_start < draw_body.length() and draw_keep_going
+			integer draw_nl = draw_body.indexOf("\n", draw_start)
+			string draw_line = ""
+			if draw_nl == -1
+				draw_line = draw_body.substring(draw_start, draw_body.length())
+				draw_keep_going = false
+			else
+				draw_line = draw_body.substring(draw_start, draw_nl)
+				draw_start = draw_nl + 1
+			string draw_trimmed = draw_line.trim()
+			if draw_trimmed.length() > 0
+				if draw_trimmed.indexOf(" = ") != -1
+					if not draw_trimmed.startsWith("canvas.") and not draw_trimmed.startsWith("audio.") and not draw_trimmed.startsWith("integer ") and not draw_trimmed.startsWith("number ") and not draw_trimmed.startsWith("string ") and not draw_trimmed.startsWith("boolean ") and not draw_trimmed.startsWith("//")
+						return "canvasScene: draw: block must not mutate state variables (CVS-L002) — move state changes to onFrame:"
+
+		// Item 15 — Canonical sub-block order (CVS-S010)
+		integer pos_assets = body.indexOf("assets:")
+		integer pos_layers = body.indexOf("layers:")
+		integer pos_state = body.indexOf("state:")
+		integer pos_tween = body.indexOf("tween")
+		integer pos_timeline = body.indexOf("timeline")
+		integer pos_animState = body.indexOf("animState")
+		integer pos_animSprite = body.indexOf("animSprite")
+		integer pos_particles = body.indexOf("particles")
+		integer pos_path = body.indexOf("path")
+		integer pos_gradient = body.indexOf("gradient")
+		integer pos_customEase = body.indexOf("customEase")
+		integer pos_camera = body.indexOf("camera:")
+		integer pos_init = body.indexOf("init:")
+		integer pos_draw = body.indexOf("draw:")
+		integer pos_onFrame = body.indexOf("onFrame")
+		integer pos_onPointerDown = body.indexOf("onPointerDown")
+		integer pos_onPointerMove = body.indexOf("onPointerMove")
+		integer pos_onPointerUp = body.indexOf("onPointerUp")
+		integer pos_onKeyDown = body.indexOf("onKeyDown")
+		integer pos_onKeyUp = body.indexOf("onKeyUp")
+		integer pos_onExit = body.indexOf("onExit")
+		integer pos_onPause = body.indexOf("onPause")
+		integer pos_onResume = body.indexOf("onResume")
+
+		integer prev_pos = -1
+		boolean order_ok = true
+
+		if pos_assets != -1
+			if prev_pos != -1 and pos_assets < prev_pos
+				order_ok = false
+			if pos_assets > prev_pos
+				prev_pos = pos_assets
+
+		if pos_layers != -1
+			if pos_layers < prev_pos
+				order_ok = false
+			if pos_layers > prev_pos
+				prev_pos = pos_layers
+
+		if pos_state != -1
+			if pos_state < prev_pos
+				order_ok = false
+			if pos_state > prev_pos
+				prev_pos = pos_state
+
+		if pos_tween != -1
+			if pos_tween < prev_pos
+				order_ok = false
+			if pos_tween > prev_pos
+				prev_pos = pos_tween
+
+		if pos_timeline != -1
+			if pos_timeline < prev_pos
+				order_ok = false
+			if pos_timeline > prev_pos
+				prev_pos = pos_timeline
+
+		if pos_animState != -1
+			if pos_animState < prev_pos
+				order_ok = false
+			if pos_animState > prev_pos
+				prev_pos = pos_animState
+
+		if pos_animSprite != -1
+			if pos_animSprite < prev_pos
+				order_ok = false
+			if pos_animSprite > prev_pos
+				prev_pos = pos_animSprite
+
+		if pos_particles != -1
+			if pos_particles < prev_pos
+				order_ok = false
+			if pos_particles > prev_pos
+				prev_pos = pos_particles
+
+		if pos_path != -1
+			if pos_path < prev_pos
+				order_ok = false
+			if pos_path > prev_pos
+				prev_pos = pos_path
+
+		if pos_gradient != -1
+			if pos_gradient < prev_pos
+				order_ok = false
+			if pos_gradient > prev_pos
+				prev_pos = pos_gradient
+
+		if pos_customEase != -1
+			if pos_customEase < prev_pos
+				order_ok = false
+			if pos_customEase > prev_pos
+				prev_pos = pos_customEase
+
+		if pos_camera != -1
+			if pos_camera < prev_pos
+				order_ok = false
+			if pos_camera > prev_pos
+				prev_pos = pos_camera
+
+		if pos_init != -1
+			if pos_init < prev_pos
+				order_ok = false
+			if pos_init > prev_pos
+				prev_pos = pos_init
+
+		if pos_draw != -1
+			if pos_draw < prev_pos
+				order_ok = false
+			if pos_draw > prev_pos
+				prev_pos = pos_draw
+
+		if pos_onFrame != -1
+			if pos_onFrame < prev_pos
+				order_ok = false
+			if pos_onFrame > prev_pos
+				prev_pos = pos_onFrame
+
+		if pos_onPointerDown != -1
+			if pos_onPointerDown < prev_pos
+				order_ok = false
+			if pos_onPointerDown > prev_pos
+				prev_pos = pos_onPointerDown
+
+		if pos_onPointerMove != -1
+			if pos_onPointerMove < prev_pos
+				order_ok = false
+			if pos_onPointerMove > prev_pos
+				prev_pos = pos_onPointerMove
+
+		if pos_onPointerUp != -1
+			if pos_onPointerUp < prev_pos
+				order_ok = false
+			if pos_onPointerUp > prev_pos
+				prev_pos = pos_onPointerUp
+
+		if pos_onKeyDown != -1
+			if pos_onKeyDown < prev_pos
+				order_ok = false
+			if pos_onKeyDown > prev_pos
+				prev_pos = pos_onKeyDown
+
+		if pos_onKeyUp != -1
+			if pos_onKeyUp < prev_pos
+				order_ok = false
+			if pos_onKeyUp > prev_pos
+				prev_pos = pos_onKeyUp
+
+		if pos_onExit != -1
+			if pos_onExit < prev_pos
+				order_ok = false
+			if pos_onExit > prev_pos
+				prev_pos = pos_onExit
+
+		if pos_onPause != -1
+			if pos_onPause < prev_pos
+				order_ok = false
+			if pos_onPause > prev_pos
+				prev_pos = pos_onPause
+
+		if pos_onResume != -1
+			if pos_onResume < prev_pos
+				order_ok = false
+			if pos_onResume > prev_pos
+				prev_pos = pos_onResume
+
+		if order_ok == false
+			return "canvasScene: sub-blocks are out of order (CVS-S010) — expected: assets, layers, state, tween, timeline, animState, particles, path, gradient, customEase, camera, init, draw, onFrame, event handlers"
+
 		return ""
 
 // ============================================================================
@@ -1020,19 +1526,6 @@ functions:
 		emit_one_fn(ctx, fn_name, params_h, "void", body_arr)
 		return 0
 
-	// Emit the start: block registration calls for a scene's declared
-	// resources. Each string is a pre-computed source fragment (v1-format)
-	// that we route through _emit_stmt_from_source with origin_offset=0.
-	// Sub-cycle 3 will replace this with typed emission per-registration.
-	integer emit_start_block_regs_from_source(integer ctx, string src, string diag_code, string diag_ctx)
-		if src.trim().length() == 0
-			return 0
-		integer stmt = _emit_stmt_from_source(ctx, src, 0)
-		if stmt == 0
-			_emit_error(ctx, 2, diag_code, "syntax error in " + diag_ctx + " registration source", "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
-			return 1
-		return _emit_statement_into_start(ctx, stmt)
-
 	integer expand_canvas_scene(integer ctx, string attrs_json, string body)
 		_ctx_set_error_context(ctx, "FRAME-CANVAS-E400", "frame.canvas expand_canvas_scene failed")
 
@@ -1070,17 +1563,10 @@ functions:
 		string rs_body = extract_scene_subblock(body, "onResume")
 
 		// -------------------------------------------------------------------
-		// (3) Multi-instance defs — each yields the registration source
-		// fragment for start:.
+		// (3) Multi-instance defs — typed expanders emit directly to start:.
+		// scan_multi_instance is now typed: integer(ctx, body, keyword, kind_id)
 		// -------------------------------------------------------------------
-		string tween_regs = scan_multi_instance(body, "tween", 1)
-		string timeline_regs = scan_multi_instance(body, "timeline", 2)
-		string anim_sprite_regs = scan_multi_instance(body, "animSprite", 3)
-		string anim_state_regs = scan_multi_instance(body, "animState", 4)
-		string particles_regs = scan_multi_instance(body, "particles", 5)
-		string path_regs = scan_multi_instance(body, "path", 6)
-		string gradient_regs = scan_multi_instance(body, "gradient", 7)
-		string custom_ease_regs = scan_multi_instance(body, "customEase", 8)
+		// (deferred to start: section below — after type stubs and handlers)
 
 		// -------------------------------------------------------------------
 		// State-var presence flag for frame/handler load/save injection.
@@ -1111,17 +1597,11 @@ functions:
 		if has_state
 			scene_state_load(ctx, fcb_body_arr, state_body)
 		// user onFrame body (routed through scene_expand_lines for canvas.* dispatch)
-		string frame_expanded = scene_expand_lines(frame_body)
-		if frame_expanded.length() > 0
-			integer fb_stmt = _emit_stmt_from_source(ctx, frame_expanded, 0)
-			if fb_stmt != 0
-				_batch_arrayPush(ctx, fcb_body_arr, fb_stmt)
+		if frame_body.trim().length() > 0
+			scene_expand_lines(ctx, fcb_body_arr, frame_body)
 		// draw body
-		string draw_expanded = scene_expand_lines(draw_body)
-		if draw_expanded.length() > 0
-			integer db_stmt = _emit_stmt_from_source(ctx, draw_expanded, 0)
-			if db_stmt != 0
-				_batch_arrayPush(ctx, fcb_body_arr, db_stmt)
+		if draw_body.trim().length() > 0
+			scene_expand_lines(ctx, fcb_body_arr, draw_body)
 		// state var save (Sub-cycle 3a: typed emit directly into body_arr)
 		if has_state
 			scene_state_save(ctx, fcb_body_arr, state_body)
@@ -1144,11 +1624,8 @@ functions:
 			integer dn_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, dn_body_arr, state_body)
-			string dn_source = scene_expand_lines(dn_body)
-			if dn_source.length() > 0
-				integer dn_expanded = _emit_stmt_from_source(ctx, dn_source, 0)
-				if dn_expanded != 0
-					_batch_arrayPush(ctx, dn_body_arr, dn_expanded)
+			if dn_body.trim().length() > 0
+				scene_expand_lines(ctx, dn_body_arr, dn_body)
 			if has_state
 				scene_state_save(ctx, dn_body_arr, state_body)
 			integer dn_params = params_cv_2(ctx, dn_px, "number", dn_py, "number")
@@ -1162,11 +1639,8 @@ functions:
 			integer mv_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, mv_body_arr, state_body)
-			string mv_source = scene_expand_lines(mv_body)
-			if mv_source.length() > 0
-				integer mv_stmt = _emit_stmt_from_source(ctx, mv_source, 0)
-				if mv_stmt != 0
-					_batch_arrayPush(ctx, mv_body_arr, mv_stmt)
+			if mv_body.trim().length() > 0
+				scene_expand_lines(ctx, mv_body_arr, mv_body)
 			if has_state
 				scene_state_save(ctx, mv_body_arr, state_body)
 			integer mv_params = params_cv_2(ctx, mv_px, "number", mv_py, "number")
@@ -1180,11 +1654,8 @@ functions:
 			integer up_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, up_body_arr, state_body)
-			string up_source = scene_expand_lines(up_body)
-			if up_source.length() > 0
-				integer up_stmt = _emit_stmt_from_source(ctx, up_source, 0)
-				if up_stmt != 0
-					_batch_arrayPush(ctx, up_body_arr, up_stmt)
+			if up_body.trim().length() > 0
+				scene_expand_lines(ctx, up_body_arr, up_body)
 			if has_state
 				scene_state_save(ctx, up_body_arr, state_body)
 			integer up_params = params_cv_2(ctx, up_px, "number", up_py, "number")
@@ -1197,11 +1668,8 @@ functions:
 			integer kd_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, kd_body_arr, state_body)
-			string kd_source = scene_expand_lines(kd_body)
-			if kd_source.length() > 0
-				integer kd_stmt = _emit_stmt_from_source(ctx, kd_source, 0)
-				if kd_stmt != 0
-					_batch_arrayPush(ctx, kd_body_arr, kd_stmt)
+			if kd_body.trim().length() > 0
+				scene_expand_lines(ctx, kd_body_arr, kd_body)
 			if has_state
 				scene_state_save(ctx, kd_body_arr, state_body)
 			integer kd_params = params_cv_1(ctx, kd_var, "string")
@@ -1214,11 +1682,8 @@ functions:
 			integer ku_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, ku_body_arr, state_body)
-			string ku_source = scene_expand_lines(ku_body)
-			if ku_source.length() > 0
-				integer ku_stmt = _emit_stmt_from_source(ctx, ku_source, 0)
-				if ku_stmt != 0
-					_batch_arrayPush(ctx, ku_body_arr, ku_stmt)
+			if ku_body.trim().length() > 0
+				scene_expand_lines(ctx, ku_body_arr, ku_body)
 			if has_state
 				scene_state_save(ctx, ku_body_arr, state_body)
 			integer ku_params = params_cv_1(ctx, ku_var, "string")
@@ -1230,11 +1695,8 @@ functions:
 			integer ex_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, ex_body_arr, state_body)
-			string ex_source = scene_expand_lines(ex_body)
-			if ex_source.length() > 0
-				integer ex_stmt = _emit_stmt_from_source(ctx, ex_source, 0)
-				if ex_stmt != 0
-					_batch_arrayPush(ctx, ex_body_arr, ex_stmt)
+			if ex_body.trim().length() > 0
+				scene_expand_lines(ctx, ex_body_arr, ex_body)
 			if has_state
 				scene_state_save(ctx, ex_body_arr, state_body)
 			integer ex_params = params_cv(ctx)
@@ -1246,11 +1708,8 @@ functions:
 			integer ps_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, ps_body_arr, state_body)
-			string ps_source = scene_expand_lines(ps_body)
-			if ps_source.length() > 0
-				integer ps_stmt = _emit_stmt_from_source(ctx, ps_source, 0)
-				if ps_stmt != 0
-					_batch_arrayPush(ctx, ps_body_arr, ps_stmt)
+			if ps_body.trim().length() > 0
+				scene_expand_lines(ctx, ps_body_arr, ps_body)
 			if has_state
 				scene_state_save(ctx, ps_body_arr, state_body)
 			integer ps_params = params_cv(ctx)
@@ -1262,11 +1721,8 @@ functions:
 			integer rs_body_arr = _batch_arrayNew(ctx)
 			if has_state
 				scene_state_load(ctx, rs_body_arr, state_body)
-			string rs_source = scene_expand_lines(rs_body)
-			if rs_source.length() > 0
-				integer rs_stmt = _emit_stmt_from_source(ctx, rs_source, 0)
-				if rs_stmt != 0
-					_batch_arrayPush(ctx, rs_body_arr, rs_stmt)
+			if rs_body.trim().length() > 0
+				scene_expand_lines(ctx, rs_body_arr, rs_body)
 			if has_state
 				scene_state_save(ctx, rs_body_arr, state_body)
 			integer rs_params = params_cv(ctx)
@@ -1291,22 +1747,20 @@ functions:
 		integer fps_expr = _batch_intLit(ctx, string_to_int_default(fps_val, 60), 0)
 		sc2(ctx, "_canvas_set_fps", ident(ctx, "__cv"), fps_expr)
 
-		// Sub-cycle 3a: Assets, layers, camera — typed emission directly into start:.
-		// scan_multi_instance still returns source strings (STUB3 → 3b replaces);
-		// those go through emit_start_block_regs_from_source until 3b converts them.
+		// Sub-cycle 3b: all start: registration now via typed emission.
 		if assets_body.trim().length() > 0
 			process_assets_body(ctx, assets_body)
 		if layers_body.trim().length() > 0
 			process_layers_body(ctx, layers_body)
-		// Multi-instance registrations still via source-string pass-through (STUB3 parsers)
-		emit_start_block_regs_from_source(ctx, anim_sprite_regs, "FRAME-CANVAS-E412", "animSprite")
-		emit_start_block_regs_from_source(ctx, anim_state_regs, "FRAME-CANVAS-E413", "animState")
-		emit_start_block_regs_from_source(ctx, tween_regs, "FRAME-CANVAS-E414", "tween")
-		emit_start_block_regs_from_source(ctx, timeline_regs, "FRAME-CANVAS-E415", "timeline")
-		emit_start_block_regs_from_source(ctx, particles_regs, "FRAME-CANVAS-E416", "particles")
-		emit_start_block_regs_from_source(ctx, path_regs, "FRAME-CANVAS-E417", "path")
-		emit_start_block_regs_from_source(ctx, gradient_regs, "FRAME-CANVAS-E418", "gradient")
-		emit_start_block_regs_from_source(ctx, custom_ease_regs, "FRAME-CANVAS-E419", "customEase")
+		// Multi-instance registrations — typed scan_multi_instance emits directly into start:
+		scan_multi_instance(ctx, body, "animSprite", 3)
+		scan_multi_instance(ctx, body, "animState", 4)
+		scan_multi_instance(ctx, body, "tween", 1)
+		scan_multi_instance(ctx, body, "timeline", 2)
+		scan_multi_instance(ctx, body, "particles", 5)
+		scan_multi_instance(ctx, body, "path", 6)
+		scan_multi_instance(ctx, body, "gradient", 7)
+		scan_multi_instance(ctx, body, "customEase", 8)
 		if camera_body.trim().length() > 0
 			expand_camera(ctx, "{}", camera_body)
 
@@ -1327,14 +1781,30 @@ functions:
 			integer rrs_call = call1(ctx, "_canvas_on_resume", ident(ctx, "__cv"))
 			_emit_statement_into_start(ctx, sassign(ctx, "__rrs", rrs_call))
 
-		// Sub-cycle 3a: state-var init — typed emission via scene_state_init.
+		// State-var init — typed emission via scene_state_init.
 		if has_state
 			scene_state_init(ctx, state_body)
-		// User init body — still via source pass-through (scene_expand_lines_start is STUB3).
+		// User init body — emit each non-empty line directly into start:.
 		string init_trimmed = init_body.trim()
 		if init_trimmed.length() > 0
-			string init_expanded = scene_expand_lines_start(init_body)
-			emit_start_block_regs_from_source(ctx, init_expanded, "FRAME-CANVAS-E422", "init")
+			integer init_scan = 0
+			integer init_len = init_body.length()
+			while init_scan < init_len
+				integer init_nl = init_body.indexOf("\n", init_scan)
+				string init_line = ""
+				integer init_next = 0
+				if init_nl == -1
+					init_line = init_body.substring(init_scan, init_len)
+					init_next = init_len
+				else
+					init_line = init_body.substring(init_scan, init_nl)
+					init_next = init_nl + 1
+				string init_t = init_line.trim()
+				if init_t.length() > 0
+					integer init_h = _emit_stmt_from_source(ctx, init_t, 0)
+					if init_h != 0
+						_emit_statement_into_start(ctx, init_h)
+				init_scan = init_next
 
 		// integer __rfr0 = _canvas_request_frame(__cv)
 		integer rfr0_call = call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))
@@ -1354,51 +1824,6 @@ functions:
 				return 0
 			return fallback
 		return n
-
-// ============================================================================
-// DISPATCHER WIRE-UP (partial — Sub-cycle 2 covers canvasScene + 11 handlers)
-// ============================================================================
-// Overwrites the Sub-cycle 1 stub `expand_block_typed` (which returned 0).
-// Sub-cycle 3 will add:
-//   - canvas.<op> command routing (32 draw commands)
-//   - assets, layers, state, animSprite, animState, tween, timeline, particles,
-//     path, gradient, customEase, camera
-// Each Sub-cycle 3 addition follows the same startsWith arm shape.
-//
-// NOTE: Clean Language forbids two `functions:` blocks defining the same
-// symbol. Sub-cycle 1's expand_block_typed was a stub; the real dispatcher
-// lives here. Sub-cycle 3 will edit this function in place (not add another).
-
-functions:
-	integer expand_block_typed_v2(integer ctx, string block_name, string attrs_json, string body)
-		if block_name.startsWith("canvasScene")
-			return expand_canvas_scene(ctx, attrs_json, body)
-		if block_name.startsWith("onPointerDown")
-			return expand_on_pointer_down(ctx, attrs_json, body)
-		if block_name.startsWith("onPointerMove")
-			return expand_on_pointer_move(ctx, attrs_json, body)
-		if block_name.startsWith("onPointerUp")
-			return expand_on_pointer_up(ctx, attrs_json, body)
-		if block_name.startsWith("onKeyDown")
-			return expand_on_key_down(ctx, attrs_json, body)
-		if block_name.startsWith("onKeyUp")
-			return expand_on_key_up(ctx, attrs_json, body)
-		if block_name.startsWith("onFrame")
-			return expand_on_frame(ctx, attrs_json, body)
-		if block_name.startsWith("onExit")
-			return expand_on_exit(ctx, attrs_json, body)
-		if block_name.startsWith("onPause")
-			return expand_on_pause(ctx, attrs_json, body)
-		if block_name.startsWith("onResume")
-			return expand_on_resume(ctx, attrs_json, body)
-		if block_name.startsWith("draw")
-			return expand_draw(ctx, attrs_json, body)
-		if block_name.startsWith("init")
-			return expand_init(ctx, attrs_json, body)
-		// Sub-cycle 3 arms land below this line:
-		//   canvas.*, assets, layers, state, animSprite, animState, tween,
-		//   timeline, particles, path, gradient, customEase, camera
-		return 0
 
 // ============================================================================
 // END OF SUB-CYCLE 2 CONTENT / START OF SUB-CYCLE 3a CONTENT
@@ -1433,63 +1858,602 @@ functions:
 // Sub-cycle 3b replaces them. Stub returns are the safe zero/empty defaults.
 
 functions:
-	// STUB3 (main.v1.cln:1278) — extract key=value from a body line or string.
+	// v1 verbatim (main.v1.cln:1278) — extract key=value from a body line or string.
 	string get_body_value(string body, string key, string default_val)
-		return default_val
+		string pat1 = key + " ="
+		string pat2 = key + "="
+		integer pos = body.indexOf(pat1)
+		if pos == -1
+			pos = body.indexOf(pat2)
+		if pos == -1
+			return default_val
+		integer eq_pos = body.indexOf("=", pos)
+		if eq_pos == -1
+			return default_val
+		return extract_body_value_at(body, eq_pos + 1)
 
-	// STUB3 (main.v1.cln:1325) — extract quoted name after a prefix offset.
+	string extract_body_value_at(string body, integer start_pos)
+		integer i = start_pos
+		integer len = body.length()
+		while i < len
+			string c = body.substring(i, i + 1)
+			if c != " "
+				if c != "\t"
+					break
+			i = i + 1
+		if i >= len
+			return ""
+		string first = body.substring(i, i + 1)
+		if first == "\""
+			integer end_q = body.indexOf("\"", i + 1)
+			if end_q == -1
+				return ""
+			return body.substring(i + 1, end_q)
+		string result = ""
+		while i < len
+			string c = body.substring(i, i + 1)
+			if c == " "
+				break
+			if c == "\t"
+				break
+			if c == "\n"
+				break
+			if c == "\r"
+				break
+			if c == ","
+				break
+			result = result + c
+			i = i + 1
+		return result
+
+	// v1 verbatim (main.v1.cln:1325) — extract quoted name after a prefix offset.
 	string get_quoted_name(string s, integer after_pos)
-		return ""
+		integer q1 = s.indexOf("\"", after_pos)
+		if q1 == -1
+			return ""
+		integer q2 = s.indexOf("\"", q1 + 1)
+		if q2 == -1
+			return ""
+		return s.substring(q1 + 1, q2)
 
-	// STUB3 (main.v1.cln:1334) — return first whitespace-separated word.
+	// v1 verbatim (main.v1.cln:1334) — return first whitespace-separated word.
 	string get_first_word(string s)
-		return s
+		string result = ""
+		integer i = 0
+		integer len = s.length()
+		while i < len
+			string c = s.substring(i, i + 1)
+			if c == " "
+				return result
+			if c == "\t"
+				return result
+			if c == "="
+				return result
+			result = result + c
+			i = i + 1
+		return result
 
-	// STUB3 (main.v1.cln:1371) — true if line is a tween target (var from/to).
-	boolean is_tween_target_line(string line)
+	// v1 verbatim (main.v1.cln:1350) — true if line is a tween config (not target).
+	boolean is_tween_config_line(string line)
+		if line.startsWith("duration")
+			return true
+		if line.startsWith("ease")
+			return true
+		if line.startsWith("repeat")
+			return true
+		if line.startsWith("yoyo")
+			return true
+		if line.startsWith("delay")
+			return true
+		if line.startsWith("onComplete")
+			return true
+		if line.startsWith("along")
+			return true
+		if line.startsWith("orient")
+			return true
+		if line.startsWith("//")
+			return true
 		return false
 
-	// STUB3 (main.v1.cln:1382) — returns "linear" or "radial" gradient type.
+	// v1 verbatim (main.v1.cln:1371) — true if line is a tween target (var from/to).
+	boolean is_tween_target_line(string line)
+		if line.length() == 0
+			return false
+		if line.startsWith("//")
+			return false
+		if is_tween_config_line(line)
+			return false
+		if line.contains("to=")
+			return true
+		return false
+
+	// v1 verbatim (main.v1.cln:1382) — returns "linear" or "radial" gradient type.
 	string get_gradient_type(string attrs)
+		if attrs.contains("linear")
+			return "linear"
+		if attrs.contains("radial")
+			return "radial"
 		return "linear"
 
-	// STUB3 (main.v1.cln:1389) — parse "N..M" range, return start N as string.
+	// v1 verbatim (main.v1.cln:1389) — parse "N..M" range, return start N as string.
 	string get_range_start(string range)
-		return "0"
+		integer dot_pos = range.indexOf("..")
+		if dot_pos == -1
+			return "0"
+		return range.substring(0, dot_pos)
 
-	// STUB3 (main.v1.cln:1395) — parse "N..M" range, return end M as string.
+	// v1 verbatim (main.v1.cln:1395) — parse "N..M" range, return end M as string.
 	string get_range_end(string range)
-		return "0"
+		integer dot_pos = range.indexOf("..")
+		if dot_pos == -1
+			return range
+		return range.substring(dot_pos + 2, range.length())
 
-	// STUB3 (main.v1.cln:1401) — JSON-escape a string value.
+	// v1 verbatim (main.v1.cln:1401) — JSON-escape a string value.
 	string json_escape(string s)
-		return s
+		string result = s.replace("\\", "\\\\")
+		result = result.replace("\"", "\\\"")
+		result = result.replace("\n", "\\n")
+		result = result.replace("\t", "\\t")
+		return result
 
-	// STUB3 (main.v1.cln:1832) — split flat state body (tab-joined) into newlines.
+	// v1 verbatim (main.v1.cln:1832) — split flat state body (tab-joined) into newlines.
 	string scene_state_split_flat(string body)
-		return body
+		string result = ""
+		string remaining = body.trim()
+		integer safety = 0
+		while safety < 50 and remaining.length() > 0
+			safety = safety + 1
+			integer next_num = remaining.indexOf(" number ")
+			integer next_int = remaining.indexOf(" integer ")
+			integer next_str = remaining.indexOf(" string ")
+			integer next_bool = remaining.indexOf(" boolean ")
+			integer next_decl = -1
+			if next_num != -1
+				if next_decl == -1 or next_num < next_decl
+					next_decl = next_num
+			if next_int != -1
+				if next_decl == -1 or next_int < next_decl
+					next_decl = next_int
+			if next_str != -1
+				if next_decl == -1 or next_str < next_decl
+					next_decl = next_str
+			if next_bool != -1
+				if next_decl == -1 or next_bool < next_decl
+					next_decl = next_bool
+			if next_decl == -1
+				string decl = remaining.trim()
+				if decl.length() > 0
+					result = result + decl + "\n"
+				remaining = ""
+			else
+				string decl = remaining.substring(0, next_decl).trim()
+				if decl.length() > 0
+					result = result + decl + "\n"
+				remaining = remaining.substring(next_decl + 1, remaining.length())
+		return result
 
-	// STUB3 (main.v1.cln:1868) — extract variable name from a state line.
+	// v1 verbatim (main.v1.cln:1868) — extract variable name from a state line.
 	string scene_var_name(string line)
-		string t = line.trim()
-		if t.length() == 0
+		integer space1 = line.indexOf(" ")
+		if space1 == -1
 			return ""
-		integer space = t.indexOf(" ")
-		if space == -1
-			return t
-		return t.substring(0, space)
+		string after_type = line.substring(space1 + 1, line.length()).trim()
+		integer end_pos = after_type.length()
+		integer sp2 = after_type.indexOf(" ")
+		integer eq = after_type.indexOf("=")
+		if sp2 != -1
+			if sp2 < end_pos
+				end_pos = sp2
+		if eq != -1
+			if eq < end_pos
+				end_pos = eq
+		return after_type.substring(0, end_pos).trim()
 
-	// STUB3 (main.v1.cln:1886) — extract default value from a state line.
+	// v1 verbatim (main.v1.cln:1886) — extract default value from a state line.
+	// Normalizes boolean/integer literals to float for _canvas_var_set.
 	string scene_var_default(string line)
-		return "0"
+		integer eq = line.indexOf("=")
+		if eq == -1
+			return "0.0"
+		string val = line.substring(eq + 1, line.length()).trim()
+		integer comment = val.indexOf("//")
+		if comment != -1
+			val = val.substring(0, comment).trim()
+		if val == "true"
+			return "1.0"
+		if val == "false"
+			return "0.0"
+		if val == "0"
+			return "0.0"
+		if val == "1"
+			return "1.0"
+		if val.contains(".")
+			return val
+		return val + ".0"
 
-	// STUB3 (main.v1.cln:2170) — parse key=value / key="value" inline attrs.
+	// v1 verbatim (main.v1.cln:2170) — parse key=value / key="value" inline attrs.
 	string get_iattr(string ia, string key, string default_val)
-		return default_val
+		string pat = key + "="
+		integer pos = ia.indexOf(pat)
+		if pos == -1
+			return default_val
+		integer vs = pos + pat.length()
+		if vs >= ia.length()
+			return default_val
+		string first = ia.substring(vs, vs + 1)
+		if first == "\""
+			integer ve = ia.indexOf("\"", vs + 1)
+			if ve == -1
+				return default_val
+			return ia.substring(vs + 1, ve)
+		string result = ""
+		integer i = vs
+		while i < ia.length()
+			string c = ia.substring(i, i + 1)
+			if c == " " or c == "\t" or c == "\n"
+				return result
+			result = result + c
+			i = i + 1
+		return result
 
-	// STUB3 (main.v1.cln:2196) — like get_iattr but preserve outer quotes.
+	// v1 verbatim (main.v1.cln:2196) — like get_iattr but preserve outer quotes.
 	string get_iattr_raw(string ia, string key, string default_val)
-		return default_val
+		string pat = key + "="
+		integer pos = ia.indexOf(pat)
+		if pos == -1
+			return default_val
+		integer vs = pos + pat.length()
+		if vs >= ia.length()
+			return default_val
+		string first = ia.substring(vs, vs + 1)
+		if first == "\""
+			integer ve = ia.indexOf("\"", vs + 1)
+			if ve == -1
+				return default_val
+			return ia.substring(vs, ve + 1)
+		string result = ""
+		integer i = vs
+		while i < ia.length()
+			string c = ia.substring(i, i + 1)
+			if c == " " or c == "\t" or c == "\n"
+				return result
+			result = result + c
+			i = i + 1
+		return result
+
+// ============================================================================
+// SUB-CYCLE 3b DSL HELPERS (verbatim v1 / adapted for v3)
+// ============================================================================
+// Functions called by scene_expand_lines, scene_expand_lines_flat,
+// scan_multi_instance, extract_scene_subblock, extract_scene_subblock_attr.
+
+functions:
+	// v1 verbatim (main.v1.cln:1413) — true if trimmed line is a known sub-block header.
+	boolean is_scene_subblock_header(string t)
+		if t == "state:"
+			return true
+		if t == "draw:"
+			return true
+		if t == "init:"
+			return true
+		if t == "assets:"
+			return true
+		if t == "layers:"
+			return true
+		if t == "camera:"
+			return true
+		if t == "onExit:"
+			return true
+		if t == "onPause:"
+			return true
+		if t == "onResume:"
+			return true
+		if t.startsWith("onFrame")
+			return true
+		if t.startsWith("onPointerDown")
+			return true
+		if t.startsWith("onPointerMove")
+			return true
+		if t.startsWith("onPointerUp")
+			return true
+		if t.startsWith("onKeyDown")
+			return true
+		if t.startsWith("onKeyUp")
+			return true
+		if t.startsWith("animSprite")
+			return true
+		if t.startsWith("tween")
+			return true
+		if t.startsWith("timeline")
+			return true
+		if t.startsWith("animState")
+			return true
+		if t.startsWith("particles")
+			return true
+		if t.startsWith("path")
+			return true
+		if t.startsWith("gradient")
+			return true
+		if t.startsWith("customEase")
+			return true
+		return false
+
+	// v1 verbatim (main.v1.cln:1534) — returns position of next space at or after pos.
+	integer flat_next_space(string s, integer pos)
+		return s.indexOf(" ", pos)
+
+	// v1 verbatim (main.v1.cln:1538) — returns true if s has space exactly at pos.
+	boolean flat_space_at(string s, integer pos)
+		integer next = s.indexOf(" ", pos)
+		if next == pos
+			return true
+		return false
+
+	// v1 verbatim (main.v1.cln:1544) — true if s starts with "kw:" or "kw ".
+	boolean flat_kw_at_start(string s, string kw)
+		if s.startsWith(kw + ":")
+			return true
+		if s.startsWith(kw + " ")
+			return true
+		return false
+
+	// v1 verbatim (main.v1.cln:1552) — find start position of sub-block keyword in flat body.
+	integer flat_find_kw(string body, string kw)
+		string kw_col = " " + kw + ":"
+		integer pos = body.indexOf(kw_col)
+		if pos >= 0
+			return pos + 1
+		string kw_sp = " " + kw + " "
+		pos = body.indexOf(kw_sp)
+		if pos >= 0
+			return pos + 1
+		// Check at position 0
+		if body.startsWith(kw + ":")
+			return 0
+		if body.startsWith(kw + " ")
+			return 0
+		return -1
+
+	// v1 verbatim (main.v1.cln:1572) — find end of current sub-block content.
+	integer flat_find_next_block_end(string content)
+		integer end = content.length()
+		integer pos = -1
+		pos = flat_find_kw(content, "state")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onFrame")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "draw")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onPointerDown")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onPointerMove")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onPointerUp")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onKeyDown")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "onKeyUp")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "init")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "animSprite")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "tween")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "timeline")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "animState")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "particles")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "camera")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "layers")
+		if pos >= 0 and pos < end
+			end = pos
+		pos = flat_find_kw(content, "assets")
+		if pos >= 0 and pos < end
+			end = pos
+		return end
+
+	// v1 verbatim (main.v1.cln:1628) — skip optional key="value" attribute at start.
+	integer flat_skip_one_attr(string s)
+		integer eq_q = s.indexOf("=\"")
+		if eq_q == -1
+			return 0
+		// Key before =" must contain no spaces
+		string key = s.substring(0, eq_q)
+		if key.indexOf(" ") >= 0
+			return 0
+		integer close = s.indexOf("\"", eq_q + 2)
+		if close == -1
+			return 0
+		integer end = close + 1
+		// Skip trailing space
+		if end < s.length()
+			integer sp = s.indexOf(" ", end)
+			if sp == end
+				end = end + 1
+		return end
+
+	// v1 verbatim (main.v1.cln:1651) — extract content for sub-block from flat body.
+	string extract_scene_subblock_flat(string body, string keyword)
+		integer kpos = flat_find_kw(body, keyword)
+		if kpos == -1
+			return ""
+		string kw_colon = keyword + ":"
+		integer after_kw = kpos + kw_colon.length()
+		if after_kw > body.length()
+			after_kw = body.length()
+		string rest = body.substring(after_kw, body.length()).trim()
+		integer attr_skip = flat_skip_one_attr(rest)
+		string content = rest.substring(attr_skip, rest.length()).trim()
+		integer end = flat_find_next_block_end(content)
+		return content.substring(0, end).trim()
+
+	// v1 verbatim (main.v1.cln:1671) — extract attribute value from flat sub-block header.
+	string extract_scene_subblock_attr_flat(string body, string keyword, string attr, string default_val)
+		integer kpos = flat_find_kw(body, keyword)
+		if kpos == -1
+			return default_val
+		string kw_colon = keyword + ":"
+		integer after_kw = kpos + kw_colon.length()
+		if after_kw > body.length()
+			return default_val
+		string rest = body.substring(after_kw, body.length()).trim()
+		string pat = attr + "=\""
+		integer pos = rest.indexOf(pat)
+		if pos == -1
+			return default_val
+		integer vs = pos + pat.length()
+		integer ve = rest.indexOf("\"", vs)
+		if ve == -1
+			return default_val
+		return rest.substring(vs, ve)
+
+	// v1 verbatim (main.v1.cln:1695) — find where condition ends in "if COND BODY".
+	integer flat_if_body_start(string s)
+		integer scan_from = 3
+		integer spaces = 0
+		integer i = scan_from
+		integer len = s.length()
+		while i < len and spaces < 3
+			integer sp = s.indexOf(" ", i)
+			if sp == -1
+				return len
+			spaces = spaces + 1
+			i = sp + 1
+		return i
+
+	// v1 verbatim (main.v1.cln:1710) — find position of next "if " or next sub-block.
+	integer flat_find_if_end(string body)
+		integer end = body.length()
+		integer pos = body.indexOf(" if ")
+		if pos >= 0 and pos < end
+			end = pos + 1
+		// Also stop at next sub-block
+		integer blk = flat_find_next_block_end(body)
+		if blk < end
+			end = blk
+		return end
+
+	// v1 verbatim (main.v1.cln:1721) — find position of next statement start.
+	integer flat_find_next_stmt(string s, integer search_from)
+		integer len = s.length()
+		integer scan = search_from + 1
+		while scan < len
+			// Find " = " pattern (assignment boundary)
+			integer eq = s.indexOf(" = ", scan)
+			if eq == -1
+				return len
+			// Make sure it's not == (check char after " = ")
+			boolean is_double = false
+			if eq + 3 < len
+				string after = s.substring(eq + 3, eq + 4)
+				if after.startsWith("=")
+					is_double = true
+			if is_double == false
+				// Walk backward from eq to find the start of the identifier
+				integer look = eq - 1
+				boolean found_sp = false
+				while look >= search_from and found_sp == false
+					integer sp = s.indexOf(" ", look)
+					if sp == look
+						found_sp = true
+					else
+						look = look - 1
+				integer id_start = look + 1
+				if id_start > search_from
+					// Check if the word immediately before id_start is a type keyword.
+					integer look2 = look - 1
+					boolean found_sp2 = false
+					while look2 >= search_from and found_sp2 == false
+						integer sp2 = s.indexOf(" ", look2)
+						if sp2 == look2
+							found_sp2 = true
+						else
+							look2 = look2 - 1
+					integer word_start = look2 + 1
+					integer type_start = id_start
+					if word_start < look
+						string prev_word = s.substring(word_start, look)
+						boolean is_type = false
+						if prev_word == "integer" or prev_word == "number"
+							is_type = true
+						if prev_word == "string" or prev_word == "boolean"
+							is_type = true
+						if is_type == true
+							type_start = word_start
+					if type_start > search_from
+						return type_start
+				// Identifier at or before search_from — skip
+			scan = eq + 1
+		return len
+
+	// v1 verbatim (main.v1.cln:2246) — parse inline attrs into JSON object string.
+	string parse_inline_attrs(string s)
+		string json = "{"
+		string rest = s.trim()
+		boolean first = true
+
+		// First token: optional quoted name
+		if rest.startsWith("\"")
+			integer end_quote = rest.indexOf("\"", 1)
+			if end_quote != -1
+				string name = rest.substring(1, end_quote)
+				json = json + "\"name\":\"" + name + "\""
+				first = false
+				rest = rest.substring(end_quote + 1, rest.length()).trim()
+
+		// Remaining: key=value pairs
+		integer safety = 0
+		while rest.length() > 0 and safety < 32
+			safety = safety + 1
+			integer eq = rest.indexOf("=")
+			if eq == -1
+				rest = ""
+			else
+				string key = rest.substring(0, eq).trim()
+				string after = rest.substring(eq + 1, rest.length())
+				string value = ""
+				if after.startsWith("\"")
+					integer end_q = after.indexOf("\"", 1)
+					if end_q == -1
+						rest = ""
+					else
+						value = after.substring(1, end_q)
+						rest = after.substring(end_q + 1, after.length()).trim()
+				else
+					integer space = after.indexOf(" ")
+					if space == -1
+						value = after
+						rest = ""
+					else
+						value = after.substring(0, space)
+						rest = after.substring(space, after.length()).trim()
+				if not first
+					json = json + ","
+				first = false
+				json = json + "\"" + key + "\":\"" + value + "\""
+
+		json = json + "}"
+		return json
 
 // ============================================================================
 // SUB-CYCLE 3a §2: REMAINING BODY PROCESSORS (v3 typed emission)
@@ -2418,92 +3382,9 @@ functions:
 		return 0
 
 // ============================================================================
-// SUB-CYCLE 3a §6: UPDATED DISPATCHER
+// END OF SUB-CYCLE 3b CONTENT
 // ============================================================================
-// Extends expand_block_typed_v2 with arms for all Sub-cycle 3a blocks:
-// canvas.* (32 draw commands via expand_canvas_command), plus multi-instance
-// expanders (animSprite, animState, tween, timeline, particles, path,
-// gradient, customEase).
-//
-// Sub-cycle 3b will fold this into expand_block_typed and delete expand_block_typed_v2.
-
-functions:
-	integer expand_block_typed_v3(integer ctx, string block_name, string attrs_json, string body)
-		// First check Sub-cycle 2 arms:
-		if block_name.startsWith("canvasScene")
-			return expand_canvas_scene(ctx, attrs_json, body)
-		if block_name.startsWith("onPointerDown")
-			return expand_on_pointer_down(ctx, attrs_json, body)
-		if block_name.startsWith("onPointerMove")
-			return expand_on_pointer_move(ctx, attrs_json, body)
-		if block_name.startsWith("onPointerUp")
-			return expand_on_pointer_up(ctx, attrs_json, body)
-		if block_name.startsWith("onKeyDown")
-			return expand_on_key_down(ctx, attrs_json, body)
-		if block_name.startsWith("onKeyUp")
-			return expand_on_key_up(ctx, attrs_json, body)
-		if block_name.startsWith("onFrame")
-			return expand_on_frame(ctx, attrs_json, body)
-		if block_name.startsWith("onExit")
-			return expand_on_exit(ctx, attrs_json, body)
-		if block_name.startsWith("onPause")
-			return expand_on_pause(ctx, attrs_json, body)
-		if block_name.startsWith("onResume")
-			return expand_on_resume(ctx, attrs_json, body)
-		if block_name.startsWith("draw")
-			return expand_draw(ctx, attrs_json, body)
-		if block_name.startsWith("init")
-			return expand_init(ctx, attrs_json, body)
-		// Sub-cycle 3a arms:
-		if block_name.startsWith("canvas.")
-			return expand_canvas_command(ctx, block_name, attrs_json, body)
-		if block_name.startsWith("animSprite")
-			return expand_anim_sprite(ctx, attrs_json, body)
-		if block_name.startsWith("animState")
-			return expand_anim_state(ctx, attrs_json, body)
-		if block_name.startsWith("tween")
-			return expand_tween(ctx, attrs_json, body)
-		if block_name.startsWith("timeline")
-			return expand_timeline(ctx, attrs_json, body)
-		if block_name.startsWith("particles")
-			return expand_particles(ctx, attrs_json, body)
-		if block_name.startsWith("path")
-			return expand_path(ctx, attrs_json, body)
-		if block_name.startsWith("gradient")
-			return expand_gradient(ctx, attrs_json, body)
-		if block_name.startsWith("customEase")
-			return expand_custom_ease(ctx, attrs_json, body)
-		if block_name.startsWith("camera")
-			return expand_camera(ctx, attrs_json, body)
-		// Sub-cycle 3b will add: assets, layers, state + fold into expand_block_typed
-		return 0
-
-// ============================================================================
-// END OF SUB-CYCLE 3a CONTENT
-// ============================================================================
-// Sub-cycle 3b delivers:
-//   - STUB3 → v1 verbatim copies (all remaining STUB3 tagged functions:
-//     get_attr, extract_scene_subblock, extract_scene_subblock_attr,
-//     scan_multi_instance, scene_expand_lines [typed], scene_expand_lines_start,
-//     scene_param_part, indent_lines, validate_canvas_scene, and 3a's body
-//     parser stubs: get_body_value, get_quoted_name, get_first_word,
-//     is_tween_target_line, get_gradient_type, get_range_start, get_range_end,
-//     json_escape, scene_state_split_flat, scene_var_name, scene_var_default,
-//     get_iattr, get_iattr_raw).
-//   - Additional DSL parsers verbatim from v1 (~1050 LOC):
-//     flat_*helpers, parse_inline_attrs, is_scene_subblock_header,
-//     extract_scene_subblock (real body), scan_multi_instance (real body), etc.
-//   - Additional attribute helpers from v1 (~355 LOC).
-//   - validate_canvas_scene real body (~240 LOC).
-//   - Fold expand_block_typed_v3 into expand_block_typed (edit expand_block_typed
-//     at line ~106 to route through expand_block_typed_v3 arms) and delete
-//     expand_block_typed_v2 / expand_block_typed_v3 in favor of the single
-//     real dispatcher.
-//   - Replace validate_block and get_keywords with real v1 bodies.
-//   - Typed scene_expand_lines(ctx, body_arr, body) calling scene_expand_cmd.
-//   - plugin.toml version bump to 3.0.0.
-//   - Delete main.v1.cln.
-//   - comita + squash-merge to main.
-//
-// See reports/sessions/2026-07-03-canvas-subcycle-3a-handoff.md for LOC counts
-// and bridge coverage report.
+// Sub-cycles 3a and 3b are complete. All STUB3 functions replaced with real
+// implementations. All DSL helpers ported verbatim from main.v1.cln.
+// Dispatcher folded into expand_block_typed. validate_block and get_keywords
+// real bodies in place. plugin.toml version 3.0.0. main.v1.cln deleted.
