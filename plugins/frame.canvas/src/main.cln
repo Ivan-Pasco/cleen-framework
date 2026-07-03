@@ -337,32 +337,286 @@ functions:
 	string scan_multi_instance(string body, string kind, integer kind_id)
 		return ""
 
-	// STUB3 (main.v1.cln:1032) — per-asset registration call emission.
-	string process_assets_body(string body)
-		return ""
+	// Sub-cycle 3a: process_assets_body — typed emission (replaces STUB3).
+	// Emits per-asset _asset_preload_image / _sprite_register_sheet / _audio_preload
+	// / _font_load calls into the start: block via _emit_statement_into_start.
+	// Signature change: now takes ctx, emits directly, returns 0 on success.
+	integer process_assets_body(integer ctx, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E500", "frame.canvas process_assets_body failed")
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("image ")
+				string name = get_quoted_name(trimmed, 6)
+				string src = get_body_value(trimmed, "src", "")
+				if name.length() > 0
+					if src.length() > 0
+						integer n_h = sl(ctx, name)
+						integer s_h = sl(ctx, src)
+						integer a = _batch_args(ctx, "[" + n_h.toString() + "," + s_h.toString() + "]")
+						_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_asset_preload_image", a))
+			if trimmed.startsWith("spritesheet ")
+				string name = get_quoted_name(trimmed, 12)
+				string src = get_body_value(trimmed, "src", "")
+				string fw = get_body_value(trimmed, "frameWidth", "32")
+				string fh = get_body_value(trimmed, "frameHeight", "32")
+				if name.length() > 0
+					if src.length() > 0
+						integer n_h = sl(ctx, name)
+						integer s_h = sl(ctx, src)
+						integer fw_h = sl(ctx, fw)
+						integer fh_h = sl(ctx, fh)
+						integer a = _batch_args(ctx, "[" + n_h.toString() + "," + s_h.toString() + "," + fw_h.toString() + "," + fh_h.toString() + "]")
+						_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_sprite_register_sheet", a))
+			if trimmed.startsWith("sound ")
+				string name = get_quoted_name(trimmed, 6)
+				string src = get_body_value(trimmed, "src", "")
+				if name.length() > 0
+					if src.length() > 0
+						integer n_h = sl(ctx, name)
+						integer s_h = sl(ctx, src)
+						integer a = _batch_args(ctx, "[" + n_h.toString() + "," + s_h.toString() + "]")
+						_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_audio_preload", a))
+			if trimmed.startsWith("music ")
+				string name = get_quoted_name(trimmed, 6)
+				string src = get_body_value(trimmed, "src", "")
+				if name.length() > 0
+					if src.length() > 0
+						integer n_h = sl(ctx, name)
+						integer s_h = sl(ctx, src)
+						integer a = _batch_args(ctx, "[" + n_h.toString() + "," + s_h.toString() + "]")
+						_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_audio_preload", a))
+			if trimmed.startsWith("font ")
+				string name = get_quoted_name(trimmed, 5)
+				string src = get_body_value(trimmed, "src", "")
+				if name.length() > 0
+					if src.length() > 0
+						integer n_h = sl(ctx, name)
+						integer s_h = sl(ctx, src)
+						integer a = _batch_args(ctx, "[" + n_h.toString() + "," + s_h.toString() + "]")
+						_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_font_load", a))
+			i = next_i
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E500", "process_assets_body sticky-error tripped")
+		return 0
 
-	// STUB3 (main.v1.cln:1067) — per-layer registration call emission.
-	string process_layers_body(string body)
-		return ""
+	// Sub-cycle 3a: process_layers_body — typed emission (replaces STUB3).
+	// Emits _layer_declare("name", z) into start: per layer line.
+	integer process_layers_body(integer ctx, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E510", "frame.canvas process_layers_body failed")
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("layer ")
+				string name = get_quoted_name(trimmed, 6)
+				string z_val = get_body_value(trimmed, "z", "0")
+				if name.length() > 0
+					integer n_h = sl(ctx, name)
+					integer z_h = sl(ctx, z_val)
+					integer a = _batch_args(ctx, "[" + n_h.toString() + "," + z_h.toString() + "]")
+					_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_layer_declare", a))
+			i = next_i
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E510", "process_layers_body sticky-error tripped")
+		return 0
 
-	// STUB3 (main.v1.cln:521) — camera config expander.
-	string expand_camera(string attrs, string body)
-		return ""
+	// Sub-cycle 3a: expand_camera — typed emission (replaces STUB3).
+	// Emits camera configuration calls (_camera_set_follow, _camera_set_deadzone,
+	// _camera_set_bounds, _camera_set_zoom) into start: block.
+	integer expand_camera(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E520", "frame.canvas expand_camera failed")
+		string follow_x = get_body_value(body, "followX", "")
+		string follow_y = get_body_value(body, "followY", "")
+		string smoothing = get_body_value(body, "smoothing", "0.08")
+		string deadzone_w = get_body_value(body, "deadzoneWidth", "0")
+		string deadzone_h = get_body_value(body, "deadzoneHeight", "0")
+		string bounds_x = get_body_value(body, "boundsX", "")
+		string bounds_y = get_body_value(body, "boundsY", "")
+		string bounds_w = get_body_value(body, "boundsWidth", "")
+		string bounds_h = get_body_value(body, "boundsHeight", "")
+		string zoom_val = get_body_value(body, "zoom", "")
+		if follow_x.length() > 0
+			if follow_y.length() > 0
+				integer fx_h = sl(ctx, follow_x)
+				integer fy_h = sl(ctx, follow_y)
+				integer sm_h = sl(ctx, smoothing)
+				integer a = _batch_args(ctx, "[" + fx_h.toString() + "," + fy_h.toString() + "," + sm_h.toString() + "]")
+				_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_camera_set_follow", a))
+		if deadzone_w != "0"
+			integer dw_h = sl(ctx, deadzone_w)
+			integer dh_h = sl(ctx, deadzone_h)
+			integer a = _batch_args(ctx, "[" + dw_h.toString() + "," + dh_h.toString() + "]")
+			_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_camera_set_deadzone", a))
+		if bounds_x.length() > 0
+			if bounds_w.length() > 0
+				integer bx_h = sl(ctx, bounds_x)
+				integer by_h = sl(ctx, bounds_y)
+				integer bw_h = sl(ctx, bounds_w)
+				integer bh_h = sl(ctx, bounds_h)
+				integer a = _batch_args(ctx, "[" + bx_h.toString() + "," + by_h.toString() + "," + bw_h.toString() + "," + bh_h.toString() + "]")
+				_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_camera_set_bounds", a))
+		if zoom_val.length() > 0
+			integer z_h = sl(ctx, zoom_val)
+			integer a = _batch_args(ctx, "[" + z_h.toString() + "]")
+			_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_camera_set_zoom", a))
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E520", "expand_camera sticky-error tripped")
+		return 0
 
-	// STUB3 (main.v1.cln:1907) — scene state variable "load" sequence.
-	string scene_state_load(string state_body)
-		return ""
+	// Sub-cycle 3a: scene_state_load — typed emission (replaces STUB3).
+	// Signature change: takes (ctx, body_arr, state_body). Pushes one stmt handle
+	// per state var into body_arr: `number vname = _canvas_var_get("vname", default)`.
+	// Am 7 note: with one stmt per var, the stmts are pushed individually into the
+	// existing body_arr (no separate stmtSeq needed since the array is shared).
+	integer scene_state_load(integer ctx, integer body_arr, string state_body)
+		if state_body.trim().length() == 0
+			return 0
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E530", "frame.canvas scene_state_load failed")
+		string effective_body = state_body
+		if state_body.indexOf("\n") == -1
+			if state_body.trim().length() > 0
+				effective_body = scene_state_split_flat(state_body.replace("\t", " "))
+		integer scan = 0
+		integer len = effective_body.length()
+		while scan < len
+			integer nl = effective_body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = effective_body.substring(scan, len)
+				next_scan = len
+			else
+				line = effective_body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("//") == false
+					string vname = scene_var_name(t)
+					string vdefault = scene_var_default(t)
+					if vname.length() > 0
+						// number vname = _canvas_var_get("vname", default_val)
+						integer vn_h = sl(ctx, vname)
+						integer vd_h = sl(ctx, vdefault)
+						integer a = _batch_args(ctx, "[" + vn_h.toString() + "," + vd_h.toString() + "]")
+						integer call_h = _batch_call(ctx, "_canvas_var_get", a)
+						integer stmt_h = _batch_stmtAssign(ctx, vname, call_h)
+						_batch_arrayPush(ctx, body_arr, stmt_h)
+			scan = next_scan
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E530", "scene_state_load sticky-error tripped")
+		return 0
 
-	// STUB3 (main.v1.cln:1939) — scene state variable "save" sequence.
-	string scene_state_save(string state_body)
-		return ""
+	// Sub-cycle 3a: scene_state_save — typed emission (replaces STUB3).
+	// Pushes one stmt handle per state var into body_arr:
+	// `integer __svN = _canvas_var_set("vname", vname)`.
+	integer scene_state_save(integer ctx, integer body_arr, string state_body)
+		if state_body.trim().length() == 0
+			return 0
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E540", "frame.canvas scene_state_save failed")
+		string effective_body = state_body
+		if state_body.indexOf("\n") == -1
+			if state_body.trim().length() > 0
+				effective_body = scene_state_split_flat(state_body.replace("\t", " "))
+		integer scan = 0
+		integer len = effective_body.length()
+		integer idx = 0
+		while scan < len
+			integer nl = effective_body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = effective_body.substring(scan, len)
+				next_scan = len
+			else
+				line = effective_body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("//") == false
+					string vname = scene_var_name(t)
+					if vname.length() > 0
+						// integer __svN = _canvas_var_set("vname", vname)
+						string target = "__sv" + idx.toString()
+						integer vn_h = sl(ctx, vname)
+						integer vv_h = ident(ctx, vname)
+						integer a = _batch_args(ctx, "[" + vn_h.toString() + "," + vv_h.toString() + "]")
+						integer call_h = _batch_call(ctx, "_canvas_var_set", a)
+						integer stmt_h = _batch_stmtAssign(ctx, target, call_h)
+						_batch_arrayPush(ctx, body_arr, stmt_h)
+						idx = idx + 1
+			scan = next_scan
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E540", "scene_state_save sticky-error tripped")
+		return 0
 
-	// STUB3 (main.v1.cln:1971) — scene state variable "init" sequence.
-	string scene_state_init(string state_body)
-		return ""
+	// Sub-cycle 3a: scene_state_init — typed emission (replaces STUB3).
+	// Emits one _emit_statement_into_start per state var:
+	// `integer __siN = _canvas_var_set("vname", default_val)` into start:.
+	integer scene_state_init(integer ctx, string state_body)
+		if state_body.trim().length() == 0
+			return 0
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E550", "frame.canvas scene_state_init failed")
+		string effective_body = state_body
+		if state_body.indexOf("\n") == -1
+			if state_body.trim().length() > 0
+				effective_body = scene_state_split_flat(state_body.replace("\t", " "))
+		integer scan = 0
+		integer len = effective_body.length()
+		integer idx = 0
+		while scan < len
+			integer nl = effective_body.indexOf("\n", scan)
+			string line = ""
+			integer next_scan = 0
+			if nl == -1
+				line = effective_body.substring(scan, len)
+				next_scan = len
+			else
+				line = effective_body.substring(scan, nl)
+				next_scan = nl + 1
+			string t = line.trim()
+			if t.length() > 0
+				if t.startsWith("//") == false
+					string vname = scene_var_name(t)
+					string vdefault = scene_var_default(t)
+					if vname.length() > 0
+						// integer __siN = _canvas_var_set("vname", default_val)
+						string target = "__si" + idx.toString()
+						integer vn_h = sl(ctx, vname)
+						integer vd_h = sl(ctx, vdefault)
+						integer a = _batch_args(ctx, "[" + vn_h.toString() + "," + vd_h.toString() + "]")
+						integer call_h = _batch_call(ctx, "_canvas_var_set", a)
+						integer stmt_h = _batch_stmtAssign(ctx, target, call_h)
+						_emit_statement_into_start(ctx, stmt_h)
+						idx = idx + 1
+			scan = next_scan
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E550", "scene_state_init sticky-error tripped")
+		return 0
 
 	// STUB3 (main.v1.cln:1996) — line-oriented body expander (dispatches to
-	// scene_expand_cmd for canvas.* lines). Sub-cycle 3 wires the full body.
+	// scene_expand_cmd for canvas.* lines). Sub-cycle 3b writes typed version.
+	// scene_expand_cmd is now typed (integer ctx, string line) -> integer handle,
+	// so 3b scene_expand_lines(ctx, body_arr, body) -> integer.
 	string scene_expand_lines(string body)
 		return body
 
@@ -829,25 +1083,11 @@ functions:
 		string custom_ease_regs = scan_multi_instance(body, "customEase", 8)
 
 		// -------------------------------------------------------------------
-		// Single-instance registration outputs (Sub-cycle 3 populates the
-		// body of process_* stubs; here we get empty strings for now).
+		// State-var presence flag for frame/handler load/save injection.
+		// Sub-cycle 3a: scene_state_load/save now take (ctx, body_arr, state_body)
+		// and push typed stmt handles directly into the handler body arrays.
 		// -------------------------------------------------------------------
-		string asset_regs = ""
-		if assets_body.trim().length() > 0
-			asset_regs = process_assets_body(assets_body)
-		string layer_regs = ""
-		if layers_body.trim().length() > 0
-			layer_regs = process_layers_body(layers_body)
-		string camera_regs = ""
-		if camera_body.trim().length() > 0
-			camera_regs = expand_camera("{}", camera_body)
-
-		// -------------------------------------------------------------------
-		// State management source fragments (Sub-cycle 3 populates).
-		// -------------------------------------------------------------------
-		string s_load = scene_state_load(state_body)
-		string s_save = scene_state_save(state_body)
-		string s_init = scene_state_init(state_body)
+		boolean has_state = state_body.trim().length() > 0
 
 		// -------------------------------------------------------------------
 		// (4) Emit 12 scene type stubs.
@@ -867,11 +1107,9 @@ functions:
 		integer fcb_body_arr = _batch_arrayNew(ctx)
 		// number <frame_param> = _canvas_get_delta_time()
 		_batch_arrayPush(ctx, fcb_body_arr, sassign(ctx, frame_param, call0(ctx, "_canvas_get_delta_time")))
-		// s_load (may be multi-statement — parsed as a whole via _emit_stmt_from_source)
-		if s_load.length() > 0
-			integer s_load_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-			if s_load_stmt != 0
-				_batch_arrayPush(ctx, fcb_body_arr, s_load_stmt)
+		// state var load (Sub-cycle 3a: typed emit directly into body_arr)
+		if has_state
+			scene_state_load(ctx, fcb_body_arr, state_body)
 		// user onFrame body (routed through scene_expand_lines for canvas.* dispatch)
 		string frame_expanded = scene_expand_lines(frame_body)
 		if frame_expanded.length() > 0
@@ -884,11 +1122,9 @@ functions:
 			integer db_stmt = _emit_stmt_from_source(ctx, draw_expanded, 0)
 			if db_stmt != 0
 				_batch_arrayPush(ctx, fcb_body_arr, db_stmt)
-		// s_save
-		if s_save.length() > 0
-			integer s_save_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-			if s_save_stmt != 0
-				_batch_arrayPush(ctx, fcb_body_arr, s_save_stmt)
+		// state var save (Sub-cycle 3a: typed emit directly into body_arr)
+		if has_state
+			scene_state_save(ctx, fcb_body_arr, state_body)
 		// integer __rfr = _canvas_request_frame(__cv)
 		_batch_arrayPush(ctx, fcb_body_arr, sassign(ctx, "__rfr", call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))))
 		integer fcb_params = params_cv(ctx)
@@ -900,26 +1136,21 @@ functions:
 		// shape; the pointer/key handlers need param-decl preludes so they
 		// build their own body arrays inline.
 		// -------------------------------------------------------------------
-		// Pointer down
+		// Pointer down — Sub-cycle 3a: state load/save via typed scene_state_load/save
 		string dn_trimmed = dn_body.trim()
 		if dn_trimmed.length() > 0
 			string dn_px = scene_param_part(dn_param, 0)
 			string dn_py = scene_param_part(dn_param, 1)
 			integer dn_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer sl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if sl_stmt != 0
-					_batch_arrayPush(ctx, dn_body_arr, sl_stmt)
-			integer dn_expanded = 0
+			if has_state
+				scene_state_load(ctx, dn_body_arr, state_body)
 			string dn_source = scene_expand_lines(dn_body)
 			if dn_source.length() > 0
-				dn_expanded = _emit_stmt_from_source(ctx, dn_source, 0)
+				integer dn_expanded = _emit_stmt_from_source(ctx, dn_source, 0)
 				if dn_expanded != 0
 					_batch_arrayPush(ctx, dn_body_arr, dn_expanded)
-			if s_save.length() > 0
-				integer ss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if ss_stmt != 0
-					_batch_arrayPush(ctx, dn_body_arr, ss_stmt)
+			if has_state
+				scene_state_save(ctx, dn_body_arr, state_body)
 			integer dn_params = params_cv_2(ctx, dn_px, "number", dn_py, "number")
 			emit_one_fn(ctx, "_on_pointer_down", dn_params, "void", dn_body_arr)
 
@@ -929,19 +1160,15 @@ functions:
 			string mv_px = scene_param_part(mv_param, 0)
 			string mv_py = scene_param_part(mv_param, 1)
 			integer mv_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer msl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if msl_stmt != 0
-					_batch_arrayPush(ctx, mv_body_arr, msl_stmt)
+			if has_state
+				scene_state_load(ctx, mv_body_arr, state_body)
 			string mv_source = scene_expand_lines(mv_body)
 			if mv_source.length() > 0
 				integer mv_stmt = _emit_stmt_from_source(ctx, mv_source, 0)
 				if mv_stmt != 0
 					_batch_arrayPush(ctx, mv_body_arr, mv_stmt)
-			if s_save.length() > 0
-				integer mss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if mss_stmt != 0
-					_batch_arrayPush(ctx, mv_body_arr, mss_stmt)
+			if has_state
+				scene_state_save(ctx, mv_body_arr, state_body)
 			integer mv_params = params_cv_2(ctx, mv_px, "number", mv_py, "number")
 			emit_one_fn(ctx, "_on_pointer_move", mv_params, "void", mv_body_arr)
 
@@ -951,19 +1178,15 @@ functions:
 			string up_px = scene_param_part(up_param, 0)
 			string up_py = scene_param_part(up_param, 1)
 			integer up_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer usl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if usl_stmt != 0
-					_batch_arrayPush(ctx, up_body_arr, usl_stmt)
+			if has_state
+				scene_state_load(ctx, up_body_arr, state_body)
 			string up_source = scene_expand_lines(up_body)
 			if up_source.length() > 0
 				integer up_stmt = _emit_stmt_from_source(ctx, up_source, 0)
 				if up_stmt != 0
 					_batch_arrayPush(ctx, up_body_arr, up_stmt)
-			if s_save.length() > 0
-				integer uss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if uss_stmt != 0
-					_batch_arrayPush(ctx, up_body_arr, uss_stmt)
+			if has_state
+				scene_state_save(ctx, up_body_arr, state_body)
 			integer up_params = params_cv_2(ctx, up_px, "number", up_py, "number")
 			emit_one_fn(ctx, "_on_pointer_up", up_params, "void", up_body_arr)
 
@@ -972,19 +1195,15 @@ functions:
 		if kd_trimmed.length() > 0
 			string kd_var = scene_param_part(kd_param, 0)
 			integer kd_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer ksl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if ksl_stmt != 0
-					_batch_arrayPush(ctx, kd_body_arr, ksl_stmt)
+			if has_state
+				scene_state_load(ctx, kd_body_arr, state_body)
 			string kd_source = scene_expand_lines(kd_body)
 			if kd_source.length() > 0
 				integer kd_stmt = _emit_stmt_from_source(ctx, kd_source, 0)
 				if kd_stmt != 0
 					_batch_arrayPush(ctx, kd_body_arr, kd_stmt)
-			if s_save.length() > 0
-				integer kss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if kss_stmt != 0
-					_batch_arrayPush(ctx, kd_body_arr, kss_stmt)
+			if has_state
+				scene_state_save(ctx, kd_body_arr, state_body)
 			integer kd_params = params_cv_1(ctx, kd_var, "string")
 			emit_one_fn(ctx, "_on_key_down", kd_params, "void", kd_body_arr)
 
@@ -993,19 +1212,15 @@ functions:
 		if ku_trimmed.length() > 0
 			string ku_var = scene_param_part(ku_param, 0)
 			integer ku_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer usl2_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if usl2_stmt != 0
-					_batch_arrayPush(ctx, ku_body_arr, usl2_stmt)
+			if has_state
+				scene_state_load(ctx, ku_body_arr, state_body)
 			string ku_source = scene_expand_lines(ku_body)
 			if ku_source.length() > 0
 				integer ku_stmt = _emit_stmt_from_source(ctx, ku_source, 0)
 				if ku_stmt != 0
 					_batch_arrayPush(ctx, ku_body_arr, ku_stmt)
-			if s_save.length() > 0
-				integer uss2_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if uss2_stmt != 0
-					_batch_arrayPush(ctx, ku_body_arr, uss2_stmt)
+			if has_state
+				scene_state_save(ctx, ku_body_arr, state_body)
 			integer ku_params = params_cv_1(ctx, ku_var, "string")
 			emit_one_fn(ctx, "_on_key_up", ku_params, "void", ku_body_arr)
 
@@ -1013,19 +1228,15 @@ functions:
 		string ex_trimmed = ex_body.trim()
 		if ex_trimmed.length() > 0
 			integer ex_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer esl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if esl_stmt != 0
-					_batch_arrayPush(ctx, ex_body_arr, esl_stmt)
+			if has_state
+				scene_state_load(ctx, ex_body_arr, state_body)
 			string ex_source = scene_expand_lines(ex_body)
 			if ex_source.length() > 0
 				integer ex_stmt = _emit_stmt_from_source(ctx, ex_source, 0)
 				if ex_stmt != 0
 					_batch_arrayPush(ctx, ex_body_arr, ex_stmt)
-			if s_save.length() > 0
-				integer ess_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if ess_stmt != 0
-					_batch_arrayPush(ctx, ex_body_arr, ess_stmt)
+			if has_state
+				scene_state_save(ctx, ex_body_arr, state_body)
 			integer ex_params = params_cv(ctx)
 			emit_one_fn(ctx, "_on_exit", ex_params, "void", ex_body_arr)
 
@@ -1033,19 +1244,15 @@ functions:
 		string ps_trimmed = ps_body.trim()
 		if ps_trimmed.length() > 0
 			integer ps_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer psl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if psl_stmt != 0
-					_batch_arrayPush(ctx, ps_body_arr, psl_stmt)
+			if has_state
+				scene_state_load(ctx, ps_body_arr, state_body)
 			string ps_source = scene_expand_lines(ps_body)
 			if ps_source.length() > 0
 				integer ps_stmt = _emit_stmt_from_source(ctx, ps_source, 0)
 				if ps_stmt != 0
 					_batch_arrayPush(ctx, ps_body_arr, ps_stmt)
-			if s_save.length() > 0
-				integer pss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if pss_stmt != 0
-					_batch_arrayPush(ctx, ps_body_arr, pss_stmt)
+			if has_state
+				scene_state_save(ctx, ps_body_arr, state_body)
 			integer ps_params = params_cv(ctx)
 			emit_one_fn(ctx, "_on_pause", ps_params, "void", ps_body_arr)
 
@@ -1053,19 +1260,15 @@ functions:
 		string rs_trimmed = rs_body.trim()
 		if rs_trimmed.length() > 0
 			integer rs_body_arr = _batch_arrayNew(ctx)
-			if s_load.length() > 0
-				integer rsl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
-				if rsl_stmt != 0
-					_batch_arrayPush(ctx, rs_body_arr, rsl_stmt)
+			if has_state
+				scene_state_load(ctx, rs_body_arr, state_body)
 			string rs_source = scene_expand_lines(rs_body)
 			if rs_source.length() > 0
 				integer rs_stmt = _emit_stmt_from_source(ctx, rs_source, 0)
 				if rs_stmt != 0
 					_batch_arrayPush(ctx, rs_body_arr, rs_stmt)
-			if s_save.length() > 0
-				integer rss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
-				if rss_stmt != 0
-					_batch_arrayPush(ctx, rs_body_arr, rss_stmt)
+			if has_state
+				scene_state_save(ctx, rs_body_arr, state_body)
 			integer rs_params = params_cv(ctx)
 			emit_one_fn(ctx, "_on_resume", rs_params, "void", rs_body_arr)
 
@@ -1088,10 +1291,14 @@ functions:
 		integer fps_expr = _batch_intLit(ctx, string_to_int_default(fps_val, 60), 0)
 		sc2(ctx, "_canvas_set_fps", ident(ctx, "__cv"), fps_expr)
 
-		// Registration source fragments — each parsed as a whole and injected
-		// via _emit_statement_into_start.
-		emit_start_block_regs_from_source(ctx, asset_regs, "FRAME-CANVAS-E410", "assets")
-		emit_start_block_regs_from_source(ctx, layer_regs, "FRAME-CANVAS-E411", "layers")
+		// Sub-cycle 3a: Assets, layers, camera — typed emission directly into start:.
+		// scan_multi_instance still returns source strings (STUB3 → 3b replaces);
+		// those go through emit_start_block_regs_from_source until 3b converts them.
+		if assets_body.trim().length() > 0
+			process_assets_body(ctx, assets_body)
+		if layers_body.trim().length() > 0
+			process_layers_body(ctx, layers_body)
+		// Multi-instance registrations still via source-string pass-through (STUB3 parsers)
 		emit_start_block_regs_from_source(ctx, anim_sprite_regs, "FRAME-CANVAS-E412", "animSprite")
 		emit_start_block_regs_from_source(ctx, anim_state_regs, "FRAME-CANVAS-E413", "animState")
 		emit_start_block_regs_from_source(ctx, tween_regs, "FRAME-CANVAS-E414", "tween")
@@ -1100,7 +1307,8 @@ functions:
 		emit_start_block_regs_from_source(ctx, path_regs, "FRAME-CANVAS-E417", "path")
 		emit_start_block_regs_from_source(ctx, gradient_regs, "FRAME-CANVAS-E418", "gradient")
 		emit_start_block_regs_from_source(ctx, custom_ease_regs, "FRAME-CANVAS-E419", "customEase")
-		emit_start_block_regs_from_source(ctx, camera_regs, "FRAME-CANVAS-E420", "camera")
+		if camera_body.trim().length() > 0
+			expand_camera(ctx, "{}", camera_body)
 
 		// Optional key/lifecycle registration calls in start: block.
 		if kd_trimmed.length() > 0
@@ -1119,8 +1327,10 @@ functions:
 			integer rrs_call = call1(ctx, "_canvas_on_resume", ident(ctx, "__cv"))
 			_emit_statement_into_start(ctx, sassign(ctx, "__rrs", rrs_call))
 
-		// State-var init + user init body.
-		emit_start_block_regs_from_source(ctx, s_init, "FRAME-CANVAS-E421", "state_init")
+		// Sub-cycle 3a: state-var init — typed emission via scene_state_init.
+		if has_state
+			scene_state_init(ctx, state_body)
+		// User init body — still via source pass-through (scene_expand_lines_start is STUB3).
 		string init_trimmed = init_body.trim()
 		if init_trimmed.length() > 0
 			string init_expanded = scene_expand_lines_start(init_body)
@@ -1191,30 +1401,1109 @@ functions:
 		return 0
 
 // ============================================================================
-// END OF SUB-CYCLE 2 CONTENT
+// END OF SUB-CYCLE 2 CONTENT / START OF SUB-CYCLE 3a CONTENT
 // ============================================================================
-// Sub-cycle 3 begins here and will:
-//   - Delete every STUB3-tagged function above and paste in the real v1 body
-//     (line ranges are noted per-stub).
-//   - Add expand_canvas_command (~700–750 LOC, 32 draw commands via sc<N>).
-//   - Add scene_expand_cmd (~340–380 LOC, 14 DSL body commands).
-//   - Add 8 multi-instance expanders (~150 LOC): expand_tween, expand_timeline,
-//     expand_anim_sprite, expand_anim_state, expand_particles, expand_path,
-//     expand_gradient, expand_custom_ease.
-//   - Add camera / gradient / path / customEase individual expanders (~260 LOC).
-//   - Add body processors (~700 LOC): process_assets_body, process_layers_body,
-//     process_path_body, process_gradient_stops, process_tween_body.
-//   - Migrate DSL parsers verbatim (~1050 LOC): flat-format helpers, attribute
-//     parsers, is_scene_subblock_header, extract_scene_subblock, etc.
-//   - Migrate attribute helpers verbatim (~355 LOC).
-//   - Migrate validate_canvas_scene verbatim (~240 LOC).
-//   - Replace expand_block_typed body with the fully-wired dispatcher (fold
-//     expand_block_typed_v2 into expand_block_typed and delete _v2).
-//   - Replace validate_block and get_keywords with real v1 bodies.
-//   - Bump plugin.toml [plugin].version from 3.0.0-alpha.1 to 3.0.0.
-//   - Delete main.v1.cln.
-//   - Run comita to ship.
-//   - Squash-merge v3/frame.canvas to main atomically.
+// Sub-cycle 3a delivers:
+//   1. STUB3 stubs for missing body-parser helpers (get_body_value, etc.) —
+//      Sub-cycle 3b replaces these with verbatim v1 bodies.
+//   2. New body processors (v3 typed emission): process_path_body,
+//      process_gradient_stops, process_tween_body.
+//   3. 8 multi-instance expanders (v3 typed emission): expand_anim_sprite,
+//      expand_tween, expand_timeline, expand_anim_state, expand_particles,
+//      expand_path, expand_gradient, expand_custom_ease.
+//   4. expand_canvas_command (32 draw commands via sc<N> — primary Am 8 win).
+//   5. scene_expand_cmd (14 DSL body draw commands, returns stmt handle).
+//   6. Updated dispatcher fold: expand_block_typed_v2 extended + routed.
 //
-// See reports/2026-07-03-session-3-frame-canvas-deferred-v4.md §5.1 for the
-// full sub-cycle plan.
+// Sub-cycle 3b delivers:
+//   - STUB3 → v1 verbatim copies (DSL parsers, attribute helpers,
+//     validate_canvas_scene, get_attr, extract_scene_subblock, etc.)
+//   - Typed scene_expand_lines(ctx, body_arr, body) calling typed scene_expand_cmd
+//   - Dispatcher fold (expand_block_typed_v2 → expand_block_typed)
+//   - validate_block and get_keywords real bodies
+//   - plugin.toml version bump to 3.0.0
+//   - Delete main.v1.cln
+//   - comita + atomic merge to main
+
+// ============================================================================
+// SUB-CYCLE 3a §1: STUB3 HELPERS FOR BODY-PARSER FUNCTIONS
+// ============================================================================
+// These are parsing/utility helpers called by the body processors and expanders
+// added in Sub-cycle 3a. Their real implementations are verbatim v1 copies —
+// Sub-cycle 3b replaces them. Stub returns are the safe zero/empty defaults.
+
+functions:
+	// STUB3 (main.v1.cln:1278) — extract key=value from a body line or string.
+	string get_body_value(string body, string key, string default_val)
+		return default_val
+
+	// STUB3 (main.v1.cln:1325) — extract quoted name after a prefix offset.
+	string get_quoted_name(string s, integer after_pos)
+		return ""
+
+	// STUB3 (main.v1.cln:1334) — return first whitespace-separated word.
+	string get_first_word(string s)
+		return s
+
+	// STUB3 (main.v1.cln:1371) — true if line is a tween target (var from/to).
+	boolean is_tween_target_line(string line)
+		return false
+
+	// STUB3 (main.v1.cln:1382) — returns "linear" or "radial" gradient type.
+	string get_gradient_type(string attrs)
+		return "linear"
+
+	// STUB3 (main.v1.cln:1389) — parse "N..M" range, return start N as string.
+	string get_range_start(string range)
+		return "0"
+
+	// STUB3 (main.v1.cln:1395) — parse "N..M" range, return end M as string.
+	string get_range_end(string range)
+		return "0"
+
+	// STUB3 (main.v1.cln:1401) — JSON-escape a string value.
+	string json_escape(string s)
+		return s
+
+	// STUB3 (main.v1.cln:1832) — split flat state body (tab-joined) into newlines.
+	string scene_state_split_flat(string body)
+		return body
+
+	// STUB3 (main.v1.cln:1868) — extract variable name from a state line.
+	string scene_var_name(string line)
+		string t = line.trim()
+		if t.length() == 0
+			return ""
+		integer space = t.indexOf(" ")
+		if space == -1
+			return t
+		return t.substring(0, space)
+
+	// STUB3 (main.v1.cln:1886) — extract default value from a state line.
+	string scene_var_default(string line)
+		return "0"
+
+	// STUB3 (main.v1.cln:2170) — parse key=value / key="value" inline attrs.
+	string get_iattr(string ia, string key, string default_val)
+		return default_val
+
+	// STUB3 (main.v1.cln:2196) — like get_iattr but preserve outer quotes.
+	string get_iattr_raw(string ia, string key, string default_val)
+		return default_val
+
+// ============================================================================
+// SUB-CYCLE 3a §2: REMAINING BODY PROCESSORS (v3 typed emission)
+// ============================================================================
+// process_path_body, process_gradient_stops, process_tween_body.
+// These are NOT in the STUB3 list (they were not stubs in Sub-cycle 2).
+// They are new additions in Sub-cycle 3a with the v3 typed signature:
+//   integer process_*(integer ctx, ..., string body) → emits into start:
+
+functions:
+	// process_path_body — emits _path_* calls into start: for a path: body.
+	// v1 reference: main.v1.cln:1105-1151
+	integer process_path_body(integer ctx, string path_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E560", "frame.canvas process_path_body failed")
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("moveTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				integer n_h = sl(ctx, path_name)
+				integer x_h = sl(ctx, x)
+				integer y_h = sl(ctx, y)
+				integer a = _batch_args(ctx, "[" + n_h.toString() + "," + x_h.toString() + "," + y_h.toString() + "]")
+				_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_path_move_to", a))
+			if trimmed.startsWith("lineTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				integer n_h = sl(ctx, path_name)
+				integer x_h = sl(ctx, x)
+				integer y_h = sl(ctx, y)
+				integer a = _batch_args(ctx, "[" + n_h.toString() + "," + x_h.toString() + "," + y_h.toString() + "]")
+				_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_path_line_to", a))
+			if trimmed.startsWith("curveTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				if trimmed.contains("cp1x")
+					string cp1x = get_body_value(trimmed, "cp1x", "0")
+					string cp1y = get_body_value(trimmed, "cp1y", "0")
+					string cp2x = get_body_value(trimmed, "cp2x", "0")
+					string cp2y = get_body_value(trimmed, "cp2y", "0")
+					integer n_h = sl(ctx, path_name)
+					integer cp1x_h = sl(ctx, cp1x)
+					integer cp1y_h = sl(ctx, cp1y)
+					integer cp2x_h = sl(ctx, cp2x)
+					integer cp2y_h = sl(ctx, cp2y)
+					integer x_h = sl(ctx, x)
+					integer y_h = sl(ctx, y)
+					integer a = _batch_args(ctx, "[" + n_h.toString() + "," + cp1x_h.toString() + "," + cp1y_h.toString() + "," + cp2x_h.toString() + "," + cp2y_h.toString() + "," + x_h.toString() + "," + y_h.toString() + "]")
+					_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_path_cubic_to", a))
+				else
+					string cx = get_body_value(trimmed, "cx", "0")
+					string cy = get_body_value(trimmed, "cy", "0")
+					integer n_h = sl(ctx, path_name)
+					integer cx_h = sl(ctx, cx)
+					integer cy_h = sl(ctx, cy)
+					integer x_h = sl(ctx, x)
+					integer y_h = sl(ctx, y)
+					integer a = _batch_args(ctx, "[" + n_h.toString() + "," + cx_h.toString() + "," + cy_h.toString() + "," + x_h.toString() + "," + y_h.toString() + "]")
+					_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_path_curve_to", a))
+			if trimmed.startsWith("arcTo")
+				string x = get_body_value(trimmed, "x", "0")
+				string y = get_body_value(trimmed, "y", "0")
+				string r = get_body_value(trimmed, "radius", "50")
+				string sa = get_body_value(trimmed, "startAngle", "0")
+				string ea = get_body_value(trimmed, "endAngle", "360")
+				integer n_h = sl(ctx, path_name)
+				integer x_h = sl(ctx, x)
+				integer y_h = sl(ctx, y)
+				integer r_h = sl(ctx, r)
+				integer sa_h = sl(ctx, sa)
+				integer ea_h = sl(ctx, ea)
+				integer a = _batch_args(ctx, "[" + n_h.toString() + "," + x_h.toString() + "," + y_h.toString() + "," + r_h.toString() + "," + sa_h.toString() + "," + ea_h.toString() + "]")
+				_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_path_arc_to", a))
+			if trimmed.startsWith("closePath")
+				integer n_h = sl(ctx, path_name)
+				integer a = _batch_args(ctx, "[" + n_h.toString() + "]")
+				_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_path_close", a))
+			i = next_i
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E560", "process_path_body sticky-error tripped")
+		return 0
+
+	// process_gradient_stops — emits _gradient_add_stop calls into start:.
+	// v1 reference: main.v1.cln:1153-1178
+	integer process_gradient_stops(integer ctx, string name, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E570", "frame.canvas process_gradient_stops failed")
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.startsWith("stop ")
+				string rest = trimmed.substring(5, trimmed.length())
+				string offset = get_first_word(rest)
+				integer q1 = trimmed.indexOf("\"", 5)
+				if q1 != -1
+					integer q2 = trimmed.indexOf("\"", q1 + 1)
+					if q2 != -1
+						string color = trimmed.substring(q1 + 1, q2)
+						integer n_h = sl(ctx, name)
+						integer off_h = sl(ctx, offset)
+						integer col_h = sl(ctx, color)
+						integer a = _batch_args(ctx, "[" + n_h.toString() + "," + off_h.toString() + "," + col_h.toString() + "]")
+						_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_gradient_add_stop", a))
+			i = next_i
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E570", "process_gradient_stops sticky-error tripped")
+		return 0
+
+	// process_tween_body — emits _tween_define_var calls into start:.
+	// v1 reference: main.v1.cln:1180-1211
+	integer process_tween_body(integer ctx, string name, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E580", "frame.canvas process_tween_body failed")
+		string duration = get_body_value(body, "duration", "0.5")
+		string ease = get_body_value(body, "ease", "linear")
+		string repeat_val = get_body_value(body, "repeat", "0")
+		string yoyo_val = get_body_value(body, "yoyo", "false")
+		string delay_val = get_body_value(body, "delay", "0.0")
+		string path_val = get_body_value(body, "along", "")
+		string yoyo_int = "0"
+		if yoyo_val == "true"
+			yoyo_int = "1"
+		integer i = 0
+		integer len = body.length()
+		while i < len
+			integer nl = body.indexOf("\n", i)
+			string line = ""
+			integer next_i = 0
+			if nl == -1
+				line = body.substring(i, len)
+				next_i = len
+			else
+				line = body.substring(i, nl)
+				next_i = nl + 1
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				if is_tween_target_line(trimmed)
+					string var_name = get_first_word(trimmed)
+					string from_val = get_body_value(trimmed, "from", "0.0")
+					string to_val = get_body_value(trimmed, "to", "0.0")
+					integer n_h = sl(ctx, name)
+					integer vn_h = sl(ctx, var_name)
+					integer fr_h = sl(ctx, from_val)
+					integer to_h = sl(ctx, to_val)
+					integer dur_h = sl(ctx, duration)
+					integer ease_h = sl(ctx, ease)
+					integer rep_h = sl(ctx, repeat_val)
+					integer yoy_h = sl(ctx, yoyo_int)
+					integer del_h = sl(ctx, delay_val)
+					integer path_h = sl(ctx, path_val)
+					integer a = _batch_args(ctx, "[" + n_h.toString() + "," + vn_h.toString() + "," + fr_h.toString() + "," + to_h.toString() + "," + dur_h.toString() + "," + ease_h.toString() + "," + rep_h.toString() + "," + yoy_h.toString() + "," + del_h.toString() + "," + path_h.toString() + "]")
+					_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_tween_define_var", a))
+			i = next_i
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E580", "process_tween_body sticky-error tripped")
+		return 0
+
+// ============================================================================
+// SUB-CYCLE 3a §3: MULTI-INSTANCE EXPANDERS (8, v3 typed emission)
+// ============================================================================
+// Each expander receives (ctx, attrs, body) and emits one or more registration
+// calls into the start: block via _emit_statement_into_start.
+// v1 reference: main.v1.cln:440-530.
+// Am 8 (batch.args) used for all multi-argument call sites.
+
+functions:
+	// expand_anim_sprite — emits _animsprite_define into start:.
+	// v1 shape: _animsprite_define("name", "sheet", frameStart, frameEnd, fps, loop)
+	integer expand_anim_sprite(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E600", "frame.canvas expand_anim_sprite failed")
+		string name = get_attr(attrs, "name", "")
+		string sheet = get_body_value(body, "sheet", "")
+		string frames_val = get_body_value(body, "frames", "0..0")
+		string fps_val = get_body_value(body, "fps", "12")
+		string loop_val = get_body_value(body, "loop", "true")
+		string frame_start = get_range_start(frames_val)
+		string frame_end = get_range_end(frames_val)
+		string loop_int = "1"
+		if loop_val == "false"
+			loop_int = "0"
+		integer n_h = sl(ctx, name)
+		integer sh_h = sl(ctx, sheet)
+		integer fs_h = sl(ctx, frame_start)
+		integer fe_h = sl(ctx, frame_end)
+		integer fp_h = sl(ctx, fps_val)
+		integer lp_h = sl(ctx, loop_int)
+		integer a = _batch_args(ctx, "[" + n_h.toString() + "," + sh_h.toString() + "," + fs_h.toString() + "," + fe_h.toString() + "," + fp_h.toString() + "," + lp_h.toString() + "]")
+		_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_animsprite_define", a))
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E600", "expand_anim_sprite sticky-error tripped")
+		return 0
+
+	// expand_tween — emits per-var _tween_define_var calls via process_tween_body.
+	// v1 shape: delegates entirely to process_tween_body(name, body).
+	integer expand_tween(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E610", "frame.canvas expand_tween failed")
+		string name = get_attr(attrs, "name", "")
+		integer result = process_tween_body(ctx, name, body)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E610", "expand_tween sticky-error tripped")
+		return result
+
+	// expand_timeline — emits _timeline_define_json("name", json_body) into start:.
+	// v1 shape: _timeline_define_json("name", "<json-escaped body>")
+	integer expand_timeline(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E620", "frame.canvas expand_timeline failed")
+		string name = get_attr(attrs, "name", "")
+		string safe_body = json_escape(body)
+		integer n_h = sl(ctx, name)
+		integer b_h = sl(ctx, safe_body)
+		integer a = _batch_args(ctx, "[" + n_h.toString() + "," + b_h.toString() + "]")
+		_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_timeline_define_json", a))
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E620", "expand_timeline sticky-error tripped")
+		return 0
+
+	// expand_anim_state — emits _animstate_define_json("name", json_body) into start:.
+	integer expand_anim_state(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E630", "frame.canvas expand_anim_state failed")
+		string name = get_attr(attrs, "name", "")
+		string safe_body = json_escape(body)
+		integer n_h = sl(ctx, name)
+		integer b_h = sl(ctx, safe_body)
+		integer a = _batch_args(ctx, "[" + n_h.toString() + "," + b_h.toString() + "]")
+		_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_animstate_define_json", a))
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E630", "expand_anim_state sticky-error tripped")
+		return 0
+
+	// expand_particles — emits _particles_define_json("name", json_body) into start:.
+	integer expand_particles(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E640", "frame.canvas expand_particles failed")
+		string name = get_attr(attrs, "name", "")
+		string safe_body = json_escape(body)
+		integer n_h = sl(ctx, name)
+		integer b_h = sl(ctx, safe_body)
+		integer a = _batch_args(ctx, "[" + n_h.toString() + "," + b_h.toString() + "]")
+		_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_particles_define_json", a))
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E640", "expand_particles sticky-error tripped")
+		return 0
+
+	// expand_path — emits _path_begin("name") then per-segment calls via process_path_body.
+	// v1 shape: _path_begin("name") followed by moveTo/lineTo/curveTo/closePath calls.
+	integer expand_path(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E650", "frame.canvas expand_path failed")
+		string name = get_attr(attrs, "name", "")
+		integer n_h = sl(ctx, name)
+		integer a = _batch_args(ctx, "[" + n_h.toString() + "]")
+		_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_path_begin", a))
+		integer result = process_path_body(ctx, name, body)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E650", "expand_path sticky-error tripped")
+		return result
+
+	// expand_gradient — emits _gradient_linear/radial then per-stop calls.
+	// v1 shape: _gradient_linear("name", x1, y1, x2, y2) or _gradient_radial("name", cx, cy, r)
+	//           followed by _gradient_add_stop calls via process_gradient_stops.
+	integer expand_gradient(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E660", "frame.canvas expand_gradient failed")
+		string name = get_attr(attrs, "name", "")
+		string gtype = get_gradient_type(attrs)
+		if gtype == "linear"
+			string x1 = get_attr(attrs, "x1", "0")
+			string y1 = get_attr(attrs, "y1", "0")
+			string x2 = get_attr(attrs, "x2", "100")
+			string y2 = get_attr(attrs, "y2", "0")
+			integer n_h = sl(ctx, name)
+			integer x1_h = sl(ctx, x1)
+			integer y1_h = sl(ctx, y1)
+			integer x2_h = sl(ctx, x2)
+			integer y2_h = sl(ctx, y2)
+			integer a = _batch_args(ctx, "[" + n_h.toString() + "," + x1_h.toString() + "," + y1_h.toString() + "," + x2_h.toString() + "," + y2_h.toString() + "]")
+			_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_gradient_linear", a))
+		else
+			string cx = get_attr(attrs, "cx", "0")
+			string cy = get_attr(attrs, "cy", "0")
+			string r = get_attr(attrs, "r", "100")
+			integer n_h = sl(ctx, name)
+			integer cx_h = sl(ctx, cx)
+			integer cy_h = sl(ctx, cy)
+			integer r_h = sl(ctx, r)
+			integer a = _batch_args(ctx, "[" + n_h.toString() + "," + cx_h.toString() + "," + cy_h.toString() + "," + r_h.toString() + "]")
+			_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_gradient_radial", a))
+		integer result = process_gradient_stops(ctx, name, body)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E660", "expand_gradient sticky-error tripped")
+		return result
+
+	// expand_custom_ease — emits _custom_ease_register into start:.
+	// v1 shape: _custom_ease_register("name", x1, y1, x2, y2)
+	integer expand_custom_ease(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E670", "frame.canvas expand_custom_ease failed")
+		string name = get_attr(attrs, "name", "")
+		string x1 = get_attr(attrs, "x1", "0.42")
+		string y1 = get_attr(attrs, "y1", "0.0")
+		string x2 = get_attr(attrs, "x2", "0.58")
+		string y2 = get_attr(attrs, "y2", "1.0")
+		integer n_h = sl(ctx, name)
+		integer x1_h = sl(ctx, x1)
+		integer y1_h = sl(ctx, y1)
+		integer x2_h = sl(ctx, x2)
+		integer y2_h = sl(ctx, y2)
+		integer a = _batch_args(ctx, "[" + n_h.toString() + "," + x1_h.toString() + "," + y1_h.toString() + "," + x2_h.toString() + "," + y2_h.toString() + "]")
+		_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_custom_ease_register", a))
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E670", "expand_custom_ease sticky-error tripped")
+		return 0
+
+// ============================================================================
+// SUB-CYCLE 3a §4: expand_canvas_command (32 DRAW COMMANDS, v3 typed emission)
+// ============================================================================
+// Called from the block dispatcher when a standalone `canvas.<op>:` block
+// appears (outside a canvasScene: body). In v3 typed emission, every draw
+// command emits via sc<N> or a combination of typed batch calls.
+//
+// v1 reference: main.v1.cln:536-797 (string-concat emission).
+//
+// The canvas_id parameter comes from attrs "canvas" key (default "_canvas_0").
+// Every sc<N> call routes through _emit_statement_into_start; for commands
+// with scoped begin/body/end structure (group, clip, alpha, shadow, blur,
+// glow, blend/blendMode), we emit begin + source_body + end separately.
+//
+// Note on arity: the maximum draw-command arity in this function is 8 (triangle
+// with 7 point coords + canvas_id = 8 args). sc8 handles this exactly. All
+// other commands fit sc1..sc7. No arity > 8 encountered.
+
+functions:
+	integer expand_canvas_command(integer ctx, string command, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E700", "frame.canvas expand_canvas_command failed")
+		// command arrives as "canvas.clear", "canvas.circle", etc.
+		// Strip "canvas." prefix to get the op name.
+		string cmd = command.substring(7, command.length())
+		string canvas_id = get_attr(attrs, "canvas", "_canvas_0")
+		integer cv = ident(ctx, canvas_id)
+
+		if cmd == "clear"
+			string color = get_attr(attrs, "color", "")
+			if color == ""
+				sc1(ctx, "_canvas_clear", cv)
+			else
+				sc2(ctx, "_canvas_clear_color", cv, sl(ctx, color))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command clear failed")
+			return 0
+
+		if cmd == "circle"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string radius = get_attr(attrs, "radius", "10")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			if filled == "true"
+				sc5(ctx, "_canvas_circle_filled", cv, sl(ctx, x), sl(ctx, y), sl(ctx, radius), sl(ctx, color))
+			else
+				sc5(ctx, "_canvas_circle_outline", cv, sl(ctx, x), sl(ctx, y), sl(ctx, radius), sl(ctx, color))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command circle failed")
+			return 0
+
+		if cmd == "rect"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string w = get_attr(attrs, "width", "100")
+			string h = get_attr(attrs, "height", "100")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			string corner = get_attr(attrs, "cornerRadius", "")
+			if corner != ""
+				sc7(ctx, "_canvas_rect_rounded", cv, sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h), sl(ctx, corner), sl(ctx, color))
+			else
+				if filled == "true"
+					sc6(ctx, "_canvas_rect_filled", cv, sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h), sl(ctx, color))
+				else
+					sc6(ctx, "_canvas_rect_outline", cv, sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h), sl(ctx, color))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command rect failed")
+			return 0
+
+		if cmd == "line"
+			string x1 = get_attr(attrs, "fromX", "0")
+			string y1 = get_attr(attrs, "fromY", "0")
+			string x2 = get_attr(attrs, "toX", "100")
+			string y2 = get_attr(attrs, "toY", "100")
+			string stroke = get_attr(attrs, "stroke", "1")
+			string color = get_attr(attrs, "color", "black")
+			sc7(ctx, "_canvas_line", cv, sl(ctx, x1), sl(ctx, y1), sl(ctx, x2), sl(ctx, y2), sl(ctx, stroke), sl(ctx, color))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command line failed")
+			return 0
+
+		if cmd == "triangle"
+			string x1 = get_attr(attrs, "x1", "0")
+			string y1 = get_attr(attrs, "y1", "0")
+			string x2 = get_attr(attrs, "x2", "50")
+			string y2 = get_attr(attrs, "y2", "100")
+			string x3 = get_attr(attrs, "x3", "100")
+			string y3 = get_attr(attrs, "y3", "0")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			if filled == "true"
+				sc8(ctx, "_canvas_triangle_filled", cv, sl(ctx, x1), sl(ctx, y1), sl(ctx, x2), sl(ctx, y2), sl(ctx, x3), sl(ctx, y3), sl(ctx, color))
+			else
+				sc8(ctx, "_canvas_triangle_outline", cv, sl(ctx, x1), sl(ctx, y1), sl(ctx, x2), sl(ctx, y2), sl(ctx, x3), sl(ctx, y3), sl(ctx, color))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command triangle failed")
+			return 0
+
+		if cmd == "ellipse"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string rx = get_attr(attrs, "radiusX", "50")
+			string ry = get_attr(attrs, "radiusY", "25")
+			string color = get_attr(attrs, "color", "black")
+			string filled = get_attr(attrs, "filled", "true")
+			if filled == "true"
+				sc6(ctx, "_canvas_ellipse_filled", cv, sl(ctx, x), sl(ctx, y), sl(ctx, rx), sl(ctx, ry), sl(ctx, color))
+			else
+				sc6(ctx, "_canvas_ellipse_outline", cv, sl(ctx, x), sl(ctx, y), sl(ctx, rx), sl(ctx, ry), sl(ctx, color))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command ellipse failed")
+			return 0
+
+		if cmd == "text"
+			string text_val = get_attr(attrs, "value", body)
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string size = get_attr(attrs, "size", "16")
+			string color = get_attr(attrs, "color", "black")
+			string font = get_attr(attrs, "font", "")
+			string align = get_attr(attrs, "align", "")
+			string baseline = get_attr(attrs, "baseline", "")
+			if font != ""
+				if align == ""
+					align = "left"
+				if baseline == ""
+					baseline = "top"
+				sc8(ctx, "_canvas_text_aligned", cv, sl(ctx, text_val), sl(ctx, x), sl(ctx, y), sl(ctx, size), sl(ctx, color), sl(ctx, align), sl(ctx, baseline))
+			else
+				if align != ""
+					if baseline == ""
+						baseline = "top"
+					sc8(ctx, "_canvas_text_aligned", cv, sl(ctx, text_val), sl(ctx, x), sl(ctx, y), sl(ctx, size), sl(ctx, color), sl(ctx, align), sl(ctx, baseline))
+				else
+					sc6(ctx, "_canvas_text", cv, sl(ctx, text_val), sl(ctx, x), sl(ctx, y), sl(ctx, size), sl(ctx, color))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command text failed")
+			return 0
+
+		if cmd == "image"
+			string src = get_attr(attrs, "src", "")
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string w = get_attr(attrs, "width", "100")
+			string h = get_attr(attrs, "height", "100")
+			sc6(ctx, "_canvas_image", cv, sl(ctx, src), sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command image failed")
+			return 0
+
+		if cmd == "sprite"
+			string name = get_attr(attrs, "name", "")
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string w = get_attr(attrs, "width", "48")
+			string h = get_attr(attrs, "height", "64")
+			string clip = get_attr(attrs, "clip", "0")
+			string tint = get_attr(attrs, "tint", "")
+			string tint_strength = get_attr(attrs, "tintStrength", "1.0")
+			string flip_x = get_attr(attrs, "flipX", "false")
+			string flip_y = get_attr(attrs, "flipY", "false")
+			string fx = "0"
+			string fy = "0"
+			if flip_x == "true"
+				fx = "1"
+			if flip_y == "true"
+				fy = "1"
+			if tint != ""
+				// _sprite_draw_tint(cv, "name", clip, x, y, w, h, "tint", tint_strength)
+				integer a = _batch_args(ctx, "[" + cv.toString() + "," + sl(ctx, name).toString() + "," + sl(ctx, clip).toString() + "," + sl(ctx, x).toString() + "," + sl(ctx, y).toString() + "," + sl(ctx, w).toString() + "," + sl(ctx, h).toString() + "," + sl(ctx, tint).toString() + "," + sl(ctx, tint_strength).toString() + "]")
+				_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_sprite_draw_tint", a))
+			else
+				if fx == "1"
+					// _sprite_draw_flipped(cv, "name", clip, x, y, w, h, fx, fy)
+					integer a = _batch_args(ctx, "[" + cv.toString() + "," + sl(ctx, name).toString() + "," + sl(ctx, clip).toString() + "," + sl(ctx, x).toString() + "," + sl(ctx, y).toString() + "," + sl(ctx, w).toString() + "," + sl(ctx, h).toString() + "," + sl(ctx, fx).toString() + "," + sl(ctx, fy).toString() + "]")
+					_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_sprite_draw_flipped", a))
+				else
+					if fy == "1"
+						integer a = _batch_args(ctx, "[" + cv.toString() + "," + sl(ctx, name).toString() + "," + sl(ctx, clip).toString() + "," + sl(ctx, x).toString() + "," + sl(ctx, y).toString() + "," + sl(ctx, w).toString() + "," + sl(ctx, h).toString() + "," + sl(ctx, fx).toString() + "," + sl(ctx, fy).toString() + "]")
+						_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_sprite_draw_flipped", a))
+					else
+						sc7(ctx, "_sprite_draw", cv, sl(ctx, name), sl(ctx, clip), sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command sprite failed")
+			return 0
+
+		if cmd == "save"
+			sc1(ctx, "_canvas_save", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command save failed")
+			return 0
+
+		if cmd == "restore"
+			sc1(ctx, "_canvas_restore", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command restore failed")
+			return 0
+
+		if cmd == "translate"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			sc3(ctx, "_canvas_translate", cv, sl(ctx, x), sl(ctx, y))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command translate failed")
+			return 0
+
+		if cmd == "rotate"
+			string angle = get_attr(attrs, "angle", "0")
+			sc2(ctx, "_canvas_rotate", cv, sl(ctx, angle))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command rotate failed")
+			return 0
+
+		if cmd == "scale"
+			string x = get_attr(attrs, "x", "1")
+			string y = get_attr(attrs, "y", "1")
+			sc3(ctx, "_canvas_scale", cv, sl(ctx, x), sl(ctx, y))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command scale failed")
+			return 0
+
+		if cmd == "group"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string rotation = get_attr(attrs, "rotation", "0")
+			string scale_x = get_attr(attrs, "scaleX", "1.0")
+			string scale_y = get_attr(attrs, "scaleY", "1.0")
+			string alpha_val = get_attr(attrs, "alpha", "1.0")
+			// group_begin(cv, x, y, rotation, scaleX, scaleY, alpha) — 7 args
+			sc7(ctx, "_canvas_group_begin", cv, sl(ctx, x), sl(ctx, y), sl(ctx, rotation), sl(ctx, scale_x), sl(ctx, scale_y), sl(ctx, alpha_val))
+			// user body pass-through
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_group_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command group failed")
+			return 0
+
+		if cmd == "clip"
+			string x = get_attr(attrs, "x", "0")
+			string y = get_attr(attrs, "y", "0")
+			string path_name = get_attr(attrs, "path", "")
+			string r = get_attr(attrs, "radius", "")
+			string w = get_attr(attrs, "width", "100")
+			string h = get_attr(attrs, "height", "100")
+			if path_name != ""
+				sc2(ctx, "_canvas_clip_path", cv, sl(ctx, path_name))
+			else
+				if r != ""
+					sc4(ctx, "_canvas_clip_circle", cv, sl(ctx, x), sl(ctx, y), sl(ctx, r))
+				else
+					sc5(ctx, "_canvas_clip_rect", cv, sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h))
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_clip_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command clip failed")
+			return 0
+
+		if cmd == "alpha"
+			string value = get_attr(attrs, "value", "1.0")
+			sc2(ctx, "_canvas_alpha_begin", cv, sl(ctx, value))
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_alpha_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command alpha failed")
+			return 0
+
+		if cmd == "shadow"
+			string blur = get_attr(attrs, "blur", "10")
+			string offset_x = get_attr(attrs, "offsetX", "2")
+			string offset_y = get_attr(attrs, "offsetY", "2")
+			string color = get_attr(attrs, "color", "rgba(0,0,0,0.5)")
+			sc5(ctx, "_canvas_shadow_begin", cv, sl(ctx, blur), sl(ctx, offset_x), sl(ctx, offset_y), sl(ctx, color))
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_shadow_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command shadow failed")
+			return 0
+
+		if cmd == "blur"
+			string radius = get_attr(attrs, "radius", "4")
+			sc2(ctx, "_canvas_blur_begin", cv, sl(ctx, radius))
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_blur_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command blur failed")
+			return 0
+
+		if cmd == "glow"
+			string color = get_attr(attrs, "color", "#ffffff")
+			string blur = get_attr(attrs, "blur", "12")
+			sc3(ctx, "_canvas_glow_begin", cv, sl(ctx, color), sl(ctx, blur))
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_glow_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command glow failed")
+			return 0
+
+		if cmd == "blend"
+			string mode = get_attr(attrs, "mode", "normal")
+			sc2(ctx, "_canvas_blend_begin", cv, sl(ctx, mode))
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_blend_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command blend failed")
+			return 0
+
+		if cmd == "blendMode"
+			string mode = get_attr(attrs, "mode", "normal")
+			sc2(ctx, "_canvas_blend_begin", cv, sl(ctx, mode))
+			if body.trim().length() > 0
+				integer body_stmt = _emit_stmt_from_source(ctx, body, 0)
+				if body_stmt != 0
+					_emit_statement_into_start(ctx, body_stmt)
+			sc1(ctx, "_canvas_blend_end", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command blendMode failed")
+			return 0
+
+		// --- Immediate-mode path primitives ---
+		if cmd == "beginPath"
+			sc1(ctx, "_canvas_begin_path", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command beginPath failed")
+			return 0
+
+		if cmd == "moveTo"
+			string mx = get_attr(attrs, "x", "0")
+			string my = get_attr(attrs, "y", "0")
+			sc3(ctx, "_canvas_move_to", cv, sl(ctx, mx), sl(ctx, my))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command moveTo failed")
+			return 0
+
+		if cmd == "lineTo"
+			string lx = get_attr(attrs, "x", "0")
+			string ly = get_attr(attrs, "y", "0")
+			sc3(ctx, "_canvas_line_to", cv, sl(ctx, lx), sl(ctx, ly))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command lineTo failed")
+			return 0
+
+		if cmd == "curveTo"
+			string cpx = get_attr(attrs, "cpX", "0")
+			string cpy = get_attr(attrs, "cpY", "0")
+			string cx = get_attr(attrs, "x", "0")
+			string cy = get_attr(attrs, "y", "0")
+			sc5(ctx, "_canvas_curve_to", cv, sl(ctx, cpx), sl(ctx, cpy), sl(ctx, cx), sl(ctx, cy))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command curveTo failed")
+			return 0
+
+		if cmd == "cubicTo"
+			string cp1x = get_attr(attrs, "cp1x", "0")
+			string cp1y = get_attr(attrs, "cp1y", "0")
+			string cp2x = get_attr(attrs, "cp2x", "0")
+			string cp2y = get_attr(attrs, "cp2y", "0")
+			string ux = get_attr(attrs, "x", "0")
+			string uy = get_attr(attrs, "y", "0")
+			sc7(ctx, "_canvas_cubic_to", cv, sl(ctx, cp1x), sl(ctx, cp1y), sl(ctx, cp2x), sl(ctx, cp2y), sl(ctx, ux), sl(ctx, uy))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command cubicTo failed")
+			return 0
+
+		if cmd == "arc"
+			string ax = get_attr(attrs, "x", "0")
+			string ay = get_attr(attrs, "y", "0")
+			string ar = get_attr(attrs, "radius", "10")
+			string asa = get_attr(attrs, "startAngle", "0")
+			string aea = get_attr(attrs, "endAngle", "6.283185307179586")
+			sc6(ctx, "_canvas_arc", cv, sl(ctx, ax), sl(ctx, ay), sl(ctx, ar), sl(ctx, asa), sl(ctx, aea))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command arc failed")
+			return 0
+
+		if cmd == "closePath"
+			sc1(ctx, "_canvas_close_path", cv)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command closePath failed")
+			return 0
+
+		if cmd == "fill"
+			string fcolor = get_attr(attrs, "color", "black")
+			sc2(ctx, "_canvas_fill_path", cv, sl(ctx, fcolor))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command fill failed")
+			return 0
+
+		if cmd == "stroke"
+			string scolor = get_attr(attrs, "color", "black")
+			string swidth = get_attr(attrs, "width", "1")
+			sc3(ctx, "_canvas_stroke_path", cv, sl(ctx, scolor), sl(ctx, swidth))
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-CANVAS-E700", "expand_canvas_command stroke failed")
+			return 0
+
+		// Unknown canvas command — emit a diagnostic and return.
+		return plugin_error(ctx, "FRAME-CANVAS-E701", "unknown canvas command: " + cmd)
+
+// ============================================================================
+// SUB-CYCLE 3a §5: scene_expand_cmd (14 DSL BODY COMMANDS, returns stmt handle)
+// ============================================================================
+// Used by scene_expand_lines (Sub-cycle 3b typed version) when dispatching
+// inline "canvas.cmd attr=val ..." lines inside handler function bodies.
+// Unlike expand_canvas_command (which routes to start: via sc<N>), this
+// function returns a batch_stmt_handle that the caller pushes into a body_arr.
+//
+// The __cv identifier is used (implicit canvas reference from the handler scope).
+//
+// v1 reference: main.v1.cln:2055-2166 (string emission, 2-tab indent).
+//
+// Return value: 0 means "unrecognized command" (caller falls through to
+// source pass-through). Non-zero means a valid stmt handle was built.
+//
+// Note on arity for scene_expand_cmd: triangle_filled needs 8 args (cv +
+// x1,y1,x2,y2,x3,y3,color). sc<N> emits into start: not into a body_arr.
+// For scene body commands we need a raw _batch_stmtCall form. We use a helper
+// bcc<N> (batch canvas command) that builds the stmtCall handle without
+// calling _emit_statement_into_start.
+
+functions:
+	// bcc<N>: build a canvas-command batch_stmt_handle for a scene body (NOT start:).
+	// Named distinctly from sc<N> which targets start: via _emit_statement_into_start.
+	integer bcc1(integer ctx, string callee, integer a1)
+		string args_json = "[" + a1.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	integer bcc2(integer ctx, string callee, integer a1, integer a2)
+		string args_json = "[" + a1.toString() + "," + a2.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	integer bcc3(integer ctx, string callee, integer a1, integer a2, integer a3)
+		string args_json = "[" + a1.toString() + "," + a2.toString() + "," + a3.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	integer bcc4(integer ctx, string callee, integer a1, integer a2, integer a3, integer a4)
+		string args_json = "[" + a1.toString() + "," + a2.toString() + "," + a3.toString() + "," + a4.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	integer bcc5(integer ctx, string callee, integer a1, integer a2, integer a3, integer a4, integer a5)
+		string args_json = "[" + a1.toString() + "," + a2.toString() + "," + a3.toString() + "," + a4.toString() + "," + a5.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	integer bcc6(integer ctx, string callee, integer a1, integer a2, integer a3, integer a4, integer a5, integer a6)
+		string args_json = "[" + a1.toString() + "," + a2.toString() + "," + a3.toString() + "," + a4.toString() + "," + a5.toString() + "," + a6.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	integer bcc7(integer ctx, string callee, integer a1, integer a2, integer a3, integer a4, integer a5, integer a6, integer a7)
+		string args_json = "[" + a1.toString() + "," + a2.toString() + "," + a3.toString() + "," + a4.toString() + "," + a5.toString() + "," + a6.toString() + "," + a7.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	integer bcc8(integer ctx, string callee, integer a1, integer a2, integer a3, integer a4, integer a5, integer a6, integer a7, integer a8)
+		string args_json = "[" + a1.toString() + "," + a2.toString() + "," + a3.toString() + "," + a4.toString() + "," + a5.toString() + "," + a6.toString() + "," + a7.toString() + "," + a8.toString() + "]"
+		return _batch_stmtCall(ctx, callee, _batch_args(ctx, args_json))
+
+	// scene_expand_cmd — expand one "canvas.cmd attr=val ..." inline line into
+	// a batch_stmt_handle for use in a scene handler body_arr.
+	// Returns 0 for unrecognized commands (caller passes line through as source).
+	// v1 reference: main.v1.cln:2055-2166
+	integer scene_expand_cmd(integer ctx, string line)
+		integer dot = line.indexOf(".")
+		if dot == -1
+			return 0
+		integer sp = line.indexOf(" ", dot)
+		string cmd = ""
+		string ia = ""
+		if sp == -1
+			cmd = line.substring(dot + 1, line.length())
+			ia = ""
+		else
+			cmd = line.substring(dot + 1, sp)
+			ia = line.substring(sp + 1, line.length())
+		integer cv = ident(ctx, "__cv")
+
+		if cmd == "clear"
+			string color = get_iattr(ia, "color", "")
+			if color == ""
+				return bcc1(ctx, "_canvas_clear", cv)
+			return bcc2(ctx, "_canvas_clear_color", cv, sl(ctx, color))
+
+		if cmd == "circle"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string r_a = get_iattr(ia, "radius", "")
+			string r_b = get_iattr(ia, "r", "10")
+			string r = r_a
+			if r_a == ""
+				r = r_b
+			string color = get_iattr(ia, "color", "#000000")
+			string filled = get_iattr(ia, "filled", "true")
+			if filled == "false"
+				return bcc5(ctx, "_canvas_circle_outline", cv, sl(ctx, x), sl(ctx, y), sl(ctx, r), sl(ctx, color))
+			return bcc5(ctx, "_canvas_circle_filled", cv, sl(ctx, x), sl(ctx, y), sl(ctx, r), sl(ctx, color))
+
+		if cmd == "rect"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string w = get_iattr(ia, "width", "100")
+			string h = get_iattr(ia, "height", "100")
+			string color = get_iattr(ia, "color", "#000000")
+			string filled = get_iattr(ia, "filled", "true")
+			string corner = get_iattr(ia, "cornerRadius", "")
+			if corner.length() > 0
+				return bcc7(ctx, "_canvas_rect_rounded", cv, sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h), sl(ctx, corner), sl(ctx, color))
+			if filled == "false"
+				return bcc6(ctx, "_canvas_rect_outline", cv, sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h), sl(ctx, color))
+			return bcc6(ctx, "_canvas_rect_filled", cv, sl(ctx, x), sl(ctx, y), sl(ctx, w), sl(ctx, h), sl(ctx, color))
+
+		if cmd == "line"
+			string x1 = get_iattr(ia, "fromX", "0")
+			string y1 = get_iattr(ia, "fromY", "0")
+			string x2 = get_iattr(ia, "toX", "100")
+			string y2 = get_iattr(ia, "toY", "100")
+			string stroke = get_iattr(ia, "stroke", "1")
+			string color = get_iattr(ia, "color", "#000000")
+			return bcc7(ctx, "_canvas_line", cv, sl(ctx, x1), sl(ctx, y1), sl(ctx, x2), sl(ctx, y2), sl(ctx, stroke), sl(ctx, color))
+
+		if cmd == "triangle"
+			string x1 = get_iattr(ia, "x1", "0")
+			string y1 = get_iattr(ia, "y1", "0")
+			string x2 = get_iattr(ia, "x2", "50")
+			string y2 = get_iattr(ia, "y2", "100")
+			string x3 = get_iattr(ia, "x3", "100")
+			string y3 = get_iattr(ia, "y3", "0")
+			string color = get_iattr(ia, "color", "#000000")
+			return bcc8(ctx, "_canvas_triangle_filled", cv, sl(ctx, x1), sl(ctx, y1), sl(ctx, x2), sl(ctx, y2), sl(ctx, x3), sl(ctx, y3), sl(ctx, color))
+
+		if cmd == "ellipse"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string rx_a = get_iattr(ia, "radiusX", "")
+			string rx_b = get_iattr(ia, "rx", "50")
+			string rx = rx_a
+			if rx_a == ""
+				rx = rx_b
+			string ry_a = get_iattr(ia, "radiusY", "")
+			string ry_b = get_iattr(ia, "ry", "25")
+			string ry = ry_a
+			if ry_a == ""
+				ry = ry_b
+			string color = get_iattr(ia, "color", "#000000")
+			return bcc6(ctx, "_canvas_ellipse", cv, sl(ctx, x), sl(ctx, y), sl(ctx, rx), sl(ctx, ry), sl(ctx, color))
+
+		if cmd == "text"
+			string raw_val = get_iattr_raw(ia, "value", "\"\"")
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			string size = get_iattr(ia, "size", "16")
+			string color = get_iattr(ia, "color", "#000000")
+			return bcc6(ctx, "_canvas_text", cv, sl(ctx, raw_val), sl(ctx, x), sl(ctx, y), sl(ctx, size), sl(ctx, color))
+
+		if cmd == "save"
+			return bcc1(ctx, "_canvas_save", cv)
+
+		if cmd == "restore"
+			return bcc1(ctx, "_canvas_restore", cv)
+
+		if cmd == "translate"
+			string x = get_iattr(ia, "x", "0")
+			string y = get_iattr(ia, "y", "0")
+			return bcc3(ctx, "_canvas_translate", cv, sl(ctx, x), sl(ctx, y))
+
+		if cmd == "rotate"
+			string angle = get_iattr(ia, "angle", "0")
+			return bcc2(ctx, "_canvas_rotate", cv, sl(ctx, angle))
+
+		if cmd == "scale"
+			string x = get_iattr(ia, "x", "1")
+			string y = get_iattr(ia, "y", "1")
+			return bcc3(ctx, "_canvas_scale", cv, sl(ctx, x), sl(ctx, y))
+
+		if cmd == "alpha"
+			string value = get_iattr(ia, "value", "1.0")
+			return bcc2(ctx, "_canvas_alpha", cv, sl(ctx, value))
+
+		// Unrecognized command — return 0 so caller falls through to source pass-through.
+		return 0
+
+// ============================================================================
+// SUB-CYCLE 3a §6: UPDATED DISPATCHER
+// ============================================================================
+// Extends expand_block_typed_v2 with arms for all Sub-cycle 3a blocks:
+// canvas.* (32 draw commands via expand_canvas_command), plus multi-instance
+// expanders (animSprite, animState, tween, timeline, particles, path,
+// gradient, customEase).
+//
+// Sub-cycle 3b will fold this into expand_block_typed and delete expand_block_typed_v2.
+
+functions:
+	integer expand_block_typed_v3(integer ctx, string block_name, string attrs_json, string body)
+		// First check Sub-cycle 2 arms:
+		if block_name.startsWith("canvasScene")
+			return expand_canvas_scene(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerDown")
+			return expand_on_pointer_down(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerMove")
+			return expand_on_pointer_move(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerUp")
+			return expand_on_pointer_up(ctx, attrs_json, body)
+		if block_name.startsWith("onKeyDown")
+			return expand_on_key_down(ctx, attrs_json, body)
+		if block_name.startsWith("onKeyUp")
+			return expand_on_key_up(ctx, attrs_json, body)
+		if block_name.startsWith("onFrame")
+			return expand_on_frame(ctx, attrs_json, body)
+		if block_name.startsWith("onExit")
+			return expand_on_exit(ctx, attrs_json, body)
+		if block_name.startsWith("onPause")
+			return expand_on_pause(ctx, attrs_json, body)
+		if block_name.startsWith("onResume")
+			return expand_on_resume(ctx, attrs_json, body)
+		if block_name.startsWith("draw")
+			return expand_draw(ctx, attrs_json, body)
+		if block_name.startsWith("init")
+			return expand_init(ctx, attrs_json, body)
+		// Sub-cycle 3a arms:
+		if block_name.startsWith("canvas.")
+			return expand_canvas_command(ctx, block_name, attrs_json, body)
+		if block_name.startsWith("animSprite")
+			return expand_anim_sprite(ctx, attrs_json, body)
+		if block_name.startsWith("animState")
+			return expand_anim_state(ctx, attrs_json, body)
+		if block_name.startsWith("tween")
+			return expand_tween(ctx, attrs_json, body)
+		if block_name.startsWith("timeline")
+			return expand_timeline(ctx, attrs_json, body)
+		if block_name.startsWith("particles")
+			return expand_particles(ctx, attrs_json, body)
+		if block_name.startsWith("path")
+			return expand_path(ctx, attrs_json, body)
+		if block_name.startsWith("gradient")
+			return expand_gradient(ctx, attrs_json, body)
+		if block_name.startsWith("customEase")
+			return expand_custom_ease(ctx, attrs_json, body)
+		if block_name.startsWith("camera")
+			return expand_camera(ctx, attrs_json, body)
+		// Sub-cycle 3b will add: assets, layers, state + fold into expand_block_typed
+		return 0
+
+// ============================================================================
+// END OF SUB-CYCLE 3a CONTENT
+// ============================================================================
+// Sub-cycle 3b delivers:
+//   - STUB3 → v1 verbatim copies (all remaining STUB3 tagged functions:
+//     get_attr, extract_scene_subblock, extract_scene_subblock_attr,
+//     scan_multi_instance, scene_expand_lines [typed], scene_expand_lines_start,
+//     scene_param_part, indent_lines, validate_canvas_scene, and 3a's body
+//     parser stubs: get_body_value, get_quoted_name, get_first_word,
+//     is_tween_target_line, get_gradient_type, get_range_start, get_range_end,
+//     json_escape, scene_state_split_flat, scene_var_name, scene_var_default,
+//     get_iattr, get_iattr_raw).
+//   - Additional DSL parsers verbatim from v1 (~1050 LOC):
+//     flat_*helpers, parse_inline_attrs, is_scene_subblock_header,
+//     extract_scene_subblock (real body), scan_multi_instance (real body), etc.
+//   - Additional attribute helpers from v1 (~355 LOC).
+//   - validate_canvas_scene real body (~240 LOC).
+//   - Fold expand_block_typed_v3 into expand_block_typed (edit expand_block_typed
+//     at line ~106 to route through expand_block_typed_v3 arms) and delete
+//     expand_block_typed_v2 / expand_block_typed_v3 in favor of the single
+//     real dispatcher.
+//   - Replace validate_block and get_keywords with real v1 bodies.
+//   - Typed scene_expand_lines(ctx, body_arr, body) calling scene_expand_cmd.
+//   - plugin.toml version bump to 3.0.0.
+//   - Delete main.v1.cln.
+//   - comita + squash-merge to main.
+//
+// See reports/sessions/2026-07-03-canvas-subcycle-3a-handoff.md for LOC counts
+// and bridge coverage report.
