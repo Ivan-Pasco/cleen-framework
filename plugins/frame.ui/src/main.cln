@@ -153,13 +153,37 @@ external:
 //     for the small per-component arg lists.
 
 functions:
+	// module_helpers lifecycle slot. Emits SSR response helpers (render, renderWith)
+	// as a full Clean functions: block via _emit_stmt_from_source.
 	integer emit_ui_helpers_typed(integer ctx, string ctx_json)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_HELPERS", "emit_ui_helpers")
+		string source = emit_ssr_helpers()
+		_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
+	// artifact_emitters lifecycle slot. Ensures a default theme.css exists via
+	// build_state. Emits no Clean statements — the side effect is the build_state write.
 	integer emit_ui_artifacts_typed(integer ctx, string ctx_json)
+		string existing = _build_state_get("frame.ui.theme.css")
+		if existing == ""
+			string default_css = "/* frame.ui default theme — override in public/css/theme.css */\n"
+			default_css = default_css + ":root {\n"
+			default_css = default_css + "\t--color-bg: #ffffff;\n"
+			default_css = default_css + "\t--color-fg: #111111;\n"
+			default_css = default_css + "\t--spacing-md: 1rem;\n"
+			default_css = default_css + "}\n"
+			_build_state_set("frame.ui.theme.css", default_css)
 		return 0
 
+	// client_init lifecycle slot. Reads build_state["frame.ui:components"] and
+	// emits per-component hydration statements (client-mode build only).
 	integer emit_ui_client_init_typed(integer ctx, string ctx_json)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_CLIENT_INIT", "emit_ui_client_init")
+		string source = emit_ui_client_init_source(ctx_json)
+		if source.length() > 0
+			_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
 // ============================================================================
@@ -217,10 +241,30 @@ functions:
 //   has_frame_server=true. Sub-cycle 3.
 
 functions:
+	// process_html: emit a full page class from a raw HTML page. Reads html, path,
+	// registry_json, companion_json from ctx_json.
 	integer process_html_typed(integer ctx, string ctx_json)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_PROCESS_HTML", "process_html")
+		string html = extract_json_field(ctx_json, "html")
+		string path = extract_json_field(ctx_json, "path")
+		string registry_json = extract_json_field(ctx_json, "registry_json")
+		string companion_json = extract_json_field(ctx_json, "companion_json")
+		string source = process_html(html, path, registry_json, companion_json)
+		_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
+	// assemble: emit page companion route module + hydration manifest + component
+	// tag render wrappers + load helpers + diagnostic module by concatenating
+	// their source strings. Each virtual source becomes one _emit_stmt_from_source
+	// call. Legacy assemble() returned envelope JSON; typed emission emits each
+	// module inline.
 	integer assemble_typed(integer ctx, string ctx_json)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_ASSEMBLE", "assemble")
+		string source = assemble_typed_source(ctx_json)
+		if source.length() > 0
+			_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
 // ============================================================================
@@ -780,9 +824,15 @@ functions:
 		_ctx_clear_error(ctx)
 		return 0
 
-	// ui: dispatcher arm — Sub-cycle 3 fills the widget renderer. Stub
-	// remains here so the dispatch shape is stable.
+	// ui: dispatcher arm. Parses body into indent-based lines, walks via
+	// render_ui_tree, and hands assembled Clean statements to _emit_stmt_from_source.
 	integer expand_ui_stub(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_WIDGET", "expand_ui")
+		list<string> lines = split_lines(body)
+		string source = render_ui_tree(lines, 0, -1)
+		if source.length() > 0
+			_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
 // ============================================================================
@@ -2328,63 +2378,1637 @@ functions:
 		return result
 
 // ============================================================================
-// END OF SUB-CYCLE 2 CONTENT — SUB-CYCLE 3 SCOPE BELOW
+// SUB-CYCLE 3 — WIDGET RENDERER + ASSEMBLE + REMAINING V1 PORTS
 // ============================================================================
-// Sub-cycle 2 will add (~3500–4000 LOC):
-//   - expand_component: build class spec, invoke ui_component_class.
-//   - generate_page_class: build page class spec, invoke ui_component_class.
-//   - expand_html_block + html_block_to_code + html_block_to_statements: HTML
-//     block-to-Clean transformer with Am 6 for user fragments.
-//   - process_text_node / process_element / process_block_text_node /
-//     process_block_element: HTML→Clean transformers with cl-* directive
-//     dispatch. Am 6 for {{ expr }}, cl-if, cl-iterate, cl-bind, cl-show,
-//     cl-validate values.
-//   - render_element / render_element_hidden / render_validation_error_span /
-//     render_element_with_preview / render_element_with_stream /
-//     render_screen_island / extract_screen_props: attribute-string composition
-//     + inline CSRF injection.
-//   - render_component: island wrapper + prop injection (Am 6 for props / slot).
-//   - html_to_render + process_html: entry orchestrator.
-//   - HTML utility ports: extract_body, remove_tag, remove_tag_with_content,
-//     find_tag_end, find_matching_close, is_void_element, is_digit_char,
-//     is_numeric_literal, find_compare_op, rewrite_any_int_compare,
-//     interpolate_attr, extract_attributes, extract_component_props,
-//     lookup_component, kebab_to_camel, tag_to_class_name, escape_string,
-//     count_chain_pluses, parse_component_body, strip_block_indent,
-//     path_to_class_name, get_attr, normalize_handlers, remove_state_dot,
-//     extract_state_fields, strip_state_block, get_component_state_fields,
-//     transform_state_in_body, extract_block_attributes,
-//     interpolate_block_attr.
-//   - Wire html:/component:/page: dispatcher arms.
-//
-// Sub-cycle 3 will add (~4000–5000 LOC):
-//   - render_ui_tree + render_ui_widget: 28-arm widget dispatcher. Am 6 for
-//     text_expr and bind_var; per-widget template accumulation.
-//   - Widget utility ports: get_widget_html_tag, get_widget_base_style,
-//     prop_to_style, extract_button_text, get_prop_value.
-//   - collect_screens_from_html + entries_to_screens_json +
-//     build_hydration_manifest_module.
-//   - build_load_helpers_module: fixed-preamble 130-line accumulator.
-//   - assemble: multi-branch template with route/component/diag wiring.
-//   - parse_source_files + derive_module_name + derive_url_path +
-//     derive_html_path + scan_routes_guards + path_matches_pattern +
-//     lookup_routes_guard + emit_routes_guard_check.
-//   - Remaining utility ports: get_indent_level, trim_indent, parse_block,
-//     parse_key_value, parse_typed_var, get_block_name, is_widget_line,
-//     get_widget_name, get_widget_props, widget_has_children,
-//     escape_json_string, format_prop_json, parse_single_prop,
-//     parse_widget_props, parse_integer, find_unescaped_quote,
-//     extract_canvas_draw_block, extract_canvas_update_block,
-//     extract_canvas_events, list_to_json_array, escape_html_attr,
-//     extract_validation_rules, parse_validation_rule, extract_quoted_string,
-//     get_widget_aria_role, generate_aria_attrs, is_numeric,
-//     needs_client_runtime, generate_runtime_injection.
-//   - Full dispatcher fold: ui: arm wired.
-//   - plugin.toml version bump 3.0.0-alpha.1 → 3.0.0.
-//   - Delete main.v1.cln.
-//   - Run comita, tag framework version.
-//   - --no-ff merge to main.
-//
-// See reports/2026-07-03-session-5-frame-ui-deferred.md §4 for the
-// authoritative per-source-section LOC projection. Do not re-inspect
-// frame.ui or re-project in subsequent sub-cycles.
+// Verbatim ports from main.v1.cln, plus emit_ui_client_init_source and
+// assemble_typed_source wrappers that build the emission strings the typed
+// lifecycle slots pass to _emit_stmt_from_source.
+
+// ============================================================================
+// SSR HELPERS + CLIENT_INIT SOURCE BUILDERS
+// ============================================================================
+
+functions:
+	string emit_ssr_helpers()
+		string result = "functions:\n"
+		result = result + "\tstring render(string name)\n"
+		result = result + "\t\treturn _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", \"{}\")\n\n"
+		result = result + "\tstring renderWith(string name, string data)\n"
+		result = result + "\t\treturn _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", data)\n\n"
+		return result
+
+	// Build the Clean source for the client_init lifecycle slot: per-component
+	// _ui_update_element + instance.onMount() calls. Returns "" when no
+	// components need hydration (no statements to emit).
+	string emit_ui_client_init_source(string context_json)
+		string build_state = extract_json_field(context_json, "build_state")
+		string components_csv = extract_json_field(build_state, "frame.ui:components")
+		if components_csv == ""
+			return ""
+		string statements = ""
+		string remaining = components_csv
+		while remaining.length() > 0
+			integer sc = remaining.indexOf(";")
+			string record = ""
+			if sc == -1
+				record = remaining
+				remaining = ""
+			else
+				record = remaining.substring(0, sc)
+				remaining = remaining.substring(sc + 1, remaining.length())
+			integer c1 = record.indexOf(",")
+			if c1 != -1
+				string rec_tag = record.substring(0, c1)
+				string rec_rest = record.substring(c1 + 1, record.length())
+				integer c2 = rec_rest.indexOf(",")
+				if c2 != -1
+					string rec_class = rec_rest.substring(0, c2)
+					string rec_hyd = rec_rest.substring(c2 + 1, rec_rest.length())
+					if rec_hyd != "off"
+						string instance_var = "instance_" + rec_tag.replace("-", "_")
+						statements = statements + "_ui_update_element(\"[data-island='" + rec_tag + "']\", " + instance_var + ".render())\n"
+						statements = statements + instance_var + ".onMount()\n"
+		return statements
+
+// ============================================================================
+// PROCESS_HTML — top-level page emitter
+// ============================================================================
+
+functions:
+	string process_html(string html, string path, string registry_json, string companion_json)
+		string layout = extract_page_attr(html, "layout")
+		string auth = extract_page_attr(html, "auth")
+		string roles = extract_page_attr(html, "roles")
+		string body_html = extract_body(html)
+		boolean has_data = false
+		if companion_json != ""
+			if companion_json.indexOf("\"has_load\":true") != -1
+				has_data = true
+		string render_code = html_to_render(body_html, registry_json, has_data)
+		if needs_client_runtime(html)
+			render_code = render_code + generate_runtime_injection()
+		string page_name = path_to_class_name(path)
+		string result = generate_page_class(page_name, path, layout, auth, roles, render_code, companion_json)
+		return result
+
+// ============================================================================
+// LINE-BASED PARSING UTILITIES (verbatim from v1)
+// ============================================================================
+
+functions:
+	list<string> split_lines(string content)
+		integer first_newline = content.indexOf("\n")
+		if content.length() > 0
+			string first_char = content.substring(0, 1)
+		list<string> result = []
+		string remaining = content
+		while remaining.length() > 0
+			integer newline = remaining.indexOf("\n")
+			if newline == -1
+				result.push(remaining)
+				remaining = ""
+			else
+				string line = remaining.substring(0, newline)
+				result.push(line)
+				remaining = remaining.substring(newline + 1, remaining.length())
+		return result
+
+	integer get_indent_level(string line)
+		integer count = 0
+		while count < line.length()
+			string ch = line.substring(count, count + 1)
+			if ch == "\t"
+				count = count + 1
+			else
+				return count
+		return count
+
+	string trim_indent(string line, integer level)
+		integer current_indent = get_indent_level(line)
+		if current_indent >= level
+			return line.substring(level, line.length())
+		return line
+
+	string parse_block(list<string> lines, integer start_index, integer base_indent)
+		list<string> block_lines = []
+		integer index = start_index
+		boolean done = false
+		while index < lines.length() and done == false
+			string line = lines[index]
+			if line.trim().length() == 0
+				block_lines.push(line)
+				index = index + 1
+			else
+				integer indent = get_indent_level(line)
+				if indent > base_indent
+					block_lines.push(line)
+					index = index + 1
+				else
+					done = true
+		string result = "{\"lines\":["
+		integer i = 0
+		while i < block_lines.length()
+			if i > 0
+				result = result + ","
+			result = result + "\"" + escape_json_string(block_lines[i]) + "\""
+			i = i + 1
+		result = result + "],\"end_index\":" + index.toString() + "}"
+		return result
+
+	string parse_key_value(string line)
+		string trimmed = line.trim()
+		integer colon_pos = trimmed.indexOf(":")
+		if colon_pos != -1
+			string key = trimmed.substring(0, colon_pos).trim()
+			string value = ""
+			if colon_pos + 1 < trimmed.length()
+				value = trimmed.substring(colon_pos + 1, trimmed.length()).trim()
+			return "{\"key\":\"" + escape_json_string(key) + "\",\"value\":\"" + escape_json_string(value) + "\",\"found\":true}"
+		integer eq_pos = trimmed.indexOf("=")
+		if eq_pos != -1
+			string key = trimmed.substring(0, eq_pos).trim()
+			string value = trimmed.substring(eq_pos + 1, trimmed.length()).trim()
+			return "{\"key\":\"" + escape_json_string(key) + "\",\"value\":\"" + escape_json_string(value) + "\",\"found\":true}"
+		return "{\"key\":\"\",\"value\":\"\",\"found\":false}"
+
+	string parse_typed_var(string line)
+		string trimmed = line.trim()
+		integer colon_pos = trimmed.indexOf(":")
+		if colon_pos == -1
+			return "{\"name\":\"\",\"type\":\"\",\"default\":\"\",\"found\":false}"
+		string name = trimmed.substring(0, colon_pos).trim()
+		string rest = trimmed.substring(colon_pos + 1, trimmed.length()).trim()
+		integer eq_pos = rest.indexOf("=")
+		if eq_pos != -1
+			string type_str = rest.substring(0, eq_pos).trim()
+			string default_val = rest.substring(eq_pos + 1, rest.length()).trim()
+			return "{\"name\":\"" + escape_json_string(name) + "\",\"type\":\"" + escape_json_string(type_str) + "\",\"default\":\"" + escape_json_string(default_val) + "\",\"found\":true}"
+		return "{\"name\":\"" + escape_json_string(name) + "\",\"type\":\"" + escape_json_string(rest) + "\",\"default\":\"\",\"found\":true}"
+
+	string get_block_name(string line)
+		string trimmed = line.trim()
+		if trimmed.endsWith(":")
+			integer eq_pos = trimmed.indexOf("=")
+			if eq_pos == -1
+				string name = trimmed.substring(0, trimmed.length() - 1)
+				return name.trim()
+		return ""
+
+	boolean is_widget_line(string line)
+		string trimmed = line.trim()
+		return trimmed.startsWith("ui.")
+
+	string get_widget_name(string line)
+		string trimmed = line.trim()
+		if trimmed.startsWith("ui.") == false
+			return ""
+		string after_prefix = trimmed.substring(3, trimmed.length())
+		integer space_pos = after_prefix.indexOf(" ")
+		integer colon_pos = after_prefix.indexOf(":")
+		integer end_pos = after_prefix.length()
+		if space_pos != -1 and space_pos < end_pos
+			end_pos = space_pos
+		if colon_pos != -1 and colon_pos < end_pos
+			end_pos = colon_pos
+		return after_prefix.substring(0, end_pos)
+
+	string get_widget_props(string line)
+		string trimmed = line.trim()
+		if trimmed.startsWith("ui.") == false
+			return ""
+		string after_prefix = trimmed.substring(3, trimmed.length())
+		string widget_name = get_widget_name(line)
+		string after_name = after_prefix.substring(widget_name.length(), after_prefix.length()).trim()
+		if after_name.endsWith(":")
+			after_name = after_name.substring(0, after_name.length() - 1).trim()
+		return after_name
+
+	boolean widget_has_children(string line)
+		string trimmed = line.trim()
+		return trimmed.endsWith(":")
+
+	string format_prop_json(string name, string value, boolean is_first)
+		string prefix = ""
+		if is_first == false
+			prefix = ","
+		return prefix + "{\"name\":\"" + escape_json_string(name) + "\",\"value\":\"" + escape_json_string(value) + "\"}"
+
+	string parse_single_prop(string remaining, boolean first)
+		string trimmed = remaining.trim()
+		if trimmed.length() == 0
+			return "{\"prop\":\"\",\"remaining\":\"\",\"first\":" + first.toString() + "}"
+		integer space_pos = trimmed.indexOf(" ")
+		if space_pos == -1
+			string prop = format_prop_json(trimmed, "true", first)
+			return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"\",\"first\":false}"
+		string prop_name = trimmed.substring(0, space_pos)
+		string after_name = trimmed.substring(space_pos + 1, trimmed.length()).trim()
+		if after_name.length() > 0 and after_name.substring(0, 1) == "\""
+			integer end_quote = after_name.indexOf("\"", 1)
+			if end_quote == -1
+				return "{\"prop\":\"\",\"remaining\":\"\",\"first\":" + first.toString() + "}"
+			string prop_value = after_name.substring(1, end_quote)
+			string prop = format_prop_json(prop_name, prop_value, first)
+			string rest = after_name.substring(end_quote + 1, after_name.length()).trim()
+			return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"" + escape_json_string(rest) + "\",\"first\":false}"
+		integer next_space = after_name.indexOf(" ")
+		if next_space == -1
+			string prop = format_prop_json(prop_name, after_name, first)
+			return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"\",\"first\":false}"
+		string prop_value = after_name.substring(0, next_space)
+		string prop = format_prop_json(prop_name, prop_value, first)
+		string rest = after_name.substring(next_space + 1, after_name.length()).trim()
+		return "{\"prop\":\"" + escape_json_string(prop) + "\",\"remaining\":\"" + escape_json_string(rest) + "\",\"first\":false}"
+
+	string parse_widget_props(string props_string)
+		if props_string.trim().length() == 0
+			return "[]"
+		string result = "["
+		string remaining = props_string.trim()
+		boolean first = true
+		while remaining.length() > 0
+			string parsed = parse_single_prop(remaining, first)
+			string prop = extract_json_field(parsed, "prop")
+			remaining = extract_json_field(parsed, "remaining")
+			string first_str = extract_json_field(parsed, "first")
+			first = first_str == "true"
+			result = result + prop
+		result = result + "]"
+		return result
+
+	integer parse_integer(string s)
+		integer result = 0
+		integer i = 0
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch >= "0" and ch <= "9"
+				result = result * 10 + (ch.charCodeAt(0) - 48)
+			i = i + 1
+		return result
+
+	integer find_unescaped_quote(string text, integer start_pos)
+		integer current_pos = start_pos
+		integer text_len = text.length()
+		while current_pos < text_len
+			integer quote_pos = text.indexOf("\"", current_pos)
+			if quote_pos == -1
+				return -1
+			integer backslash_count = 0
+			integer check_pos = quote_pos - 1
+			boolean keep_counting = true
+			while keep_counting and check_pos >= start_pos
+				string ch = text.substring(check_pos, check_pos + 1)
+				if ch.charCodeAt(0) == 92
+					backslash_count = backslash_count + 1
+					check_pos = check_pos - 1
+				else
+					keep_counting = false
+			if backslash_count % 2 == 0
+				return quote_pos
+			current_pos = quote_pos + 1
+		return -1
+
+	list<string> json_to_string_list(string json_array)
+		list<string> result = []
+		if json_array.length() < 2
+			return result
+		string content = json_array.substring(1, json_array.length() - 1)
+		if content.trim().length() == 0
+			return result
+		string remaining = content
+		while remaining.length() > 0
+			boolean __skip_ws_jstr = true
+			while __skip_ws_jstr and remaining.length() > 0
+				string __ws_jstr_ch = remaining.substring(0, 1)
+				if __ws_jstr_ch != " "
+					__skip_ws_jstr = false
+				else
+					remaining = remaining.substring(1, remaining.length())
+			if remaining.length() == 0
+				break
+			if remaining.substring(0, 1) == "\""
+				integer end_quote = 1
+				while end_quote < remaining.length()
+					string ch = remaining.substring(end_quote, end_quote + 1)
+					if ch == "\\" and end_quote + 1 < remaining.length()
+						end_quote = end_quote + 2
+					else if ch == "\""
+						break
+					else
+						end_quote = end_quote + 1
+				string value = remaining.substring(1, end_quote)
+				value = value.replace("\\n", "\n")
+				value = value.replace("\\t", "\t")
+				value = value.replace("\\\"", "\"")
+				value = value.replace("\\\\", "\\")
+				result.push(value)
+				remaining = remaining.substring(end_quote + 1, remaining.length())
+				integer comma_pos = remaining.indexOf(",")
+				if comma_pos != -1
+					remaining = remaining.substring(comma_pos + 1, remaining.length())
+				else
+					remaining = ""
+			else
+				integer comma_pos = remaining.indexOf(",")
+				if comma_pos != -1
+					remaining = remaining.substring(comma_pos + 1, remaining.length())
+				else
+					remaining = ""
+		return result
+
+	list<string> json_to_object_list(string json_array)
+		list<string> result = []
+		if json_array.length() < 2
+			return result
+		string content = strip_spaces(json_array.substring(1, json_array.length() - 1))
+		if content.length() == 0
+			return result
+		integer pos = 0
+		integer content_len = content.length()
+		while pos < content_len
+			while pos < content_len
+				string ch = content.substring(pos, pos + 1)
+				if ch != " " and ch != ","
+					break
+				pos = pos + 1
+			if pos >= content_len
+				break
+			integer char_code = content.charCodeAt(pos)
+			boolean is_brace = char_code == 123
+			if is_brace
+				integer depth = 1
+				integer end_pos = pos + 1
+				integer loop_count = 0
+				while end_pos < content_len
+					if depth == 0
+						break
+					integer ch_code = content.charCodeAt(end_pos)
+					if ch_code == 123
+						depth = depth + 1
+					else if ch_code == 125
+						depth = depth - 1
+					end_pos = end_pos + 1
+					loop_count = loop_count + 1
+					if loop_count > 1000
+						break
+				string obj = content.substring(pos, end_pos)
+				result.push(obj)
+				pos = end_pos
+			else
+				pos = pos + 1
+		return result
+
+	string extract_canvas_draw_block(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+			if trimmed == "draw:" or trimmed.startsWith("draw ")
+				integer base_indent = get_indent_level(line)
+				string content = ""
+				integer j = i + 1
+				while j < lines.length()
+					string draw_line = lines[j]
+					if draw_line.trim().length() == 0
+						j = j + 1
+					else
+						integer draw_indent = get_indent_level(draw_line)
+						if draw_indent > base_indent
+							if content != ""
+								content = content + "\\n"
+							content = content + draw_line.trim()
+							j = j + 1
+						else
+							break
+				return content
+			i = i + 1
+		return ""
+
+	string extract_canvas_update_block(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+			if trimmed == "update:" or trimmed.startsWith("update ")
+				integer base_indent = get_indent_level(line)
+				string content = ""
+				integer j = i + 1
+				while j < lines.length()
+					string update_line = lines[j]
+					if update_line.trim().length() == 0
+						j = j + 1
+					else
+						integer update_indent = get_indent_level(update_line)
+						if update_indent > base_indent
+							if content != ""
+								content = content + "\\n"
+							content = content + update_line.trim()
+							j = j + 1
+						else
+							break
+				return content
+			i = i + 1
+		return ""
+
+	string extract_canvas_events(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+		string result = ""
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+			string event_type = ""
+			if trimmed == "onCanvasClick:" or trimmed.startsWith("onCanvasClick ")
+				event_type = "click"
+			else if trimmed == "onCanvasMouseMove:" or trimmed.startsWith("onCanvasMouseMove ")
+				event_type = "mousemove"
+			else if trimmed == "onCanvasMouseDown:" or trimmed.startsWith("onCanvasMouseDown ")
+				event_type = "mousedown"
+			else if trimmed == "onCanvasMouseUp:" or trimmed.startsWith("onCanvasMouseUp ")
+				event_type = "mouseup"
+			else if trimmed == "onCanvasTouchStart:" or trimmed.startsWith("onCanvasTouchStart ")
+				event_type = "touchstart"
+			else if trimmed == "onCanvasTouchMove:" or trimmed.startsWith("onCanvasTouchMove ")
+				event_type = "touchmove"
+			else if trimmed == "onCanvasTouchEnd:" or trimmed.startsWith("onCanvasTouchEnd ")
+				event_type = "touchend"
+			if event_type != ""
+				integer base_indent = get_indent_level(line)
+				string action = ""
+				integer j = i + 1
+				while j < lines.length()
+					string action_line = lines[j]
+					if action_line.trim().length() == 0
+						j = j + 1
+					else
+						integer action_indent = get_indent_level(action_line)
+						if action_indent > base_indent
+							if action != ""
+								action = action + "; "
+							action = action + action_line.trim()
+							j = j + 1
+						else
+							break
+				if result != ""
+					result = result + ","
+				result = result + event_type + ":" + action
+			i = i + 1
+		return result
+
+	string list_to_json_array(list<string> items)
+		string result = "["
+		integer i = 0
+		while i < items.length()
+			if i > 0
+				result = result + ","
+			result = result + "\"" + escape_json_string(items[i]) + "\""
+			i = i + 1
+		result = result + "]"
+		return result
+
+	string escape_html_attr(string input)
+		string result = ""
+		integer i = 0
+		while i < input.length()
+			string c = input.charAt(i)
+			if c == "\""
+				result = result + "&quot;"
+			else if c == "'"
+				result = result + "&#39;"
+			else if c == "<"
+				result = result + "&lt;"
+			else if c == ">"
+				result = result + "&gt;"
+			else if c == "&"
+				result = result + "&amp;"
+			else
+				result = result + c
+			i = i + 1
+		return result
+
+// ============================================================================
+// FORM VALIDATION (UI-41) — verbatim from v1
+// ============================================================================
+
+functions:
+	string extract_validation_rules(string child_lines_json)
+		list<string> lines = json_to_string_list(child_lines_json)
+		string rules = ""
+		integer i = 0
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+			if trimmed == "validate:" or trimmed.startsWith("validate ")
+				integer base_indent = get_indent_level(line)
+				integer j = i + 1
+				while j < lines.length()
+					string rule_line = lines[j]
+					if rule_line.trim().length() == 0
+						j = j + 1
+					else
+						integer rule_indent = get_indent_level(rule_line)
+						if rule_indent > base_indent
+							string rule = rule_line.trim()
+							if rules != ""
+								rules = rules + ","
+							rules = rules + parse_validation_rule(rule)
+							j = j + 1
+						else
+							break
+				return rules
+			i = i + 1
+		return rules
+
+	string parse_validation_rule(string rule)
+		string rule_type = ""
+		string rule_value = ""
+		string rule_message = ""
+		integer space_pos = rule.indexOf(" ")
+		if space_pos > 0
+			rule_type = rule.substring(0, space_pos)
+			string rest = rule.substring(space_pos + 1).trim()
+			if rest.startsWith("\"")
+				rule_message = extract_quoted_string(rest)
+			else
+				integer msg_start = rest.indexOf("\"")
+				if msg_start > 0
+					rule_value = rest.substring(0, msg_start).trim()
+					rule_message = extract_quoted_string(rest.substring(msg_start))
+				else
+					rule_value = rest
+		else
+			rule_type = rule
+		string result = "{\"type\":\"" + rule_type + "\""
+		if rule_value != ""
+			result = result + ",\"value\":\"" + escape_json_string(rule_value) + "\""
+		if rule_message != ""
+			result = result + ",\"message\":\"" + escape_json_string(rule_message) + "\""
+		result = result + "}"
+		return result
+
+	string extract_quoted_string(string input)
+		if input.startsWith("\"")
+			integer end_quote = input.indexOf("\"", 1)
+			if end_quote > 1
+				return input.substring(1, end_quote)
+		return ""
+
+// ============================================================================
+// ACCESSIBILITY (UI-42) — verbatim from v1
+// ============================================================================
+
+functions:
+	string get_widget_aria_role(string widget_name)
+		if widget_name == "button"
+			return "button"
+		if widget_name == "textField"
+			return "textbox"
+		if widget_name == "checkbox"
+			return "checkbox"
+		if widget_name == "radio"
+			return "radio"
+		if widget_name == "select"
+			return "listbox"
+		if widget_name == "slider"
+			return "slider"
+		if widget_name == "link"
+			return "link"
+		if widget_name == "heading"
+			return "heading"
+		if widget_name == "paragraph"
+			return ""
+		if widget_name == "image"
+			return "img"
+		if widget_name == "column" or widget_name == "row"
+			return "group"
+		if widget_name == "card"
+			return "region"
+		if widget_name == "scroll"
+			return "scrollbar"
+		return ""
+
+	string generate_aria_attrs(string widget_name, list<string> props)
+		string attrs = ""
+		string role = get_widget_aria_role(widget_name)
+		if role != ""
+			attrs = attrs + " role='" + role + "'"
+		string label = get_prop_value(props, "label")
+		if label != ""
+			attrs = attrs + " aria-label='" + label + "'"
+		string hint = get_prop_value(props, "hint")
+		if hint != ""
+			attrs = attrs + " aria-describedby='hint'"
+		string disabled = get_prop_value(props, "disabled")
+		if disabled == "true"
+			attrs = attrs + " aria-disabled='true'"
+		string required = get_prop_value(props, "required")
+		if required == "true"
+			attrs = attrs + " aria-required='true'"
+		return attrs
+
+// ============================================================================
+// UI WIDGET PARSING AND RENDERING (verbatim from v1)
+// ============================================================================
+
+functions:
+	string render_ui_tree(list<string> lines, integer start_index, integer base_indent)
+		string result = ""
+		integer event_counter = 0
+		integer i = start_index
+		while i < lines.length()
+			string line = lines[i]
+			string trimmed = line.trim()
+			if trimmed.length() == 0
+				i = i + 1
+			else
+				integer line_indent = get_indent_level(line)
+				if line_indent <= base_indent and i > start_index
+					break
+				if is_widget_line(line)
+					string widget_name = get_widget_name(line)
+					string widget_props = get_widget_props(line)
+					boolean has_children = widget_has_children(line)
+					list<string> child_lines = []
+					if has_children
+						integer child_start = i + 1
+						integer child_base = line_indent
+						while child_start < lines.length()
+							string child_line = lines[child_start]
+							if child_line.trim().length() == 0
+								child_lines.push(child_line)
+								child_start = child_start + 1
+							else
+								integer child_indent = get_indent_level(child_line)
+								if child_indent > child_base
+									child_lines.push(child_line)
+									child_start = child_start + 1
+								else
+									break
+					string widget_result = render_ui_widget(widget_name, widget_props, child_lines, event_counter)
+					result = result + extract_json_field(widget_result, "code")
+					string new_counter = extract_json_field(widget_result, "event_counter")
+					event_counter = parse_integer(new_counter)
+					if has_children
+						i = i + 1 + child_lines.length()
+					else
+						i = i + 1
+				else
+					i = i + 1
+		return result
+
+	string render_ui_widget(string widget_name, string props_string, list<string> child_lines, integer event_counter)
+		string code = ""
+		string props_json = parse_widget_props(props_string)
+		string html_tag = get_widget_html_tag(widget_name)
+		string html_class = "ui-" + widget_name
+		string html_style = get_widget_base_style(widget_name)
+		list<string> props = json_to_object_list(props_json)
+		integer i = 0
+		while i < props.length()
+			string prop_json = props[i]
+			string prop_name = extract_json_field(prop_json, "name")
+			string prop_value = extract_json_field(prop_json, "value")
+			string style = prop_to_style(prop_name, prop_value)
+			if style != ""
+				html_style = html_style + style
+			i = i + 1
+		if widget_name == "text"
+			string text_expr = props_string.trim()
+			if text_expr.startsWith("\"")
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "'>\"\n"
+				code = code + "\t\t\thtml = html + " + text_expr + "\n"
+				code = code + "\t\t\thtml = html + \"</span>\"\n"
+			else
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "'>\"\n"
+				code = code + "\t\t\thtml = html + html.escape(" + text_expr + ".toString())\n"
+				code = code + "\t\t\thtml = html + \"</span>\"\n"
+		else if widget_name == "button"
+			code = code + "\t\t\thtml = html + \"<button class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			string button_text = extract_button_text(props_string)
+			if button_text != ""
+				code = code + "\t\t\thtml = html + " + button_text + "\n"
+			code = code + "\t\t\thtml = html + \"</button>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "textField"
+			code = code + "\t\t\thtml = html + \"<input type='text' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			string bind_var = get_prop_value(props, "bind")
+			if bind_var != ""
+				code = code + "\t\t\thtml = html + \" value='\" + html.escape(" + bind_var + ") + \"'\"\n"
+			string placeholder = get_prop_value(props, "placeholder")
+			if placeholder != ""
+				code = code + "\t\t\thtml = html + \" placeholder='" + placeholder + "'\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "checkbox"
+			code = code + "\t\t\thtml = html + \"<label class='" + html_class + "-wrapper'>\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='checkbox' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			string bind_var = get_prop_value(props, "bind")
+			if bind_var != ""
+				code = code + "\t\t\tif " + bind_var + "\n"
+				code = code + "\t\t\t\thtml = html + \" checked\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+			string label_text = get_prop_value(props, "label")
+			if label_text != ""
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "-label'>\" + \"" + label_text + "\" + \"</span>\"\n"
+			code = code + "\t\t\thtml = html + \"</label>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "radio"
+			string radio_value = get_prop_value(props, "value")
+			string label_text = get_prop_value(props, "label")
+			string name_attr = get_prop_value(props, "name")
+			code = code + "\t\t\thtml = html + \"<label class='" + html_class + "-wrapper'>\"\n"
+			code = code + "\t\t\thtml = html + \"<input type='radio' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if name_attr != ""
+				code = code + "\t\t\thtml = html + \" name='" + name_attr + "'\"\n"
+			if radio_value != ""
+				code = code + "\t\t\thtml = html + \" value='" + radio_value + "'\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+			if label_text != ""
+				code = code + "\t\t\thtml = html + \"<span class='" + html_class + "-label'>\" + \"" + label_text + "\" + \"</span>\"\n"
+			code = code + "\t\t\thtml = html + \"</label>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "select"
+			code = code + "\t\t\thtml = html + \"<select class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+			code = code + "\t\t\thtml = html + \"</select>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "option"
+			string option_value = get_prop_value(props, "value")
+			string label_text = get_prop_value(props, "label")
+			code = code + "\t\t\thtml = html + \"<option\"\n"
+			if option_value != ""
+				code = code + "\t\t\thtml = html + \" value='" + option_value + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			if label_text != ""
+				code = code + "\t\t\thtml = html + \"" + label_text + "\"\n"
+			code = code + "\t\t\thtml = html + \"</option>\"\n"
+		else if widget_name == "slider"
+			code = code + "\t\t\thtml = html + \"<input type='range' class='" + html_class + " evt-" + event_counter.toString() + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			string min_val = get_prop_value(props, "min")
+			string max_val = get_prop_value(props, "max")
+			string step_val = get_prop_value(props, "step")
+			if min_val != ""
+				code = code + "\t\t\thtml = html + \" min='" + min_val + "'\"\n"
+			if max_val != ""
+				code = code + "\t\t\thtml = html + \" max='" + max_val + "'\"\n"
+			if step_val != ""
+				code = code + "\t\t\thtml = html + \" step='" + step_val + "'\"\n"
+			string bind_var = get_prop_value(props, "bind")
+			if bind_var != ""
+				code = code + "\t\t\thtml = html + \" value='\" + " + bind_var + ".toString() + \"'\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+			event_counter = event_counter + 1
+		else if widget_name == "image"
+			string src = get_prop_value(props, "src")
+			string alt = get_prop_value(props, "alt")
+			string width = get_prop_value(props, "width")
+			string height = get_prop_value(props, "height")
+			code = code + "\t\t\thtml = html + \"<img class='" + html_class + "'\"\n"
+			if src != ""
+				code = code + "\t\t\thtml = html + \" src='" + src + "'\"\n"
+			if alt != ""
+				code = code + "\t\t\thtml = html + \" alt='" + alt + "'\"\n"
+			if width != ""
+				code = code + "\t\t\thtml = html + \" width='" + width + "'\"\n"
+			if height != ""
+				code = code + "\t\t\thtml = html + \" height='" + height + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+		else if widget_name == "link"
+			string href = get_prop_value(props, "href")
+			string link_text = get_prop_value(props, "text")
+			string external = get_prop_value(props, "external")
+			code = code + "\t\t\thtml = html + \"<a class='" + html_class + "'\"\n"
+			if href != ""
+				code = code + "\t\t\thtml = html + \" href='" + href + "'\"\n"
+			if external == "true"
+				code = code + "\t\t\thtml = html + \" target='_blank' rel='noopener noreferrer'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			if link_text != ""
+				code = code + "\t\t\thtml = html + \"" + link_text + "\"\n"
+			else if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+			code = code + "\t\t\thtml = html + \"</a>\"\n"
+		else if widget_name == "divider"
+			string thickness = get_prop_value(props, "thickness")
+			string color = get_prop_value(props, "color")
+			code = code + "\t\t\thtml = html + \"<hr class='" + html_class + "'\"\n"
+			string divider_style = ""
+			if thickness != ""
+				divider_style = divider_style + "border-width:" + thickness + "px;"
+			if color != ""
+				divider_style = divider_style + "border-color:" + color + ";"
+			if divider_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + divider_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \"/>\"\n"
+		else if widget_name == "spacer"
+			string width = get_prop_value(props, "width")
+			string height = get_prop_value(props, "height")
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='\"\n"
+			if width != "" or height != ""
+				if width != ""
+					code = code + "\t\t\thtml = html + \"width:" + width + "px;\"\n"
+				if height != ""
+					code = code + "\t\t\thtml = html + \"height:" + height + "px;\"\n"
+			else
+				code = code + "\t\t\thtml = html + \"flex:1;\"\n"
+			code = code + "\t\t\thtml = html + \"'></div>\"\n"
+		else if widget_name == "scroll"
+			string scroll_height = get_prop_value(props, "height")
+			string scroll_width = get_prop_value(props, "width")
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='overflow:auto;\"\n"
+			if scroll_height != ""
+				code = code + "\t\t\thtml = html + \"max-height:" + scroll_height + "px;\"\n"
+			if scroll_width != ""
+				code = code + "\t\t\thtml = html + \"max-width:" + scroll_width + "px;\"\n"
+			code = code + "\t\t\thtml = html + \"'>\"\n"
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+			code = code + "\t\t\thtml = html + \"</div>\"\n"
+		else if widget_name == "card"
+			string shadow = get_prop_value(props, "shadow")
+			code = code + "\t\t\thtml = html + \"<div class='" + html_class + "' style='\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \"" + html_style + "\"\n"
+			if shadow == "true"
+				code = code + "\t\t\thtml = html + \"box-shadow:0 2px 8px rgba(0,0,0,0.15);\"\n"
+			code = code + "\t\t\thtml = html + \"border-radius:8px;background:#fff;\"\n"
+			code = code + "\t\t\thtml = html + \"'>\"\n"
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+			code = code + "\t\t\thtml = html + \"</div>\"\n"
+		else if widget_name == "heading"
+			string level = get_prop_value(props, "level")
+			string heading_text = get_prop_value(props, "text")
+			if level == ""
+				level = "1"
+			code = code + "\t\t\thtml = html + \"<h" + level + " class='" + html_class + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			if heading_text != ""
+				code = code + "\t\t\thtml = html + \"" + heading_text + "\"\n"
+			code = code + "\t\t\thtml = html + \"</h" + level + ">\"\n"
+		else if widget_name == "paragraph"
+			code = code + "\t\t\thtml = html + \"<p class='" + html_class + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+			code = code + "\t\t\thtml = html + \"</p>\"\n"
+		else if widget_name == "code"
+			string language = get_prop_value(props, "language")
+			code = code + "\t\t\thtml = html + \"<pre class='" + html_class + "'><code\"\n"
+			if language != ""
+				code = code + "\t\t\thtml = html + \" class='language-" + language + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+			code = code + "\t\t\thtml = html + \"</code></pre>\"\n"
+		else if widget_name == "bold"
+			code = code + "\t\t\thtml = html + \"<strong>\"\n"
+			string bold_text = props_string.trim()
+			if bold_text.startsWith("\"")
+				code = code + "\t\t\thtml = html + " + bold_text + "\n"
+			code = code + "\t\t\thtml = html + \"</strong>\"\n"
+		else if widget_name == "italic"
+			code = code + "\t\t\thtml = html + \"<em>\"\n"
+			string italic_text = props_string.trim()
+			if italic_text.startsWith("\"")
+				code = code + "\t\t\thtml = html + " + italic_text + "\n"
+			code = code + "\t\t\thtml = html + \"</em>\"\n"
+		else if widget_name == "icon"
+			string icon_name = get_prop_value(props, "name")
+			string icon_size = get_prop_value(props, "size")
+			code = code + "\t\t\thtml = html + \"<span class='" + html_class + " icon-" + icon_name + "'\"\n"
+			if icon_size != ""
+				code = code + "\t\t\thtml = html + \" style='font-size:" + icon_size + "px;'\"\n"
+			code = code + "\t\t\thtml = html + \"></span>\"\n"
+		else if widget_name == "canvasScene"
+			string canvas_id = "canvas-" + event_counter.toString()
+			string canvas_width = get_prop_value(props, "width")
+			string canvas_height = get_prop_value(props, "height")
+			string animate = get_prop_value(props, "animate")
+			if canvas_width == ""
+				canvas_width = "400"
+			if canvas_height == ""
+				canvas_height = "300"
+			code = code + "\t\t\thtml = html + \"<canvas id='" + canvas_id + "' class='" + html_class + "'\"\n"
+			code = code + "\t\t\thtml = html + \" width='" + canvas_width + "' height='" + canvas_height + "'\"\n"
+			code = code + "\t\t\thtml = html + \" data-canvas-id='" + canvas_id + "'\"\n"
+			if animate == "true"
+				code = code + "\t\t\thtml = html + \" data-animate='true'\"\n"
+			string child_lines_json = list_to_json_array(child_lines)
+			string draw_code = extract_canvas_draw_block(child_lines_json)
+			if draw_code != ""
+				code = code + "\t\t\thtml = html + \" data-draw='\" + escape_html_attr(draw_code) + \"'\"\n"
+			string update_code = extract_canvas_update_block(child_lines_json)
+			if update_code != ""
+				code = code + "\t\t\thtml = html + \" data-update='\" + escape_html_attr(update_code) + \"'\"\n"
+			string canvas_events = extract_canvas_events(child_lines_json)
+			if canvas_events != ""
+				code = code + "\t\t\thtml = html + \" data-canvas-events='\" + escape_html_attr(canvas_events) + \"'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \"></canvas>\"\n"
+			event_counter = event_counter + 1
+		else
+			code = code + "\t\t\thtml = html + \"<" + html_tag + " class='" + html_class + "'\"\n"
+			if html_style != ""
+				code = code + "\t\t\thtml = html + \" style='" + html_style + "'\"\n"
+			code = code + "\t\t\thtml = html + \">\"\n"
+			if child_lines.length() > 0
+				code = code + render_ui_tree(child_lines, 0, -1)
+			code = code + "\t\t\thtml = html + \"</" + html_tag + ">\"\n"
+		return "{\"code\":\"" + escape_json_string(code) + "\",\"event_counter\":" + event_counter.toString() + "}"
+
+	string get_widget_html_tag(string widget_name)
+		if widget_name == "column" or widget_name == "row" or widget_name == "stack"
+			return "div"
+		if widget_name == "text"
+			return "span"
+		if widget_name == "button"
+			return "button"
+		if widget_name == "textField" or widget_name == "checkbox" or widget_name == "radio" or widget_name == "slider"
+			return "input"
+		if widget_name == "select"
+			return "select"
+		if widget_name == "option"
+			return "option"
+		if widget_name == "image"
+			return "img"
+		if widget_name == "link"
+			return "a"
+		if widget_name == "divider"
+			return "hr"
+		if widget_name == "spacer" or widget_name == "scroll" or widget_name == "card"
+			return "div"
+		if widget_name == "heading"
+			return "h1"
+		if widget_name == "paragraph"
+			return "p"
+		if widget_name == "code"
+			return "pre"
+		if widget_name == "bold"
+			return "strong"
+		if widget_name == "canvasScene"
+			return "canvas"
+		if widget_name == "italic"
+			return "em"
+		if widget_name == "icon"
+			return "span"
+		return "div"
+
+	string get_widget_base_style(string widget_name)
+		if widget_name == "column"
+			return "display:flex;flex-direction:column;"
+		if widget_name == "row"
+			return "display:flex;flex-direction:row;"
+		if widget_name == "stack"
+			return "position:relative;"
+		return ""
+
+	string prop_to_style(string prop_name, string prop_value)
+		if prop_name == "gap"
+			return "gap:" + prop_value + "px;"
+		if prop_name == "padding"
+			return "padding:" + prop_value + "px;"
+		if prop_name == "margin"
+			return "margin:" + prop_value + "px;"
+		if prop_name == "width"
+			return "width:" + prop_value + "px;"
+		if prop_name == "height"
+			return "height:" + prop_value + "px;"
+		if prop_name == "backgroundColor" or prop_name == "bg"
+			return "background-color:" + prop_value + ";"
+		if prop_name == "color"
+			return "color:" + prop_value + ";"
+		if prop_name == "fontSize"
+			return "font-size:" + prop_value + "px;"
+		if prop_name == "fontWeight"
+			return "font-weight:" + prop_value + ";"
+		if prop_name == "borderRadius"
+			return "border-radius:" + prop_value + "px;"
+		if prop_name == "align"
+			return "align-items:" + prop_value + ";"
+		if prop_name == "justify"
+			return "justify-content:" + prop_value + ";"
+		return ""
+
+	string extract_button_text(string props_string)
+		string trimmed = props_string.trim()
+		if trimmed.indexOf("\"") != -1
+			integer startIdx = trimmed.indexOf("\"")
+			integer end = trimmed.indexOf("\"", startIdx + 1)
+			if end != -1
+				return trimmed.substring(startIdx, end + 1)
+		return "\"\""
+
+	string get_prop_value(list<string> props, string prop_name)
+		integer i = 0
+		while i < props.length()
+			string prop_json = props[i]
+			string name = extract_json_field(prop_json, "name")
+			if name == prop_name
+				return extract_json_field(prop_json, "value")
+			i = i + 1
+		return ""
+
+// ============================================================================
+// SCREEN COLLECTION + HYDRATION MANIFEST + LOAD HELPERS (verbatim from v1)
+// ============================================================================
+
+functions:
+	string collect_screens_from_html(string html)
+		string entries = ""
+		string remaining = html
+		integer safety = 0
+		while remaining.indexOf("<screen") != -1 and safety < 1000
+			safety = safety + 1
+			integer screen_start = remaining.indexOf("<screen")
+			integer screen_end = remaining.indexOf(">", screen_start)
+			if screen_end == -1
+				return entries
+			string screen_tag = remaining.substring(screen_start, screen_end + 1)
+			string name = extract_attr_value(screen_tag, "name")
+			string mode = extract_attr_value(screen_tag, "client")
+			if name.length() > 0
+				if mode.length() == 0
+					mode = "off"
+				entries = entries + name + "=" + mode + "\n"
+			remaining = remaining.substring(screen_end + 1, remaining.length())
+		return entries
+
+	string entries_to_screens_json(string entries)
+		string result = "{"
+		string seen = ""
+		boolean first = true
+		string lines = entries
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer eq_pos = line.indexOf("=")
+				if eq_pos != -1
+					string name = line.substring(0, eq_pos)
+					string mode = line.substring(eq_pos + 1, line.length())
+					string seen_key = "|" + name + "|"
+					if seen.indexOf(seen_key) == -1
+						seen = seen + seen_key
+						if not first
+							result = result + ","
+						first = false
+						result = result + "\"" + name + "\":\"" + mode + "\""
+			line_start = line_end + 1
+		result = result + "}"
+		return result
+
+	string build_hydration_manifest_module(string screens_json)
+		string module = "// Auto-generated hydration manifest (frame.ui)\n"
+		module = module + "functions:\n"
+		module = module + "\tstring _ui_hydration_manifest()\n"
+		module = module + "\t\treturn \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
+		return module
+
+	string build_load_helpers_module()
+		string m = "// Auto-generated frame.ui load() return normalization\n"
+		m = m + "functions:\n"
+		m = m + "\tstring _ui_normalize_load_return(any __r)\n"
+		m = m + "\t\tstring __s = json.encode(__r)\n"
+		m = m + "\t\tif __s.length() == 0\n"
+		m = m + "\t\t\treturn \"{}\"\n"
+		m = m + "\t\tstring __first = __s.substring(0, 1)\n"
+		m = m + "\t\tif __first == \"{\" or __first == \"[\"\n"
+		m = m + "\t\t\treturn _ui_promote_string_fields(__s)\n"
+		m = m + "\t\tif __s.length() >= 2 and __first == \"\\\"\"\n"
+		m = m + "\t\t\tstring __second = __s.substring(1, 2)\n"
+		m = m + "\t\t\tif __second == \"{\" or __second == \"[\"\n"
+		m = m + "\t\t\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
+		m = m + "\t\treturn __s\n"
+		m = m + "\n"
+		m = m + "\tstring _ui_unwrap_json_encoded_string(string __s)\n"
+		m = m + "\t\tif __s.length() < 2\n"
+		m = m + "\t\t\treturn __s\n"
+		m = m + "\t\tinteger __n = __s.length()\n"
+		m = m + "\t\tstring __body = __s.substring(1, __n - 1)\n"
+		m = m + "\t\tstring __result = \"\"\n"
+		m = m + "\t\tinteger __i = 0\n"
+		m = m + "\t\tinteger __m = __body.length()\n"
+		m = m + "\t\twhile __i < __m\n"
+		m = m + "\t\t\tstring __ch = __body.substring(__i, __i + 1)\n"
+		m = m + "\t\t\tif __ch == \"\\\\\" and __i + 1 < __m\n"
+		m = m + "\t\t\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
+		m = m + "\t\t\t\tif __nx == \"n\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\n\"\n"
+		m = m + "\t\t\t\telse if __nx == \"t\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\t\"\n"
+		m = m + "\t\t\t\telse if __nx == \"r\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\r\"\n"
+		m = m + "\t\t\t\telse if __nx == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\\"\"\n"
+		m = m + "\t\t\t\telse if __nx == \"/\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"/\"\n"
+		m = m + "\t\t\t\telse if __nx == \"\\\\\"\n"
+		m = m + "\t\t\t\t\t__result = __result + \"\\\\\"\n"
+		m = m + "\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t__result = __result + __ch + __nx\n"
+		m = m + "\t\t\t\t__i = __i + 2\n"
+		m = m + "\t\t\telse\n"
+		m = m + "\t\t\t\t__result = __result + __ch\n"
+		m = m + "\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\treturn __result\n"
+		m = m + "\n"
+		m = m + "\tstring _ui_promote_string_fields(string __input)\n"
+		m = m + "\t\tif __input.length() < 4\n"
+		m = m + "\t\t\treturn __input\n"
+		m = m + "\t\tstring __out = \"\"\n"
+		m = m + "\t\tinteger __i = 0\n"
+		m = m + "\t\tinteger __n = __input.length()\n"
+		m = m + "\t\tboolean __in_str = false\n"
+		m = m + "\t\tboolean __escape = false\n"
+		m = m + "\t\twhile __i < __n\n"
+		m = m + "\t\t\tstring __ch = __input.substring(__i, __i + 1)\n"
+		m = m + "\t\t\tif __in_str\n"
+		m = m + "\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\tif __escape\n"
+		m = m + "\t\t\t\t\t__escape = false\n"
+		m = m + "\t\t\t\telse if __ch == \"\\\\\"\n"
+		m = m + "\t\t\t\t\t__escape = true\n"
+		m = m + "\t\t\t\telse if __ch == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t__in_str = false\n"
+		m = m + "\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\t\telse\n"
+		m = m + "\t\t\t\tif __ch == \":\"\n"
+		m = m + "\t\t\t\t\tinteger __j = __i + 1\n"
+		m = m + "\t\t\t\t\tboolean __ws_keep = true\n"
+		m = m + "\t\t\t\t\twhile __ws_keep and __j < __n\n"
+		m = m + "\t\t\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
+		m = m + "\t\t\t\t\t\tif __ws_ch != \" \"\n"
+		m = m + "\t\t\t\t\t\t\t__ws_keep = false\n"
+		m = m + "\t\t\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t\t\t__j = __j + 1\n"
+		m = m + "\t\t\t\t\tboolean __did = false\n"
+		m = m + "\t\t\t\t\tboolean __qt_match = false\n"
+		m = m + "\t\t\t\t\tif __j + 1 < __n\n"
+		m = m + "\t\t\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
+		m = m + "\t\t\t\t\t\tif __qt_ch == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t\t\t__qt_match = true\n"
+		m = m + "\t\t\t\t\tif __qt_match\n"
+		m = m + "\t\t\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
+		m = m + "\t\t\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
+		m = m + "\t\t\t\t\t\t\tinteger __end = __j + 1\n"
+		m = m + "\t\t\t\t\t\t\tboolean __found = false\n"
+		m = m + "\t\t\t\t\t\t\twhile __end < __n and not __found\n"
+		m = m + "\t\t\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
+		m = m + "\t\t\t\t\t\t\t\tif __c == \"\\\\\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__end = __end + 2\n"
+		m = m + "\t\t\t\t\t\t\t\telse if __c == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__found = true\n"
+		m = m + "\t\t\t\t\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__end = __end + 1\n"
+		m = m + "\t\t\t\t\t\t\tif __found\n"
+		m = m + "\t\t\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
+		m = m + "\t\t\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
+		m = m + "\t\t\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
+		m = m + "\t\t\t\t\t\t\t\tboolean __ok = false\n"
+		m = m + "\t\t\t\t\t\t\t\tif __ulen >= 2\n"
+		m = m + "\t\t\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
+		m = m + "\t\t\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
+		m = m + "\t\t\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
+		m = m + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
+		m = m + "\t\t\t\t\t\t\t\tif __ok\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__i = __end + 1\n"
+		m = m + "\t\t\t\t\t\t\t\t\t__did = true\n"
+		m = m + "\t\t\t\t\tif not __did\n"
+		m = m + "\t\t\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\t\t\telse if __ch == \"\\\"\"\n"
+		m = m + "\t\t\t\t\t__in_str = true\n"
+		m = m + "\t\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\t\t\telse\n"
+		m = m + "\t\t\t\t\t__out = __out + __ch\n"
+		m = m + "\t\t\t\t\t__i = __i + 1\n"
+		m = m + "\t\treturn __out\n"
+		return m
+
+// ============================================================================
+// ASSEMBLE + SUPPORTING FUNCTIONS (verbatim from v1)
+// ============================================================================
+
+functions:
+	// Build the Clean source that assemble_typed emits. Concatenates the auto-generated
+	// route module, component-render module, hydration manifest, load helpers, and
+	// diagnostics module into a single source string.
+	string assemble_typed_source(string input_json)
+		string envelope = assemble(input_json)
+		// envelope has shape {"injected_sources":[{...},{...}],"transformed_sources":[...]}
+		// Extract each injected_source content and concatenate. transformed_sources
+		// are per-file rewrites — under v3 typed emission we cannot rewrite existing
+		// sources from assemble, only emit new module content. Transformed content
+		// is dropped in favor of the raw source (documented behavior change).
+		string injected_arr = extract_json_field(envelope, "injected_sources")
+		list<string> objs = json_to_object_list(injected_arr)
+		string result = ""
+		integer oi = 0
+		while oi < objs.length()
+			string content = extract_json_field(objs[oi], "content")
+			if content.length() > 0
+				result = result + content + "\n"
+			oi = oi + 1
+		return result
+
+	string assemble(string input_json)
+		boolean has_server = input_json.indexOf("\"has_frame_server\":true") != -1
+		list<string> source_files = parse_source_files(input_json)
+		string __routes_guard_table = ""
+		integer __gsi = 0
+		while __gsi < source_files.length()
+			string __gsf = source_files[__gsi]
+			string __gsc = extract_json_field(__gsf, "content")
+			__routes_guard_table = scan_routes_guards(__gsc, __routes_guard_table)
+			__gsi = __gsi + 1
+		string transformed_json = ""
+		string route_fns = ""
+		string route_registrations = ""
+		boolean first_transformed = true
+		string hydration_entries = ""
+		boolean has_any_load = false
+		integer page_candidates = 0
+		integer pages_with_markers = 0
+		integer pages_emitted = 0
+		integer html_candidates = 0
+		integer html_with_screen = 0
+		integer fi = 0
+		while fi < source_files.length()
+			string file_obj = source_files[fi]
+			boolean candidate = file_obj.indexOf("pages/") != -1 or file_obj.indexOf(".html") != -1
+			if candidate
+				string file_path = extract_json_field(file_obj, "path")
+				boolean in_pages = file_path.indexOf("pages/") != -1
+				boolean is_html = file_path.endsWith(".html")
+				if in_pages
+					page_candidates = page_candidates + 1
+				if is_html
+					html_candidates = html_candidates + 1
+				boolean raw_has_load = false
+				boolean raw_has_guard = false
+				boolean raw_has_screen = false
+				if in_pages
+					raw_has_load = file_obj.indexOf("any load(") != -1
+					raw_has_guard = file_obj.indexOf("any guard(") != -1
+				if is_html
+					raw_has_screen = file_obj.indexOf("<screen") != -1
+				if in_pages and (raw_has_load or raw_has_guard)
+					pages_with_markers = pages_with_markers + 1
+				if is_html and raw_has_screen
+					html_with_screen = html_with_screen + 1
+				if (in_pages or is_html) and (raw_has_load or raw_has_guard or raw_has_screen)
+					string file_content = extract_json_field(file_obj, "content")
+					boolean has_load = raw_has_load
+					boolean has_guard = raw_has_guard
+					if is_html and raw_has_screen
+						hydration_entries = hydration_entries + collect_screens_from_html(file_content)
+					if in_pages and (has_load or has_guard)
+						string module_name = derive_module_name(file_path)
+						string new_content = file_content
+						if has_load
+							has_any_load = true
+							new_content = new_content.replace("any load(Request ", "any " + module_name + "_load_impl(any ")
+							new_content = new_content.replace("any load(", "any " + module_name + "_load_impl(")
+							new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn _ui_normalize_load_return(" + module_name + "_load_impl(__p))\n"
+						if has_guard
+							new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
+							new_content = new_content.replace("any guard(", "any " + module_name + "_guard(")
+						if first_transformed == false
+							transformed_json = transformed_json + ","
+						first_transformed = false
+						transformed_json = transformed_json + "{\"path\":\"" + escape_json_string(file_path) + "\",\"content\":\"" + escape_json_string(new_content) + "\"}"
+						if has_server
+							string url = derive_url_path(file_path)
+							string html_path = derive_html_path(file_path)
+							route_fns = route_fns + "\tstring " + module_name + "_render()\n"
+							string __routes_guard_roles = lookup_routes_guard(url, __routes_guard_table)
+							if __routes_guard_roles.length() > 0
+								route_fns = route_fns + emit_routes_guard_check(__routes_guard_roles)
+							if has_guard
+								route_fns = route_fns + "\t\tany __g = " + module_name + "_guard(null)\n"
+								route_fns = route_fns + "\t\tif __g != null\n"
+								route_fns = route_fns + "\t\t\treturn __g\n"
+							if has_load
+								route_fns = route_fns + "\t\tstring __d = " + module_name + "_load(null)\n"
+								route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", __d)\n\n"
+							else
+								route_fns = route_fns + "\t\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n\n"
+							route_registrations = route_registrations + "\t_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
+							pages_emitted = pages_emitted + 1
+			fi = fi + 1
+		string injected_json = ""
+		boolean first_injected = true
+		if has_server and route_fns.length() > 0
+			string module_content = "// Auto-generated page routes\nstart:\n" + route_registrations + "\nfunctions:\n" + route_fns
+			injected_json = injected_json + "{\"virtual_path\":\"__page_routes_generated.cln\",\"content\":\"" + escape_json_string(module_content) + "\"}"
+			first_injected = false
+		if hydration_entries.length() > 0
+			string screens_json = entries_to_screens_json(hydration_entries)
+			string manifest_module = build_hydration_manifest_module(screens_json)
+			if not first_injected
+				injected_json = injected_json + ","
+			injected_json = injected_json + "{\"virtual_path\":\"__hydration_manifest.cln\",\"content\":\"" + escape_json_string(manifest_module) + "\"}"
+			first_injected = false
+		if has_any_load
+			string load_helpers_module = build_load_helpers_module()
+			if not first_injected
+				injected_json = injected_json + ","
+			injected_json = injected_json + "{\"virtual_path\":\"__ui_load_helpers.cln\",\"content\":\"" + escape_json_string(load_helpers_module) + "\"}"
+			first_injected = false
+		string total_files_str = source_files.length().toString()
+		string pc_str = page_candidates.toString()
+		string pm_str = pages_with_markers.toString()
+		string pe_str = pages_emitted.toString()
+		string hc_str = html_candidates.toString()
+		string hs_str = html_with_screen.toString()
+		string has_server_str = "false"
+		if has_server
+			has_server_str = "true"
+		string diag_lines = "// __frame_ui_diagnostics__\n"
+		diag_lines = diag_lines + "// total_files=" + total_files_str + "\n"
+		diag_lines = diag_lines + "// has_server=" + has_server_str + "\n"
+		diag_lines = diag_lines + "// page_candidates=" + pc_str + "\n"
+		diag_lines = diag_lines + "// pages_with_markers=" + pm_str + "\n"
+		diag_lines = diag_lines + "// pages_emitted=" + pe_str + "\n"
+		diag_lines = diag_lines + "// html_candidates=" + hc_str + "\n"
+		diag_lines = diag_lines + "// html_with_screen=" + hs_str + "\n"
+		string diag_module = diag_lines + "\nfunctions:\n\tstring _frame_ui_assemble_diagnostics()\n"
+		diag_module = diag_module + "\t\treturn \"frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
+		if not first_injected
+			injected_json = injected_json + ","
+		injected_json = injected_json + "{\"virtual_path\":\"__frame_ui_diagnostics.cln\",\"content\":\"" + escape_json_string(diag_module) + "\"}"
+		first_injected = false
+		return "{\"injected_sources\":[" + injected_json + "],\"transformed_sources\":[" + transformed_json + "]}"
+
+	list<string> parse_source_files(string input_json)
+		list<string> result = []
+		integer sf_start = input_json.indexOf("\"source_files\"")
+		if sf_start == -1
+			return result
+		integer arr_start = input_json.indexOf("[", sf_start)
+		if arr_start == -1
+			return result
+		integer pos = arr_start + 1
+		integer json_len = input_json.length()
+		integer outer_safety = 0
+		while pos < json_len and outer_safety < 10000
+			outer_safety = outer_safety + 1
+			integer ch_code = input_json.charCodeAt(pos)
+			if ch_code == 32 or ch_code == 10 or ch_code == 13 or ch_code == 9
+				pos = pos + 1
+			else if ch_code == 93
+				break
+			else if ch_code == 44
+				pos = pos + 1
+			else if ch_code == 123
+				integer obj_start = pos
+				integer depth = 1
+				pos = pos + 1
+				boolean in_str = false
+				boolean escape_next = false
+				while pos < json_len and depth > 0
+					integer cc = input_json.charCodeAt(pos)
+					if escape_next
+						escape_next = false
+						pos = pos + 1
+					else if in_str
+						if cc == 92
+							escape_next = true
+							pos = pos + 1
+						else if cc == 34
+							in_str = false
+							pos = pos + 1
+						else
+							pos = pos + 1
+					else
+						if cc == 34
+							in_str = true
+							pos = pos + 1
+						else if cc == 123
+							depth = depth + 1
+							pos = pos + 1
+						else if cc == 125
+							depth = depth - 1
+							pos = pos + 1
+						else
+							pos = pos + 1
+				string obj = input_json.substring(obj_start, pos)
+				result.push(obj)
+			else
+				pos = pos + 1
+		return result
+
+	string derive_module_name(string file_path)
+		integer pages_pos = file_path.indexOf("pages/")
+		string rel = file_path
+		if pages_pos != -1
+			rel = file_path.substring(pages_pos + 6, file_path.length())
+		integer dot_pos = rel.lastIndexOf(".")
+		if dot_pos != -1
+			rel = rel.substring(0, dot_pos)
+		string name = rel.replace("/", "_").replace("[", "").replace("]", "").replace("-", "_").replace(".", "_")
+		return "pages_" + name
+
+	string derive_url_path(string file_path)
+		integer pages_pos = file_path.indexOf("pages/")
+		string rel = file_path
+		if pages_pos != -1
+			rel = file_path.substring(pages_pos + 6, file_path.length())
+		integer dot_pos = rel.lastIndexOf(".")
+		if dot_pos != -1
+			rel = rel.substring(0, dot_pos)
+		if rel == "index"
+			return "/"
+		string url = rel.replace("[", ":").replace("]", "")
+		if url.endsWith("/index")
+			url = url.substring(0, url.length() - 6)
+		if url.length() == 0
+			return "/"
+		return "/" + url
+
+	string derive_html_path(string file_path)
+		integer pages_pos = file_path.indexOf("pages/")
+		string rel = file_path
+		if pages_pos != -1
+			rel = file_path.substring(pages_pos + 6, file_path.length())
+		if rel.endsWith(".cln")
+			rel = rel.substring(0, rel.length() - 4) + ".html"
+		return "app/ui/web/pages/" + rel
+
+	string scan_routes_guards(string content, string accumulator)
+		string result = accumulator
+		integer search_from = 0
+		integer outer_safety = 0
+		while outer_safety < 50 and search_from < content.length()
+			outer_safety = outer_safety + 1
+			integer rp = content.indexOf("routes:", search_from)
+			if rp == -1
+				return result
+			boolean at_line_head = false
+			if rp == 0
+				at_line_head = true
+			else
+				string prev = content.substring(rp - 1, rp)
+				if prev == "\n"
+					at_line_head = true
+			if not at_line_head
+				search_from = rp + 7
+			else
+				integer body_start = content.indexOf("\n", rp)
+				if body_start == -1
+					return result
+				body_start = body_start + 1
+				integer cursor = body_start
+				integer inner_safety = 0
+				boolean keep_inner = true
+				while keep_inner and inner_safety < 200 and cursor < content.length()
+					inner_safety = inner_safety + 1
+					integer nl = content.indexOf("\n", cursor)
+					string line = ""
+					integer next_cursor = 0
+					if nl == -1
+						line = content.substring(cursor, content.length())
+						next_cursor = content.length()
+					else
+						line = content.substring(cursor, nl)
+						next_cursor = nl + 1
+					cursor = next_cursor
+					if line.trim().length() == 0
+						inner_safety = inner_safety + 0
+					else
+						if not line.startsWith("\t")
+							keep_inner = false
+						else
+							string ltrim = line.trim()
+							if ltrim.startsWith("guard:")
+								string g_after = ltrim.substring(6, ltrim.length()).trim()
+								integer gq1 = g_after.indexOf("\"")
+								if gq1 != -1
+									integer gq2 = g_after.indexOf("\"", gq1 + 1)
+									if gq2 != -1
+										string g_pattern = g_after.substring(gq1 + 1, gq2)
+										string g_rest = g_after.substring(gq2 + 1, g_after.length()).trim()
+										integer g_ob = g_rest.indexOf("[")
+										integer g_cb = g_rest.indexOf("]")
+										if g_ob != -1 and g_cb != -1
+											string g_roles = g_rest.substring(g_ob + 1, g_cb).replace(" ", "")
+											if g_pattern.length() > 0 and g_roles.length() > 0
+												string g_record = g_pattern + "|" + g_roles
+												if result.length() == 0
+													result = g_record
+												else
+													result = result + ";" + g_record
+				search_from = cursor
+		return result
+
+	boolean path_matches_pattern(string path, string pattern)
+		string rp = path
+		if rp.startsWith("/")
+			rp = rp.substring(1, rp.length())
+		string rpat = pattern
+		if rpat.startsWith("/")
+			rpat = rpat.substring(1, rpat.length())
+		integer safety = 0
+		while safety < 50
+			safety = safety + 1
+			if rpat.length() == 0
+				return rp.length() == 0
+			integer p_slash = rpat.indexOf("/")
+			string p_seg = ""
+			if p_slash == -1
+				p_seg = rpat
+				rpat = ""
+			else
+				p_seg = rpat.substring(0, p_slash)
+				rpat = rpat.substring(p_slash + 1, rpat.length())
+			if p_seg == "**"
+				return true
+			if rp.length() == 0
+				return false
+			integer t_slash = rp.indexOf("/")
+			string t_seg = ""
+			if t_slash == -1
+				t_seg = rp
+				rp = ""
+			else
+				t_seg = rp.substring(0, t_slash)
+				rp = rp.substring(t_slash + 1, rp.length())
+			if p_seg == "*"
+				safety = safety + 0
+			else
+				if p_seg != t_seg
+					return false
+		return false
+
+	string lookup_routes_guard(string url, string table)
+		if table.length() == 0
+			return ""
+		string remaining = table
+		integer safety = 0
+		while safety < 100 and remaining.length() > 0
+			safety = safety + 1
+			integer semi = remaining.indexOf(";")
+			string record = ""
+			if semi == -1
+				record = remaining
+				remaining = ""
+			else
+				record = remaining.substring(0, semi)
+				remaining = remaining.substring(semi + 1, remaining.length())
+			integer pipe = record.indexOf("|")
+			if pipe != -1
+				string g_pattern = record.substring(0, pipe)
+				string g_roles = record.substring(pipe + 1, record.length())
+				if path_matches_pattern(url, g_pattern)
+					return g_roles
+		return ""
+
+	string emit_routes_guard_check(string roles)
+		string result = "\t\tboolean __routes_auth_ok = false\n"
+		string mr = roles
+		integer safety = 0
+		while safety < 20 and mr.length() > 0
+			safety = safety + 1
+			integer comma = mr.indexOf(",")
+			string role = ""
+			if comma == -1
+				role = mr.trim()
+				mr = ""
+			else
+				role = mr.substring(0, comma).trim()
+				mr = mr.substring(comma + 1, mr.length())
+			if role.length() > 0
+				result = result + "\t\tif _auth_require_role(\"" + role + "\") == 1\n"
+				result = result + "\t\t\t__routes_auth_ok = true\n"
+		result = result + "\t\tif not __routes_auth_ok\n"
+		result = result + "\t\t\treturn unauthorized()\n"
+		return result
