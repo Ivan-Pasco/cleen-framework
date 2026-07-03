@@ -72,6 +72,14 @@ external:
 	integer _batch_arrayPush(integer ctx, integer array_handle, integer item_handle)
 	integer _batch_stmtSeq(integer ctx, string stmts_lp)
 	integer _batch_args(integer ctx, string exprs_lp)
+	// ---- Function / spec batch (§3.12, §3.14) ----
+	// Sub-cycle 2 adds these because event handlers and _frame_callback are emitted
+	// as batch-spec functions (one _batch_func per handler, wrapped by _batch_spec
+	// and shipped through _emit_helpers_batch — same shape as frame.mcp v2.0.0).
+	integer _batch_param(integer ctx, string name, string type_name)
+	integer _batch_func(integer ctx, string name, integer params_array_handle, string return_type, integer body_array_handle)
+	integer _batch_spec(integer ctx, integer functions_array_handle)
+	integer _emit_helpers_batch(integer ctx, integer spec_handle_or_lp, integer flags)
 
 // ============================================================================
 // V3 LIFECYCLE SLOTS (SKELETON — Sub-cycle 1)
@@ -279,18 +287,934 @@ functions:
 		return _emit_statement_into_start(ctx, _batch_stmtCall(ctx, callee, arr))
 
 // ============================================================================
-// END OF SUB-CYCLE 1 SKELETON
+// END OF SUB-CYCLE 1 SKELETON — SUB-CYCLE 2 CONTENT BEGINS BELOW
 // ============================================================================
-// Sub-cycle 2 begins immediately below this line and adds:
-//   - expand_canvas_scene (~920–1020 LOC, per v3 §5.1 item 7)
-//   - 11 event-handler emitters (~340–380 LOC, per v3 §5.1 item 9)
+// Sub-cycle 2 adds (this section, ~1400 LOC):
+//   - expand_canvas_scene: typed-emission scene template
+//   - 11 event handler emitters: expand_on_frame, expand_on_pointer_{down,move,up},
+//     expand_on_key_{down,up}, expand_on_exit, expand_on_pause, expand_on_resume,
+//     expand_draw, expand_init
+//   - 12 scene type stubs via _emit_class_full (Canvas, Sprite, Sound, Music,
+//     Image, Font, Tween, Timeline, AnimState, Particles, Gradient, Path)
+//   - Partial dispatcher wire-up in expand_block_typed (canvasScene + 11 handlers)
 //
-// Sub-cycle 3 adds:
-//   - expand_canvas_command (~700–750 LOC, 32 draw commands)
-//   - multi-instance expanders, camera/gradient/path/customEase
-//   - body processors, state loops, scene_expand_lines / scene_expand_cmd
-//   - scan_multi_instance
-//   - preserved DSL parsers, attribute helpers, validate_canvas_scene
-//     (~1050 + 355 + 240 LOC, moved forward as-is from main.v1.cln)
+// Sub-cycle 3 will add:
+//   - expand_canvas_command (32 draw commands used outside scene bodies)
+//   - scene_expand_cmd (14 DSL body commands inside scene draw sections)
+//   - 8 multi-instance expanders (expand_tween, expand_timeline, ...)
+//   - Remaining lifecycle slots, preserved DSL parsers, attribute helpers,
+//     validate_canvas_scene (moved forward verbatim from main.v1.cln)
+//   - Integration test + comita.
 //
 // See reports/2026-07-03-session-3-frame-canvas-deferred-v4.md §5.1.
+
+// ============================================================================
+// STUB HELPERS (parsers moved verbatim in Sub-cycle 3)
+// ============================================================================
+// Sub-cycle 2 emits calls that will be routed to Sub-cycle 3's preserved v1
+// DSL parsers. To keep this file parse-clean under `cln check`, we declare
+// minimal signature-matching stubs here that return empty defaults. Sub-cycle
+// 3 will DELETE these stubs and copy the real bodies from main.v1.cln.
+//
+// STUB TAG: every function below is marked with the STUB3 comment — Sub-cycle
+// 3's first task is to grep STUB3 and replace each function's body verbatim
+// from main.v1.cln at the noted line range.
+
+functions:
+	// STUB3 (main.v1.cln:2170) — attribute lookup with default.
+	string get_attr(string attrs, string key, string default_value)
+		return default_value
+
+	// STUB3 (main.v1.cln:1413) — extract single-instance scene sub-block body.
+	string extract_scene_subblock(string body, string kind)
+		return ""
+
+	// STUB3 (main.v1.cln:1450) — extract sub-block attribute with default.
+	string extract_scene_subblock_attr(string body, string kind, string key, string default_value)
+		return default_value
+
+	// STUB3 (main.v1.cln:2321) — scan multi-instance definitions of `kind`.
+	string scan_multi_instance(string body, string kind, integer kind_id)
+		return ""
+
+	// STUB3 (main.v1.cln:1032) — per-asset registration call emission.
+	string process_assets_body(string body)
+		return ""
+
+	// STUB3 (main.v1.cln:1067) — per-layer registration call emission.
+	string process_layers_body(string body)
+		return ""
+
+	// STUB3 (main.v1.cln:521) — camera config expander.
+	string expand_camera(string attrs, string body)
+		return ""
+
+	// STUB3 (main.v1.cln:1907) — scene state variable "load" sequence.
+	string scene_state_load(string state_body)
+		return ""
+
+	// STUB3 (main.v1.cln:1939) — scene state variable "save" sequence.
+	string scene_state_save(string state_body)
+		return ""
+
+	// STUB3 (main.v1.cln:1971) — scene state variable "init" sequence.
+	string scene_state_init(string state_body)
+		return ""
+
+	// STUB3 (main.v1.cln:1996) — line-oriented body expander (dispatches to
+	// scene_expand_cmd for canvas.* lines). Sub-cycle 3 wires the full body.
+	string scene_expand_lines(string body)
+		return body
+
+	// STUB3 (main.v1.cln:2034) — line-oriented start:-block expander.
+	string scene_expand_lines_start(string body)
+		return body
+
+	// STUB3 (main.v1.cln:2181) — parse "px,py"-style param string; index 0 or 1.
+	string scene_param_part(string params, integer idx)
+		if idx == 0
+			return params
+		return params
+
+	// STUB3 (main.v1.cln:2299) — prepend "\t" to every non-empty line.
+	string indent_lines(string s)
+		return s
+
+	// STUB3 (main.v1.cln:803) — canvasScene: pre-emission validation.
+	string validate_canvas_scene(string attrs, string body)
+		return ""
+
+// ============================================================================
+// SCENE TYPE STUBS (12 classes emitted per scene)
+// ============================================================================
+// v3 §5 recipe requires the plugin to emit 12 canvas type stubs per canvasScene:
+// block so user code can reference them (Canvas, Sprite, Sound, Music, Image,
+// Font, Tween, Timeline, AnimState, Particles, Gradient, Path). Under v1 these
+// were slated as a "follow-up cycle" (see main.v1.cln:12-17 lifecycle comment);
+// v3 typed emission delivers them.
+//
+// Each stub is a minimal empty-field class; the actual canvas API methods live
+// as bridge-imported host functions (_canvas_*, _audio_*, _image_*), not on
+// these types. The stubs give the type-checker something to bind against when
+// user code has `Sprite mySprite = _sprite_load(...)`.
+//
+// _emit_class_full accepts either a batch_spec_handle OR an LP-string JSON spec
+// per §3.13 (widened signature). We use the LP-string path here because the
+// spec is 100% plugin-authored template data (class name is the only variable),
+// keeping the emitter to 1-liner-per-class shape.
+//
+// Sticky-error at helper boundary; caller emits diagnostic on trip.
+
+functions:
+	integer emit_scene_type_stub(integer ctx, string class_name)
+		string spec = "{\"name\":\"" + class_name + "\",\"parent\":null,\"fields\":[],\"methods\":[]}"
+		integer spec_ptr = _batch_stringLit(ctx, spec)
+		// _emit_class_full accepts either handle or LP; we pass the LP-string via
+		// a stringLit-derived handle. Compiler side dispatches on tag bit.
+		return _emit_class_full(ctx, spec_ptr, 1)
+
+	integer emit_all_scene_type_stubs(integer ctx)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E100", "frame.canvas emit_all_scene_type_stubs failed")
+		emit_scene_type_stub(ctx, "Canvas")
+		emit_scene_type_stub(ctx, "Sprite")
+		emit_scene_type_stub(ctx, "Sound")
+		emit_scene_type_stub(ctx, "Music")
+		emit_scene_type_stub(ctx, "Image")
+		emit_scene_type_stub(ctx, "Font")
+		emit_scene_type_stub(ctx, "Tween")
+		emit_scene_type_stub(ctx, "Timeline")
+		emit_scene_type_stub(ctx, "AnimState")
+		emit_scene_type_stub(ctx, "Particles")
+		emit_scene_type_stub(ctx, "Gradient")
+		emit_scene_type_stub(ctx, "Path")
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E100", "emit_all_scene_type_stubs sticky-error tripped")
+		return 0
+
+// ============================================================================
+// EVENT HANDLER EMITTERS (11)
+// ============================================================================
+// Each event handler compiles to a batched function:
+//   void _<callback>(integer __cv[, params...])
+//       <prelude bridge call>
+//       [param variable declarations from _canvas_event_*()]
+//       [user-authored body via _emit_stmt_from_source]
+//
+// The prelude sequence for each handler is:
+//   1. side-effect bridge call (e.g. _canvas_request_frame(__cv))
+//   2. per-param decl statement(s) (assigned from _canvas_event_*())
+//   3. user body statement (pass-through via §3.11)
+//
+// Am 7 (batch.stmtSeq) collapses steps 1+2 when they're all plugin-authored;
+// step 3 is a §3.11 handle appended into the same array.
+//
+// The emitter for each handler is standalone — it does NOT need extraction of
+// canvas_id from attrs, because in v1 the handler was called via
+// _canvas_on_<event>(canvas_id) as a top-level side-effect; in v3 the handler
+// function receives __cv as a parameter and the top-level start: block wires
+// it via _canvas_on_<event>(__cv). This is a shape shift from v1 (top-level
+// side-effect) to v3 (parameterised function). The typed-emission path is
+// cleaner because there is no ambient canvas_id to smuggle across scopes.
+
+// Utility factories used by every event handler emitter. Each returns a
+// pushable handle — sticky-error propagates through them.
+
+functions:
+	// Build a params list with one integer __cv param.
+	integer params_cv(integer ctx)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, _batch_param(ctx, "__cv", "integer"))
+		return a
+
+	// Build a params list [__cv, name: type].
+	integer params_cv_1(integer ctx, string name, string type_name)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, _batch_param(ctx, "__cv", "integer"))
+		_batch_arrayPush(ctx, a, _batch_param(ctx, name, type_name))
+		return a
+
+	// Build a params list [__cv, name1: t1, name2: t2].
+	integer params_cv_2(integer ctx, string name1, string type1, string name2, string type2)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, _batch_param(ctx, "__cv", "integer"))
+		_batch_arrayPush(ctx, a, _batch_param(ctx, name1, type1))
+		_batch_arrayPush(ctx, a, _batch_param(ctx, name2, type2))
+		return a
+
+	// Emit one batched function via _batch_spec + _emit_helpers_batch.
+	integer emit_one_fn(integer ctx, string name, integer params_h, string return_type, integer body_arr_h)
+		integer fn_h = _batch_func(ctx, name, params_h, return_type, body_arr_h)
+		integer fns_arr = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, fns_arr, fn_h)
+		integer spec = _batch_spec(ctx, fns_arr)
+		_emit_helpers_batch(ctx, spec, 2)
+		return 0
+
+	// Pass a user-authored Clean statement body through _emit_stmt_from_source
+	// and append to body_arr. Empty bodies are a no-op (nothing pushed).
+	// origin_offset is the byte offset of body_source in the plugin's original
+	// body_lp input — used for diagnostic span translation (§3.11).
+	integer append_user_body(integer ctx, integer body_arr, string body_source, integer origin_offset, string diag_code, string diag_ctx)
+		if body_source.length() == 0
+			return 0
+		integer stmt = _emit_stmt_from_source(ctx, body_source, origin_offset)
+		if stmt == 0
+			_emit_error(ctx, 2, diag_code, "syntax error in " + diag_ctx + " body", "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
+			return 1
+		_batch_arrayPush(ctx, body_arr, stmt)
+		return 0
+
+// ---- expand_on_frame ----
+// Emits: void _on_frame(integer __cv, number dt)
+//            number dt = _canvas_get_delta_time()
+//            <user body>
+//            integer __rfr = _canvas_request_frame(__cv)
+
+functions:
+	integer expand_on_frame(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E200", "frame.canvas expand_on_frame failed")
+		string param = get_attr(attrs_json, "param", "dt")
+
+		integer body_arr = _batch_arrayNew(ctx)
+		// number <param> = _canvas_get_delta_time()
+		integer dt_expr = call0(ctx, "_canvas_get_delta_time")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, param, dt_expr))
+		// user body pass-through
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E201", "onFrame")
+		// integer __rfr = _canvas_request_frame(__cv)
+		integer rfr_expr = call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__rfr", rfr_expr))
+
+		integer params_h = params_cv_1(ctx, param, "number")
+		emit_one_fn(ctx, "_on_frame", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E200", "expand_on_frame sticky-error tripped")
+		return 0
+
+// ---- expand_on_pointer_down ----
+// void _on_pointer_down(integer __cv, number <px>, number <py>)
+//     number <px> = _canvas_event_x()
+//     number <py> = _canvas_event_y()
+//     <user body>
+
+functions:
+	integer expand_on_pointer_down(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E210", "frame.canvas expand_on_pointer_down failed")
+		string params_str = get_attr(attrs_json, "param", "x,y")
+		string x_var = scene_param_part(params_str, 0)
+		string y_var = scene_param_part(params_str, 1)
+
+		integer body_arr = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, x_var, call0(ctx, "_canvas_event_x")))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, y_var, call0(ctx, "_canvas_event_y")))
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E211", "onPointerDown")
+
+		integer params_h = params_cv_2(ctx, x_var, "number", y_var, "number")
+		emit_one_fn(ctx, "_on_pointer_down", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E210", "expand_on_pointer_down sticky-error tripped")
+		return 0
+
+// ---- expand_on_pointer_move ----
+
+functions:
+	integer expand_on_pointer_move(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E220", "frame.canvas expand_on_pointer_move failed")
+		string params_str = get_attr(attrs_json, "param", "x,y")
+		string x_var = scene_param_part(params_str, 0)
+		string y_var = scene_param_part(params_str, 1)
+
+		integer body_arr = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, x_var, call0(ctx, "_canvas_event_x")))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, y_var, call0(ctx, "_canvas_event_y")))
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E221", "onPointerMove")
+
+		integer params_h = params_cv_2(ctx, x_var, "number", y_var, "number")
+		emit_one_fn(ctx, "_on_pointer_move", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E220", "expand_on_pointer_move sticky-error tripped")
+		return 0
+
+// ---- expand_on_pointer_up ----
+
+functions:
+	integer expand_on_pointer_up(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E230", "frame.canvas expand_on_pointer_up failed")
+		string params_str = get_attr(attrs_json, "param", "x,y")
+		string x_var = scene_param_part(params_str, 0)
+		string y_var = scene_param_part(params_str, 1)
+
+		integer body_arr = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, x_var, call0(ctx, "_canvas_event_x")))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, y_var, call0(ctx, "_canvas_event_y")))
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E231", "onPointerUp")
+
+		integer params_h = params_cv_2(ctx, x_var, "number", y_var, "number")
+		emit_one_fn(ctx, "_on_pointer_up", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E230", "expand_on_pointer_up sticky-error tripped")
+		return 0
+
+// ---- expand_on_key_down ----
+// void _on_key_down(integer __cv, string <key>)
+//     string <key> = _canvas_event_key()
+//     <user body>
+
+functions:
+	integer expand_on_key_down(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E240", "frame.canvas expand_on_key_down failed")
+		string params_str = get_attr(attrs_json, "param", "key")
+		string key_var = scene_param_part(params_str, 0)
+
+		integer body_arr = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, key_var, call0(ctx, "_canvas_event_key")))
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E241", "onKeyDown")
+
+		integer params_h = params_cv_1(ctx, key_var, "string")
+		emit_one_fn(ctx, "_on_key_down", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E240", "expand_on_key_down sticky-error tripped")
+		return 0
+
+// ---- expand_on_key_up ----
+
+functions:
+	integer expand_on_key_up(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E250", "frame.canvas expand_on_key_up failed")
+		string params_str = get_attr(attrs_json, "param", "key")
+		string key_var = scene_param_part(params_str, 0)
+
+		integer body_arr = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, key_var, call0(ctx, "_canvas_event_key")))
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E251", "onKeyUp")
+
+		integer params_h = params_cv_1(ctx, key_var, "string")
+		emit_one_fn(ctx, "_on_key_up", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E250", "expand_on_key_up sticky-error tripped")
+		return 0
+
+// ---- expand_on_exit ----
+// void _on_exit(integer __cv)
+//     <user body>
+
+functions:
+	integer expand_on_exit(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E260", "frame.canvas expand_on_exit failed")
+
+		integer body_arr = _batch_arrayNew(ctx)
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E261", "onExit")
+
+		integer params_h = params_cv(ctx)
+		emit_one_fn(ctx, "_on_exit", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E260", "expand_on_exit sticky-error tripped")
+		return 0
+
+// ---- expand_on_pause ----
+
+functions:
+	integer expand_on_pause(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E270", "frame.canvas expand_on_pause failed")
+
+		integer body_arr = _batch_arrayNew(ctx)
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E271", "onPause")
+
+		integer params_h = params_cv(ctx)
+		emit_one_fn(ctx, "_on_pause", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E270", "expand_on_pause sticky-error tripped")
+		return 0
+
+// ---- expand_on_resume ----
+
+functions:
+	integer expand_on_resume(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E280", "frame.canvas expand_on_resume failed")
+
+		integer body_arr = _batch_arrayNew(ctx)
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E281", "onResume")
+
+		integer params_h = params_cv(ctx)
+		emit_one_fn(ctx, "_on_resume", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E280", "expand_on_resume sticky-error tripped")
+		return 0
+
+// ---- expand_draw ----
+// Emits: void _draw(integer __cv)
+//            <user body — sequence of canvas.<op>: calls>
+
+functions:
+	integer expand_draw(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E290", "frame.canvas expand_draw failed")
+
+		integer body_arr = _batch_arrayNew(ctx)
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E291", "draw")
+
+		integer params_h = params_cv(ctx)
+		emit_one_fn(ctx, "_draw", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E290", "expand_draw sticky-error tripped")
+		return 0
+
+// ---- expand_init ----
+// Standalone init: block outside canvasScene: — emits a `void _init(integer __cv)`
+// function with the user body verbatim. Inside a canvasScene: the init body is
+// inlined into the start: block by expand_canvas_scene (not routed here).
+
+functions:
+	integer expand_init(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E300", "frame.canvas expand_init failed")
+
+		integer body_arr = _batch_arrayNew(ctx)
+		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E301", "init")
+
+		integer params_h = params_cv(ctx)
+		emit_one_fn(ctx, "_init", params_h, "void", body_arr)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E300", "expand_init sticky-error tripped")
+		return 0
+
+// ============================================================================
+// expand_canvas_scene — THE WHOLE-SCENE TEMPLATE
+// ============================================================================
+// v1 line range: 121-307 (187 LOC).
+// v3 typed-emission shape:
+//
+//   1. Parse attrs: width, height, id, fps.
+//   2. Extract all single-instance sub-blocks (state, init, onFrame, draw,
+//      onPointer{Down,Move,Up}, onKey{Down,Up}, onExit, onPause, onResume,
+//      assets, layers, camera).
+//   3. Scan multi-instance defs (tween, timeline, animSprite, animState,
+//      particles, path, gradient, customEase).
+//   4. Emit 12 scene type stubs via emit_all_scene_type_stubs.
+//   5. Emit _frame_callback function (always).
+//   6. Emit each optional event handler function (only if declared).
+//   7. Emit start: block statements (canvas init, fps set, all registrations,
+//      state init, user init, first frame request).
+//
+// The scene sub-block bodies are processed by scene_expand_lines() (Sub-cycle 3
+// stub returns body verbatim) then passed through _emit_stmt_from_source. Under
+// full Sub-cycle 3 wire-up, scene_expand_lines routes canvas.<op> lines through
+// scene_expand_cmd and passes other Clean statements through untouched — the
+// resulting string is still one Clean statement block that _emit_stmt_from_source
+// parses as a whole.
+
+functions:
+	// Helper: emit a single scene sub-block handler function only if the body
+	// is non-empty. Encapsulates the "if declared" test and delegation.
+	// Returns 1 on syntax error in the user body, 0 otherwise.
+	integer emit_scene_handler_if_present(integer ctx, string fn_name, integer params_h, string body_text, string diag_code, string diag_ctx)
+		if body_text.trim().length() == 0
+			return 0
+		integer body_arr = _batch_arrayNew(ctx)
+		integer err = append_user_body(ctx, body_arr, body_text, 0, diag_code, diag_ctx)
+		if err != 0
+			return err
+		emit_one_fn(ctx, fn_name, params_h, "void", body_arr)
+		return 0
+
+	// Emit the start: block registration calls for a scene's declared
+	// resources. Each string is a pre-computed source fragment (v1-format)
+	// that we route through _emit_stmt_from_source with origin_offset=0.
+	// Sub-cycle 3 will replace this with typed emission per-registration.
+	integer emit_start_block_regs_from_source(integer ctx, string src, string diag_code, string diag_ctx)
+		if src.trim().length() == 0
+			return 0
+		integer stmt = _emit_stmt_from_source(ctx, src, 0)
+		if stmt == 0
+			_emit_error(ctx, 2, diag_code, "syntax error in " + diag_ctx + " registration source", "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
+			return 1
+		return _emit_statement_into_start(ctx, stmt)
+
+	integer expand_canvas_scene(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "FRAME-CANVAS-E400", "frame.canvas expand_canvas_scene failed")
+
+		// -------------------------------------------------------------------
+		// (1) Attributes: width, height, id, fps.
+		// -------------------------------------------------------------------
+		string width = get_attr(attrs_json, "width", "800")
+		string height = get_attr(attrs_json, "height", "600")
+		string id_str = get_attr(attrs_json, "id", "_canvas_0")
+		string fps_val = get_attr(attrs_json, "fps", "60")
+
+		// -------------------------------------------------------------------
+		// (2) Single-instance sub-blocks.
+		// -------------------------------------------------------------------
+		string state_body = extract_scene_subblock(body, "state")
+		string init_body = extract_scene_subblock(body, "init")
+		string frame_body = extract_scene_subblock(body, "onFrame")
+		string frame_param = extract_scene_subblock_attr(body, "onFrame", "param", "dt")
+		string draw_body = extract_scene_subblock(body, "draw")
+		string dn_body = extract_scene_subblock(body, "onPointerDown")
+		string dn_param = extract_scene_subblock_attr(body, "onPointerDown", "param", "px,py")
+		string mv_body = extract_scene_subblock(body, "onPointerMove")
+		string mv_param = extract_scene_subblock_attr(body, "onPointerMove", "param", "px,py")
+		string up_body = extract_scene_subblock(body, "onPointerUp")
+		string up_param = extract_scene_subblock_attr(body, "onPointerUp", "param", "px,py")
+		string assets_body = extract_scene_subblock(body, "assets")
+		string layers_body = extract_scene_subblock(body, "layers")
+		string camera_body = extract_scene_subblock(body, "camera")
+		string kd_body = extract_scene_subblock(body, "onKeyDown")
+		string kd_param = extract_scene_subblock_attr(body, "onKeyDown", "param", "key")
+		string ku_body = extract_scene_subblock(body, "onKeyUp")
+		string ku_param = extract_scene_subblock_attr(body, "onKeyUp", "param", "key")
+		string ex_body = extract_scene_subblock(body, "onExit")
+		string ps_body = extract_scene_subblock(body, "onPause")
+		string rs_body = extract_scene_subblock(body, "onResume")
+
+		// -------------------------------------------------------------------
+		// (3) Multi-instance defs — each yields the registration source
+		// fragment for start:.
+		// -------------------------------------------------------------------
+		string tween_regs = scan_multi_instance(body, "tween", 1)
+		string timeline_regs = scan_multi_instance(body, "timeline", 2)
+		string anim_sprite_regs = scan_multi_instance(body, "animSprite", 3)
+		string anim_state_regs = scan_multi_instance(body, "animState", 4)
+		string particles_regs = scan_multi_instance(body, "particles", 5)
+		string path_regs = scan_multi_instance(body, "path", 6)
+		string gradient_regs = scan_multi_instance(body, "gradient", 7)
+		string custom_ease_regs = scan_multi_instance(body, "customEase", 8)
+
+		// -------------------------------------------------------------------
+		// Single-instance registration outputs (Sub-cycle 3 populates the
+		// body of process_* stubs; here we get empty strings for now).
+		// -------------------------------------------------------------------
+		string asset_regs = ""
+		if assets_body.trim().length() > 0
+			asset_regs = process_assets_body(assets_body)
+		string layer_regs = ""
+		if layers_body.trim().length() > 0
+			layer_regs = process_layers_body(layers_body)
+		string camera_regs = ""
+		if camera_body.trim().length() > 0
+			camera_regs = expand_camera("{}", camera_body)
+
+		// -------------------------------------------------------------------
+		// State management source fragments (Sub-cycle 3 populates).
+		// -------------------------------------------------------------------
+		string s_load = scene_state_load(state_body)
+		string s_save = scene_state_save(state_body)
+		string s_init = scene_state_init(state_body)
+
+		// -------------------------------------------------------------------
+		// (4) Emit 12 scene type stubs.
+		// -------------------------------------------------------------------
+		emit_all_scene_type_stubs(ctx)
+
+		// -------------------------------------------------------------------
+		// (5) Emit _frame_callback.
+		//     void _frame_callback(integer __cv)
+		//         number <frame_param> = _canvas_get_delta_time()
+		//         <s_load>
+		//         <scene_expand_lines(frame_body)>
+		//         <scene_expand_lines(draw_body)>
+		//         <s_save>
+		//         integer __rfr = _canvas_request_frame(__cv)
+		// -------------------------------------------------------------------
+		integer fcb_body_arr = _batch_arrayNew(ctx)
+		// number <frame_param> = _canvas_get_delta_time()
+		_batch_arrayPush(ctx, fcb_body_arr, sassign(ctx, frame_param, call0(ctx, "_canvas_get_delta_time")))
+		// s_load (may be multi-statement — parsed as a whole via _emit_stmt_from_source)
+		if s_load.length() > 0
+			integer s_load_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+			if s_load_stmt != 0
+				_batch_arrayPush(ctx, fcb_body_arr, s_load_stmt)
+		// user onFrame body (routed through scene_expand_lines for canvas.* dispatch)
+		string frame_expanded = scene_expand_lines(frame_body)
+		if frame_expanded.length() > 0
+			integer fb_stmt = _emit_stmt_from_source(ctx, frame_expanded, 0)
+			if fb_stmt != 0
+				_batch_arrayPush(ctx, fcb_body_arr, fb_stmt)
+		// draw body
+		string draw_expanded = scene_expand_lines(draw_body)
+		if draw_expanded.length() > 0
+			integer db_stmt = _emit_stmt_from_source(ctx, draw_expanded, 0)
+			if db_stmt != 0
+				_batch_arrayPush(ctx, fcb_body_arr, db_stmt)
+		// s_save
+		if s_save.length() > 0
+			integer s_save_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+			if s_save_stmt != 0
+				_batch_arrayPush(ctx, fcb_body_arr, s_save_stmt)
+		// integer __rfr = _canvas_request_frame(__cv)
+		_batch_arrayPush(ctx, fcb_body_arr, sassign(ctx, "__rfr", call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))))
+		integer fcb_params = params_cv(ctx)
+		emit_one_fn(ctx, "_frame_callback", fcb_params, "void", fcb_body_arr)
+
+		// -------------------------------------------------------------------
+		// (6) Optional handler functions — each emitted only if the sub-block
+		// is non-empty. Uses emit_scene_handler_if_present for the common
+		// shape; the pointer/key handlers need param-decl preludes so they
+		// build their own body arrays inline.
+		// -------------------------------------------------------------------
+		// Pointer down
+		string dn_trimmed = dn_body.trim()
+		if dn_trimmed.length() > 0
+			string dn_px = scene_param_part(dn_param, 0)
+			string dn_py = scene_param_part(dn_param, 1)
+			integer dn_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer sl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if sl_stmt != 0
+					_batch_arrayPush(ctx, dn_body_arr, sl_stmt)
+			integer dn_expanded = 0
+			string dn_source = scene_expand_lines(dn_body)
+			if dn_source.length() > 0
+				dn_expanded = _emit_stmt_from_source(ctx, dn_source, 0)
+				if dn_expanded != 0
+					_batch_arrayPush(ctx, dn_body_arr, dn_expanded)
+			if s_save.length() > 0
+				integer ss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if ss_stmt != 0
+					_batch_arrayPush(ctx, dn_body_arr, ss_stmt)
+			integer dn_params = params_cv_2(ctx, dn_px, "number", dn_py, "number")
+			emit_one_fn(ctx, "_on_pointer_down", dn_params, "void", dn_body_arr)
+
+		// Pointer move
+		string mv_trimmed = mv_body.trim()
+		if mv_trimmed.length() > 0
+			string mv_px = scene_param_part(mv_param, 0)
+			string mv_py = scene_param_part(mv_param, 1)
+			integer mv_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer msl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if msl_stmt != 0
+					_batch_arrayPush(ctx, mv_body_arr, msl_stmt)
+			string mv_source = scene_expand_lines(mv_body)
+			if mv_source.length() > 0
+				integer mv_stmt = _emit_stmt_from_source(ctx, mv_source, 0)
+				if mv_stmt != 0
+					_batch_arrayPush(ctx, mv_body_arr, mv_stmt)
+			if s_save.length() > 0
+				integer mss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if mss_stmt != 0
+					_batch_arrayPush(ctx, mv_body_arr, mss_stmt)
+			integer mv_params = params_cv_2(ctx, mv_px, "number", mv_py, "number")
+			emit_one_fn(ctx, "_on_pointer_move", mv_params, "void", mv_body_arr)
+
+		// Pointer up
+		string up_trimmed = up_body.trim()
+		if up_trimmed.length() > 0
+			string up_px = scene_param_part(up_param, 0)
+			string up_py = scene_param_part(up_param, 1)
+			integer up_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer usl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if usl_stmt != 0
+					_batch_arrayPush(ctx, up_body_arr, usl_stmt)
+			string up_source = scene_expand_lines(up_body)
+			if up_source.length() > 0
+				integer up_stmt = _emit_stmt_from_source(ctx, up_source, 0)
+				if up_stmt != 0
+					_batch_arrayPush(ctx, up_body_arr, up_stmt)
+			if s_save.length() > 0
+				integer uss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if uss_stmt != 0
+					_batch_arrayPush(ctx, up_body_arr, uss_stmt)
+			integer up_params = params_cv_2(ctx, up_px, "number", up_py, "number")
+			emit_one_fn(ctx, "_on_pointer_up", up_params, "void", up_body_arr)
+
+		// Key down
+		string kd_trimmed = kd_body.trim()
+		if kd_trimmed.length() > 0
+			string kd_var = scene_param_part(kd_param, 0)
+			integer kd_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer ksl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if ksl_stmt != 0
+					_batch_arrayPush(ctx, kd_body_arr, ksl_stmt)
+			string kd_source = scene_expand_lines(kd_body)
+			if kd_source.length() > 0
+				integer kd_stmt = _emit_stmt_from_source(ctx, kd_source, 0)
+				if kd_stmt != 0
+					_batch_arrayPush(ctx, kd_body_arr, kd_stmt)
+			if s_save.length() > 0
+				integer kss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if kss_stmt != 0
+					_batch_arrayPush(ctx, kd_body_arr, kss_stmt)
+			integer kd_params = params_cv_1(ctx, kd_var, "string")
+			emit_one_fn(ctx, "_on_key_down", kd_params, "void", kd_body_arr)
+
+		// Key up
+		string ku_trimmed = ku_body.trim()
+		if ku_trimmed.length() > 0
+			string ku_var = scene_param_part(ku_param, 0)
+			integer ku_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer usl2_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if usl2_stmt != 0
+					_batch_arrayPush(ctx, ku_body_arr, usl2_stmt)
+			string ku_source = scene_expand_lines(ku_body)
+			if ku_source.length() > 0
+				integer ku_stmt = _emit_stmt_from_source(ctx, ku_source, 0)
+				if ku_stmt != 0
+					_batch_arrayPush(ctx, ku_body_arr, ku_stmt)
+			if s_save.length() > 0
+				integer uss2_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if uss2_stmt != 0
+					_batch_arrayPush(ctx, ku_body_arr, uss2_stmt)
+			integer ku_params = params_cv_1(ctx, ku_var, "string")
+			emit_one_fn(ctx, "_on_key_up", ku_params, "void", ku_body_arr)
+
+		// Exit
+		string ex_trimmed = ex_body.trim()
+		if ex_trimmed.length() > 0
+			integer ex_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer esl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if esl_stmt != 0
+					_batch_arrayPush(ctx, ex_body_arr, esl_stmt)
+			string ex_source = scene_expand_lines(ex_body)
+			if ex_source.length() > 0
+				integer ex_stmt = _emit_stmt_from_source(ctx, ex_source, 0)
+				if ex_stmt != 0
+					_batch_arrayPush(ctx, ex_body_arr, ex_stmt)
+			if s_save.length() > 0
+				integer ess_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if ess_stmt != 0
+					_batch_arrayPush(ctx, ex_body_arr, ess_stmt)
+			integer ex_params = params_cv(ctx)
+			emit_one_fn(ctx, "_on_exit", ex_params, "void", ex_body_arr)
+
+		// Pause
+		string ps_trimmed = ps_body.trim()
+		if ps_trimmed.length() > 0
+			integer ps_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer psl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if psl_stmt != 0
+					_batch_arrayPush(ctx, ps_body_arr, psl_stmt)
+			string ps_source = scene_expand_lines(ps_body)
+			if ps_source.length() > 0
+				integer ps_stmt = _emit_stmt_from_source(ctx, ps_source, 0)
+				if ps_stmt != 0
+					_batch_arrayPush(ctx, ps_body_arr, ps_stmt)
+			if s_save.length() > 0
+				integer pss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if pss_stmt != 0
+					_batch_arrayPush(ctx, ps_body_arr, pss_stmt)
+			integer ps_params = params_cv(ctx)
+			emit_one_fn(ctx, "_on_pause", ps_params, "void", ps_body_arr)
+
+		// Resume
+		string rs_trimmed = rs_body.trim()
+		if rs_trimmed.length() > 0
+			integer rs_body_arr = _batch_arrayNew(ctx)
+			if s_load.length() > 0
+				integer rsl_stmt = _emit_stmt_from_source(ctx, s_load, 0)
+				if rsl_stmt != 0
+					_batch_arrayPush(ctx, rs_body_arr, rsl_stmt)
+			string rs_source = scene_expand_lines(rs_body)
+			if rs_source.length() > 0
+				integer rs_stmt = _emit_stmt_from_source(ctx, rs_source, 0)
+				if rs_stmt != 0
+					_batch_arrayPush(ctx, rs_body_arr, rs_stmt)
+			if s_save.length() > 0
+				integer rss_stmt = _emit_stmt_from_source(ctx, s_save, 0)
+				if rss_stmt != 0
+					_batch_arrayPush(ctx, rs_body_arr, rss_stmt)
+			integer rs_params = params_cv(ctx)
+			emit_one_fn(ctx, "_on_resume", rs_params, "void", rs_body_arr)
+
+		// -------------------------------------------------------------------
+		// (7) start: block emission. Every statement here is emitted via
+		// _emit_statement_into_start. The width/height/id/fps are plugin-
+		// controlled literals — we build them via typed batch calls to keep
+		// the arg types explicit (integer vs. string). Registration source
+		// fragments (asset_regs, layer_regs, ..._regs, camera_regs, s_init,
+		// init_body) are pass-through via _emit_stmt_from_source.
+		// -------------------------------------------------------------------
+		// integer __cv = _canvas_init(width, height, id_str)
+		integer w_expr = _batch_intLit(ctx, string_to_int_default(width, 800), 0)
+		integer h_expr = _batch_intLit(ctx, string_to_int_default(height, 600), 0)
+		integer id_expr = sl(ctx, id_str)
+		integer init_call = _batch_call(ctx, "_canvas_init", arr3(ctx, w_expr, h_expr, id_expr))
+		_emit_statement_into_start(ctx, sassign(ctx, "__cv", init_call))
+
+		// _canvas_set_fps(__cv, fps_val)
+		integer fps_expr = _batch_intLit(ctx, string_to_int_default(fps_val, 60), 0)
+		sc2(ctx, "_canvas_set_fps", ident(ctx, "__cv"), fps_expr)
+
+		// Registration source fragments — each parsed as a whole and injected
+		// via _emit_statement_into_start.
+		emit_start_block_regs_from_source(ctx, asset_regs, "FRAME-CANVAS-E410", "assets")
+		emit_start_block_regs_from_source(ctx, layer_regs, "FRAME-CANVAS-E411", "layers")
+		emit_start_block_regs_from_source(ctx, anim_sprite_regs, "FRAME-CANVAS-E412", "animSprite")
+		emit_start_block_regs_from_source(ctx, anim_state_regs, "FRAME-CANVAS-E413", "animState")
+		emit_start_block_regs_from_source(ctx, tween_regs, "FRAME-CANVAS-E414", "tween")
+		emit_start_block_regs_from_source(ctx, timeline_regs, "FRAME-CANVAS-E415", "timeline")
+		emit_start_block_regs_from_source(ctx, particles_regs, "FRAME-CANVAS-E416", "particles")
+		emit_start_block_regs_from_source(ctx, path_regs, "FRAME-CANVAS-E417", "path")
+		emit_start_block_regs_from_source(ctx, gradient_regs, "FRAME-CANVAS-E418", "gradient")
+		emit_start_block_regs_from_source(ctx, custom_ease_regs, "FRAME-CANVAS-E419", "customEase")
+		emit_start_block_regs_from_source(ctx, camera_regs, "FRAME-CANVAS-E420", "camera")
+
+		// Optional key/lifecycle registration calls in start: block.
+		if kd_trimmed.length() > 0
+			integer rkd_call = call1(ctx, "_canvas_on_key_down", ident(ctx, "__cv"))
+			_emit_statement_into_start(ctx, sassign(ctx, "__rkd", rkd_call))
+		if ku_trimmed.length() > 0
+			integer rku_call = call1(ctx, "_canvas_on_key_up", ident(ctx, "__cv"))
+			_emit_statement_into_start(ctx, sassign(ctx, "__rku", rku_call))
+		if ex_trimmed.length() > 0
+			integer rex_call = call1(ctx, "_canvas_on_exit", ident(ctx, "__cv"))
+			_emit_statement_into_start(ctx, sassign(ctx, "__rex", rex_call))
+		if ps_trimmed.length() > 0
+			integer rps_call = call1(ctx, "_canvas_on_pause", ident(ctx, "__cv"))
+			_emit_statement_into_start(ctx, sassign(ctx, "__rps", rps_call))
+		if rs_trimmed.length() > 0
+			integer rrs_call = call1(ctx, "_canvas_on_resume", ident(ctx, "__cv"))
+			_emit_statement_into_start(ctx, sassign(ctx, "__rrs", rrs_call))
+
+		// State-var init + user init body.
+		emit_start_block_regs_from_source(ctx, s_init, "FRAME-CANVAS-E421", "state_init")
+		string init_trimmed = init_body.trim()
+		if init_trimmed.length() > 0
+			string init_expanded = scene_expand_lines_start(init_body)
+			emit_start_block_regs_from_source(ctx, init_expanded, "FRAME-CANVAS-E422", "init")
+
+		// integer __rfr0 = _canvas_request_frame(__cv)
+		integer rfr0_call = call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))
+		_emit_statement_into_start(ctx, sassign(ctx, "__rfr0", rfr0_call))
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-CANVAS-E400", "expand_canvas_scene sticky-error tripped")
+		return 0
+
+	// STUB3 helper: default-int parse for width/height/fps attrs. Sub-cycle 3
+	// may replace this with a Clean-Language stdlib call once the string→int
+	// path is confirmed stable; for now this is the safe fallback.
+	integer string_to_int_default(string s, integer fallback)
+		integer n = s.toInteger()
+		if n == 0
+			if s == "0"
+				return 0
+			return fallback
+		return n
+
+// ============================================================================
+// DISPATCHER WIRE-UP (partial — Sub-cycle 2 covers canvasScene + 11 handlers)
+// ============================================================================
+// Overwrites the Sub-cycle 1 stub `expand_block_typed` (which returned 0).
+// Sub-cycle 3 will add:
+//   - canvas.<op> command routing (32 draw commands)
+//   - assets, layers, state, animSprite, animState, tween, timeline, particles,
+//     path, gradient, customEase, camera
+// Each Sub-cycle 3 addition follows the same startsWith arm shape.
+//
+// NOTE: Clean Language forbids two `functions:` blocks defining the same
+// symbol. Sub-cycle 1's expand_block_typed was a stub; the real dispatcher
+// lives here. Sub-cycle 3 will edit this function in place (not add another).
+
+functions:
+	integer expand_block_typed_v2(integer ctx, string block_name, string attrs_json, string body)
+		if block_name.startsWith("canvasScene")
+			return expand_canvas_scene(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerDown")
+			return expand_on_pointer_down(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerMove")
+			return expand_on_pointer_move(ctx, attrs_json, body)
+		if block_name.startsWith("onPointerUp")
+			return expand_on_pointer_up(ctx, attrs_json, body)
+		if block_name.startsWith("onKeyDown")
+			return expand_on_key_down(ctx, attrs_json, body)
+		if block_name.startsWith("onKeyUp")
+			return expand_on_key_up(ctx, attrs_json, body)
+		if block_name.startsWith("onFrame")
+			return expand_on_frame(ctx, attrs_json, body)
+		if block_name.startsWith("onExit")
+			return expand_on_exit(ctx, attrs_json, body)
+		if block_name.startsWith("onPause")
+			return expand_on_pause(ctx, attrs_json, body)
+		if block_name.startsWith("onResume")
+			return expand_on_resume(ctx, attrs_json, body)
+		if block_name.startsWith("draw")
+			return expand_draw(ctx, attrs_json, body)
+		if block_name.startsWith("init")
+			return expand_init(ctx, attrs_json, body)
+		// Sub-cycle 3 arms land below this line:
+		//   canvas.*, assets, layers, state, animSprite, animState, tween,
+		//   timeline, particles, path, gradient, customEase, camera
+		return 0
+
+// ============================================================================
+// END OF SUB-CYCLE 2 CONTENT
+// ============================================================================
+// Sub-cycle 3 begins here and will:
+//   - Delete every STUB3-tagged function above and paste in the real v1 body
+//     (line ranges are noted per-stub).
+//   - Add expand_canvas_command (~700–750 LOC, 32 draw commands via sc<N>).
+//   - Add scene_expand_cmd (~340–380 LOC, 14 DSL body commands).
+//   - Add 8 multi-instance expanders (~150 LOC): expand_tween, expand_timeline,
+//     expand_anim_sprite, expand_anim_state, expand_particles, expand_path,
+//     expand_gradient, expand_custom_ease.
+//   - Add camera / gradient / path / customEase individual expanders (~260 LOC).
+//   - Add body processors (~700 LOC): process_assets_body, process_layers_body,
+//     process_path_body, process_gradient_stops, process_tween_body.
+//   - Migrate DSL parsers verbatim (~1050 LOC): flat-format helpers, attribute
+//     parsers, is_scene_subblock_header, extract_scene_subblock, etc.
+//   - Migrate attribute helpers verbatim (~355 LOC).
+//   - Migrate validate_canvas_scene verbatim (~240 LOC).
+//   - Replace expand_block_typed body with the fully-wired dispatcher (fold
+//     expand_block_typed_v2 into expand_block_typed and delete _v2).
+//   - Replace validate_block and get_keywords with real v1 bodies.
+//   - Bump plugin.toml [plugin].version from 3.0.0-alpha.1 to 3.0.0.
+//   - Delete main.v1.cln.
+//   - Run comita to ship.
+//   - Squash-merge v3/frame.canvas to main atomically.
+//
+// See reports/2026-07-03-session-3-frame-canvas-deferred-v4.md §5.1 for the
+// full sub-cycle plan.
