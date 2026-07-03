@@ -28,8 +28,6 @@
 //   - Amendment 3 (§3.13) _emit_class_full for the model class shell.
 //   - Amendment 6 (§3.16) _emit_expr_from_source for user-authored expression
 //     fragments in where:/join:/set:/on_insert: clauses (Sub-cycle 3).
-//   - Amendment 9 (§3.17) _emit_verb_expression for read-verb _db_query
-//     spec-JSON assembly (Sub-cycle 3).
 //   - Amendment 10 (§3.18) _emit_class_methods_from_spec via the extended
 //     _emit_class_full class-spec shape — extends the class spec's method
 //     entry union with a from_spec template variant (Sub-cycle 2).
@@ -62,7 +60,6 @@ external:
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
-	integer _emit_verb_expression(integer ctx, string spec_lp)
 	// ---- Diagnostics (§5) ----
 	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
 	// ---- Sticky-error context (§3.15) ----
@@ -381,18 +378,6 @@ functions:
 // statement emission, and user-source expression pass-through.
 
 functions:
-	// db_query(ctx, spec_json) — Sub-cycle 3 read-verb expression.
-	//
-	// Wraps _emit_verb_expression (Am 9, §3.17). spec_json is the LP-JSON
-	// describing the verb call ("kind":"db_query","sql_parts":[...],
-	// "params":[...]) that the compiler assembles into
-	// _db_query(sql_chain, params_array). Read-verb expanders in
-	// Sub-cycle 3 build spec_json inline (per §3.17 "Spec JSON shape") and
-	// return the expr handle from this helper as the verb's result
-	// expression. Sticky-error propagates — caller checks once at boundary.
-	integer db_query(integer ctx, string spec_json)
-		return _emit_verb_expression(ctx, spec_json)
-
 	// db_exec_stmt(ctx, callee, args_json) — Sub-cycle 4 write-verb statement.
 	//
 	// Wraps sc-style emission but takes the arg-list JSON directly so callers
