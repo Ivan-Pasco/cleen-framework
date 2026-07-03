@@ -118,6 +118,19 @@ functions:
 
 functions:
 	integer expand_block_typed(integer ctx, string block_name, string attrs_json, string body)
+		// data ModelName: block — expand to ORM class
+		if block_name == "data"
+			string model_name = extract_attr(attrs_json, "model_name")
+			if model_name.length() == 0
+				// Config block (data: with no model name) — Sub-cycle 5 will handle
+				return 0
+			return expand_data_model(ctx, model_name, body)
+
+		// migrate: block — Sub-cycle 5 will implement expand_migrate_block
+		if block_name == "migrate"
+			return 0
+
+		// Verb blocks (Model.find:, Model.insert:, etc.) — Sub-cycles 3 and 4
 		return 0
 
 // ============================================================================
@@ -401,3 +414,1719 @@ functions:
 // See reports/2026-07-03-session-4-frame-data-deferred-v4.md §2 for the
 // authoritative per-source-section LOC projection. Do not re-inspect
 // frame.data or re-project in subsequent sub-cycles.
+
+// ============================================================================
+// SUB-CYCLE 2: PLUGIN-TIME STRING HELPERS (verbatim from v1)
+// ============================================================================
+// Pure string-manipulation — no bridge calls, no typed emission.
+// These run at plugin-authoring time to parse DSL bodies and compute SQL
+// fragments. Copied verbatim from main.v1.cln for correctness preservation.
+
+functions:
+	// Detect whether a data model body declares tenant isolation.
+	boolean detect_tenant_field(string body)
+		if body.indexOf("tenantId") != -1
+			return true
+		if body.indexOf(": tenant") != -1
+			return true
+		return false
+
+	// Returns true when name is a reserved Clean Language keyword.
+	boolean is_clean_keyword(string name)
+		if name == "return" or name == "if" or name == "else" or name == "then"
+			return true
+		if name == "iterate" or name == "in" or name == "to" or name == "step"
+			return true
+		if name == "tests" or name == "error" or name == "function" or name == "functions"
+			return true
+		if name == "input" or name == "description" or name == "class" or name == "constructor"
+			return true
+		if name == "is" or name == "and" or name == "or" or name == "not"
+			return true
+		if name == "true" or name == "false" or name == "none" or name == "null"
+			return true
+		if name == "default" or name == "onError" or name == "constant" or name == "private"
+			return true
+		if name == "base" or name == "list" or name == "matrix" or name == "pairs"
+			return true
+		if name == "integer" or name == "number" or name == "boolean" or name == "string"
+			return true
+		if name == "void" or name == "any" or name == "import" or name == "from"
+			return true
+		if name == "as" or name == "later" or name == "background" or name == "start"
+			return true
+		if name == "print" or name == "break" or name == "continue" or name == "while"
+			return true
+		if name == "state" or name == "watch" or name == "computed" or name == "screen"
+			return true
+		if name == "guard" or name == "reset" or name == "require" or name == "rules"
+			return true
+		if name == "spec" or name == "intent" or name == "source" or name == "build"
+			return true
+		return false
+
+	// Returns a Clean-safe identifier for a field name.
+	string safe_field_name(string name)
+		if is_clean_keyword(name)
+			return "__" + name
+		return name
+
+	// Convert PascalCase to snake_case (for table names).
+	string to_snake_case(string name)
+		string result = ""
+		integer i = 0
+		while i < name.length()
+			string ch = name.substring(i, i + 1)
+			string lower = ch.toLowerCase()
+			if ch != lower and i > 0
+				result = result + "_"
+			result = result + lower
+			i = i + 1
+		return result
+
+	// Pluralize a snake_case name for standard table naming.
+	string pluralize(string name)
+		integer len = name.length()
+		if len == 0
+			return name
+		string last = name.substring(len - 1, len)
+		if last == "s"
+			return name
+		if last == "y" and len > 1
+			string vowels = "aeiou"
+			string prev = name.substring(len - 2, len - 1)
+			if vowels.indexOf(prev) == -1
+				return name.substring(0, len - 1) + "ies"
+			return name + "s"
+		if last == "x" or last == "z"
+			return name + "es"
+		if last == "h" and len > 1
+			string prev2 = name.substring(len - 2, len - 1)
+			if prev2 == "c" or prev2 == "s"
+				return name + "es"
+		return name + "s"
+
+	// Normalize a field line to canonical "type name [= default] [: constraints]" form.
+	string normalize_field_line(string line)
+		integer colon_pos = line.indexOf(":")
+		integer first_space = line.indexOf(" ")
+		if colon_pos == -1 or (first_space != -1 and first_space < colon_pos)
+			return line
+		string field_name = line.substring(0, colon_pos).trim()
+		string rest = line.substring(colon_pos + 1, line.length()).trim()
+		integer rest_space = rest.indexOf(" ")
+		string field_type = ""
+		string modifiers = ""
+		if rest_space == -1
+			field_type = rest
+		else
+			field_type = rest.substring(0, rest_space).trim()
+			modifiers = rest.substring(rest_space + 1, rest.length()).trim()
+		if field_type.length() == 0
+			return ""
+		string default_val = ""
+		string constraints = modifiers
+		integer def_pos = modifiers.indexOf("default ")
+		if def_pos != -1
+			constraints = modifiers.substring(0, def_pos).trim()
+			default_val = modifiers.substring(def_pos + 8, modifiers.length()).trim()
+		string result = field_type + " " + field_name
+		if default_val.length() > 0
+			result = result + " = " + default_val
+		if constraints.length() > 0
+			result = result + " : " + constraints
+		return result
+
+	// Parse a single field line into a Clean field declaration string.
+	string parse_field_line(string line)
+		line = normalize_field_line(line)
+		if line.length() == 0
+			return ""
+		integer colon_pos = line.indexOf(" : ")
+		string field_part = line
+		string constraints = ""
+		if colon_pos != -1
+			field_part = line.substring(0, colon_pos).trim()
+			constraints = line.substring(colon_pos + 3, line.length()).trim()
+		integer equals_pos = field_part.indexOf(" = ")
+		string default_val = ""
+		if equals_pos != -1
+			default_val = field_part.substring(equals_pos + 3, field_part.length()).trim()
+			field_part = field_part.substring(0, equals_pos).trim()
+		integer space_pos = field_part.indexOf(" ")
+		if space_pos == -1
+			return ""
+		string field_type = field_part.substring(0, space_pos).trim()
+		string field_name = field_part.substring(space_pos + 1, field_part.length()).trim()
+		if field_type == "string" and default_val.length() > 0
+			if default_val != "true" and default_val != "false" and default_val != "null"
+				string __first_ch = default_val.substring(0, 1)
+				if __first_ch != "\""
+					default_val = "\"" + default_val + "\""
+		if field_type == "datetime"
+			field_type = "string"
+		if field_type == "date"
+			field_type = "string"
+		if field_type == "text"
+			field_type = "string"
+		if field_type == "uuid"
+			field_type = "string"
+		if field_type == "json"
+			field_type = "string"
+		string result = field_type + " " + safe_field_name(field_name)
+		if default_val.length() > 0
+			result = result + " = " + default_val
+		return result
+
+	// Parse all field definitions from body; returns lines for class public: section.
+	string parse_fields(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_code = parse_field_line(line)
+				if field_code.length() > 0
+					result = result + "\t\t" + field_code + "\n"
+			line_start = line_end + 1
+		return result
+
+	// Extract field names as comma-separated list.
+	string extract_field_names(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_name = extract_field_name_from_line(line)
+				if field_name.length() > 0
+					if result.length() > 0
+						result = result + ","
+					result = result + field_name
+			line_start = line_end + 1
+		return result
+
+	// Extract field name from a single line.
+	string extract_field_name_from_line(string line)
+		line = normalize_field_line(line)
+		integer colon_pos = line.indexOf(" : ")
+		if colon_pos != -1
+			line = line.substring(0, colon_pos)
+		integer equals_pos = line.indexOf(" = ")
+		if equals_pos != -1
+			line = line.substring(0, equals_pos)
+		line = line.trim()
+		integer space_pos = line.indexOf(" ")
+		if space_pos == -1
+			return ""
+		return line.substring(space_pos + 1, line.length()).trim()
+
+	// Extract field types as comma-separated list (parallel to extract_field_names).
+	string extract_field_types(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string field_type = extract_field_type_from_line(line)
+				if field_type.length() > 0
+					if result.length() > 0
+						result = result + ","
+					result = result + field_type
+			line_start = line_end + 1
+		return result
+
+	// Extract field type from a single line (first word after normalization).
+	string extract_field_type_from_line(string line)
+		line = normalize_field_line(line)
+		integer colon_pos = line.indexOf(" : ")
+		if colon_pos != -1
+			line = line.substring(0, colon_pos)
+		integer equals_pos = line.indexOf(" = ")
+		if equals_pos != -1
+			line = line.substring(0, equals_pos)
+		line = line.trim()
+		integer space_pos = line.indexOf(" ")
+		if space_pos == -1
+			return ""
+		string ftype = line.substring(0, space_pos).trim()
+		return ftype
+
+	// Count comma-separated fields.
+	integer count_fields(string field_names)
+		if field_names.length() == 0
+			return 0
+		integer count = 1
+		integer pos = 0
+		while pos < field_names.length()
+			if field_names.substring(pos, pos + 1) == ","
+				count = count + 1
+			pos = pos + 1
+		return count
+
+	// Determine whether a Clean type name is a primitive scalar.
+	boolean is_primitive_type(string type_name)
+		if type_name == "integer"
+			return true
+		if type_name == "number"
+			return true
+		if type_name == "string"
+			return true
+		if type_name == "text"
+			return true
+		if type_name == "boolean"
+			return true
+		if type_name == "datetime"
+			return true
+		if type_name == "date"
+			return true
+		if type_name == "uuid"
+			return true
+		if type_name == "json"
+			return true
+		return false
+
+	// Map Clean type to SQL column type.
+	string clean_type_to_sql(string clean_type)
+		if clean_type == "integer"
+			return "INTEGER"
+		if clean_type == "number"
+			return "REAL"
+		if clean_type == "string"
+			return "TEXT"
+		if clean_type == "text"
+			return "TEXT"
+		if clean_type == "boolean"
+			return "BOOLEAN"
+		if clean_type == "datetime"
+			return "TIMESTAMP"
+		if clean_type == "date"
+			return "DATE"
+		if clean_type == "uuid"
+			return "UUID"
+		if clean_type == "json"
+			return "JSON"
+		return "INTEGER"
+
+	// Map Clean constraint to SQL constraint fragment.
+	string clean_constraint_to_sql(string constraint)
+		string result = ""
+		if constraint.indexOf("unique") != -1
+			result = result + " UNIQUE"
+		if constraint.indexOf("default=now") != -1
+			result = result + " DEFAULT CURRENT_TIMESTAMP"
+		return result
+
+	// Generate SQL field definitions from body for CREATE TABLE.
+	string generate_field_definitions(string body)
+		string result = ""
+		string lines = body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				line = normalize_field_line(line)
+				integer colon_pos = line.indexOf(" : ")
+				string field_part = line
+				string constraints = ""
+				if colon_pos != -1
+					field_part = line.substring(0, colon_pos).trim()
+					constraints = line.substring(colon_pos + 3, line.length()).trim()
+				if constraints.indexOf("pk") != -1 and constraints.indexOf("auto") != -1
+					line_start = line_end + 1
+					continue
+				integer eq_pos = field_part.indexOf(" = ")
+				string default_val = ""
+				if eq_pos != -1
+					default_val = field_part.substring(eq_pos + 3, field_part.length()).trim()
+					field_part = field_part.substring(0, eq_pos).trim()
+				integer space_pos = field_part.indexOf(" ")
+				if space_pos != -1
+					string field_type = field_part.substring(0, space_pos).trim()
+					string field_name = field_part.substring(space_pos + 1, field_part.length()).trim()
+					if result.length() > 0
+						result = result + ", "
+					if is_primitive_type(field_type)
+						string sql_type = clean_type_to_sql(field_type)
+						string sql_constraint = clean_constraint_to_sql(constraints)
+						result = result + field_name + " " + sql_type + sql_constraint
+						if default_val.length() > 0 and constraints.indexOf("default=") == -1
+							string sql_default = default_val
+							if sql_default.startsWith("\"") and sql_default.endsWith("\"") and sql_default.length() > 1
+								sql_default = sql_default.substring(1, sql_default.length() - 1)
+							if sql_default == "true" or sql_default == "false"
+								result = result + " DEFAULT " + sql_default
+							else
+								result = result + " DEFAULT '" + sql_default.replace("'", "''") + "'"
+					else
+						string ref_table = pluralize(to_snake_case(field_type))
+						string fk_col = field_name + "_id"
+						result = result + fk_col + " INTEGER REFERENCES " + ref_table + "(id)"
+						if constraints.indexOf("onDelete=cascade") != -1
+							result = result + " ON DELETE CASCADE"
+						result = result + clean_constraint_to_sql(constraints)
+			line_start = line_end + 1
+		return result
+
+	// Generate field serialization code for INSERT/UPDATE params JSON array.
+	string generate_field_serialization(string field_names, string field_types, boolean skip_first)
+		string result = ""
+		string fields = field_names
+		string types = field_types
+		integer pos = 0
+		integer type_pos = 0
+		boolean first_added = false
+		while pos < fields.length()
+			integer comma_pos = fields.indexOf(",", pos)
+			if comma_pos == -1
+				comma_pos = fields.length()
+			integer type_comma = types.indexOf(",", type_pos)
+			if type_comma == -1
+				type_comma = types.length()
+			string field = fields.substring(pos, comma_pos).trim()
+			string ftype = types.substring(type_pos, type_comma).trim()
+			if field != "id"
+				boolean needs_quotes = true
+				if ftype == "integer" or ftype == "number" or ftype == "boolean"
+					needs_quotes = false
+				string separator = ""
+				if skip_first or first_added
+					separator = ", "
+				if ftype == "datetime"
+					result = result + "\t\t\t\tparams = params + \"" + separator + "{\\\"__type\\\":\\\"epoch_s\\\",\\\"value\\\":\" + " + safe_field_name(field) + ".toInteger().toString() + \"}\"\n"
+				else if needs_quotes
+					result = result + "\t\t\t\tparams = params + \"" + separator + "\\\"\" + " + safe_field_name(field) + ".toString() + \"\\\"\"\n"
+				else
+					result = result + "\t\t\t\tparams = params + \"" + separator + "\" + " + safe_field_name(field) + ".toString()\n"
+				first_added = true
+			pos = comma_pos + 1
+			type_pos = type_comma + 1
+		return result
+
+	// Generate UPDATE SET clause SQL: "field1 = $2, field2 = $3, ..."
+	string generate_update_set_sql(string field_names)
+		string result = ""
+		string fields = field_names
+		integer pos = 0
+		integer param_idx = 2
+		while pos < fields.length()
+			integer comma_pos = fields.indexOf(",", pos)
+			if comma_pos == -1
+				comma_pos = fields.length()
+			string field = fields.substring(pos, comma_pos).trim()
+			if field != "id"
+				if result.length() > 0
+					result = result + ", "
+				result = result + field + " = $" + param_idx.toString()
+				param_idx = param_idx + 1
+			pos = comma_pos + 1
+		return result
+
+// ============================================================================
+// SUB-CYCLE 2: CLASS-SPEC FIELD LIST BUILDER
+// ============================================================================
+// Builds the "fields" JSON array for _emit_class_full class spec.
+// Each field entry: {"name":"<n>","type":"<t>"}
+// Walks comma-separated field_names / field_types in parallel.
+
+functions:
+	// Build a JSON array of {"name":...,"type":...} field descriptors for _emit_class_full.
+	string build_fields_json(string field_names, string field_types)
+		string result = "["
+		string fields = field_names
+		string types = field_types
+		integer pos = 0
+		integer tpos = 0
+		boolean first = true
+		while pos < fields.length()
+			integer comma = fields.indexOf(",", pos)
+			if comma == -1
+				comma = fields.length()
+			integer tcomma = types.indexOf(",", tpos)
+			if tcomma == -1
+				tcomma = types.length()
+			string fname = fields.substring(pos, comma).trim()
+			string ftype = types.substring(tpos, tcomma).trim()
+			// Map DSL types to Clean runtime types (same as parse_field_line)
+			string clean_ftype = ftype
+			if ftype == "datetime" or ftype == "date" or ftype == "text" or ftype == "uuid" or ftype == "json"
+				clean_ftype = "string"
+			if fname.length() > 0
+				if not first
+					result = result + ","
+				result = result + "{\"name\":\"" + safe_field_name(fname) + "\",\"type\":\"" + clean_ftype + "\"}"
+				first = false
+			pos = comma + 1
+			tpos = tcomma + 1
+		result = result + "]"
+		return result
+
+// ============================================================================
+// SUB-CYCLE 2: INLINE METHOD BODY BUILDERS (batch-builder style)
+// ============================================================================
+// Each build_* function constructs the method body using batch builder bridges
+// (sl, il, bl, ident, sassign, sr, sblk, arr*, call*, _batch_stmtIf, etc.)
+// and returns the body_handle (a batch_stmt_handle for a block).
+// These are used to populate the "body_handle" field of inline method entries
+// in the class spec passed to _emit_class_full.
+//
+// Strategy: because the method bodies contain tenant branches, while-loops,
+// and SQL string construction that cannot be expressed via Am 10 from_spec
+// templates, every method uses the inline body_handle path.
+
+functions:
+	// Build body for: boolean save()
+	// Emits an if/else on id==0 (INSERT path) and UPDATE path.
+	// has_tenant controls whether the INSERT path includes tenant scaffolding.
+	integer build_save_body(integer ctx, string table_name, boolean has_tenant)
+		// INSERT branch body (id == 0)
+		integer insert_stmts = _batch_arrayNew(ctx)
+		if has_tenant
+			// string __tenant_id = tenant_getId()
+			integer tid_expr = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant_id", tid_expr)
+			_batch_arrayPush(ctx, insert_stmts, tid_assign)
+			// string sql = "INSERT INTO <table> (" + __field_list() + ") VALUES (" + __placeholder_list() + ") RETURNING id"
+			integer fl = call0(ctx, "__field_list")
+			integer pl = call0(ctx, "__placeholder_list")
+			integer prefix = sl(ctx, "INSERT INTO " + table_name + " (")
+			integer mid = sl(ctx, ") VALUES (")
+			integer suffix = sl(ctx, ") RETURNING id")
+			integer p1 = _batch_binop(ctx, "+", prefix, fl)
+			integer p2 = _batch_binop(ctx, "+", p1, mid)
+			integer p3 = _batch_binop(ctx, "+", p2, pl)
+			integer sql_expr = _batch_binop(ctx, "+", p3, suffix)
+			integer sql_assign = sassign(ctx, "sql", sql_expr)
+			_batch_arrayPush(ctx, insert_stmts, sql_assign)
+			// string params = __to_params_with_tenant(__tenant_id)
+			integer tid_ref = ident(ctx, "__tenant_id")
+			integer tp_expr = call1(ctx, "__to_params_with_tenant", tid_ref)
+			integer params_assign = sassign(ctx, "params", tp_expr)
+			_batch_arrayPush(ctx, insert_stmts, params_assign)
+		else
+			// string sql = "INSERT INTO <table> (" + __field_list() + ") VALUES (" + __placeholder_list() + ") RETURNING id"
+			integer fl2 = call0(ctx, "__field_list")
+			integer pl2 = call0(ctx, "__placeholder_list")
+			integer prefix2 = sl(ctx, "INSERT INTO " + table_name + " (")
+			integer mid2 = sl(ctx, ") VALUES (")
+			integer suffix2 = sl(ctx, ") RETURNING id")
+			integer q1 = _batch_binop(ctx, "+", prefix2, fl2)
+			integer q2 = _batch_binop(ctx, "+", q1, mid2)
+			integer q3 = _batch_binop(ctx, "+", q2, pl2)
+			integer sql_expr2 = _batch_binop(ctx, "+", q3, suffix2)
+			integer sql_assign2 = sassign(ctx, "sql", sql_expr2)
+			_batch_arrayPush(ctx, insert_stmts, sql_assign2)
+			// string params = __to_params()
+			integer tp_expr2 = call0(ctx, "__to_params")
+			integer params_assign2 = sassign(ctx, "params", tp_expr2)
+			_batch_arrayPush(ctx, insert_stmts, params_assign2)
+		// string result = _db_query(sql, params)
+		integer sql_ref = ident(ctx, "sql")
+		integer params_ref = ident(ctx, "params")
+		integer dbq_expr = call2(ctx, "_db_query", sql_ref, params_ref)
+		integer res_assign = sassign(ctx, "__ins_result", dbq_expr)
+		_batch_arrayPush(ctx, insert_stmts, res_assign)
+		// id = __extract_id(result)
+		integer ins_res_ref = ident(ctx, "__ins_result")
+		integer eid_expr = call1(ctx, "__extract_id", ins_res_ref)
+		integer id_assign = sassign(ctx, "id", eid_expr)
+		_batch_arrayPush(ctx, insert_stmts, id_assign)
+		// return id > 0
+		integer id_ref = ident(ctx, "id")
+		integer zero_lit = il(ctx, 0)
+		integer cmp_expr = _batch_binop(ctx, ">", id_ref, zero_lit)
+		integer ret_insert = sr(ctx, cmp_expr)
+		_batch_arrayPush(ctx, insert_stmts, ret_insert)
+
+		// UPDATE branch (id != 0): always the same
+		integer update_stmts = _batch_arrayNew(ctx)
+		// string sql = "UPDATE <table> SET " + __update_set() + " WHERE id = $1"
+		integer us_expr = call0(ctx, "__update_set")
+		integer upd_prefix = sl(ctx, "UPDATE " + table_name + " SET ")
+		integer upd_where = sl(ctx, " WHERE id = $1")
+		integer upd1 = _batch_binop(ctx, "+", upd_prefix, us_expr)
+		integer upd_sql_expr = _batch_binop(ctx, "+", upd1, upd_where)
+		integer upd_sql_assign = sassign(ctx, "sql", upd_sql_expr)
+		_batch_arrayPush(ctx, update_stmts, upd_sql_assign)
+		// string params = __to_update_params()
+		integer tup_expr = call0(ctx, "__to_update_params")
+		integer upd_params_assign = sassign(ctx, "params", tup_expr)
+		_batch_arrayPush(ctx, update_stmts, upd_params_assign)
+		// integer affected = _db_execute(sql, params)
+		integer upd_sql_ref = ident(ctx, "sql")
+		integer upd_params_ref = ident(ctx, "params")
+		integer dbe_expr = call2(ctx, "_db_execute", upd_sql_ref, upd_params_ref)
+		integer aff_assign = sassign(ctx, "affected", dbe_expr)
+		_batch_arrayPush(ctx, update_stmts, aff_assign)
+		// return affected > 0
+		integer aff_ref = ident(ctx, "affected")
+		integer zero2 = il(ctx, 0)
+		integer aff_cmp = _batch_binop(ctx, ">", aff_ref, zero2)
+		integer ret_upd = sr(ctx, aff_cmp)
+		_batch_arrayPush(ctx, update_stmts, ret_upd)
+
+		// if id == 0 { insert } else { update }  — outer if/else on id
+		integer id_ref2 = ident(ctx, "id")
+		integer zero3 = il(ctx, 0)
+		integer id_eq_zero = _batch_binop(ctx, "==", id_ref2, zero3)
+		integer if_stmt = _batch_stmtIf(ctx, id_eq_zero, insert_stmts, update_stmts)
+
+		integer body_arr = arr1(ctx, if_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: boolean delete()
+	integer build_delete_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		// if id == 0 { return false }
+		integer id_ref = ident(ctx, "id")
+		integer zero_lit = il(ctx, 0)
+		integer id_eq_zero = _batch_binop(ctx, "==", id_ref, zero_lit)
+		integer false_lit = bl(ctx, false)
+		integer ret_false = sr(ctx, false_lit)
+		integer early_stmts = arr1(ctx, ret_false)
+		integer early_if = _batch_stmtIf(ctx, id_eq_zero, early_stmts, 0)
+		_batch_arrayPush(ctx, body_arr, early_if)
+
+		if has_tenant
+			// string __tenant_id = tenant_getId()
+			integer tid_expr = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant_id", tid_expr)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			// string sql = "DELETE FROM <table> WHERE id = $1 AND tenant_id = '" + __tenant_id + "'"
+			integer tid_ref = ident(ctx, "__tenant_id")
+			integer prefix = sl(ctx, "DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '")
+			integer suffix = sl(ctx, "'")
+			integer p1 = _batch_binop(ctx, "+", prefix, tid_ref)
+			integer sql_expr = _batch_binop(ctx, "+", p1, suffix)
+			integer sql_assign = sassign(ctx, "sql", sql_expr)
+			_batch_arrayPush(ctx, body_arr, sql_assign)
+		else
+			// string sql = "DELETE FROM <table> WHERE id = $1"
+			integer sql_lit = sl(ctx, "DELETE FROM " + table_name + " WHERE id = $1")
+			integer sql_assign2 = sassign(ctx, "sql", sql_lit)
+			_batch_arrayPush(ctx, body_arr, sql_assign2)
+
+		// string params = "[" + id.toString() + "]"
+		// Use _emit_stmt_from_source for this line: method call syntax requires receiver.method()
+		// which the batch builder does not natively express as a dotted call.
+		integer params_src_h = _emit_stmt_from_source(ctx, "string params = \"[\" + id.toString() + \"]\"\n", 0)
+		_batch_arrayPush(ctx, body_arr, params_src_h)
+
+		// integer affected = _db_execute(sql, params)
+		integer sql_ref = ident(ctx, "sql")
+		integer params_ref = ident(ctx, "params")
+		integer dbe_expr = call2(ctx, "_db_execute", sql_ref, params_ref)
+		integer aff_assign = sassign(ctx, "affected", dbe_expr)
+		_batch_arrayPush(ctx, body_arr, aff_assign)
+		// return affected > 0
+		integer aff_ref = ident(ctx, "affected")
+		integer zero2 = il(ctx, 0)
+		integer aff_cmp = _batch_binop(ctx, ">", aff_ref, zero2)
+		integer ret_stmt = sr(ctx, aff_cmp)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+// ============================================================================
+// SUB-CYCLE 2: STATIC METHOD BODY BUILDERS
+// ============================================================================
+
+functions:
+	// Build body for: list<M> find(string where_clause, string order_clause, string limit_clause)
+	integer build_find_body(integer ctx, string model_name, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		// string sql = "SELECT * FROM <table>"
+		integer sql_base = sl(ctx, "SELECT * FROM " + table_name)
+		integer sql_assign = sassign(ctx, "sql", sql_base)
+		_batch_arrayPush(ctx, body_arr, sql_assign)
+
+		if has_tenant
+			// string __tenant = tenant_getId()
+			integer tid = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant", tid)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			// string __tenant_filter = "tenant_id = '" + __tenant + "'"
+			integer tf_prefix = sl(ctx, "tenant_id = '")
+			integer tf_suffix = sl(ctx, "'")
+			integer tenant_ref = ident(ctx, "__tenant")
+			integer p1 = _batch_binop(ctx, "+", tf_prefix, tenant_ref)
+			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
+			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
+			_batch_arrayPush(ctx, body_arr, tf_assign)
+			// if where_clause.length() > 0 { sql += " WHERE " + __tenant_filter + " AND " + where_clause } else { sql += " WHERE " + __tenant_filter }
+			integer wc_ref = ident(ctx, "where_clause")
+			integer wc_len = _batch_field(ctx, wc_ref, "length")
+			integer wc_len_call = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero = il(ctx, 0)
+			integer wc_cond = _batch_binop(ctx, ">", wc_len_call, wc_zero)
+			// then: sql = sql + " WHERE " + __tenant_filter + " AND " + where_clause
+			integer sql_ref1 = ident(ctx, "sql")
+			integer tf_ref1 = ident(ctx, "__tenant_filter")
+			integer wc_ref1 = ident(ctx, "where_clause")
+			integer where_kw = sl(ctx, " WHERE ")
+			integer and_kw = sl(ctx, " AND ")
+			integer t1 = _batch_binop(ctx, "+", sql_ref1, where_kw)
+			integer t2 = _batch_binop(ctx, "+", t1, tf_ref1)
+			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
+			integer t4 = _batch_binop(ctx, "+", t3, wc_ref1)
+			integer then_assign = sassign(ctx, "sql", t4)
+			integer then_arr = arr1(ctx, then_assign)
+			// else: sql = sql + " WHERE " + __tenant_filter
+			integer sql_ref2 = ident(ctx, "sql")
+			integer tf_ref2 = ident(ctx, "__tenant_filter")
+			integer where_kw2 = sl(ctx, " WHERE ")
+			integer e1 = _batch_binop(ctx, "+", sql_ref2, where_kw2)
+			integer e2 = _batch_binop(ctx, "+", e1, tf_ref2)
+			integer else_assign = sassign(ctx, "sql", e2)
+			integer else_arr = arr1(ctx, else_assign)
+			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
+			_batch_arrayPush(ctx, body_arr, where_if)
+		else
+			// if where_clause.length() > 0 { sql += " WHERE " + where_clause }
+			integer wc_ref2 = ident(ctx, "where_clause")
+			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero2 = il(ctx, 0)
+			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
+			integer sql_ref3 = ident(ctx, "sql")
+			integer wc_ref3 = ident(ctx, "where_clause")
+			integer where_kw3 = sl(ctx, " WHERE ")
+			integer wn1 = _batch_binop(ctx, "+", sql_ref3, where_kw3)
+			integer wn2 = _batch_binop(ctx, "+", wn1, wc_ref3)
+			integer wn_assign = sassign(ctx, "sql", wn2)
+			integer wn_then = arr1(ctx, wn_assign)
+			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
+			_batch_arrayPush(ctx, body_arr, wn_if)
+
+		// if order_clause.length() > 0 { sql += " ORDER BY " + order_clause }
+		integer oc_len = _batch_call(ctx, "order_clause.length", _batch_arrayNew(ctx))
+		integer oc_zero = il(ctx, 0)
+		integer oc_cond = _batch_binop(ctx, ">", oc_len, oc_zero)
+		integer sql_ref4 = ident(ctx, "sql")
+		integer oc_ref = ident(ctx, "order_clause")
+		integer order_kw = sl(ctx, " ORDER BY ")
+		integer oa1 = _batch_binop(ctx, "+", sql_ref4, order_kw)
+		integer oa2 = _batch_binop(ctx, "+", oa1, oc_ref)
+		integer oa_assign = sassign(ctx, "sql", oa2)
+		integer oa_then = arr1(ctx, oa_assign)
+		integer oa_if = _batch_stmtIf(ctx, oc_cond, oa_then, 0)
+		_batch_arrayPush(ctx, body_arr, oa_if)
+
+		// if limit_clause.length() > 0 { sql += " LIMIT " + limit_clause }
+		integer lc_len = _batch_call(ctx, "limit_clause.length", _batch_arrayNew(ctx))
+		integer lc_zero = il(ctx, 0)
+		integer lc_cond = _batch_binop(ctx, ">", lc_len, lc_zero)
+		integer sql_ref5 = ident(ctx, "sql")
+		integer lc_ref = ident(ctx, "limit_clause")
+		integer limit_kw = sl(ctx, " LIMIT ")
+		integer la1 = _batch_binop(ctx, "+", sql_ref5, limit_kw)
+		integer la2 = _batch_binop(ctx, "+", la1, lc_ref)
+		integer la_assign = sassign(ctx, "sql", la2)
+		integer la_then = arr1(ctx, la_assign)
+		integer la_if = _batch_stmtIf(ctx, lc_cond, la_then, 0)
+		_batch_arrayPush(ctx, body_arr, la_if)
+
+		// return __parse_as_<model>(_db_query(sql, "[]"))
+		integer sql_ref6 = ident(ctx, "sql")
+		integer empty_params = sl(ctx, "[]")
+		integer dbq = call2(ctx, "_db_query", sql_ref6, empty_params)
+		integer parse_ret = call1(ctx, "__parse_as_" + model_name, dbq)
+		integer ret_stmt = sr(ctx, parse_ret)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: string first(string where_clause)
+	integer build_first_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		integer sql_base = sl(ctx, "SELECT * FROM " + table_name)
+		integer sql_assign = sassign(ctx, "sql", sql_base)
+		_batch_arrayPush(ctx, body_arr, sql_assign)
+
+		if has_tenant
+			integer tid = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant", tid)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			integer tf_prefix = sl(ctx, "tenant_id = '")
+			integer tf_suffix = sl(ctx, "'")
+			integer tenant_ref = ident(ctx, "__tenant")
+			integer p1 = _batch_binop(ctx, "+", tf_prefix, tenant_ref)
+			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
+			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
+			_batch_arrayPush(ctx, body_arr, tf_assign)
+			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero = il(ctx, 0)
+			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
+			integer sql_r1 = ident(ctx, "sql")
+			integer tf_r1 = ident(ctx, "__tenant_filter")
+			integer wc_r1 = ident(ctx, "where_clause")
+			integer where_kw = sl(ctx, " WHERE ")
+			integer and_kw = sl(ctx, " AND ")
+			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
+			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
+			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
+			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
+			integer then_assign = sassign(ctx, "sql", t4)
+			integer then_arr = arr1(ctx, then_assign)
+			integer sql_r2 = ident(ctx, "sql")
+			integer tf_r2 = ident(ctx, "__tenant_filter")
+			integer where_kw2 = sl(ctx, " WHERE ")
+			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
+			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
+			integer else_assign = sassign(ctx, "sql", e2)
+			integer else_arr = arr1(ctx, else_assign)
+			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
+			_batch_arrayPush(ctx, body_arr, where_if)
+		else
+			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero2 = il(ctx, 0)
+			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
+			integer sql_r3 = ident(ctx, "sql")
+			integer wc_r2 = ident(ctx, "where_clause")
+			integer where_kw3 = sl(ctx, " WHERE ")
+			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
+			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
+			integer wn_assign = sassign(ctx, "sql", wn2)
+			integer wn_then = arr1(ctx, wn_assign)
+			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
+			_batch_arrayPush(ctx, body_arr, wn_if)
+
+		// sql = sql + " LIMIT 1"
+		integer sql_r4 = ident(ctx, "sql")
+		integer limit1 = sl(ctx, " LIMIT 1")
+		integer lim_expr = _batch_binop(ctx, "+", sql_r4, limit1)
+		integer lim_assign = sassign(ctx, "sql", lim_expr)
+		_batch_arrayPush(ctx, body_arr, lim_assign)
+		// return _db_query(sql, "[]")
+		integer sql_r5 = ident(ctx, "sql")
+		integer ep = sl(ctx, "[]")
+		integer dbq = call2(ctx, "_db_query", sql_r5, ep)
+		integer ret_stmt = sr(ctx, dbq)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: integer count(string where_clause)
+	integer build_count_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		integer sql_base = sl(ctx, "SELECT COUNT(*) as count FROM " + table_name)
+		integer sql_assign = sassign(ctx, "sql", sql_base)
+		_batch_arrayPush(ctx, body_arr, sql_assign)
+		if has_tenant
+			integer tid = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant", tid)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			integer tf_prefix = sl(ctx, "tenant_id = '")
+			integer tf_suffix = sl(ctx, "'")
+			integer tr = ident(ctx, "__tenant")
+			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
+			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
+			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
+			_batch_arrayPush(ctx, body_arr, tf_assign)
+			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero = il(ctx, 0)
+			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
+			integer sql_r1 = ident(ctx, "sql")
+			integer tf_r1 = ident(ctx, "__tenant_filter")
+			integer wc_r1 = ident(ctx, "where_clause")
+			integer where_kw = sl(ctx, " WHERE ")
+			integer and_kw = sl(ctx, " AND ")
+			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
+			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
+			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
+			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
+			integer then_assign = sassign(ctx, "sql", t4)
+			integer then_arr = arr1(ctx, then_assign)
+			integer sql_r2 = ident(ctx, "sql")
+			integer tf_r2 = ident(ctx, "__tenant_filter")
+			integer where_kw2 = sl(ctx, " WHERE ")
+			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
+			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
+			integer else_assign = sassign(ctx, "sql", e2)
+			integer else_arr = arr1(ctx, else_assign)
+			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
+			_batch_arrayPush(ctx, body_arr, where_if)
+		else
+			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero2 = il(ctx, 0)
+			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
+			integer sql_r3 = ident(ctx, "sql")
+			integer wc_r2 = ident(ctx, "where_clause")
+			integer where_kw3 = sl(ctx, " WHERE ")
+			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
+			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
+			integer wn_assign = sassign(ctx, "sql", wn2)
+			integer wn_then = arr1(ctx, wn_assign)
+			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
+			_batch_arrayPush(ctx, body_arr, wn_if)
+		// string result = _db_query(sql, "[]")
+		integer sql_r4 = ident(ctx, "sql")
+		integer ep = sl(ctx, "[]")
+		integer dbq = call2(ctx, "_db_query", sql_r4, ep)
+		integer res_assign = sassign(ctx, "__count_result", dbq)
+		_batch_arrayPush(ctx, body_arr, res_assign)
+		// return __extract_count(result)
+		integer res_ref = ident(ctx, "__count_result")
+		integer ec_expr = call1(ctx, "__extract_count", res_ref)
+		integer ret_stmt = sr(ctx, ec_expr)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: integer exists(string where_clause)
+	integer build_exists_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		integer sql_base = sl(ctx, "SELECT COUNT(*) as count FROM " + table_name)
+		integer sql_assign = sassign(ctx, "sql", sql_base)
+		_batch_arrayPush(ctx, body_arr, sql_assign)
+		if has_tenant
+			integer tid = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant", tid)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			integer tf_prefix = sl(ctx, "tenant_id = '")
+			integer tf_suffix = sl(ctx, "'")
+			integer tr = ident(ctx, "__tenant")
+			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
+			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
+			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
+			_batch_arrayPush(ctx, body_arr, tf_assign)
+			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero = il(ctx, 0)
+			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
+			integer sql_r1 = ident(ctx, "sql")
+			integer tf_r1 = ident(ctx, "__tenant_filter")
+			integer wc_r1 = ident(ctx, "where_clause")
+			integer where_kw = sl(ctx, " WHERE ")
+			integer and_kw = sl(ctx, " AND ")
+			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
+			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
+			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
+			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
+			integer then_assign = sassign(ctx, "sql", t4)
+			integer then_arr = arr1(ctx, then_assign)
+			integer sql_r2 = ident(ctx, "sql")
+			integer tf_r2 = ident(ctx, "__tenant_filter")
+			integer where_kw2 = sl(ctx, " WHERE ")
+			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
+			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
+			integer else_assign = sassign(ctx, "sql", e2)
+			integer else_arr = arr1(ctx, else_assign)
+			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
+			_batch_arrayPush(ctx, body_arr, where_if)
+		else
+			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero2 = il(ctx, 0)
+			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
+			integer sql_r3 = ident(ctx, "sql")
+			integer wc_r2 = ident(ctx, "where_clause")
+			integer where_kw3 = sl(ctx, " WHERE ")
+			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
+			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
+			integer wn_assign = sassign(ctx, "sql", wn2)
+			integer wn_then = arr1(ctx, wn_assign)
+			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
+			_batch_arrayPush(ctx, body_arr, wn_if)
+		// sql = sql + " LIMIT 1"
+		integer sql_r4 = ident(ctx, "sql")
+		integer limit1 = sl(ctx, " LIMIT 1")
+		integer lim_expr = _batch_binop(ctx, "+", sql_r4, limit1)
+		integer lim_assign = sassign(ctx, "sql", lim_expr)
+		_batch_arrayPush(ctx, body_arr, lim_assign)
+		// string __exists_result = _db_query(sql, "[]")
+		integer sql_r5 = ident(ctx, "sql")
+		integer ep = sl(ctx, "[]")
+		integer dbq = call2(ctx, "_db_query", sql_r5, ep)
+		integer exr_assign = sassign(ctx, "__exists_result", dbq)
+		_batch_arrayPush(ctx, body_arr, exr_assign)
+		// if __extract_count(__exists_result) > 0 { return 1 } return 0
+		integer exr_ref = ident(ctx, "__exists_result")
+		integer ec_call = call1(ctx, "__extract_count", exr_ref)
+		integer zero_lit = il(ctx, 0)
+		integer ec_cond = _batch_binop(ctx, ">", ec_call, zero_lit)
+		integer one_lit = il(ctx, 1)
+		integer ret1 = sr(ctx, one_lit)
+		integer ex_then = arr1(ctx, ret1)
+		integer ex_if = _batch_stmtIf(ctx, ec_cond, ex_then, 0)
+		_batch_arrayPush(ctx, body_arr, ex_if)
+		integer zero2 = il(ctx, 0)
+		integer ret0 = sr(ctx, zero2)
+		_batch_arrayPush(ctx, body_arr, ret0)
+		return sblk(ctx, body_arr)
+
+	// Build body for: string findOrFail(string where_clause)
+	integer build_find_or_fail_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		integer sql_base = sl(ctx, "SELECT * FROM " + table_name)
+		integer sql_assign = sassign(ctx, "sql", sql_base)
+		_batch_arrayPush(ctx, body_arr, sql_assign)
+		if has_tenant
+			integer tid = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant", tid)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			integer tf_prefix = sl(ctx, "tenant_id = '")
+			integer tf_suffix = sl(ctx, "'")
+			integer tr = ident(ctx, "__tenant")
+			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
+			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
+			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
+			_batch_arrayPush(ctx, body_arr, tf_assign)
+			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero = il(ctx, 0)
+			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
+			integer sql_r1 = ident(ctx, "sql")
+			integer tf_r1 = ident(ctx, "__tenant_filter")
+			integer wc_r1 = ident(ctx, "where_clause")
+			integer where_kw = sl(ctx, " WHERE ")
+			integer and_kw = sl(ctx, " AND ")
+			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
+			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
+			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
+			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
+			integer then_assign = sassign(ctx, "sql", t4)
+			integer then_arr = arr1(ctx, then_assign)
+			integer sql_r2 = ident(ctx, "sql")
+			integer tf_r2 = ident(ctx, "__tenant_filter")
+			integer where_kw2 = sl(ctx, " WHERE ")
+			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
+			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
+			integer else_assign = sassign(ctx, "sql", e2)
+			integer else_arr = arr1(ctx, else_assign)
+			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
+			_batch_arrayPush(ctx, body_arr, where_if)
+		else
+			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
+			integer wc_zero2 = il(ctx, 0)
+			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
+			integer sql_r3 = ident(ctx, "sql")
+			integer wc_r2 = ident(ctx, "where_clause")
+			integer where_kw3 = sl(ctx, " WHERE ")
+			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
+			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
+			integer wn_assign = sassign(ctx, "sql", wn2)
+			integer wn_then = arr1(ctx, wn_assign)
+			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
+			_batch_arrayPush(ctx, body_arr, wn_if)
+		// sql = sql + " LIMIT 1"
+		integer sql_r4 = ident(ctx, "sql")
+		integer limit1 = sl(ctx, " LIMIT 1")
+		integer lim_expr = _batch_binop(ctx, "+", sql_r4, limit1)
+		integer lim_assign = sassign(ctx, "sql", lim_expr)
+		_batch_arrayPush(ctx, body_arr, lim_assign)
+		// string __fail_result = _db_query(sql, "[]")
+		integer sql_r5 = ident(ctx, "sql")
+		integer ep = sl(ctx, "[]")
+		integer dbq = call2(ctx, "_db_query", sql_r5, ep)
+		integer fr_assign = sassign(ctx, "__fail_result", dbq)
+		_batch_arrayPush(ctx, body_arr, fr_assign)
+		// if __fail_result == "[]" { error("NOT_FOUND") }
+		integer fr_ref = ident(ctx, "__fail_result")
+		integer empty_json = sl(ctx, "[]")
+		integer fr_cond = _batch_binop(ctx, "==", fr_ref, empty_json)
+		integer not_found_lit = sl(ctx, "NOT_FOUND")
+		integer err_call = call1(ctx, "error", not_found_lit)
+		integer err_stmt = _batch_stmtCall(ctx, "error", arr1(ctx, not_found_lit))
+		integer fail_then = arr1(ctx, err_stmt)
+		integer fail_if = _batch_stmtIf(ctx, fr_cond, fail_then, 0)
+		_batch_arrayPush(ctx, body_arr, fail_if)
+		// return __fail_result
+		integer fr_ref2 = ident(ctx, "__fail_result")
+		integer ret_stmt = sr(ctx, fr_ref2)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: boolean migrate()
+	integer build_migrate_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		if has_tenant
+			// string __field_defs = __field_definitions()
+			integer fd_expr = call0(ctx, "__field_definitions")
+			integer fd_assign = sassign(ctx, "__field_defs", fd_expr)
+			_batch_arrayPush(ctx, body_arr, fd_assign)
+			// if __field_defs.indexOf("tenant_id") == -1 { __field_defs = "tenant_id TEXT NOT NULL, " + __field_defs }
+			integer fd_ref = ident(ctx, "__field_defs")
+			integer tid_lit = sl(ctx, "tenant_id")
+			integer iof_call = call1(ctx, "__field_defs.indexOf", tid_lit)
+			integer neg1 = il(ctx, -1)
+			integer iof_cond = _batch_binop(ctx, "==", iof_call, neg1)
+			integer prepend_lit = sl(ctx, "tenant_id TEXT NOT NULL, ")
+			integer fd_ref2 = ident(ctx, "__field_defs")
+			integer prepend_expr = _batch_binop(ctx, "+", prepend_lit, fd_ref2)
+			integer prepend_assign = sassign(ctx, "__field_defs", prepend_expr)
+			integer prepend_then = arr1(ctx, prepend_assign)
+			integer prepend_if = _batch_stmtIf(ctx, iof_cond, prepend_then, 0)
+			_batch_arrayPush(ctx, body_arr, prepend_if)
+			// string sql = "CREATE TABLE IF NOT EXISTS <table> (id SERIAL PRIMARY KEY, " + __field_defs + ")"
+			integer sql_prefix = sl(ctx, "CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, ")
+			integer sql_suffix = sl(ctx, ")")
+			integer fd_ref3 = ident(ctx, "__field_defs")
+			integer sm1 = _batch_binop(ctx, "+", sql_prefix, fd_ref3)
+			integer sql_expr = _batch_binop(ctx, "+", sm1, sql_suffix)
+			integer sql_assign = sassign(ctx, "sql", sql_expr)
+			_batch_arrayPush(ctx, body_arr, sql_assign)
+		else
+			// string sql = "CREATE TABLE IF NOT EXISTS <table> (id SERIAL PRIMARY KEY, " + __field_definitions() + ")"
+			integer fd_call = call0(ctx, "__field_definitions")
+			integer sql_prefix2 = sl(ctx, "CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, ")
+			integer sql_suffix2 = sl(ctx, ")")
+			integer sm2 = _batch_binop(ctx, "+", sql_prefix2, fd_call)
+			integer sql_expr2 = _batch_binop(ctx, "+", sm2, sql_suffix2)
+			integer sql_assign2 = sassign(ctx, "sql", sql_expr2)
+			_batch_arrayPush(ctx, body_arr, sql_assign2)
+		// integer affected = _db_execute(sql, "[]")
+		integer sql_r = ident(ctx, "sql")
+		integer ep = sl(ctx, "[]")
+		integer dbe = call2(ctx, "_db_execute", sql_r, ep)
+		integer aff_assign = sassign(ctx, "affected", dbe)
+		_batch_arrayPush(ctx, body_arr, aff_assign)
+		// return affected >= 0
+		integer aff_ref = ident(ctx, "affected")
+		integer zero_lit = il(ctx, 0)
+		integer ret_cond = _batch_binop(ctx, ">=", aff_ref, zero_lit)
+		integer ret_stmt = sr(ctx, ret_cond)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: integer __raw_update(string set_sql, string where_sql)
+	integer build_raw_update_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		// string sql = "UPDATE <table> SET " + set_sql
+		integer set_ref = ident(ctx, "set_sql")
+		integer upd_prefix = sl(ctx, "UPDATE " + table_name + " SET ")
+		integer sql_expr = _batch_binop(ctx, "+", upd_prefix, set_ref)
+		integer sql_assign = sassign(ctx, "sql", sql_expr)
+		_batch_arrayPush(ctx, body_arr, sql_assign)
+		if has_tenant
+			integer tid = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant", tid)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			integer tf_prefix = sl(ctx, "tenant_id = '")
+			integer tf_suffix = sl(ctx, "'")
+			integer tr = ident(ctx, "__tenant")
+			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
+			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
+			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
+			_batch_arrayPush(ctx, body_arr, tf_assign)
+			integer ws_len = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
+			integer ws_zero = il(ctx, 0)
+			integer ws_cond = _batch_binop(ctx, ">", ws_len, ws_zero)
+			integer sql_r1 = ident(ctx, "sql")
+			integer tf_r1 = ident(ctx, "__tenant_filter")
+			integer ws_r1 = ident(ctx, "where_sql")
+			integer where_kw = sl(ctx, " WHERE ")
+			integer and_kw = sl(ctx, " AND ")
+			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
+			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
+			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
+			integer t4 = _batch_binop(ctx, "+", t3, ws_r1)
+			integer then_assign = sassign(ctx, "sql", t4)
+			integer then_arr = arr1(ctx, then_assign)
+			integer sql_r2 = ident(ctx, "sql")
+			integer tf_r2 = ident(ctx, "__tenant_filter")
+			integer where_kw2 = sl(ctx, " WHERE ")
+			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
+			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
+			integer else_assign = sassign(ctx, "sql", e2)
+			integer else_arr = arr1(ctx, else_assign)
+			integer where_if = _batch_stmtIf(ctx, ws_cond, then_arr, else_arr)
+			_batch_arrayPush(ctx, body_arr, where_if)
+		else
+			integer ws_len2 = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
+			integer ws_zero2 = il(ctx, 0)
+			integer ws_cond2 = _batch_binop(ctx, ">", ws_len2, ws_zero2)
+			integer sql_r3 = ident(ctx, "sql")
+			integer ws_r2 = ident(ctx, "where_sql")
+			integer where_kw3 = sl(ctx, " WHERE ")
+			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
+			integer wn2 = _batch_binop(ctx, "+", wn1, ws_r2)
+			integer wn_assign = sassign(ctx, "sql", wn2)
+			integer wn_then = arr1(ctx, wn_assign)
+			integer wn_if = _batch_stmtIf(ctx, ws_cond2, wn_then, 0)
+			_batch_arrayPush(ctx, body_arr, wn_if)
+		// return _db_execute(sql, "[]")
+		integer sql_r4 = ident(ctx, "sql")
+		integer ep = sl(ctx, "[]")
+		integer dbe = call2(ctx, "_db_execute", sql_r4, ep)
+		integer ret_stmt = sr(ctx, dbe)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: integer __raw_delete(string where_sql)
+	integer build_raw_delete_body(integer ctx, string table_name, boolean has_tenant)
+		integer body_arr = _batch_arrayNew(ctx)
+		if has_tenant
+			integer sql_base = sl(ctx, "DELETE FROM " + table_name)
+			integer sql_assign = sassign(ctx, "sql", sql_base)
+			_batch_arrayPush(ctx, body_arr, sql_assign)
+			integer tid = call0(ctx, "tenant_getId")
+			integer tid_assign = sassign(ctx, "__tenant", tid)
+			_batch_arrayPush(ctx, body_arr, tid_assign)
+			integer tf_prefix = sl(ctx, "tenant_id = '")
+			integer tf_suffix = sl(ctx, "'")
+			integer tr = ident(ctx, "__tenant")
+			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
+			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
+			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
+			_batch_arrayPush(ctx, body_arr, tf_assign)
+			integer ws_len = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
+			integer ws_zero = il(ctx, 0)
+			integer ws_cond = _batch_binop(ctx, ">", ws_len, ws_zero)
+			integer sql_r1 = ident(ctx, "sql")
+			integer tf_r1 = ident(ctx, "__tenant_filter")
+			integer ws_r1 = ident(ctx, "where_sql")
+			integer where_kw = sl(ctx, " WHERE ")
+			integer and_kw = sl(ctx, " AND ")
+			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
+			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
+			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
+			integer t4 = _batch_binop(ctx, "+", t3, ws_r1)
+			integer then_assign = sassign(ctx, "sql", t4)
+			integer then_arr = arr1(ctx, then_assign)
+			integer sql_r2 = ident(ctx, "sql")
+			integer tf_r2 = ident(ctx, "__tenant_filter")
+			integer where_kw2 = sl(ctx, " WHERE ")
+			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
+			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
+			integer else_assign = sassign(ctx, "sql", e2)
+			integer else_arr = arr1(ctx, else_assign)
+			integer where_if = _batch_stmtIf(ctx, ws_cond, then_arr, else_arr)
+			_batch_arrayPush(ctx, body_arr, where_if)
+		else
+			integer sql_base2 = sl(ctx, "DELETE FROM " + table_name)
+			integer sql_assign2 = sassign(ctx, "sql", sql_base2)
+			_batch_arrayPush(ctx, body_arr, sql_assign2)
+			integer ws_len2 = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
+			integer ws_zero2 = il(ctx, 0)
+			integer ws_cond2 = _batch_binop(ctx, ">", ws_len2, ws_zero2)
+			integer sql_r3 = ident(ctx, "sql")
+			integer ws_r2 = ident(ctx, "where_sql")
+			integer where_kw3 = sl(ctx, " WHERE ")
+			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
+			integer wn2 = _batch_binop(ctx, "+", wn1, ws_r2)
+			integer wn_assign = sassign(ctx, "sql", wn2)
+			integer wn_then = arr1(ctx, wn_assign)
+			integer wn_if = _batch_stmtIf(ctx, ws_cond2, wn_then, 0)
+			_batch_arrayPush(ctx, body_arr, wn_if)
+		// return _db_execute(sql, "[]")
+		integer sql_r4 = ident(ctx, "sql")
+		integer ep = sl(ctx, "[]")
+		integer dbe = call2(ctx, "_db_execute", sql_r4, ep)
+		integer ret_stmt = sr(ctx, dbe)
+		_batch_arrayPush(ctx, body_arr, ret_stmt)
+		return sblk(ctx, body_arr)
+
+// ============================================================================
+// SUB-CYCLE 2: HELPER METHOD BODY BUILDERS
+// ============================================================================
+
+functions:
+	// Build body for: string __field_list() — returns field CSV as a literal string.
+	// field_names_display is field_names with commas replaced by ", ".
+	integer build_field_list_body(integer ctx, string field_names)
+		string display = field_names.replace(",", ", ")
+		integer lit = sl(ctx, display)
+		integer ret_stmt = sr(ctx, lit)
+		integer body_arr = arr1(ctx, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: string __field_definitions() — returns SQL column defs literal.
+	integer build_field_definitions_body(integer ctx, string field_defs)
+		integer lit = sl(ctx, field_defs)
+		integer ret_stmt = sr(ctx, lit)
+		integer body_arr = arr1(ctx, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: string __placeholder_list() — calls __generate_placeholders(N).
+	integer build_placeholder_list_body(integer ctx, integer field_count)
+		integer n_lit = il(ctx, field_count)
+		integer call_expr = call1(ctx, "__generate_placeholders", n_lit)
+		integer ret_stmt = sr(ctx, call_expr)
+		integer body_arr = arr1(ctx, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: string __update_set() — returns UPDATE SET SQL literal.
+	integer build_update_set_body(integer ctx, string update_set_sql)
+		integer lit = sl(ctx, update_set_sql)
+		integer ret_stmt = sr(ctx, lit)
+		integer body_arr = arr1(ctx, ret_stmt)
+		return sblk(ctx, body_arr)
+
+	// Build body for: string __to_params() — serializes fields to JSON array.
+	// The serialization code is generated at plugin time as a Clean source fragment
+	// using generate_field_serialization, then emitted via _emit_stmt_from_source.
+	// Returns the body block handle.
+	integer build_to_params_body(integer ctx, string field_names, string field_types)
+		// Build source: params = "[" ... params = params + "]" ... return params
+		string src = "string params = \"[\"\n"
+		src = src + generate_field_serialization(field_names, field_types, false)
+		src = src + "params = params + \"]\"\n"
+		src = src + "return params\n"
+		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
+		return block_handle
+
+	// Build body for: string __to_params_with_tenant(string tenant_id)
+	integer build_to_params_with_tenant_body(integer ctx, string field_names, string field_types)
+		string src = "string params = \"[\\\"\" + tenant_id + \"\\\"\"\n"
+		src = src + generate_field_serialization(field_names, field_types, true)
+		src = src + "params = params + \"]\"\n"
+		src = src + "return params\n"
+		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
+		return block_handle
+
+	// Build body for: string __to_update_params()
+	integer build_to_update_params_body(integer ctx, string field_names, string field_types)
+		string src = "string params = \"[\" + id.toString()\n"
+		src = src + generate_field_serialization(field_names, field_types, true)
+		src = src + "params = params + \"]\"\n"
+		src = src + "return params\n"
+		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
+		return block_handle
+
+// ============================================================================
+// SUB-CYCLE 2: CLASS SPEC JSON ASSEMBLER
+// ============================================================================
+// Builds the complete JSON string for _emit_class_full. All method entries
+// use "kind":"inline" with "body_handle":N where N is a pre-built
+// batch_stmt_handle. The Am 10 "from_spec" variant is used only for
+// __generate_placeholders (which has no per-tenant branching).
+
+functions:
+	// Assemble the complete methods JSON array for _emit_class_full.
+	// Returns a JSON string: [{"kind":"inline","name":"...","body_handle":N,...}, ...]
+	// On any builder failure returns "" (sticky-error already set on ctx).
+	string build_methods_json(integer ctx, string model_name, string table_name, string field_names, string field_types, string field_defs, boolean has_tenant)
+
+		string methods = "["
+		boolean first = true
+
+		// Helper: append one inline method entry
+		// (inline assembly via string concatenation of plugin-authored integers —
+		//  these are handle IDs, not user source, so this is safe per §3.14 Am 7)
+
+		// --- save() ---
+		integer save_bh = build_save_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		if not first
+			methods = methods + ","
+		methods = methods + "{\"kind\":\"inline\",\"name\":\"save\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + save_bh.toString() + "}"
+		first = false
+
+		// --- delete() ---
+		integer del_bh = build_delete_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"delete\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + del_bh.toString() + "}"
+
+		// --- __field_list() ---
+		integer fl_bh = build_field_list_body(ctx, field_names)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__field_list\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + fl_bh.toString() + "}"
+
+		// --- __field_definitions() ---
+		integer fd_bh = build_field_definitions_body(ctx, field_defs)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__field_definitions\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + fd_bh.toString() + "}"
+
+		// --- __placeholder_list() ---
+		integer fc = count_fields(field_names)
+		integer pl_bh = build_placeholder_list_body(ctx, fc)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__placeholder_list\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + pl_bh.toString() + "}"
+
+		// --- __generate_placeholders(integer count) — Am 10 from_spec iterate_over:none ---
+		// Body: string result = "" ... while i <= count ... return result
+		// This has a while-loop so use _emit_stmt_from_source.
+		string gp_src = "string result = \"\"\ninteger i = 1\nwhile i <= count\n\tif i > 1\n\t\tresult = result + \", \"\n\tresult = result + \"$\" + i.toString()\n\ti = i + 1\nreturn result\n"
+		integer gp_bh = _emit_stmt_from_source(ctx, gp_src, 0)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__generate_placeholders\",\"params\":[{\"name\":\"count\",\"type\":\"integer\"}],\"return_type\":\"string\",\"body_handle\":" + gp_bh.toString() + "}"
+
+		// --- __to_params() ---
+		integer tp_bh = build_to_params_body(ctx, field_names, field_types)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + tp_bh.toString() + "}"
+
+		// --- __to_params_with_tenant(string tenant_id) — only if has_tenant ---
+		if has_tenant
+			integer tpt_bh = build_to_params_with_tenant_body(ctx, field_names, field_types)
+			if _ctx_had_error(ctx) != 0
+				return ""
+			methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params_with_tenant\",\"params\":[{\"name\":\"tenant_id\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + tpt_bh.toString() + "}"
+
+		// --- __to_update_params() ---
+		integer tup_bh = build_to_update_params_body(ctx, field_names, field_types)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_update_params\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + tup_bh.toString() + "}"
+
+		// --- __update_set() ---
+		string update_set_sql = generate_update_set_sql(field_names)
+		integer us_bh = build_update_set_body(ctx, update_set_sql)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__update_set\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + us_bh.toString() + "}"
+
+		// --- __extract_id(string result) ---
+		string eid_src = "integer id_pos = result.indexOf(\"\\\"id\\\":\")\nif id_pos == -1\n\treturn 0\ninteger value_start = id_pos + 5\ninteger value_end = value_start\nwhile value_end < result.length()\n\tstring ch = result.substring(value_end, value_end + 1)\n\tif ch == \",\" or ch == \"}\" or ch == \" \"\n\t\tbreak\n\tvalue_end = value_end + 1\nreturn result.substring(value_start, value_end).toInteger()\n"
+		integer eid_bh = _emit_stmt_from_source(ctx, eid_src, 0)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__extract_id\",\"params\":[{\"name\":\"result\",\"type\":\"string\"}],\"return_type\":\"integer\",\"body_handle\":" + eid_bh.toString() + "}"
+
+		// --- __extract_count(string result) ---
+		string ec_src = "integer count_pos = result.indexOf(\"\\\"count\\\":\")\nif count_pos == -1\n\treturn 0\ninteger value_start = count_pos + 8\ninteger value_end = value_start\nwhile value_end < result.length()\n\tstring ch = result.substring(value_end, value_end + 1)\n\tif ch == \",\" or ch == \"}\" or ch == \" \"\n\t\tbreak\n\tvalue_end = value_end + 1\nreturn result.substring(value_start, value_end).toInteger()\n"
+		integer ec_bh = _emit_stmt_from_source(ctx, ec_src, 0)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__extract_count\",\"params\":[{\"name\":\"result\",\"type\":\"string\"}],\"return_type\":\"integer\",\"body_handle\":" + ec_bh.toString() + "}"
+
+		// --- find(string where_clause, string order_clause, string limit_clause) ---
+		integer find_bh = build_find_body(ctx, model_name, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"find\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"},{\"name\":\"order_clause\",\"type\":\"string\"},{\"name\":\"limit_clause\",\"type\":\"string\"}],\"return_type\":\"list<" + model_name + ">\",\"body_handle\":" + find_bh.toString() + "}"
+
+		// --- first(string where_clause) ---
+		integer first_bh = build_first_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"first\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + first_bh.toString() + "}"
+
+		// --- count(string where_clause) ---
+		integer count_bh = build_count_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"count\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"}],\"return_type\":\"integer\",\"body_handle\":" + count_bh.toString() + "}"
+
+		// --- exists(string where_clause) ---
+		integer exists_bh = build_exists_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"exists\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"}],\"return_type\":\"integer\",\"body_handle\":" + exists_bh.toString() + "}"
+
+		// --- findOrFail(string where_clause) ---
+		integer fof_bh = build_find_or_fail_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"findOrFail\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + fof_bh.toString() + "}"
+
+		// --- migrate() ---
+		integer mig_bh = build_migrate_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"migrate\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + mig_bh.toString() + "}"
+
+		// --- __raw_update(string set_sql, string where_sql) ---
+		integer ru_bh = build_raw_update_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__raw_update\",\"params\":[{\"name\":\"set_sql\",\"type\":\"string\"},{\"name\":\"where_sql\",\"type\":\"string\"}],\"return_type\":\"integer\",\"body_handle\":" + ru_bh.toString() + "}"
+
+		// --- __raw_delete(string where_sql) ---
+		integer rd_bh = build_raw_delete_body(ctx, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__raw_delete\",\"params\":[{\"name\":\"where_sql\",\"type\":\"string\"}],\"return_type\":\"integer\",\"body_handle\":" + rd_bh.toString() + "}"
+
+		// --- validate(string field_name, string value) ---
+		// Body generated at plugin time via source template (constraint parsing).
+		// Deferred to Sub-cycle 5 for full constraint iteration; emit a minimal stub
+		// that passes cln check and preserves the method slot.
+		string val_src = "return \"\"\n"
+		integer val_bh = _emit_stmt_from_source(ctx, val_src, 0)
+		if _ctx_had_error(ctx) != 0
+			return ""
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"validate\",\"params\":[{\"name\":\"field_name\",\"type\":\"string\"},{\"name\":\"value\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + val_bh.toString() + "}"
+
+		methods = methods + "]"
+		return methods
+
+// ============================================================================
+// SUB-CYCLE 2: TOP-LEVEL FUNCTION EMITTERS (parse_as, json_rows, orm_helpers)
+// ============================================================================
+// These are top-level functions, not class methods. They are emitted via
+// _emit_stmt_from_source so the function source is generated at plugin time
+// using the same string-builder approach as v1, then parsed by the compiler.
+
+functions:
+	// Emit the top-level __parse_as_<Model> function.
+	// Uses _emit_stmt_from_source with a plugin-time-constructed source body.
+	integer emit_parse_as_function(integer ctx, string model_name, string field_names, string field_types)
+		string src = "list<" + model_name + "> __parse_as_" + model_name + "(string __json)\n"
+		src = src + "\tlist<" + model_name + "> __result = []\n"
+		src = src + "\tstring __pa_data = json.get(__json, \"data\")\n"
+		src = src + "\tstring __pa_rows = json.get(__pa_data, \"rows\")\n"
+		src = src + "\tinteger __i = 0\n"
+		src = src + "\tstring __check = json.get(__pa_rows, \"0\")\n"
+		src = src + "\twhile __check != \"\"\n"
+		src = src + "\t\t" + model_name + " __row = " + model_name + "()\n"
+		src = src + "\t\tstring __row_json = json.get(__pa_rows, __i.toString())\n"
+		string fields = field_names
+		string types = field_types
+		integer fpos = 0
+		integer tpos = 0
+		while fpos < fields.length()
+			integer comma = fields.indexOf(",", fpos)
+			if comma == -1
+				comma = fields.length()
+			integer tcomma = types.indexOf(",", tpos)
+			if tcomma == -1
+				tcomma = types.length()
+			string field = fields.substring(fpos, comma).trim()
+			string ftype = types.substring(tpos, tcomma).trim()
+			if is_primitive_type(ftype)
+				string base = "\t\t__row." + safe_field_name(field) + " = json.get(__row_json, \"" + field + "\")"
+				if ftype == "integer"
+					src = src + base + ".toInteger()\n"
+				else if ftype == "number"
+					src = src + base + ".toNumber()\n"
+				else if ftype == "boolean"
+					src = src + base + " == \"true\"\n"
+				else
+					src = src + base + "\n"
+			fpos = comma + 1
+			tpos = tcomma + 1
+		src = src + "\t\t__result.add(__row)\n"
+		src = src + "\t\t__i = __i + 1\n"
+		src = src + "\t\t__check = json.get(__pa_rows, __i.toString())\n"
+		src = src + "\treturn __result\n"
+		return _emit_function(ctx, "__parse_as_" + model_name, "[{\"name\":\"__json\",\"type\":\"string\"}]", "list<" + model_name + ">", _emit_stmt_from_source(ctx, src, 0), 0)
+
+	// Emit the top-level __find_as_strings_<Model> function.
+	integer emit_json_rows_function(integer ctx, string model_name)
+		string src = "list<string> __fstr_result = []\n"
+		src = src + "string __fstr_data = json.get(__json, \"data\")\n"
+		src = src + "string __fstr_rows = json.get(__fstr_data, \"rows\")\n"
+		src = src + "integer __fstr_i = 0\n"
+		src = src + "string __fstr_check = json.get(__fstr_rows, \"0\")\n"
+		src = src + "while __fstr_check != \"\"\n"
+		src = src + "\t__fstr_result.add(json.get(__fstr_rows, __fstr_i.toString()))\n"
+		src = src + "\t__fstr_i = __fstr_i + 1\n"
+		src = src + "\t__fstr_check = json.get(__fstr_rows, __fstr_i.toString())\n"
+		src = src + "return __fstr_result\n"
+		return _emit_function(ctx, "__find_as_strings_" + model_name, "[{\"name\":\"__json\",\"type\":\"string\"}]", "list<string>", _emit_stmt_from_source(ctx, src, 0), 0)
+
+	// Emit top-level ORM helper functions: __<Model>_exists, __<Model>_count,
+	// __<Model>_raw_update, __<Model>_raw_delete.
+	integer emit_orm_helpers(integer ctx, string model_name, string table_name, boolean has_tenant)
+		// __<Model>_exists(string __where_sql) -> integer
+		string exists_src = "string sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		if has_tenant
+			exists_src = exists_src + "string __tenant = tenant_getId()\n"
+			exists_src = exists_src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			exists_src = exists_src + "if __where_sql.length() > 0\n"
+			exists_src = exists_src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			exists_src = exists_src + "else\n"
+			exists_src = exists_src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			exists_src = exists_src + "if __where_sql.length() > 0\n"
+			exists_src = exists_src + "\tsql = sql + \" WHERE \" + __where_sql\n"
+		exists_src = exists_src + "sql = sql + \" LIMIT 1\"\n"
+		exists_src = exists_src + "string __ex_result = _db_query(sql, \"[]\")\n"
+		exists_src = exists_src + "string __ex_data = json.get(__ex_result, \"data\")\n"
+		exists_src = exists_src + "string __ex_rows = json.get(__ex_data, \"rows\")\n"
+		exists_src = exists_src + "string __ex_row = json.get(__ex_rows, \"0\")\n"
+		exists_src = exists_src + "if __ex_row == \"\"\n"
+		exists_src = exists_src + "\treturn 0\n"
+		exists_src = exists_src + "if __ex_row == \"null\"\n"
+		exists_src = exists_src + "\treturn 0\n"
+		exists_src = exists_src + "string __ex_cnt_str = json.get(__ex_row, \"count\")\n"
+		exists_src = exists_src + "integer __ex_cnt = __ex_cnt_str.toInteger()\n"
+		exists_src = exists_src + "if __ex_cnt > 0\n"
+		exists_src = exists_src + "\treturn 1\n"
+		exists_src = exists_src + "return 0\n"
+		string fname_exists = "__" + model_name + "_exists"
+		string exists_params = "[{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer exists_h = _emit_stmt_from_source(ctx, exists_src, 0)
+		_emit_function(ctx, fname_exists, exists_params, "integer", exists_h, 0)
+
+		// __<Model>_count(string __where_sql) -> integer
+		string count_src = "string sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
+		if has_tenant
+			count_src = count_src + "string __tenant = tenant_getId()\n"
+			count_src = count_src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			count_src = count_src + "if __where_sql.length() > 0\n"
+			count_src = count_src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			count_src = count_src + "else\n"
+			count_src = count_src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			count_src = count_src + "if __where_sql.length() > 0\n"
+			count_src = count_src + "\tsql = sql + \" WHERE \" + __where_sql\n"
+		count_src = count_src + "string __cnt_result = _db_query(sql, \"[]\")\n"
+		count_src = count_src + "string __cnt_data = json.get(__cnt_result, \"data\")\n"
+		count_src = count_src + "string __cnt_rows = json.get(__cnt_data, \"rows\")\n"
+		count_src = count_src + "string __cnt_row = json.get(__cnt_rows, \"0\")\n"
+		count_src = count_src + "if __cnt_row == \"\"\n"
+		count_src = count_src + "\treturn 0\n"
+		count_src = count_src + "string __cnt_str = json.get(__cnt_row, \"count\")\n"
+		count_src = count_src + "return __cnt_str.toInteger()\n"
+		string fname_count = "__" + model_name + "_count"
+		string count_params = "[{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer count_h = _emit_stmt_from_source(ctx, count_src, 0)
+		_emit_function(ctx, fname_count, count_params, "integer", count_h, 0)
+
+		// __<Model>_raw_update(string __set_sql, string __where_sql) -> integer
+		string update_src = "string sql = \"UPDATE " + table_name + " SET \" + __set_sql\n"
+		if has_tenant
+			update_src = update_src + "string __tenant = tenant_getId()\n"
+			update_src = update_src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			update_src = update_src + "if __where_sql.length() > 0\n"
+			update_src = update_src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			update_src = update_src + "else\n"
+			update_src = update_src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			update_src = update_src + "if __where_sql.length() > 0\n"
+			update_src = update_src + "\tsql = sql + \" WHERE \" + __where_sql\n"
+		update_src = update_src + "return _db_execute(sql, \"[]\")\n"
+		string fname_update = "__" + model_name + "_raw_update"
+		string update_params = "[{\"name\":\"__set_sql\",\"type\":\"string\"},{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer update_h = _emit_stmt_from_source(ctx, update_src, 0)
+		_emit_function(ctx, fname_update, update_params, "integer", update_h, 0)
+
+		// __<Model>_raw_delete(string __where_sql) -> integer
+		string delete_src = ""
+		if has_tenant
+			delete_src = delete_src + "string sql = \"DELETE FROM " + table_name + "\"\n"
+			delete_src = delete_src + "string __tenant = tenant_getId()\n"
+			delete_src = delete_src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			delete_src = delete_src + "if __where_sql.length() > 0\n"
+			delete_src = delete_src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + __where_sql\n"
+			delete_src = delete_src + "else\n"
+			delete_src = delete_src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
+		else
+			delete_src = delete_src + "string sql = \"DELETE FROM " + table_name + "\"\n"
+			delete_src = delete_src + "if __where_sql.length() > 0\n"
+			delete_src = delete_src + "\tsql = sql + \" WHERE \" + __where_sql\n"
+		delete_src = delete_src + "return _db_execute(sql, \"[]\")\n"
+		string fname_delete = "__" + model_name + "_raw_delete"
+		string delete_params = "[{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer delete_h = _emit_stmt_from_source(ctx, delete_src, 0)
+		_emit_function(ctx, fname_delete, delete_params, "integer", delete_h, 0)
+
+		if _ctx_had_error(ctx) != 0
+			return 1
+		return 0
+
+// ============================================================================
+// SUB-CYCLE 2: JSON ATTRIBUTE EXTRACTOR
+// ============================================================================
+
+functions:
+	// Extract the value of a string key from a simple JSON object string.
+	// Handles: {"key":"value"} — string values only, no nesting.
+	// Returns "" if key is not found.
+	string extract_attr(string json_str, string key)
+		string pattern = "\"" + key + "\":"
+		integer pos = json_str.indexOf(pattern)
+		if pos == -1
+			return ""
+		integer val_start = pos + pattern.length()
+		// Skip whitespace
+		while val_start < json_str.length()
+			string ch = json_str.substring(val_start, val_start + 1)
+			if ch != " " and ch != "\t"
+				break
+			val_start = val_start + 1
+		if val_start >= json_str.length()
+			return ""
+		string first_ch = json_str.substring(val_start, val_start + 1)
+		if first_ch == "\""
+			// String value — scan to closing quote (no escape handling needed for identifiers)
+			integer val_end = val_start + 1
+			while val_end < json_str.length()
+				string ch2 = json_str.substring(val_end, val_end + 1)
+				if ch2 == "\""
+					break
+				val_end = val_end + 1
+			return json_str.substring(val_start + 1, val_end)
+		// Bare value (true/false/number) — scan to comma, }, or end
+		integer val_end2 = val_start
+		while val_end2 < json_str.length()
+			string ch3 = json_str.substring(val_end2, val_end2 + 1)
+			if ch3 == "," or ch3 == "}" or ch3 == " " or ch3 == "\n"
+				break
+			val_end2 = val_end2 + 1
+		return json_str.substring(val_start, val_end2).trim()
+
+// ============================================================================
+// SUB-CYCLE 2: expand_data_model ORCHESTRATOR
+// ============================================================================
+
+functions:
+	// Expand a 'data ModelName' block into a fully-formed ORM class + helpers.
+	// This is the v3 replacement for v1's expand_data_model (which returned a
+	// string of Clean source). Here we build a class spec JSON and call
+	// _emit_class_full, then emit top-level functions via _emit_function.
+	//
+	// Sticky-error idiom: one _ctx_set_error_context at top, one _ctx_had_error
+	// at the bottom. No per-call error checks inside.
+	integer expand_data_model(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "PLUGIN-DATA-MODEL", "expand_data_model for " + model_name)
+
+		string table_name = pluralize(to_snake_case(model_name))
+		string field_names = extract_field_names(body)
+		string field_types = extract_field_types(body)
+		boolean has_tenant = detect_tenant_field(body)
+		string field_defs = generate_field_definitions(body)
+		string fields_json = build_fields_json(field_names, field_types)
+
+		// Build the methods JSON (inline body_handle entries).
+		string methods_json = build_methods_json(ctx, model_name, table_name,
+			field_names, field_types, field_defs, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return 1
+
+		// Assemble the complete class spec JSON.
+		string class_spec = "{\"name\":\"" + model_name + "\""
+		class_spec = class_spec + ",\"table_name\":\"" + table_name + "\""
+		class_spec = class_spec + ",\"parent\":null"
+		class_spec = class_spec + ",\"fields\":" + fields_json
+		class_spec = class_spec + ",\"methods\":" + methods_json
+		class_spec = class_spec + "}"
+
+		// Emit the class (flag 1 = exported).
+		// _emit_class_full accepts either a batch_spec_handle or an LP-string handle.
+		// Convert the spec string to a stringLit handle so the compiler dispatches
+		// on the tag bit per §3.13 (widened signature, canvas Sub-cycle 3 pattern).
+		integer class_spec_ptr = _batch_stringLit(ctx, class_spec)
+		_emit_class_full(ctx, class_spec_ptr, 1)
+		if _ctx_had_error(ctx) != 0
+			return 1
+
+		// Emit top-level functions.
+		emit_parse_as_function(ctx, model_name, field_names, field_types)
+		if _ctx_had_error(ctx) != 0
+			return 1
+
+		emit_json_rows_function(ctx, model_name)
+		if _ctx_had_error(ctx) != 0
+			return 1
+
+		emit_orm_helpers(ctx, model_name, table_name, has_tenant)
+		if _ctx_had_error(ctx) != 0
+			return 1
+
+		return 0
+
+// ============================================================================
+// SUB-CYCLE 2: DISPATCHER WIRE-UP (data arm only; verbs deferred to SC 3/4)
+// ============================================================================
+// Replace the skeleton's no-op expand_block_typed with partial dispatch.
+// The data arm routes to expand_data_model. The migrate arm is a stub
+// returning 0 (Sub-cycle 5 will fill it). Verb blocks (*.find, *.insert,
+// etc.) remain 0 until Sub-cycles 3 and 4.
