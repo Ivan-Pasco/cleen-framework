@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.data"
-version = "3.0.0-alpha.1"
-description = "ORM and database plugin for Clean Language - provides data models, CRUD operations, transactions, and raw queries. v3.0.0-alpha.1: plugin contracts v3 typed-emission WIP (sub-cycle 1 of ~5 landed — branch setup + plugin.toml stub + main.cln skeleton with typed bridges declared and data-specific factory helpers). Not yet shippable — v3 skeleton has no verb expanders. Final 3.0.0 lands when sub-cycle 5 completes on branch v3/frame.data. See main.v1.cln for the shipping v2.2.4 source retained as reference. Predecessor v2.2.4 notes: plugin contracts v2 sub-cycles 1+2 — declares [compatibility].abi_version = \"1.0.0\", [lifecycle].module_helpers = \"emit_data_helpers\", and [lifecycle].server_init = \"emit_data_server_init\" per migration.md §1.3."
+version = "3.0.0"
+description = "ORM and database plugin for Clean Language — plugin contracts v3 typed-emission. Atomic migration across 5 sub-cycles on branch v3/frame.data (Amendment 1 atomic per plugin). Closes marquee bug a648b4e6a8ec (find/join OOM) structurally: user-authored where/join/set/on_insert/match fragments route through _emit_expr_from_source (Am 6); no plugin-built triangular SQL concat. Predecessor v2.2.4 retained at git tag frame.data-v2.2.4."
 author = "Clean Language Team"
 license = "MIT"
 

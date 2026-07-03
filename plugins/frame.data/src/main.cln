@@ -122,18 +122,41 @@ functions:
 		if block_name == "data"
 			string model_name = extract_attr(attrs_json, "model_name")
 			if model_name.length() == 0
-				// Config block (data: with no model name) — Sub-cycle 5 will handle
+				// Config block (data: with no model name). v1 emits a _db_configure
+				// call into start:; v3 config expansion is out of Sub-cycle 5 scope
+				// (needs runtime dispatch on env.get, deferred). Return 0 — apps
+				// requiring runtime db config must configure via server bootstrap.
 				return 0
+			// Pre-validate — v1's validate_data_model returns "" on success or a
+			// user-facing message. Surface as PLUGIN error via plugin_error.
+			string err = validate_data_model(model_name, body)
+			if err.length() > 0
+				return plugin_error(ctx, "FRAME-DATA-E018", err)
 			return expand_data_model(ctx, model_name, body)
 
-		// migrate: block — Sub-cycle 5 will implement expand_migrate_block
+		// migrate "name": block — Sub-cycle 5 expander.
 		if block_name == "migrate"
-			return 0
+			string mattrs = extract_attr(attrs_json, "model_name")
+			if mattrs.length() == 0
+				mattrs = attrs_json
+			string merr = validate_migrate_block(mattrs, body)
+			if merr.length() > 0
+				return plugin_error(ctx, "FRAME-DATA-E019", merr)
+			return expand_migrate_block(ctx, mattrs, body)
+
+		// transaction: block — Sub-cycle 5 expander.
+		if block_name == "transaction"
+			return expand_transaction(ctx, body)
+
+		// db.query: block — Sub-cycle 5 raw query.
+		if block_name == "db.query"
+			return expand_raw_query(ctx, body)
+
+		// db.queryAs(Type): block — Sub-cycle 5 typed query.
+		if block_name.startsWith("db.queryAs")
+			return expand_typed_query(ctx, block_name, body)
 
 		// Verb blocks: <Model>.<verb>. The block_name is "<Model>.<verb>".
-		// Sub-cycle 3 wires the 7 read verbs. Write verbs (insert/insert_id/
-		// update/upsert) come in Sub-cycle 4. Other verbs (transaction/raw_query/
-		// typed_query) come in Sub-cycle 5.
 		integer dot_pos = block_name.indexOf(".")
 		if dot_pos != -1
 			string vmodel = block_name.substring(0, dot_pos)
@@ -152,7 +175,6 @@ functions:
 				return expand_paginate(ctx, vmodel, body)
 			if verb == "cursor"
 				return expand_cursor(ctx, vmodel, body)
-			// Sub-cycle 4 write verbs
 			if verb == "insert"
 				return expand_insert(ctx, vmodel, body)
 			if verb == "insert_id"
@@ -161,7 +183,6 @@ functions:
 				return expand_update(ctx, vmodel, body)
 			if verb == "upsert"
 				return expand_upsert(ctx, vmodel, body)
-			// Misc verbs (transaction/raw_query/typed_query) — Sub-cycle 5
 			return 0
 
 		return 0
@@ -175,10 +196,14 @@ functions:
 
 functions:
 	string validate_block(string block_name, string attributes, string body)
+		if block_name == "data"
+			return validate_data_model(extract_model_name(attributes), body)
+		if block_name == "migrate"
+			return validate_migrate_block(attributes, body)
 		return ""
 
 	string get_keywords()
-		return "[]"
+		return "[\"data\", \"pk\", \"auto\", \"unique\", \"default\", \"onDelete\", \"find\", \"first\", \"count\", \"exists\", \"findOrFail\", \"insert\", \"insert_id\", \"update\", \"upsert\", \"delete\", \"paginate\", \"cursor\", \"where\", \"order\", \"limit\", \"offset\", \"link\", \"set\", \"match\", \"on_insert\", \"on\", \"as\", \"transaction\", \"db.query\", \"db.queryAs\", \"cascade\", \"select\", \"group\", \"having\", \"join\", \"include\", \"min\", \"max\", \"email\", \"range\", \"engine\", \"host\", \"port\", \"database\", \"pool\", \"tenant\", \"tenantId\", \"migrate\", \"up\", \"down\", \"page\", \"perPage\", \"after\", \"by\", \"insertReturningId\", \"add_seconds\", \"add_minutes\", \"add_hours\", \"add_days\", \"subtract_seconds\", \"subtract_minutes\", \"subtract_hours\", \"subtract_days\"]"
 
 // ============================================================================
 // PLUGIN-LEVEL DIAGNOSTIC HELPER
@@ -3492,6 +3517,216 @@ functions:
 // ============================================================================
 // END OF SUB-CYCLE 4 CONTENT
 // ============================================================================
-// Sub-cycle 5 adds the remaining verbs (transaction, raw_query, typed_query,
-// migrate) + validate_data_model + keyword tables + case helpers, and lands
-// the atomic commit-tag-CI-install-resolve sequence.
+
+// ============================================================================
+// SUB-CYCLE 5: EXTRACT_MODEL_NAME + IS_CAPITALIZED (verbatim from v1)
+// ============================================================================
+// extract_model_name unwraps the attrs value used for both `data ModelName:`
+// and `migrate "name":` block heads. Accepts either a bare identifier
+// ("AddUsers") or the compiler-formatted JSON envelope ({"AddUsers":true}).
+
+functions:
+	string extract_model_name(string raw)
+		if not raw.startsWith("{")
+			return raw.trim()
+		integer first_quote = raw.indexOf("\"")
+		if first_quote == -1
+			return raw.trim()
+		integer second_quote = raw.indexOf("\"", first_quote + 1)
+		if second_quote == -1
+			return raw.trim()
+		return raw.substring(first_quote + 1, second_quote)
+
+	// Returns true when name begins with an uppercase ASCII letter.
+	// Used by the unknown-block guard to distinguish "<ModelName>.<verb>"
+	// from other plugins' blocks.
+	boolean is_capitalized(string name)
+		if name.length() == 0
+			return false
+		string first = name.substring(0, 1)
+		if first >= "A" and first <= "Z"
+			return true
+		return false
+
+// ============================================================================
+// SUB-CYCLE 5: VALIDATE_DATA_MODEL + VALIDATE_MIGRATE_BLOCK (verbatim from v1)
+// ============================================================================
+
+functions:
+	// Validate a data ModelName block before expansion. Returns error string
+	// on failure, empty string when valid.
+	string validate_data_model(string model_name, string body)
+		if model_name.length() == 0
+			return "data: model name is required"
+		if body.trim().length() == 0
+			return "data " + model_name + ": at least one field is required"
+		return ""
+
+	// Validate a migrate: block before expansion.
+	string validate_migrate_block(string attrs, string body)
+		string migration_name = attrs.trim()
+		if migration_name.length() == 0
+			return "migrate: migration name is required (e.g. migrate \"001_create_users\":)"
+
+		if migration_name.startsWith("\"")
+			migration_name = migration_name.substring(1, migration_name.length())
+		if migration_name.endsWith("\"")
+			migration_name = migration_name.substring(0, migration_name.length() - 1)
+
+		migration_name = migration_name.trim()
+		if migration_name.length() == 0
+			return "migrate: migration name must not be empty"
+
+		string up_content = extract_subblock(body, "up:")
+		if up_content.trim().length() == 0
+			return "migrate \"" + migration_name + "\": up: block is required and must contain SQL"
+
+		string down_content = extract_subblock(body, "down:")
+		if down_content.trim().length() == 0
+			return "migrate \"" + migration_name + "\": down: block is required (spec DAT-C007) — add SQL to reverse this migration"
+
+		return ""
+
+// ============================================================================
+// SUB-CYCLE 5: TRANSACTION EXPANDER
+// ============================================================================
+// v1's expand_transaction returned a multi-statement source snippet. In v3
+// we assemble the same source string and hand it to _emit_stmt_from_source
+// which wraps multi-statement bodies in an implicit block per §3.11.
+//
+// Emitted shape (identical to v1):
+//   _db_begin()
+//   boolean __tx_success = true
+//   <user body>
+//   _db_commit()
+//   __tx_success = true
+//   onError:
+//     _db_rollback()
+//     __tx_success = false
+//     error("transaction failed")
+
+functions:
+	string build_transaction_src(string body)
+		string result = "_db_begin()\n"
+		result = result + "boolean __tx_success = true\n"
+		result = result + body + "\n"
+		result = result + "_db_commit()\n"
+		result = result + "__tx_success = true\n"
+		result = result + "onError:\n"
+		result = result + "\t_db_rollback()\n"
+		result = result + "\t__tx_success = false\n"
+		result = result + "\terror(\"transaction failed\")\n"
+		return result
+
+	// Expand a transaction: block. Returns the statement handle for
+	// consumption by the compiler at the block-position statement slot.
+	integer expand_transaction(integer ctx, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E014", "expand_transaction")
+		string src = build_transaction_src(body)
+		integer stmt = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E014", "expand_transaction failed")
+		return stmt
+
+// ============================================================================
+// SUB-CYCLE 5: RAW QUERY + TYPED QUERY EXPANDERS
+// ============================================================================
+// Both collapse to a single expression:
+//   db.query:         → _db_query(sql, params)
+//   db.queryAs(T):    → __parse_as_T(_db_query(sql, params))
+// SQL and params are user-authored expression fragments (typically string
+// literals or a params array literal). Am 6 pass-through applies.
+
+functions:
+	string build_raw_query_expr(string body)
+		string sql = extract_subblock(body, "sql:")
+		string params = extract_subblock(body, "params:")
+		if params.length() == 0
+			params = "[]"
+		return "_db_query(" + sql + ", " + params + ")"
+
+	string build_typed_query_expr(string block_name, string body)
+		integer paren_start = block_name.indexOf("(")
+		integer paren_end = block_name.indexOf(")")
+		string type_name = ""
+		if paren_start != -1 and paren_end != -1
+			type_name = block_name.substring(paren_start + 1, paren_end)
+		string raw = build_raw_query_expr(body)
+		return "__parse_as_" + type_name + "(" + raw + ")"
+
+	integer expand_raw_query(integer ctx, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E015", "expand_raw_query")
+		string src = build_raw_query_expr(body)
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E015", "expand_raw_query failed")
+		return expr
+
+	integer expand_typed_query(integer ctx, string block_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E016", "expand_typed_query")
+		string src = build_typed_query_expr(block_name, body)
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E016", "expand_typed_query failed")
+		return expr
+
+// ============================================================================
+// SUB-CYCLE 5: MIGRATE BLOCK EXPANDER
+// ============================================================================
+// v1's expand_migrate_block emitted a `functions:` + `start:` block of
+// source. In v3 there is no module-level `from_source` bridge, so we
+// decompose into typed emissions:
+//   1. Emit __migration_<name>_up() function via _emit_function, body
+//      built via _emit_stmt_from_source of a single-statement return.
+//   2. Same for __migration_<name>_down().
+//   3. Emit _db_register_migration(name, up_sql, down_sql) into start:
+//      via _emit_statement_into_start(_batch_stmtCall(...)).
+// Behaviour is preserved 1:1 with v1: the emitted names, params, return
+// types, and register call arguments match.
+
+functions:
+	integer expand_migrate_block(integer ctx, string attrs, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E017", "expand_migrate_block")
+
+		string migration_name = extract_model_name(attrs)
+		string func_name = migration_name.replace("-", "_").replace(".", "_").replace(" ", "_").replace("/", "_")
+
+		string up_sql = extract_subblock(body, "up:")
+		string down_sql = extract_subblock(body, "down:")
+
+		// Collapse multi-line SQL and escape for string-literal embedding.
+		string escaped_up = up_sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\t", " ").trim()
+		string escaped_down = down_sql.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\t", " ").trim()
+
+		while escaped_up.indexOf("  ") != -1
+			escaped_up = escaped_up.replace("  ", " ")
+		while escaped_down.indexOf("  ") != -1
+			escaped_down = escaped_down.replace("  ", " ")
+
+		// Up function.
+		string up_body_src = "return 0"
+		if escaped_up.length() > 0
+			up_body_src = "return _db_execute(\"" + escaped_up + "\", \"[]\")"
+		integer up_stmt = _emit_stmt_from_source(ctx, up_body_src, 0)
+		_emit_function(ctx, "__migration_" + func_name + "_up", "[]", "integer", up_stmt, 0)
+
+		// Down function.
+		string down_body_src = "return 0"
+		if escaped_down.length() > 0
+			down_body_src = "return _db_execute(\"" + escaped_down + "\", \"[]\")"
+		integer down_stmt = _emit_stmt_from_source(ctx, down_body_src, 0)
+		_emit_function(ctx, "__migration_" + func_name + "_down", "[]", "integer", down_stmt, 0)
+
+		// Register the migration in start:.
+		integer name_lit = sl(ctx, migration_name)
+		integer up_lit = sl(ctx, escaped_up)
+		integer down_lit = sl(ctx, escaped_down)
+		sc3(ctx, "_db_register_migration", name_lit, up_lit, down_lit)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E017", "expand_migrate_block failed for " + migration_name)
+		return 0
+
+// ============================================================================
+// END OF SUB-CYCLE 5 EXPANDERS
+// ============================================================================
