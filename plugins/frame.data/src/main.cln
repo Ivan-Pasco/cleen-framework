@@ -152,7 +152,16 @@ functions:
 				return expand_paginate(ctx, vmodel, body)
 			if verb == "cursor"
 				return expand_cursor(ctx, vmodel, body)
-			// Write verbs and misc — Sub-cycles 4 and 5
+			// Sub-cycle 4 write verbs
+			if verb == "insert"
+				return expand_insert(ctx, vmodel, body)
+			if verb == "insert_id"
+				return expand_insert_id(ctx, vmodel, body)
+			if verb == "update"
+				return expand_update(ctx, vmodel, body)
+			if verb == "upsert"
+				return expand_upsert(ctx, vmodel, body)
+			// Misc verbs (transaction/raw_query/typed_query) — Sub-cycle 5
 			return 0
 
 		return 0
@@ -3144,9 +3153,345 @@ functions:
 		return tail_expr
 
 // ============================================================================
-// END OF SUB-CYCLE 3 CONTENT
+// SUB-CYCLE 4: WRITE VERB EXPRESSION BUILDERS
 // ============================================================================
-// Sub-cycle 4 adds write verbs (expand_insert, expand_insert_id, expand_update,
-// expand_upsert) + wires them into expand_block_typed's verb dispatch. Sub-
-// cycle 4 will reuse build_set_expr (defined here) and build_where_expr for
-// the write verbs' clause assembly.
+// Plugin-time Clean-source expression builders for the four write verbs
+// (insert, insert_id, update, upsert). Each builder walks the DSL body once,
+// produces a fields-list, values-list, and a Clean-source params expression,
+// then returns the final `_db_query("SQL", params_expr)` (or equivalent)
+// string in one concatenation. Runtime-side SQL assembly is bounded: the
+// emitted expression is a fixed template with runtime parameter interpolation
+// via the params expression only. No triangular plugin-time concat: each
+// helper walks the body linearly and produces bounded fragments.
+//
+// These four `build_*_expr` helpers are the write-verb siblings of Sub-cycle
+// 3's `build_where_expr` / `build_set_expr` / `build_condition_expr`. Their
+// output flows into `_emit_expr_from_source` (Am 6 pass-through) inside the
+// matching `expand_*` verb.
+
+functions:
+	// build_insert_expr: assemble a Clean-source expression that, at runtime,
+	// evaluates to `_db_query("INSERT INTO <table> (<cols>) VALUES (<placeholders>) RETURNING *", <params>)`.
+	// Handles tenant-aware injection and DAT-Q019 datetime arithmetic lowering.
+	// Verbatim port of v1's expand_insert body (main.v1.cln:1559-1629), but
+	// returns just the expression string (no _emit); the wrapping expand_insert
+	// feeds the string to `_emit_expr_from_source`.
+	string build_insert_expr(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		boolean has_tenant = detect_tenant_field(body)
+		string fields = ""
+		string values = ""
+		string params_expr = ""
+		integer param_idx = 1
+
+		// For tenant-aware models, inject tenant_id as the first column/value
+		// pair unless the caller already supplies it explicitly.
+		if has_tenant
+			if body.indexOf("tenantId = ") == -1 and body.indexOf("tenant_id = ") == -1
+				fields = "tenant_id"
+				values = "$1"
+				params_expr = "\"[\" + tenant_getId()"
+				param_idx = 2
+
+		string lines = body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer eq_pos = line.indexOf(" = ")
+				if eq_pos != -1
+					string field_name = line.substring(0, eq_pos).trim()
+					string field_value = line.substring(eq_pos + 3, line.length()).trim()
+					// DAT-Q019: lower chainable datetime arithmetic so the
+					// expiry/created_at expression is computed at the database.
+					string lowered_value = lower_datetime_arith(field_value)
+					if fields.length() > 0
+						fields = fields + ", "
+						values = values + ", "
+					fields = fields + field_name
+					if lowered_value != field_value
+						// SQL fragment — inline in VALUES list, no placeholder.
+						values = values + lowered_value
+					else
+						values = values + "$" + param_idx.toString()
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + field_value + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + field_value + ".toString()"
+						param_idx = param_idx + 1
+			line_start = line_end + 1
+
+		if params_expr.length() == 0
+			params_expr = "\"[]\""
+		else
+			params_expr = params_expr + " + \"]\""
+
+		string sql = "INSERT INTO " + table_name + " (" + fields + ") VALUES (" + values + ") RETURNING *"
+		return "_db_query(\"" + sql + "\", " + params_expr + ")"
+
+	// build_insert_id_expr: same as build_insert_expr but returns id-only.
+	// Verbatim port of v1's expand_insert_id body (main.v1.cln:1636-1690).
+	// Uses `insertReturningId(sql, params)` helper emitted at preamble time.
+	string build_insert_id_expr(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		boolean has_tenant = detect_tenant_field(body)
+		string fields = ""
+		string values = ""
+		string params_expr = ""
+		integer param_idx = 1
+
+		if has_tenant
+			if body.indexOf("tenantId = ") == -1 and body.indexOf("tenant_id = ") == -1
+				fields = "tenant_id"
+				values = "$1"
+				params_expr = "\"[\" + tenant_getId()"
+				param_idx = 2
+
+		string lines = body
+		integer line_start = 0
+		while line_start < lines.length()
+			integer line_end = lines.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = lines.length()
+			string line = lines.substring(line_start, line_end).trim()
+			if line.length() > 0
+				integer eq_pos = line.indexOf(" = ")
+				if eq_pos != -1
+					string field_name = line.substring(0, eq_pos).trim()
+					string field_value = line.substring(eq_pos + 3, line.length()).trim()
+					string lowered_value = lower_datetime_arith(field_value)
+					if fields.length() > 0
+						fields = fields + ", "
+						values = values + ", "
+					fields = fields + field_name
+					if lowered_value != field_value
+						values = values + lowered_value
+					else
+						values = values + "$" + param_idx.toString()
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + field_value + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + field_value + ".toString()"
+						param_idx = param_idx + 1
+			line_start = line_end + 1
+
+		if params_expr.length() == 0
+			params_expr = "\"[]\""
+		else
+			params_expr = params_expr + " + \"]\""
+
+		string sql = "INSERT INTO " + table_name + " (" + fields + ") VALUES (" + values + ") RETURNING id"
+		return "insertReturningId(\"" + sql + "\", " + params_expr + ")"
+
+	// build_update_expr: thin wrapper — uses build_set_expr for the SET clause
+	// and build_where_expr for the WHERE clause. Emits a call to the generated
+	// __<Model>_raw_update helper. Verbatim port of v1 expand_update
+	// (main.v1.cln:1836-1849).
+	string build_update_expr(string model_name, string body)
+		string set_clause = extract_subblock(body, "set:")
+		string where_clause = extract_subblock(body, "where:")
+
+		if set_clause.length() == 0
+			// Caller error surfaces via the plugin's sticky error context;
+			// this return still emits a syntactically valid Clean expression
+			// (a runtime error() call) so downstream typed emission does not
+			// choke on a malformed source string.
+			return "error(\"frame.data: update on " + model_name + " requires a set: sub-block\")"
+
+		string set_expr = build_set_expr(set_clause)
+		if where_clause.length() > 0
+			return "__" + model_name + "_raw_update(" + set_expr + ", " + build_where_expr(where_clause) + ")"
+		return "__" + model_name + "_raw_update(" + set_expr + ", \"\")"
+
+	// build_upsert_expr: assemble a Clean-source expression for
+	// `INSERT INTO t (match_cols, set_cols[, on_insert_cols]) VALUES (...)
+	//  ON CONFLICT (match_cols) DO UPDATE SET <set assignments> RETURNING *`.
+	// Three passes over the body: match:, set:, on_insert:. Verbatim port of
+	// v1 expand_upsert (main.v1.cln:1704-1831).
+	string build_upsert_expr(string model_name, string body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string match_clause = extract_subblock(body, "match:")
+		string set_clause = extract_subblock(body, "set:")
+		string on_insert_clause = extract_subblock(body, "on_insert:")
+
+		// DAT-D005: match: and set: are required, on_insert: is optional.
+		if match_clause.length() == 0
+			return "error(\"frame.data: upsert on " + model_name + " requires a match: sub-block (DAT-D005)\")"
+		if set_clause.length() == 0
+			return "error(\"frame.data: upsert on " + model_name + " requires a set: sub-block (DAT-D005)\")"
+
+		string match_cols = ""
+		string insert_cols = ""
+		string insert_vals = ""
+		string params_expr = ""
+		integer param_idx = 1
+
+		// First pass: walk match: lines (use == as separator).
+		string mlines = match_clause
+		integer mstart = 0
+		while mstart < mlines.length()
+			integer mend = mlines.indexOf("\n", mstart)
+			if mend == -1
+				mend = mlines.length()
+			string mline = mlines.substring(mstart, mend).trim()
+			if mline.length() > 0
+				integer meq_pos = mline.indexOf(" == ")
+				if meq_pos != -1
+					string mcol = mline.substring(0, meq_pos).trim()
+					string mval = mline.substring(meq_pos + 4, mline.length()).trim()
+					string lowered_mval = lower_datetime_arith(mval)
+					if match_cols.length() > 0
+						match_cols = match_cols + ", "
+						insert_cols = insert_cols + ", "
+						insert_vals = insert_vals + ", "
+					match_cols = match_cols + mcol
+					insert_cols = insert_cols + mcol
+					if lowered_mval != mval
+						insert_vals = insert_vals + lowered_mval
+					else
+						insert_vals = insert_vals + "$" + param_idx.toString()
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + mval + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + mval + ".toString()"
+						param_idx = param_idx + 1
+			mstart = mend + 1
+
+		// Second pass: walk set: lines — emit assignments for UPDATE branch
+		// AND extend INSERT column/value list.
+		string update_set = ""
+		string slines = set_clause
+		integer sstart = 0
+		while sstart < slines.length()
+			integer send = slines.indexOf("\n", sstart)
+			if send == -1
+				send = slines.length()
+			string sline = slines.substring(sstart, send).trim()
+			if sline.length() > 0
+				integer seq = sline.indexOf(" = ")
+				if seq != -1
+					string scol = sline.substring(0, seq).trim()
+					string sval = sline.substring(seq + 3, sline.length()).trim()
+					string lowered_sval = lower_datetime_arith(sval)
+					if update_set.length() > 0
+						update_set = update_set + ", "
+					if lowered_sval != sval
+						update_set = update_set + scol + " = " + lowered_sval
+					else
+						update_set = update_set + scol + " = $" + param_idx.toString()
+					if insert_cols.length() > 0
+						insert_cols = insert_cols + ", "
+						insert_vals = insert_vals + ", "
+					insert_cols = insert_cols + scol
+					if lowered_sval != sval
+						insert_vals = insert_vals + lowered_sval
+					else
+						insert_vals = insert_vals + "$" + param_idx.toString()
+						if params_expr.length() == 0
+							params_expr = "\"[\" + " + sval + ".toString()"
+						else
+							params_expr = params_expr + " + \",\" + " + sval + ".toString()"
+						param_idx = param_idx + 1
+			sstart = send + 1
+
+		// Third pass: walk on_insert: lines — extend INSERT list only.
+		if on_insert_clause.length() > 0
+			string olines = on_insert_clause
+			integer ostart = 0
+			while ostart < olines.length()
+				integer oend = olines.indexOf("\n", ostart)
+				if oend == -1
+					oend = olines.length()
+				string oline = olines.substring(ostart, oend).trim()
+				if oline.length() > 0
+					integer oeq = oline.indexOf(" = ")
+					if oeq != -1
+						string ocol = oline.substring(0, oeq).trim()
+						string oval = oline.substring(oeq + 3, oline.length()).trim()
+						string lowered_oval = lower_datetime_arith(oval)
+						if insert_cols.length() > 0
+							insert_cols = insert_cols + ", "
+							insert_vals = insert_vals + ", "
+						insert_cols = insert_cols + ocol
+						if lowered_oval != oval
+							insert_vals = insert_vals + lowered_oval
+						else
+							insert_vals = insert_vals + "$" + param_idx.toString()
+							if params_expr.length() == 0
+								params_expr = "\"[\" + " + oval + ".toString()"
+							else
+								params_expr = params_expr + " + \",\" + " + oval + ".toString()"
+							param_idx = param_idx + 1
+				ostart = oend + 1
+
+		if params_expr.length() == 0
+			params_expr = "\"[]\""
+		else
+			params_expr = params_expr + " + \"]\""
+
+		string sql = "INSERT INTO " + table_name + " (" + insert_cols + ") VALUES (" + insert_vals + ") ON CONFLICT (" + match_cols + ") DO UPDATE SET " + update_set + " RETURNING *"
+		return "_db_query(\"" + sql + "\", " + params_expr + ")"
+
+// ============================================================================
+// SUB-CYCLE 4: WRITE VERB EXPANDERS
+// ============================================================================
+// Each expander sets sticky error context, builds a Clean-source expression
+// via the matching build_*_expr helper, and feeds it through Amendment 6
+// pass-through (`_emit_expr_from_source`). All four verbs collapse to a
+// single expression at the emission boundary; there is no multi-branch
+// preamble path (unlike expand_find / expand_first / expand_paginate /
+// expand_cursor from Sub-cycle 3). The runtime SQL assembly + parameter
+// binding lives inside the Clean-source expression as bounded runtime
+// concatenation; plugin-time work is O(body_length) linear.
+
+functions:
+	// Expand <Model>.insert: block. Emits a call to `_db_query(SQL, params)`
+	// that INSERTs the row and returns the created record (RETURNING *).
+	integer expand_insert(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E010", "expand_insert for " + model_name)
+		string src = build_insert_expr(model_name, body)
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E010", "expand_insert failed for " + model_name)
+		return expr
+
+	// Expand <Model>.insert_id: block. Same shape as insert but returns just
+	// the integer id (RETURNING id, parsed via insertReturningId helper).
+	integer expand_insert_id(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E011", "expand_insert_id for " + model_name)
+		string src = build_insert_id_expr(model_name, body)
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E011", "expand_insert_id failed for " + model_name)
+		return expr
+
+	// Expand <Model>.update: block. Thin wrapper over
+	// __<Model>_raw_update(build_set_expr, build_where_expr).
+	integer expand_update(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E012", "expand_update for " + model_name)
+		string src = build_update_expr(model_name, body)
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E012", "expand_update failed for " + model_name)
+		return expr
+
+	// Expand <Model>.upsert: block. Emits INSERT ... ON CONFLICT ... DO
+	// UPDATE ... RETURNING *. Requires match: and set: sub-blocks; on_insert:
+	// is optional (DAT-D005).
+	integer expand_upsert(integer ctx, string model_name, string body)
+		_ctx_set_error_context(ctx, "FRAME-DATA-E013", "expand_upsert for " + model_name)
+		string src = build_upsert_expr(model_name, body)
+		integer expr = _emit_expr_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E013", "expand_upsert failed for " + model_name)
+		return expr
+
+// ============================================================================
+// END OF SUB-CYCLE 4 CONTENT
+// ============================================================================
+// Sub-cycle 5 adds the remaining verbs (transaction, raw_query, typed_query,
+// migrate) + validate_data_model + keyword tables + case helpers, and lands
+// the atomic commit-tag-CI-install-resolve sequence.
