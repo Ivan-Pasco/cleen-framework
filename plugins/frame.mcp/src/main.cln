@@ -1,54 +1,92 @@
 // frame.mcp plugin - MCP Server DSL
-// Provides: mcp: block with tool, resource, and prompt sub-blocks
-// Version: 1.0.3
-// Implements: Frame MCP Specification v1.0 (documents/specification/17_frame_mcp.md)
+// Version: 2.0.0
+// ABI: Plugin Contracts v3 — typed AST emission (typed-emission.md)
 //
-// expand_block("mcp", attributes, body) → valid Clean Language code string
-// that, when compiled, runs a fully compliant MCP JSON-RPC 2.0 server.
-
-// ============================================================================
-// LIFECYCLE SLOTS (Plugin Contracts v2)
-// ============================================================================
-// foundation/spec/plugins/contracts/lifecycle.md
-// foundation/spec/plugins/contracts/migration.md §1.5
+// Atomic migration: this plugin.wasm is v3-only. All lifecycle slots and every
+// block export are typed variants. See typed-emission.md §2.1 for the
+// atomic-per-plugin migration rule.
 //
-// frame.mcp has no __preamble magic block. The json(), text(), and error()
-// response helpers are generated inline by expand_mcp() per mcp: block —
-// they reference the server name and transport type extracted from that
-// block's attributes. Emitting them unconditionally from module_helpers
-// would produce helpers that reference an unset server name (no mcp: block
-// present) or duplicate helpers (mcp: block present).
-//
-// Moving the helpers into module_helpers requires the block-level config
-// (server name, transport, port) to land in build_state so the slot can
-// consume it; that is a follow-up cycle. The slot returns an empty body;
-// the declaration completes the migration.md §1.5 manifest surface.
-
-// JSON-escape a string for embedding inside a JSON string literal.
-// Order matters: backslash first, then quote, then control chars.
-functions:
-	string __mcp_slot_json_escape(string s)
-		string r = s.replace("\\", "\\\\")
-		r = r.replace("\"", "\\\"")
-		r = r.replace("\n", "\\n")
-		r = r.replace("\r", "\\r")
-		r = r.replace("\t", "\\t")
-		return r
-
-functions:
-	// [lifecycle].module_helpers — see header above for rationale on the empty body.
-	string emit_mcp_helpers(string context_json)
-		return "{\"statements\":\"\"}"
+// Uses:
+//   - Amendment 4 (§3.14) batch-spec builder API for preamble helpers,
+//     registration/dispatcher functions, and __mcp_handle.
+//   - Amendment 2 (§3.11) _emit_stmt_from_source for user-authored tool /
+//     resource / prompt handler bodies.
+//   - Amendment 5 (§3.15) sticky-error context to collapse per-bridge error
+//     scaffolding. One _ctx_set_error_context at helper entry + one
+//     _ctx_had_error at helper exit.
 
 // ============================================================================
-// MAIN ENTRY POINTS
+// TYPED-EMISSION BRIDGE DECLARATIONS
 // ============================================================================
+// typed-emission.md §2.3, §3, §3.11, §3.14, §3.15
+// Underscore aliases required (Clean Language external: rejects dots in names).
+// These are env imports from the compiler's typed-emission sandbox — they
+// MUST NOT appear in plugin.toml [bridge].functions.
+
+external:
+	// Array helpers (§3.14)
+	integer _batch_arrayNew(integer ctx)
+	integer _batch_arrayPush(integer ctx, integer array_handle, integer item_handle)
+	// Expression builders (§3.14)
+	integer _batch_stringLit(integer ctx, string value)
+	integer _batch_intLit(integer ctx, integer value_lo, integer value_hi)
+	integer _batch_boolLit(integer ctx, integer value)
+	integer _batch_ident(integer ctx, string name)
+	integer _batch_field(integer ctx, integer receiver_handle, string name)
+	integer _batch_call(integer ctx, string callee, integer args_array_handle)
+	integer _batch_binop(integer ctx, string op, integer lhs_handle, integer rhs_handle)
+	integer _batch_unop(integer ctx, string op, integer operand_handle)
+	integer _batch_index(integer ctx, integer receiver_handle, integer index_handle)
+	// Statement builders (§3.14)
+	integer _batch_stmtCall(integer ctx, string callee, integer args_array_handle)
+	integer _batch_stmtAssign(integer ctx, string target, integer expr_handle)
+	integer _batch_stmtIf(integer ctx, integer cond_handle, integer then_array_handle, integer else_array_handle)
+	integer _batch_stmtWhile(integer ctx, integer cond_handle, integer body_array_handle)
+	integer _batch_stmtReturn(integer ctx, integer expr_handle)
+	integer _batch_stmtBlock(integer ctx, integer stmts_array_handle)
+	// Function and terminal builders (§3.14)
+	integer _batch_param(integer ctx, string name, string type_name)
+	integer _batch_func(integer ctx, string name, integer params_array_handle, string return_type, integer body_array_handle)
+	integer _batch_spec(integer ctx, integer functions_array_handle)
+	// Declaration emitters (§3.12, §3.5)
+	integer _emit_helpers_batch(integer ctx, integer spec_handle_or_lp, integer flags)
+	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
+	// Pass-through for user-authored handler bodies (§3.11)
+	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
+	// Sticky-error context (§3.15)
+	integer _ctx_had_error(integer ctx)
+	integer _ctx_set_error_context(integer ctx, string code, string message)
+	integer _ctx_clear_error(integer ctx)
+	// Diagnostics (§5)
+	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
+
+// ============================================================================
+// V3 LIFECYCLE SLOTS
+// ============================================================================
+// typed-emission.md §7. Under atomic-migration, every declared slot MUST be a
+// typed variant. frame.mcp emits its per-file preamble and dispatcher inline
+// from expand_block_typed; module_helpers is a no-op placeholder.
 
 functions:
-	string expand_block(string block_name, string attributes, string body)
+	integer emit_module_helpers_typed(integer ctx, string ctx_json)
+		return 0
+
+	integer emit_server_init_typed(integer ctx, string ctx_json)
+		return 0
+
+	integer emit_per_request_typed(integer ctx, string ctx_json)
+		return 0
+
+// ============================================================================
+// V3 BLOCK EXPAND ENTRY POINT
+// ============================================================================
+// typed-emission.md §2.2.
+
+functions:
+	integer expand_block_typed(integer ctx, string block_name, string attrs_json, string body)
 		if block_name == "mcp"
-			return expand_mcp(attributes, body)
-		return body
+			return expand_mcp_typed(ctx, attrs_json, body)
+		return 0
 
 	string validate_block(string block_name, string attributes, string body)
 		if block_name == "mcp"
@@ -59,12 +97,465 @@ functions:
 		return "[\"mcp\", \"tool\", \"resource\", \"prompt\", \"params\", \"args\", \"transport\", \"apiKey\", \"mimeType\", \"version\", \"description\", \"port\", \"host\", \"json\", \"text\", \"error\"]"
 
 // ============================================================================
-// TOP-LEVEL MCP EXPANSION
+// PLUGIN-LEVEL DIAGNOSTIC HELPER
 // ============================================================================
 
 functions:
-	string expand_mcp(string attributes, string body)
-		// Extract server-level config
+	integer plugin_error(integer ctx, string code, string message)
+		_emit_error(ctx, 2, code, message, "{\"start\":0,\"end\":0,\"source\":\"plugin\"}")
+		return 1
+
+// ============================================================================
+// TINY BATCH-BUILDER FACTORY HELPERS
+// ============================================================================
+// Sticky-error propagates through these — the caller checks _ctx_had_error
+// once at helper exit. Each helper returns 0 on failure (sticky already set).
+
+functions:
+	// Expression literals
+	integer sl(integer ctx, string v)
+		return _batch_stringLit(ctx, v)
+
+	integer il(integer ctx, integer n)
+		return _batch_intLit(ctx, n, 0)
+
+	integer bl(integer ctx, boolean b)
+		integer bit = 0
+		if b
+			bit = 1
+		return _batch_boolLit(ctx, bit)
+
+	integer id(integer ctx, string name)
+		return _batch_ident(ctx, name)
+
+	// Empty arg array
+	integer arr0(integer ctx)
+		return _batch_arrayNew(ctx)
+
+	// One-element arg array
+	integer arr1(integer ctx, integer h1)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, h1)
+		return a
+
+	// Two-element arg array
+	integer arr2(integer ctx, integer h1, integer h2)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, h1)
+		_batch_arrayPush(ctx, a, h2)
+		return a
+
+	// Three-element arg array
+	integer arr3(integer ctx, integer h1, integer h2, integer h3)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, h1)
+		_batch_arrayPush(ctx, a, h2)
+		_batch_arrayPush(ctx, a, h3)
+		return a
+
+	// Zero-arg call as expression
+	integer call0(integer ctx, string callee)
+		return _batch_call(ctx, callee, _batch_arrayNew(ctx))
+
+	// One-arg call as expression
+	integer call1(integer ctx, string callee, integer arg1)
+		return _batch_call(ctx, callee, arr1(ctx, arg1))
+
+	// Two-arg call as expression
+	integer call2(integer ctx, string callee, integer arg1, integer arg2)
+		return _batch_call(ctx, callee, arr2(ctx, arg1, arg2))
+
+	// Three-arg call as expression
+	integer call3(integer ctx, string callee, integer arg1, integer arg2, integer arg3)
+		return _batch_call(ctx, callee, arr3(ctx, arg1, arg2, arg3))
+
+	// Statement: identifier assign to expression
+	integer sassign(integer ctx, string target, integer expr)
+		return _batch_stmtAssign(ctx, target, expr)
+
+	// Statement: return expression
+	integer sret(integer ctx, integer expr)
+		return _batch_stmtReturn(ctx, expr)
+
+	// Statement: bare call
+	integer scall(integer ctx, string callee, integer args_arr)
+		return _batch_stmtCall(ctx, callee, args_arr)
+
+	// If with no else, single-statement then body
+	integer sif1(integer ctx, integer cond, integer then_stmt)
+		return _batch_stmtIf(ctx, cond, arr1(ctx, then_stmt), 0)
+
+	// If with else, single-statement then and else bodies
+	integer sif1else(integer ctx, integer cond, integer then_stmt, integer else_stmt)
+		return _batch_stmtIf(ctx, cond, arr1(ctx, then_stmt), arr1(ctx, else_stmt))
+
+	// Method call (receiver.name(args)) → callee "receiver.name"
+	// Clean Language allows dotted callee identifiers in _batch_call.
+	integer methcall0(integer ctx, string receiver_ident, string method)
+		integer recv = id(ctx, receiver_ident)
+		integer args = arr0(ctx)
+		return _batch_call(ctx, receiver_ident + "." + method, args)
+
+	// Method call with 1 arg
+	integer methcall1(integer ctx, string receiver_ident, string method, integer arg)
+		return _batch_call(ctx, receiver_ident + "." + method, arr1(ctx, arg))
+
+	// Method call with 2 args
+	integer methcall2(integer ctx, string receiver_ident, string method, integer arg1, integer arg2)
+		return _batch_call(ctx, receiver_ident + "." + method, arr2(ctx, arg1, arg2))
+
+	// Binary op: ident == string_lit
+	integer eq_id_sl(integer ctx, string ident_name, string str_val)
+		return _batch_binop(ctx, "==", id(ctx, ident_name), sl(ctx, str_val))
+
+	// Binary op: ident == int_lit
+	integer eq_id_il(integer ctx, string ident_name, integer int_val)
+		return _batch_binop(ctx, "==", id(ctx, ident_name), il(ctx, int_val))
+
+	// Binary op: ident < int_lit
+	integer lt_id_il(integer ctx, string ident_name, integer int_val)
+		return _batch_binop(ctx, "<", id(ctx, ident_name), il(ctx, int_val))
+
+	// Binary op: ident >= int_lit
+	integer gte_id_il(integer ctx, string ident_name, integer int_val)
+		return _batch_binop(ctx, ">=", id(ctx, ident_name), il(ctx, int_val))
+
+	// Binary op: string concat two exprs
+	integer concat(integer ctx, integer lhs, integer rhs)
+		return _batch_binop(ctx, "+", lhs, rhs)
+
+	// Binary op: add two exprs
+	integer add(integer ctx, integer lhs, integer rhs)
+		return _batch_binop(ctx, "+", lhs, rhs)
+
+	// Params-array helpers
+	integer params0(integer ctx)
+		return _batch_arrayNew(ctx)
+
+	integer params1(integer ctx, string n1, string t1)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, _batch_param(ctx, n1, t1))
+		return a
+
+	integer params2(integer ctx, string n1, string t1, string n2, string t2)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, _batch_param(ctx, n1, t1))
+		_batch_arrayPush(ctx, a, _batch_param(ctx, n2, t2))
+		return a
+
+	integer params3(integer ctx, string n1, string t1, string n2, string t2, string n3, string t3)
+		integer a = _batch_arrayNew(ctx)
+		_batch_arrayPush(ctx, a, _batch_param(ctx, n1, t1))
+		_batch_arrayPush(ctx, a, _batch_param(ctx, n2, t2))
+		_batch_arrayPush(ctx, a, _batch_param(ctx, n3, t3))
+		return a
+
+// ============================================================================
+// PREAMBLE HELPER FUNCTION BUILDERS
+// ============================================================================
+// Each build_* returns a func_handle (0 on failure with sticky already tripped).
+// Every helper follows the same pattern:
+//   1. build params array
+//   2. build body_arr; push statements
+//   3. return _batch_func(ctx, name, params, return_type, body_arr)
+
+functions:
+	// __mcp_json_escape(s: string) -> string
+	// r = s.replace("\\", "\\\\")
+	// r = r.replace("\"", "\\\"")
+	// r = r.replace("\n", "\\n")
+	// r = r.replace("\r", "\\r")
+	// r = r.replace("\t", "\\t")
+	// return r
+	integer build_mcp_json_escape(integer ctx)
+		integer params = params1(ctx, "s", "string")
+		integer body_arr = arr0(ctx)
+
+		// r = s.replace("\\", "\\\\")
+		integer e1 = methcall2(ctx, "s", "replace", sl(ctx, "\\"), sl(ctx, "\\\\"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "r", e1))
+
+		// r = r.replace("\"", "\\\"")
+		integer e2 = methcall2(ctx, "r", "replace", sl(ctx, "\""), sl(ctx, "\\\""))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "r", e2))
+
+		// r = r.replace("\n", "\\n")
+		integer e3 = methcall2(ctx, "r", "replace", sl(ctx, "\n"), sl(ctx, "\\n"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "r", e3))
+
+		// r = r.replace("\r", "\\r")
+		integer e4 = methcall2(ctx, "r", "replace", sl(ctx, "\r"), sl(ctx, "\\r"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "r", e4))
+
+		// r = r.replace("\t", "\\t")
+		integer e5 = methcall2(ctx, "r", "replace", sl(ctx, "\t"), sl(ctx, "\\t"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "r", e5))
+
+		// return r
+		_batch_arrayPush(ctx, body_arr, sret(ctx, id(ctx, "r")))
+
+		return _batch_func(ctx, "__mcp_json_escape", params, "string", body_arr)
+
+	// __mcp_extract_str(__json: string, __key: string) -> string
+	// __search = "\"" + __key + "\":\""
+	// __pos = __json.indexOf(__search)
+	// if __pos < 0 return ""
+	// __start = __pos + __search.length()
+	// __end = __json.indexOf("\"", __start)
+	// if __end < 0 return ""
+	// return __json.substring(__start, __end)
+	integer build_mcp_extract_str(integer ctx)
+		integer params = params2(ctx, "__json", "string", "__key", "string")
+		integer body_arr = arr0(ctx)
+
+		// __search = "\"" + __key + "\":\""
+		integer q = sl(ctx, "\"")
+		integer colonq = sl(ctx, "\":\"")
+		integer part1 = concat(ctx, q, id(ctx, "__key"))
+		integer search_e = concat(ctx, part1, colonq)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__search", search_e))
+
+		// __pos = __json.indexOf(__search)
+		integer pos_e = methcall1(ctx, "__json", "indexOf", id(ctx, "__search"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__pos", pos_e))
+
+		// if __pos < 0: return ""
+		integer if1 = sif1(ctx, lt_id_il(ctx, "__pos", 0), sret(ctx, sl(ctx, "")))
+		_batch_arrayPush(ctx, body_arr, if1)
+
+		// __start = __pos + __search.length()
+		integer slen = methcall0(ctx, "__search", "length")
+		integer start_e = add(ctx, id(ctx, "__pos"), slen)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__start", start_e))
+
+		// __end = __json.indexOf("\"", __start)
+		integer end_e = methcall2(ctx, "__json", "indexOf", sl(ctx, "\""), id(ctx, "__start"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__end", end_e))
+
+		// if __end < 0: return ""
+		integer if2 = sif1(ctx, lt_id_il(ctx, "__end", 0), sret(ctx, sl(ctx, "")))
+		_batch_arrayPush(ctx, body_arr, if2)
+
+		// return __json.substring(__start, __end)
+		integer ret_e = methcall2(ctx, "__json", "substring", id(ctx, "__start"), id(ctx, "__end"))
+		_batch_arrayPush(ctx, body_arr, sret(ctx, ret_e))
+
+		return _batch_func(ctx, "__mcp_extract_str", params, "string", body_arr)
+
+	// __mcp_extract_str_default(__json: string, __key: string, __default: string) -> string
+	// __val = __mcp_extract_str(__json, __key)
+	// if __val == "" return __default
+	// return __val
+	integer build_mcp_extract_str_default(integer ctx)
+		integer params = params3(ctx, "__json", "string", "__key", "string", "__default", "string")
+		integer body_arr = arr0(ctx)
+
+		integer call_e = call2(ctx, "__mcp_extract_str", id(ctx, "__json"), id(ctx, "__key"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__val", call_e))
+
+		integer if1 = sif1(ctx, eq_id_sl(ctx, "__val", ""), sret(ctx, id(ctx, "__default")))
+		_batch_arrayPush(ctx, body_arr, if1)
+
+		_batch_arrayPush(ctx, body_arr, sret(ctx, id(ctx, "__val")))
+
+		return _batch_func(ctx, "__mcp_extract_str_default", params, "string", body_arr)
+
+	// __mcp_extract_int(__json: string, __key: string) -> integer
+	// __isearch = "\"" + __key + "\":"
+	// __ipos = __json.indexOf(__isearch)
+	// if __ipos < 0 return 0
+	// __istart = __ipos + __isearch.length()
+	// __irest = __json.substring(__istart, __json.length())
+	// __icomma = __irest.indexOf(",")
+	// __ibrace = __irest.indexOf("}")
+	// __iend = __irest.length()
+	// if __icomma >= 0 and __icomma < __iend: __iend = __icomma
+	// if __ibrace >= 0 and __ibrace < __iend: __iend = __ibrace
+	// __inum = __irest.substring(0, __iend).trim()
+	// if __inum == "" return 0
+	// return __inum.toInteger()
+	integer build_mcp_extract_int(integer ctx)
+		integer params = params2(ctx, "__json", "string", "__key", "string")
+		integer body_arr = arr0(ctx)
+
+		// __isearch = "\"" + __key + "\":"
+		integer q = sl(ctx, "\"")
+		integer qcolon = sl(ctx, "\":")
+		integer part1 = concat(ctx, q, id(ctx, "__key"))
+		integer isearch_e = concat(ctx, part1, qcolon)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__isearch", isearch_e))
+
+		// __ipos = __json.indexOf(__isearch)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__ipos", methcall1(ctx, "__json", "indexOf", id(ctx, "__isearch"))))
+
+		// if __ipos < 0: return 0
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, lt_id_il(ctx, "__ipos", 0), sret(ctx, il(ctx, 0))))
+
+		// __istart = __ipos + __isearch.length()
+		integer slen = methcall0(ctx, "__isearch", "length")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__istart", add(ctx, id(ctx, "__ipos"), slen)))
+
+		// __irest = __json.substring(__istart, __json.length())
+		integer jlen = methcall0(ctx, "__json", "length")
+		integer irest_e = methcall2(ctx, "__json", "substring", id(ctx, "__istart"), jlen)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__irest", irest_e))
+
+		// __icomma = __irest.indexOf(",")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__icomma", methcall1(ctx, "__irest", "indexOf", sl(ctx, ","))))
+
+		// __ibrace = __irest.indexOf("}")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__ibrace", methcall1(ctx, "__irest", "indexOf", sl(ctx, "}"))))
+
+		// __iend = __irest.length()
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__iend", methcall0(ctx, "__irest", "length")))
+
+		// if __icomma >= 0 and __icomma < __iend: __iend = __icomma
+		integer c_ge0 = gte_id_il(ctx, "__icomma", 0)
+		integer c_lt = _batch_binop(ctx, "<", id(ctx, "__icomma"), id(ctx, "__iend"))
+		integer c_and = _batch_binop(ctx, "and", c_ge0, c_lt)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, c_and, sassign(ctx, "__iend", id(ctx, "__icomma"))))
+
+		// if __ibrace >= 0 and __ibrace < __iend: __iend = __ibrace
+		integer b_ge0 = gte_id_il(ctx, "__ibrace", 0)
+		integer b_lt = _batch_binop(ctx, "<", id(ctx, "__ibrace"), id(ctx, "__iend"))
+		integer b_and = _batch_binop(ctx, "and", b_ge0, b_lt)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, b_and, sassign(ctx, "__iend", id(ctx, "__ibrace"))))
+
+		// __inum = __irest.substring(0, __iend).trim()
+		integer sub_e = methcall2(ctx, "__irest", "substring", il(ctx, 0), id(ctx, "__iend"))
+		// Chain .trim() — use _batch_call with dotted callee is wrong for expr chains.
+		// Correct approach: use _batch_field for method-on-call is not right either.
+		// Simpler: assign sub_e to a temp then call trim on it.
+		// Or use batch.field: field(sub_e, "trim") returns a call? No, field is receiver.name (member access).
+		// Method chaining requires: first the substring result, then .trim() call.
+		// The cleanest is to introduce a temp: __itmp = __irest.substring(0, __iend); __inum = __itmp.trim()
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__itmp", sub_e))
+		integer trim_e = methcall0(ctx, "__itmp", "trim")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__inum", trim_e))
+
+		// if __inum == "": return 0
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__inum", ""), sret(ctx, il(ctx, 0))))
+
+		// return __inum.toInteger()
+		_batch_arrayPush(ctx, body_arr, sret(ctx, methcall0(ctx, "__inum", "toInteger")))
+
+		return _batch_func(ctx, "__mcp_extract_int", params, "integer", body_arr)
+
+	// __mcp_extract_int_default(__json: string, __key: string, __default: integer) -> integer
+	// __disearch = "\"" + __key + "\":"
+	// __dipos = __json.indexOf(__disearch)
+	// if __dipos < 0 return __default
+	// return __mcp_extract_int(__json, __key)
+	integer build_mcp_extract_int_default(integer ctx)
+		integer params = params3(ctx, "__json", "string", "__key", "string", "__default", "integer")
+		integer body_arr = arr0(ctx)
+
+		integer q = sl(ctx, "\"")
+		integer qcolon = sl(ctx, "\":")
+		integer part1 = concat(ctx, q, id(ctx, "__key"))
+		integer search_e = concat(ctx, part1, qcolon)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__disearch", search_e))
+
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__dipos", methcall1(ctx, "__json", "indexOf", id(ctx, "__disearch"))))
+
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, lt_id_il(ctx, "__dipos", 0), sret(ctx, id(ctx, "__default"))))
+
+		_batch_arrayPush(ctx, body_arr, sret(ctx, call2(ctx, "__mcp_extract_int", id(ctx, "__json"), id(ctx, "__key"))))
+
+		return _batch_func(ctx, "__mcp_extract_int_default", params, "integer", body_arr)
+
+	// __mcp_extract_bool_str(__json: string, __key: string) -> string
+	// Same shape as extract_int but returns the trimmed raw value as a string
+	// ("true", "false", or "false" default).
+	integer build_mcp_extract_bool_str(integer ctx)
+		integer params = params2(ctx, "__json", "string", "__key", "string")
+		integer body_arr = arr0(ctx)
+
+		integer q = sl(ctx, "\"")
+		integer qcolon = sl(ctx, "\":")
+		integer part1 = concat(ctx, q, id(ctx, "__key"))
+		integer bsearch_e = concat(ctx, part1, qcolon)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bsearch", bsearch_e))
+
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bpos", methcall1(ctx, "__json", "indexOf", id(ctx, "__bsearch"))))
+
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, lt_id_il(ctx, "__bpos", 0), sret(ctx, sl(ctx, "false"))))
+
+		integer slen = methcall0(ctx, "__bsearch", "length")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bstart", add(ctx, id(ctx, "__bpos"), slen)))
+
+		integer jlen = methcall0(ctx, "__json", "length")
+		integer brest_e = methcall2(ctx, "__json", "substring", id(ctx, "__bstart"), jlen)
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__brest", brest_e))
+
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bcomma", methcall1(ctx, "__brest", "indexOf", sl(ctx, ","))))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bbrace", methcall1(ctx, "__brest", "indexOf", sl(ctx, "}"))))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bend", methcall0(ctx, "__brest", "length")))
+
+		integer c_ge0 = gte_id_il(ctx, "__bcomma", 0)
+		integer c_lt = _batch_binop(ctx, "<", id(ctx, "__bcomma"), id(ctx, "__bend"))
+		integer c_and = _batch_binop(ctx, "and", c_ge0, c_lt)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, c_and, sassign(ctx, "__bend", id(ctx, "__bcomma"))))
+
+		integer b_ge0 = gte_id_il(ctx, "__bbrace", 0)
+		integer b_lt = _batch_binop(ctx, "<", id(ctx, "__bbrace"), id(ctx, "__bend"))
+		integer b_and = _batch_binop(ctx, "and", b_ge0, b_lt)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, b_and, sassign(ctx, "__bend", id(ctx, "__bbrace"))))
+
+		// return __brest.substring(0, __bend).trim()
+		integer sub_e = methcall2(ctx, "__brest", "substring", il(ctx, 0), id(ctx, "__bend"))
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__btmp", sub_e))
+		_batch_arrayPush(ctx, body_arr, sret(ctx, methcall0(ctx, "__btmp", "trim")))
+
+		return _batch_func(ctx, "__mcp_extract_bool_str", params, "string", body_arr)
+
+	// json(__data: string) -> string
+	// return "{\"type\":\"text\",\"text\":" + __data + "}"
+	integer build_json_helper(integer ctx)
+		integer params = params1(ctx, "__data", "string")
+		integer body_arr = arr0(ctx)
+		integer prefix = sl(ctx, "{\"type\":\"text\",\"text\":")
+		integer suffix = sl(ctx, "}")
+		integer e1 = concat(ctx, prefix, id(ctx, "__data"))
+		integer full = concat(ctx, e1, suffix)
+		_batch_arrayPush(ctx, body_arr, sret(ctx, full))
+		return _batch_func(ctx, "json", params, "string", body_arr)
+
+	// text(__msg: string) -> string
+	// return "{\"type\":\"text\",\"text\":\"" + __mcp_json_escape(__msg) + "\"}"
+	integer build_text_helper(integer ctx)
+		integer params = params1(ctx, "__msg", "string")
+		integer body_arr = arr0(ctx)
+		integer prefix = sl(ctx, "{\"type\":\"text\",\"text\":\"")
+		integer suffix = sl(ctx, "\"}")
+		integer esc = call1(ctx, "__mcp_json_escape", id(ctx, "__msg"))
+		integer e1 = concat(ctx, prefix, esc)
+		integer full = concat(ctx, e1, suffix)
+		_batch_arrayPush(ctx, body_arr, sret(ctx, full))
+		return _batch_func(ctx, "text", params, "string", body_arr)
+
+	// error(__message: string) -> string
+	// return "{\"isError\":true,\"content\":[{\"type\":\"text\",\"text\":\"" + __mcp_json_escape(__message) + "\"}]}"
+	integer build_error_helper(integer ctx)
+		integer params = params1(ctx, "__message", "string")
+		integer body_arr = arr0(ctx)
+		integer prefix = sl(ctx, "{\"isError\":true,\"content\":[{\"type\":\"text\",\"text\":\"")
+		integer suffix = sl(ctx, "\"}]}")
+		integer esc = call1(ctx, "__mcp_json_escape", id(ctx, "__message"))
+		integer e1 = concat(ctx, prefix, esc)
+		integer full = concat(ctx, e1, suffix)
+		_batch_arrayPush(ctx, body_arr, sret(ctx, full))
+		return _batch_func(ctx, "error", params, "string", body_arr)
+
+// ============================================================================
+// MAIN EXPAND — expand_mcp_typed
+// ============================================================================
+
+functions:
+	integer expand_mcp_typed(integer ctx, string attributes, string body)
+		_ctx_set_error_context(ctx, "FRAME-MCP-E001", "frame.mcp expand_mcp_typed failed during typed emission")
+
+		// ── Extract server-level config (v1 parsing helpers, unchanged) ──
 		string server_name = extract_server_name(attributes)
 		string server_version = extract_config_value(body, "version")
 		if server_version == ""
@@ -77,8 +568,12 @@ functions:
 		if http_host == ""
 			http_host = "0.0.0.0"
 
-		// Collect all tools
-		string tools_code = ""
+		// ── Batch-emit the 9 preamble helper functions ──
+		integer preamble_err = emit_preamble_batch(ctx)
+		if preamble_err != 0
+			return preamble_err
+
+		// ── Collect and emit tools ──
 		string tools_list_entries = ""
 		string tools_dispatch_cases = ""
 		integer tool_count = 0
@@ -106,16 +601,22 @@ functions:
 				tools_list_entries = tools_list_entries + list_entry
 
 				string fn_name = "__mcp_tool_" + sanitize_name(tool_name)
-				tools_code = tools_code + build_tool_handler(fn_name, params_body, handler_body)
 
-				string dispatch_case = "\t\tif name == \"" + tool_name + "\"\n\t\t\tresult = " + fn_name + "(__params_json)\n"
+				// Emit the tool handler function (batch + user body via §3.11)
+				integer emit_h_err = emit_tool_handler(ctx, fn_name, params_body, handler_body, tool_name)
+				if emit_h_err != 0
+					return emit_h_err
+
+				// Track dispatch case for later batch of __mcp_dispatch_tool
+				string dispatch_case = tool_name + "|" + fn_name
+				if tools_dispatch_cases.length() > 0
+					tools_dispatch_cases = tools_dispatch_cases + "\n"
 				tools_dispatch_cases = tools_dispatch_cases + dispatch_case
 
 				tool_scan_start = tool_body_end
 				tool_count = tool_count + 1
 
-		// Collect all resources
-		string resources_code = ""
+		// ── Collect and emit resources ──
 		string resources_list_entries = ""
 		string resources_dispatch_cases = ""
 		integer resource_count = 0
@@ -144,16 +645,20 @@ functions:
 				resources_list_entries = resources_list_entries + r_list_entry
 
 				string r_safe_name = "__mcp_resource_" + sanitize_uri(resource_uri)
-				resources_code = resources_code + build_resource_handler(r_safe_name, r_handler_body)
 
-				string r_dispatch_case = "\t\tif uri == \"" + resource_uri + "\"\n\t\t\tresult = " + r_safe_name + "()\n"
+				integer emit_r_err = emit_resource_handler(ctx, r_safe_name, r_handler_body, resource_uri)
+				if emit_r_err != 0
+					return emit_r_err
+
+				string r_dispatch_case = resource_uri + "|" + r_safe_name
+				if resources_dispatch_cases.length() > 0
+					resources_dispatch_cases = resources_dispatch_cases + "\n"
 				resources_dispatch_cases = resources_dispatch_cases + r_dispatch_case
 
 				resource_scan_start = resource_body_end
 				resource_count = resource_count + 1
 
-		// Collect all prompts
-		string prompts_code = ""
+		// ── Collect and emit prompts ──
 		string prompts_list_entries = ""
 		string prompts_dispatch_cases = ""
 		integer prompt_count = 0
@@ -181,172 +686,676 @@ functions:
 				prompts_list_entries = prompts_list_entries + p_list_entry
 
 				string p_fn_name = "__mcp_prompt_" + sanitize_name(prompt_name)
-				prompts_code = prompts_code + build_prompt_handler(p_fn_name, args_body, p_handler_body)
 
-				string p_dispatch_case = "\t\tif name == \"" + prompt_name + "\"\n\t\t\tresult = " + p_fn_name + "(__args_json)\n"
+				integer emit_p_err = emit_prompt_handler(ctx, p_fn_name, args_body, p_handler_body, prompt_name)
+				if emit_p_err != 0
+					return emit_p_err
+
+				string p_dispatch_case = prompt_name + "|" + p_fn_name
+				if prompts_dispatch_cases.length() > 0
+					prompts_dispatch_cases = prompts_dispatch_cases + "\n"
 				prompts_dispatch_cases = prompts_dispatch_cases + p_dispatch_case
 
 				prompt_scan_start = prompt_body_end
 				prompt_count = prompt_count + 1
 
-		// Assemble capabilities for initialize response
+		// ── Emit the registration-list functions + dispatchers + __mcp_handle ──
 		string capabilities = build_capabilities_json(tool_count, resource_count, prompt_count)
+		integer post_err = emit_dispatcher_functions_batch(ctx, tools_list_entries, resources_list_entries, prompts_list_entries, tools_dispatch_cases, resources_dispatch_cases, prompts_dispatch_cases, server_name, server_version, capabilities)
+		if post_err != 0
+			return post_err
 
-		// Build the full output
-		string out = "functions:\n"
+		// ── Emit start: block into program start slot ──
+		integer start_err = emit_start_block(ctx, transport, http_port, http_host)
+		if start_err != 0
+			return start_err
 
-		// JSON escape utility (always emitted)
-		out = out + "\tstring __mcp_json_escape(string s)\n"
-		out = out + "\t\tstring r = s.replace(\"\\\\\", \"\\\\\\\\\")\n"
-		out = out + "\t\tr = r.replace(\"\\\"\", \"\\\\\\\"\")\n"
-		out = out + "\t\tr = r.replace(\"\\n\", \"\\\\n\")\n"
-		out = out + "\t\tr = r.replace(\"\\r\", \"\\\\r\")\n"
-		out = out + "\t\tr = r.replace(\"\\t\", \"\\\\t\")\n"
-		out = out + "\t\treturn r\n\n"
-
-		// JSON extraction helpers (always emitted)
-		out = out + "\tstring __mcp_extract_str(string __json, string __key)\n"
-		out = out + "\t\tstring __search = \"\\\"\" + __key + \"\\\":\\\"\"\n"
-		out = out + "\t\tinteger __pos = __json.indexOf(__search)\n"
-		out = out + "\t\tif __pos < 0\n"
-		out = out + "\t\t\treturn \"\"\n"
-		out = out + "\t\tinteger __start = __pos + __search.length()\n"
-		out = out + "\t\tinteger __end = __json.indexOf(\"\\\"\", __start)\n"
-		out = out + "\t\tif __end < 0\n"
-		out = out + "\t\t\treturn \"\"\n"
-		out = out + "\t\treturn __json.substring(__start, __end)\n\n"
-
-		out = out + "\tstring __mcp_extract_str_default(string __json, string __key, string __default)\n"
-		out = out + "\t\tstring __search2 = \"\\\"\" + __key + \"\\\":\\\"\"\n"
-		out = out + "\t\tinteger __pos2 = __json.indexOf(__search2)\n"
-		out = out + "\t\tif __pos2 < 0\n"
-		out = out + "\t\t\treturn __default\n"
-		out = out + "\t\tinteger __start2 = __pos2 + __search2.length()\n"
-		out = out + "\t\tinteger __end2 = __json.indexOf(\"\\\"\", __start2)\n"
-		out = out + "\t\tif __end2 < 0\n"
-		out = out + "\t\t\treturn __default\n"
-		out = out + "\t\tstring __val2 = __json.substring(__start2, __end2)\n"
-		out = out + "\t\tif __val2 == \"\"\n"
-		out = out + "\t\t\treturn __default\n"
-		out = out + "\t\treturn __val2\n\n"
-
-		out = out + "\tinteger __mcp_extract_int(string __json, string __key)\n"
-		out = out + "\t\tstring __isearch = \"\\\"\" + __key + \"\\\":\"\n"
-		out = out + "\t\tinteger __ipos = __json.indexOf(__isearch)\n"
-		out = out + "\t\tif __ipos < 0\n"
-		out = out + "\t\t\treturn 0\n"
-		out = out + "\t\tinteger __istart = __ipos + __isearch.length()\n"
-		out = out + "\t\tstring __irest = __json.substring(__istart, __json.length())\n"
-		out = out + "\t\tinteger __icomma = __irest.indexOf(\",\")\n"
-		out = out + "\t\tinteger __ibrace = __irest.indexOf(\"}\")\n"
-		out = out + "\t\tinteger __iend = __irest.length()\n"
-		out = out + "\t\tif __icomma >= 0 and __icomma < __iend\n"
-		out = out + "\t\t\t__iend = __icomma\n"
-		out = out + "\t\tif __ibrace >= 0 and __ibrace < __iend\n"
-		out = out + "\t\t\t__iend = __ibrace\n"
-		out = out + "\t\tstring __inum = __irest.substring(0, __iend).trim()\n"
-		out = out + "\t\tif __inum == \"\"\n"
-		out = out + "\t\t\treturn 0\n"
-		out = out + "\t\treturn __inum.toInteger()\n\n"
-
-		out = out + "\tinteger __mcp_extract_int_default(string __json, string __key, integer __default)\n"
-		out = out + "\t\tstring __disearch = \"\\\"\" + __key + \"\\\":\"\n"
-		out = out + "\t\tinteger __dipos = __json.indexOf(__disearch)\n"
-		out = out + "\t\tif __dipos < 0\n"
-		out = out + "\t\t\treturn __default\n"
-		out = out + "\t\treturn __mcp_extract_int(__json, __key)\n\n"
-
-		out = out + "\tstring __mcp_extract_bool_str(string __json, string __key)\n"
-		out = out + "\t\tstring __bsearch = \"\\\"\" + __key + \"\\\":\"\n"
-		out = out + "\t\tinteger __bpos = __json.indexOf(__bsearch)\n"
-		out = out + "\t\tif __bpos < 0\n"
-		out = out + "\t\t\treturn \"false\"\n"
-		out = out + "\t\tinteger __bstart = __bpos + __bsearch.length()\n"
-		out = out + "\t\tstring __brest = __json.substring(__bstart, __json.length())\n"
-		out = out + "\t\tinteger __bcomma = __brest.indexOf(\",\")\n"
-		out = out + "\t\tinteger __bbrace = __brest.indexOf(\"}\")\n"
-		out = out + "\t\tinteger __bend = __brest.length()\n"
-		out = out + "\t\tif __bcomma >= 0 and __bcomma < __bend\n"
-		out = out + "\t\t\t__bend = __bcomma\n"
-		out = out + "\t\tif __bbrace >= 0 and __bbrace < __bend\n"
-		out = out + "\t\t\t__bend = __bbrace\n"
-		out = out + "\t\treturn __brest.substring(0, __bend).trim()\n\n"
-
-		// Response helpers (json, text, error)
-		out = out + "\tstring json(string __data)\n"
-		out = out + "\t\treturn \"{\\\"type\\\":\\\"text\\\",\\\"text\\\":\" + __data + \"}\"\n\n"
-
-		out = out + "\tstring text(string __msg)\n"
-		out = out + "\t\treturn \"{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"\" + __mcp_json_escape(__msg) + \"\\\"}\"\n\n"
-
-		out = out + "\tstring error(string __message)\n"
-		out = out + "\t\treturn \"{\\\"isError\\\":true,\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"\" + __mcp_json_escape(__message) + \"\\\"}]}\"\n\n"
-
-		// Tool handlers
-		if tools_code.length() > 0
-			out = out + tools_code
-
-		// __mcp_tools_list()
-		out = out + "\tstring __mcp_tools_list()\n"
-		out = out + "\t\treturn \"[" + tools_list_entries + "]\"\n\n"
-
-		// Resource handlers
-		if resources_code.length() > 0
-			out = out + resources_code
-
-		// __mcp_resources_list()
-		out = out + "\tstring __mcp_resources_list()\n"
-		out = out + "\t\treturn \"[" + resources_list_entries + "]\"\n\n"
-
-		// Prompt handlers
-		if prompts_code.length() > 0
-			out = out + prompts_code
-
-		// __mcp_prompts_list()
-		out = out + "\tstring __mcp_prompts_list()\n"
-		out = out + "\t\treturn \"[" + prompts_list_entries + "]\"\n\n"
-
-		// __mcp_dispatch_tool
-		out = out + "\tstring __mcp_dispatch_tool(string name, string __params_json, string __req_id)\n"
-		out = out + "\t\tstring result = \"\"\n"
-		if tools_dispatch_cases.length() > 0
-			out = out + tools_dispatch_cases
-		out = out + "\t\tif result == \"\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Tool not found: \" + name + \"\\\"}}\"\n"
-		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"content\\\":[\" + result + \"]}}\"\n\n"
-
-		// __mcp_dispatch_resource
-		out = out + "\tstring __mcp_dispatch_resource(string uri, string __req_id)\n"
-		out = out + "\t\tstring result = \"\"\n"
-		if resources_dispatch_cases.length() > 0
-			out = out + resources_dispatch_cases
-		out = out + "\t\tif result == \"\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Resource not found: \" + uri + \"\\\"}}\"\n"
-		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"contents\\\":[{\\\"uri\\\":\\\"\" + uri + \"\\\",\\\"mimeType\\\":\\\"application/json\\\",\\\"text\\\":\" + result + \"}]}}\"\n\n"
-
-		// __mcp_dispatch_prompt
-		out = out + "\tstring __mcp_dispatch_prompt(string name, string __args_json, string __req_id)\n"
-		out = out + "\t\tstring result = \"\"\n"
-		if prompts_dispatch_cases.length() > 0
-			out = out + prompts_dispatch_cases
-		out = out + "\t\tif result == \"\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Prompt not found: \" + name + \"\\\"}}\"\n"
-		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":{\\\"type\\\":\\\"text\\\",\\\"text\\\":\" + result + \"}}]}}\"\n\n"
-
-		// __mcp_handle — the main JSON-RPC dispatcher
-		out = out + build_handle_fn(server_name, server_version, capabilities)
-
-		// start: block with the transport loop
-		out = out + build_start_block(transport, http_port, http_host)
-
-		return out
+		// Sticky-error final check
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-MCP-E001", "expand_mcp_typed: sticky-error tripped during emission")
+		return 0
 
 // ============================================================================
-// SERVER NAME AND CONFIG EXTRACTION
+// PREAMBLE BATCH EMISSION
 // ============================================================================
 
 functions:
-	// Extract server name from attributes: mcp "server-name" → server-name
+	integer emit_preamble_batch(integer ctx)
+		_ctx_set_error_context(ctx, "FRAME-MCP-E002", "frame.mcp emit_preamble_batch: preamble helper batch failed")
+
+		integer fns_arr = arr0(ctx)
+
+		_batch_arrayPush(ctx, fns_arr, build_mcp_json_escape(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_mcp_extract_str(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_mcp_extract_str_default(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_mcp_extract_int(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_mcp_extract_int_default(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_mcp_extract_bool_str(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_json_helper(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_text_helper(ctx))
+		_batch_arrayPush(ctx, fns_arr, build_error_helper(ctx))
+
+		integer spec = _batch_spec(ctx, fns_arr)
+		// flags=2 → BFS root (helpers referenced only from plugin-emitted dispatch)
+		_emit_helpers_batch(ctx, spec, 2)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-MCP-E002", "emit_preamble_batch: sticky-error tripped")
+		return 0
+
+// ============================================================================
+// PER-TOOL/RESOURCE/PROMPT HANDLER EMISSION
+// ============================================================================
+// Each handler function is a batch of one function whose body is:
+//   [param extractor statements built via batch]
+//   [user-authored body passed through _emit_stmt_from_source]
+
+functions:
+	// Emit __mcp_tool_<name>(string __params_json) -> string
+	integer emit_tool_handler(integer ctx, string fn_name, string params_body, string handler_body, string diag_label)
+		_ctx_set_error_context(ctx, "FRAME-MCP-E010", "frame.mcp emit_tool_handler failed for tool " + diag_label)
+
+		integer params = params1(ctx, "__params_json", "string")
+		integer body_arr = arr0(ctx)
+
+		// Emit param extractor statements (batch-built)
+		integer ext_err = emit_param_extractors_batch(ctx, params_body, "__params_json", body_arr)
+		if ext_err != 0
+			return ext_err
+
+		// Emit user body via _emit_stmt_from_source (§3.11 pass-through)
+		if handler_body.length() > 0
+			string reindented = reindent_handler_body(handler_body, 2)
+			integer user_stmt = _emit_stmt_from_source(ctx, reindented, 0)
+			if user_stmt == 0
+				_emit_error(ctx, 2, "FRAME-MCP-E011", "syntax error in tool handler body for " + diag_label, "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
+				return 1
+			_batch_arrayPush(ctx, body_arr, user_stmt)
+
+		integer fns_arr = arr0(ctx)
+		_batch_arrayPush(ctx, fns_arr, _batch_func(ctx, fn_name, params, "string", body_arr))
+		integer spec = _batch_spec(ctx, fns_arr)
+		_emit_helpers_batch(ctx, spec, 2)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-MCP-E010", "emit_tool_handler sticky-error tripped for " + diag_label)
+		return 0
+
+	// Emit __mcp_resource_<uri>() -> string
+	integer emit_resource_handler(integer ctx, string fn_name, string handler_body, string diag_label)
+		_ctx_set_error_context(ctx, "FRAME-MCP-E020", "frame.mcp emit_resource_handler failed for " + diag_label)
+
+		integer params = params0(ctx)
+		integer body_arr = arr0(ctx)
+
+		if handler_body.length() > 0
+			string reindented = reindent_handler_body(handler_body, 2)
+			integer user_stmt = _emit_stmt_from_source(ctx, reindented, 0)
+			if user_stmt == 0
+				_emit_error(ctx, 2, "FRAME-MCP-E021", "syntax error in resource handler body for " + diag_label, "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
+				return 1
+			_batch_arrayPush(ctx, body_arr, user_stmt)
+
+		integer fns_arr = arr0(ctx)
+		_batch_arrayPush(ctx, fns_arr, _batch_func(ctx, fn_name, params, "string", body_arr))
+		integer spec = _batch_spec(ctx, fns_arr)
+		_emit_helpers_batch(ctx, spec, 2)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-MCP-E020", "emit_resource_handler sticky-error tripped for " + diag_label)
+		return 0
+
+	// Emit __mcp_prompt_<name>(string __args_json) -> string
+	integer emit_prompt_handler(integer ctx, string fn_name, string args_body, string handler_body, string diag_label)
+		_ctx_set_error_context(ctx, "FRAME-MCP-E030", "frame.mcp emit_prompt_handler failed for " + diag_label)
+
+		integer params = params1(ctx, "__args_json", "string")
+		integer body_arr = arr0(ctx)
+
+		integer ext_err = emit_param_extractors_batch(ctx, args_body, "__args_json", body_arr)
+		if ext_err != 0
+			return ext_err
+
+		if handler_body.length() > 0
+			string reindented = reindent_handler_body(handler_body, 2)
+			integer user_stmt = _emit_stmt_from_source(ctx, reindented, 0)
+			if user_stmt == 0
+				_emit_error(ctx, 2, "FRAME-MCP-E031", "syntax error in prompt handler body for " + diag_label, "{\"start\":0,\"end\":0,\"source\":\"block_body\"}")
+				return 1
+			_batch_arrayPush(ctx, body_arr, user_stmt)
+
+		integer fns_arr = arr0(ctx)
+		_batch_arrayPush(ctx, fns_arr, _batch_func(ctx, fn_name, params, "string", body_arr))
+		integer spec = _batch_spec(ctx, fns_arr)
+		_emit_helpers_batch(ctx, spec, 2)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-MCP-E030", "emit_prompt_handler sticky-error tripped for " + diag_label)
+		return 0
+
+// ============================================================================
+// PARAM EXTRACTOR EMISSION
+// ============================================================================
+// Emits per-param assignment statements into body_arr. Each param maps to:
+//   TYPE pname = __mcp_extract_TYPE(json_var, "pname"[, default])
+//
+// Handles: string, integer, number, boolean plus with/without default.
+
+functions:
+	integer emit_param_extractors_batch(integer ctx, string params_body, string json_var, integer body_arr)
+		integer scan = 0
+		integer safety = 0
+		while safety < 100 and scan < params_body.length()
+			safety = safety + 1
+			string from_scan = params_body.substring(scan, params_body.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			string trimmed = line.trim()
+			if trimmed.length() > 0
+				integer sp1 = trimmed.indexOf(" ")
+				if sp1 > 0
+					string ptype = trimmed.substring(0, sp1)
+					string rest_after_type = trimmed.substring(sp1 + 1, trimmed.length()).trim()
+					integer eq_pos = rest_after_type.indexOf(" = ")
+					string pname = ""
+					string pdefault = ""
+					boolean has_default = false
+					if eq_pos >= 0
+						pname = rest_after_type.substring(0, eq_pos).trim()
+						pdefault = rest_after_type.substring(eq_pos + 3, rest_after_type.length()).trim()
+						has_default = true
+					else
+						pname = rest_after_type.trim()
+
+					// Build the extraction expression and push assign stmt
+					integer stmt = build_extractor_stmt(ctx, ptype, pname, pdefault, has_default, json_var)
+					if stmt != 0
+						_batch_arrayPush(ctx, body_arr, stmt)
+			if nl < 0
+				scan = params_body.length()
+			else
+				scan = scan + nl + 1
+		return 0
+
+	// Build a single: TYPE pname = <extract call>(<json_var>, "pname"[, default])
+	// as a _batch_stmtAssign expression. The compiler infers type from RHS.
+	integer build_extractor_stmt(integer ctx, string ptype, string pname, string pdefault, boolean has_default, string json_var)
+		integer json_arg = id(ctx, json_var)
+		integer name_arg = sl(ctx, pname)
+		if ptype == "string"
+			if has_default
+				string clean_default = pdefault
+				if pdefault.startsWith("\"") and pdefault.length() >= 2
+					clean_default = pdefault.substring(1, pdefault.length() - 1)
+				integer def_arg = sl(ctx, clean_default)
+				integer call_e = call3(ctx, "__mcp_extract_str_default", json_arg, name_arg, def_arg)
+				return sassign(ctx, pname, call_e)
+			integer call_e = call2(ctx, "__mcp_extract_str", json_arg, name_arg)
+			return sassign(ctx, pname, call_e)
+		if ptype == "integer"
+			if has_default
+				integer dnum = pdefault.toInteger()
+				integer def_arg = il(ctx, dnum)
+				integer call_e = call3(ctx, "__mcp_extract_int_default", json_arg, name_arg, def_arg)
+				return sassign(ctx, pname, call_e)
+			integer call_e = call2(ctx, "__mcp_extract_int", json_arg, name_arg)
+			return sassign(ctx, pname, call_e)
+		if ptype == "number"
+			// number = __mcp_extract_int(...).toNumber()
+			integer call_e = call2(ctx, "__mcp_extract_int", json_arg, name_arg)
+			_batch_arrayPush(ctx, arr0(ctx), 0)
+			integer chain = _batch_call(ctx, "toNumber", arr1(ctx, call_e))
+			return sassign(ctx, pname, chain)
+		if ptype == "boolean"
+			// boolean = __mcp_extract_bool_str(...) == "true"
+			integer call_e = call2(ctx, "__mcp_extract_bool_str", json_arg, name_arg)
+			integer eq_e = _batch_binop(ctx, "==", call_e, sl(ctx, "true"))
+			return sassign(ctx, pname, eq_e)
+		// list<T> / any → treat as string
+		if has_default
+			integer def_arg = sl(ctx, pdefault)
+			integer call_e = call3(ctx, "__mcp_extract_str_default", json_arg, name_arg, def_arg)
+			return sassign(ctx, pname, call_e)
+		integer call_e = call2(ctx, "__mcp_extract_str", json_arg, name_arg)
+		return sassign(ctx, pname, call_e)
+
+// ============================================================================
+// DISPATCHER FUNCTIONS + __mcp_handle EMISSION (BATCH)
+// ============================================================================
+// Emits (in one _emit_helpers_batch call):
+//   __mcp_tools_list()        — string literal return
+//   __mcp_resources_list()    — string literal return
+//   __mcp_prompts_list()      — string literal return
+//   __mcp_dispatch_tool(name, __params_json, __req_id) -> string
+//   __mcp_dispatch_resource(uri, __req_id) -> string
+//   __mcp_dispatch_prompt(name, __args_json, __req_id) -> string
+//   __mcp_handle(__msg) -> string
+
+functions:
+	integer emit_dispatcher_functions_batch(integer ctx, string tools_list_json, string resources_list_json, string prompts_list_json, string tools_dispatch, string resources_dispatch, string prompts_dispatch, string server_name, string server_version, string capabilities)
+		_ctx_set_error_context(ctx, "FRAME-MCP-E040", "frame.mcp emit_dispatcher_functions_batch failed")
+
+		integer fns_arr = arr0(ctx)
+
+		// __mcp_tools_list() → return "[<entries>]"
+		_batch_arrayPush(ctx, fns_arr, build_list_fn(ctx, "__mcp_tools_list", tools_list_json))
+		// __mcp_resources_list()
+		_batch_arrayPush(ctx, fns_arr, build_list_fn(ctx, "__mcp_resources_list", resources_list_json))
+		// __mcp_prompts_list()
+		_batch_arrayPush(ctx, fns_arr, build_list_fn(ctx, "__mcp_prompts_list", prompts_list_json))
+
+		// __mcp_dispatch_tool
+		_batch_arrayPush(ctx, fns_arr, build_dispatch_tool_fn(ctx, tools_dispatch))
+		// __mcp_dispatch_resource
+		_batch_arrayPush(ctx, fns_arr, build_dispatch_resource_fn(ctx, resources_dispatch))
+		// __mcp_dispatch_prompt
+		_batch_arrayPush(ctx, fns_arr, build_dispatch_prompt_fn(ctx, prompts_dispatch))
+
+		// __mcp_handle
+		_batch_arrayPush(ctx, fns_arr, build_mcp_handle_fn(ctx, server_name, server_version, capabilities))
+
+		integer spec = _batch_spec(ctx, fns_arr)
+		_emit_helpers_batch(ctx, spec, 2)
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-MCP-E040", "emit_dispatcher_functions_batch sticky-error tripped")
+		return 0
+
+	// build_list_fn: fn_name() → return "[<entries>]"
+	integer build_list_fn(integer ctx, string fn_name, string entries_json)
+		integer params = params0(ctx)
+		integer body_arr = arr0(ctx)
+		string full = "[" + entries_json + "]"
+		_batch_arrayPush(ctx, body_arr, sret(ctx, sl(ctx, full)))
+		return _batch_func(ctx, fn_name, params, "string", body_arr)
+
+	// build_dispatch_tool_fn:
+	//   __mcp_dispatch_tool(name: string, __params_json: string, __req_id: string) -> string
+	//     result = ""
+	//     if name == "<t1>": result = __mcp_tool_<t1>(__params_json)
+	//     if name == "<t2>": result = __mcp_tool_<t2>(__params_json)
+	//     ...
+	//     if result == "": return "{...error...}"
+	//     return "{...jsonrpc result...}"
+	integer build_dispatch_tool_fn(integer ctx, string dispatch_lines)
+		integer params = params3(ctx, "name", "string", "__params_json", "string", "__req_id", "string")
+		integer body_arr = arr0(ctx)
+
+		// result = ""
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "result", sl(ctx, "")))
+
+		// Emit one if per tool dispatch case
+		integer scan = 0
+		integer safety = 0
+		while safety < 100 and scan < dispatch_lines.length()
+			safety = safety + 1
+			string from_scan = dispatch_lines.substring(scan, dispatch_lines.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			if line.length() > 0
+				integer bar = line.indexOf("|")
+				if bar > 0
+					string tname = line.substring(0, bar)
+					string fnm = line.substring(bar + 1, line.length())
+					integer cond = eq_id_sl(ctx, "name", tname)
+					integer call_e = call1(ctx, fnm, id(ctx, "__params_json"))
+					integer body_s = sassign(ctx, "result", call_e)
+					_batch_arrayPush(ctx, body_arr, sif1(ctx, cond, body_s))
+			if nl < 0
+				scan = dispatch_lines.length()
+			else
+				scan = scan + nl + 1
+
+		// if result == "": return err_json (built via string concat at runtime)
+		// return "{\"jsonrpc\":\"2.0\",\"id\":" + __req_id + ",\"error\":{\"code\":-32601,\"message\":\"Tool not found: " + name + "\"}}"
+		integer err_prefix = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer err_mid = sl(ctx, ",\"error\":{\"code\":-32601,\"message\":\"Tool not found: ")
+		integer err_suffix = sl(ctx, "\"}}")
+		integer e1 = concat(ctx, err_prefix, id(ctx, "__req_id"))
+		integer e2 = concat(ctx, e1, err_mid)
+		integer e3 = concat(ctx, e2, id(ctx, "name"))
+		integer err_full = concat(ctx, e3, err_suffix)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "result", ""), sret(ctx, err_full)))
+
+		// return "{\"jsonrpc\":\"2.0\",\"id\":" + __req_id + ",\"result\":{\"content\":[" + result + "]}}"
+		integer ok_prefix = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer ok_mid = sl(ctx, ",\"result\":{\"content\":[")
+		integer ok_suffix = sl(ctx, "]}}")
+		integer o1 = concat(ctx, ok_prefix, id(ctx, "__req_id"))
+		integer o2 = concat(ctx, o1, ok_mid)
+		integer o3 = concat(ctx, o2, id(ctx, "result"))
+		integer ok_full = concat(ctx, o3, ok_suffix)
+		_batch_arrayPush(ctx, body_arr, sret(ctx, ok_full))
+
+		return _batch_func(ctx, "__mcp_dispatch_tool", params, "string", body_arr)
+
+	// build_dispatch_resource_fn:
+	//   __mcp_dispatch_resource(uri: string, __req_id: string) -> string
+	integer build_dispatch_resource_fn(integer ctx, string dispatch_lines)
+		integer params = params2(ctx, "uri", "string", "__req_id", "string")
+		integer body_arr = arr0(ctx)
+
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "result", sl(ctx, "")))
+
+		integer scan = 0
+		integer safety = 0
+		while safety < 100 and scan < dispatch_lines.length()
+			safety = safety + 1
+			string from_scan = dispatch_lines.substring(scan, dispatch_lines.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			if line.length() > 0
+				integer bar = line.indexOf("|")
+				if bar > 0
+					string ruri = line.substring(0, bar)
+					string fnm = line.substring(bar + 1, line.length())
+					integer cond = eq_id_sl(ctx, "uri", ruri)
+					integer call_e = call0(ctx, fnm)
+					integer body_s = sassign(ctx, "result", call_e)
+					_batch_arrayPush(ctx, body_arr, sif1(ctx, cond, body_s))
+			if nl < 0
+				scan = dispatch_lines.length()
+			else
+				scan = scan + nl + 1
+
+		// error json
+		integer err_prefix = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer err_mid = sl(ctx, ",\"error\":{\"code\":-32601,\"message\":\"Resource not found: ")
+		integer err_suffix = sl(ctx, "\"}}")
+		integer e1 = concat(ctx, err_prefix, id(ctx, "__req_id"))
+		integer e2 = concat(ctx, e1, err_mid)
+		integer e3 = concat(ctx, e2, id(ctx, "uri"))
+		integer err_full = concat(ctx, e3, err_suffix)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "result", ""), sret(ctx, err_full)))
+
+		// return "{...result: {\"contents\":[{\"uri\":\"" + uri + "\",\"mimeType\":\"application/json\",\"text\":" + result + "}]}}"
+		integer ok_p1 = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer ok_p2 = sl(ctx, ",\"result\":{\"contents\":[{\"uri\":\"")
+		integer ok_p3 = sl(ctx, "\",\"mimeType\":\"application/json\",\"text\":")
+		integer ok_p4 = sl(ctx, "}]}}")
+		integer o1 = concat(ctx, ok_p1, id(ctx, "__req_id"))
+		integer o2 = concat(ctx, o1, ok_p2)
+		integer o3 = concat(ctx, o2, id(ctx, "uri"))
+		integer o4 = concat(ctx, o3, ok_p3)
+		integer o5 = concat(ctx, o4, id(ctx, "result"))
+		integer ok_full = concat(ctx, o5, ok_p4)
+		_batch_arrayPush(ctx, body_arr, sret(ctx, ok_full))
+
+		return _batch_func(ctx, "__mcp_dispatch_resource", params, "string", body_arr)
+
+	// build_dispatch_prompt_fn: __mcp_dispatch_prompt(name, __args_json, __req_id)
+	integer build_dispatch_prompt_fn(integer ctx, string dispatch_lines)
+		integer params = params3(ctx, "name", "string", "__args_json", "string", "__req_id", "string")
+		integer body_arr = arr0(ctx)
+
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "result", sl(ctx, "")))
+
+		integer scan = 0
+		integer safety = 0
+		while safety < 100 and scan < dispatch_lines.length()
+			safety = safety + 1
+			string from_scan = dispatch_lines.substring(scan, dispatch_lines.length())
+			integer nl = from_scan.indexOf("\n")
+			string line = ""
+			if nl < 0
+				line = from_scan
+			else
+				line = from_scan.substring(0, nl)
+			if line.length() > 0
+				integer bar = line.indexOf("|")
+				if bar > 0
+					string pname = line.substring(0, bar)
+					string fnm = line.substring(bar + 1, line.length())
+					integer cond = eq_id_sl(ctx, "name", pname)
+					integer call_e = call1(ctx, fnm, id(ctx, "__args_json"))
+					integer body_s = sassign(ctx, "result", call_e)
+					_batch_arrayPush(ctx, body_arr, sif1(ctx, cond, body_s))
+			if nl < 0
+				scan = dispatch_lines.length()
+			else
+				scan = scan + nl + 1
+
+		integer err_prefix = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer err_mid = sl(ctx, ",\"error\":{\"code\":-32601,\"message\":\"Prompt not found: ")
+		integer err_suffix = sl(ctx, "\"}}")
+		integer e1 = concat(ctx, err_prefix, id(ctx, "__req_id"))
+		integer e2 = concat(ctx, e1, err_mid)
+		integer e3 = concat(ctx, e2, id(ctx, "name"))
+		integer err_full = concat(ctx, e3, err_suffix)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "result", ""), sret(ctx, err_full)))
+
+		// return "{...result:{\"messages\":[{\"role\":\"user\",\"content\":{\"type\":\"text\",\"text\":" + result + "}}]}}"
+		integer ok_p1 = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer ok_p2 = sl(ctx, ",\"result\":{\"messages\":[{\"role\":\"user\",\"content\":{\"type\":\"text\",\"text\":")
+		integer ok_p3 = sl(ctx, "}}]}}")
+		integer o1 = concat(ctx, ok_p1, id(ctx, "__req_id"))
+		integer o2 = concat(ctx, o1, ok_p2)
+		integer o3 = concat(ctx, o2, id(ctx, "result"))
+		integer ok_full = concat(ctx, o3, ok_p3)
+		_batch_arrayPush(ctx, body_arr, sret(ctx, ok_full))
+
+		return _batch_func(ctx, "__mcp_dispatch_prompt", params, "string", body_arr)
+
+	// build_mcp_handle_fn: the JSON-RPC 2.0 dispatcher
+	integer build_mcp_handle_fn(integer ctx, string server_name, string server_version, string capabilities)
+		integer params = params1(ctx, "__msg", "string")
+		integer body_arr = arr0(ctx)
+
+		// string __method = __mcp_extract_str(__msg, "method")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__method", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "method"))))
+		// string __req_id = __mcp_extract_str(__msg, "id")
+		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__req_id", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "id"))))
+
+		// if __method == "initialize": return "{...initialize response...}"
+		string init_resp = "{\"jsonrpc\":\"2.0\",\"id\":"
+		string init_mid = ",\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":" + capabilities + ",\"serverInfo\":{\"name\":\"" + server_name + "\",\"version\":\"" + server_version + "\"}}}"
+		integer i_p = sl(ctx, init_resp)
+		integer i_m = sl(ctx, init_mid)
+		integer i_e1 = concat(ctx, i_p, id(ctx, "__req_id"))
+		integer i_full = concat(ctx, i_e1, i_m)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__method", "initialize"), sret(ctx, i_full)))
+
+		// if __method == "initialized": return ""
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__method", "initialized"), sret(ctx, sl(ctx, ""))))
+
+		// if __method == "ping": return "{...ping...}"
+		integer ping_p = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer ping_s = sl(ctx, ",\"result\":{}}")
+		integer ping_e1 = concat(ctx, ping_p, id(ctx, "__req_id"))
+		integer ping_full = concat(ctx, ping_e1, ping_s)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__method", "ping"), sret(ctx, ping_full)))
+
+		// if __method == "tools/list": return "{...tools/list...}"
+		integer tl_p = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer tl_m = sl(ctx, ",\"result\":{\"tools\":")
+		integer tl_s = sl(ctx, "}}")
+		integer tl_call = call0(ctx, "__mcp_tools_list")
+		integer tl_e1 = concat(ctx, tl_p, id(ctx, "__req_id"))
+		integer tl_e2 = concat(ctx, tl_e1, tl_m)
+		integer tl_e3 = concat(ctx, tl_e2, tl_call)
+		integer tl_full = concat(ctx, tl_e3, tl_s)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__method", "tools/list"), sret(ctx, tl_full)))
+
+		// if __method == "tools/call":
+		//   __tool_name = __mcp_extract_str(__msg, "name")
+		//   __args_key = "\"arguments\":"
+		//   __args_pos = __msg.indexOf(__args_key)
+		//   __tool_params = "{}"
+		//   if __args_pos >= 0:
+		//     __args_start = __args_pos + __args_key.length()
+		//     __tool_params = __msg.substring(__args_start, __msg.length() - 1)
+		//   return __mcp_dispatch_tool(__tool_name, __tool_params, __req_id)
+		integer tc_body = arr0(ctx)
+		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__tool_name", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "name"))))
+		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__args_key", sl(ctx, "\"arguments\":")))
+		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__args_pos", methcall1(ctx, "__msg", "indexOf", id(ctx, "__args_key"))))
+		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__tool_params", sl(ctx, "{}")))
+		// nested if body
+		integer nest_body = arr0(ctx)
+		integer args_len = methcall0(ctx, "__args_key", "length")
+		integer args_start_e = add(ctx, id(ctx, "__args_pos"), args_len)
+		_batch_arrayPush(ctx, nest_body, sassign(ctx, "__args_start", args_start_e))
+		integer msg_len = methcall0(ctx, "__msg", "length")
+		integer msg_len_minus_one = _batch_binop(ctx, "-", msg_len, il(ctx, 1))
+		integer substr_e = methcall2(ctx, "__msg", "substring", id(ctx, "__args_start"), msg_len_minus_one)
+		_batch_arrayPush(ctx, nest_body, sassign(ctx, "__tool_params", substr_e))
+		integer nest_if = _batch_stmtIf(ctx, gte_id_il(ctx, "__args_pos", 0), nest_body, 0)
+		_batch_arrayPush(ctx, tc_body, nest_if)
+		_batch_arrayPush(ctx, tc_body, sret(ctx, call3(ctx, "__mcp_dispatch_tool", id(ctx, "__tool_name"), id(ctx, "__tool_params"), id(ctx, "__req_id"))))
+		integer tc_if = _batch_stmtIf(ctx, eq_id_sl(ctx, "__method", "tools/call"), tc_body, 0)
+		_batch_arrayPush(ctx, body_arr, tc_if)
+
+		// resources/list
+		integer rl_p = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer rl_m = sl(ctx, ",\"result\":{\"resources\":")
+		integer rl_s = sl(ctx, "}}")
+		integer rl_call = call0(ctx, "__mcp_resources_list")
+		integer rl_e1 = concat(ctx, rl_p, id(ctx, "__req_id"))
+		integer rl_e2 = concat(ctx, rl_e1, rl_m)
+		integer rl_e3 = concat(ctx, rl_e2, rl_call)
+		integer rl_full = concat(ctx, rl_e3, rl_s)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__method", "resources/list"), sret(ctx, rl_full)))
+
+		// resources/read: __uri = extract_str("uri"); return dispatch_resource(__uri, __req_id)
+		integer rr_body = arr0(ctx)
+		_batch_arrayPush(ctx, rr_body, sassign(ctx, "__uri", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "uri"))))
+		_batch_arrayPush(ctx, rr_body, sret(ctx, call2(ctx, "__mcp_dispatch_resource", id(ctx, "__uri"), id(ctx, "__req_id"))))
+		integer rr_if = _batch_stmtIf(ctx, eq_id_sl(ctx, "__method", "resources/read"), rr_body, 0)
+		_batch_arrayPush(ctx, body_arr, rr_if)
+
+		// prompts/list
+		integer pl_p = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer pl_m = sl(ctx, ",\"result\":{\"prompts\":")
+		integer pl_s = sl(ctx, "}}")
+		integer pl_call = call0(ctx, "__mcp_prompts_list")
+		integer pl_e1 = concat(ctx, pl_p, id(ctx, "__req_id"))
+		integer pl_e2 = concat(ctx, pl_e1, pl_m)
+		integer pl_e3 = concat(ctx, pl_e2, pl_call)
+		integer pl_full = concat(ctx, pl_e3, pl_s)
+		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__method", "prompts/list"), sret(ctx, pl_full)))
+
+		// prompts/get:
+		//   __prompt_name = extract_str("name")
+		//   __pargs_key = "\"arguments\":"
+		//   __pargs_pos = __msg.indexOf(__pargs_key)
+		//   __prompt_args = "{}"
+		//   if __pargs_pos >= 0: __pargs_start = ...; __prompt_args = __msg.substring(...)
+		//   return __mcp_dispatch_prompt(__prompt_name, __prompt_args, __req_id)
+		integer pg_body = arr0(ctx)
+		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__prompt_name", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "name"))))
+		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__pargs_key", sl(ctx, "\"arguments\":")))
+		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__pargs_pos", methcall1(ctx, "__msg", "indexOf", id(ctx, "__pargs_key"))))
+		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__prompt_args", sl(ctx, "{}")))
+		integer pnest = arr0(ctx)
+		integer pargs_len = methcall0(ctx, "__pargs_key", "length")
+		integer pargs_start_e = add(ctx, id(ctx, "__pargs_pos"), pargs_len)
+		_batch_arrayPush(ctx, pnest, sassign(ctx, "__pargs_start", pargs_start_e))
+		integer pmsg_len = methcall0(ctx, "__msg", "length")
+		integer pmsg_len_minus_one = _batch_binop(ctx, "-", pmsg_len, il(ctx, 1))
+		integer psubstr_e = methcall2(ctx, "__msg", "substring", id(ctx, "__pargs_start"), pmsg_len_minus_one)
+		_batch_arrayPush(ctx, pnest, sassign(ctx, "__prompt_args", psubstr_e))
+		integer pnest_if = _batch_stmtIf(ctx, gte_id_il(ctx, "__pargs_pos", 0), pnest, 0)
+		_batch_arrayPush(ctx, pg_body, pnest_if)
+		_batch_arrayPush(ctx, pg_body, sret(ctx, call3(ctx, "__mcp_dispatch_prompt", id(ctx, "__prompt_name"), id(ctx, "__prompt_args"), id(ctx, "__req_id"))))
+		integer pg_if = _batch_stmtIf(ctx, eq_id_sl(ctx, "__method", "prompts/get"), pg_body, 0)
+		_batch_arrayPush(ctx, body_arr, pg_if)
+
+		// Fallback: unknown method
+		// return "{\"jsonrpc\":\"2.0\",\"id\":" + __req_id + ",\"error\":{\"code\":-32601,\"message\":\"Method not found: " + __method + "\"}}"
+		integer uk_p = sl(ctx, "{\"jsonrpc\":\"2.0\",\"id\":")
+		integer uk_m = sl(ctx, ",\"error\":{\"code\":-32601,\"message\":\"Method not found: ")
+		integer uk_s = sl(ctx, "\"}}")
+		integer uk_e1 = concat(ctx, uk_p, id(ctx, "__req_id"))
+		integer uk_e2 = concat(ctx, uk_e1, uk_m)
+		integer uk_e3 = concat(ctx, uk_e2, id(ctx, "__method"))
+		integer uk_full = concat(ctx, uk_e3, uk_s)
+		_batch_arrayPush(ctx, body_arr, sret(ctx, uk_full))
+
+		return _batch_func(ctx, "__mcp_handle", params, "string", body_arr)
+
+// ============================================================================
+// START BLOCK EMISSION (typed statements into start slot)
+// ============================================================================
+
+functions:
+	integer emit_start_block(integer ctx, string transport, string http_port, string http_host)
+		_ctx_set_error_context(ctx, "FRAME-MCP-E050", "frame.mcp emit_start_block failed")
+
+		if transport == "http"
+			// _mcp_http_serve(port, host)
+			integer port_i = http_port.toInteger()
+			integer serve_args = arr2(ctx, il(ctx, port_i), sl(ctx, http_host))
+			_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_mcp_http_serve", serve_args))
+
+			// boolean __http_running = true
+			_emit_statement_into_start(ctx, sassign(ctx, "__http_running", bl(ctx, true)))
+
+			// while __http_running:
+			//   __req = _mcp_http_accept()
+			//   if __req.length() > 0:
+			//     __resp = __mcp_handle(__req)
+			//     if __resp.length() > 0:
+			//       _mcp_stdio_write(__resp)
+			integer wbody = arr0(ctx)
+			_batch_arrayPush(ctx, wbody, sassign(ctx, "__req", call0(ctx, "_mcp_http_accept")))
+			integer reqlen = methcall0(ctx, "__req", "length")
+			integer reqlen_gt0 = _batch_binop(ctx, ">", reqlen, il(ctx, 0))
+			integer inner1 = arr0(ctx)
+			_batch_arrayPush(ctx, inner1, sassign(ctx, "__resp", call1(ctx, "__mcp_handle", id(ctx, "__req"))))
+			integer resplen = methcall0(ctx, "__resp", "length")
+			integer resplen_gt0 = _batch_binop(ctx, ">", resplen, il(ctx, 0))
+			integer inner2 = arr0(ctx)
+			_batch_arrayPush(ctx, inner2, _batch_stmtCall(ctx, "_mcp_stdio_write", arr1(ctx, id(ctx, "__resp"))))
+			_batch_arrayPush(ctx, inner1, _batch_stmtIf(ctx, resplen_gt0, inner2, 0))
+			_batch_arrayPush(ctx, wbody, _batch_stmtIf(ctx, reqlen_gt0, inner1, 0))
+			_emit_statement_into_start(ctx, _batch_stmtWhile(ctx, id(ctx, "__http_running"), wbody))
+		else
+			// stdio (default)
+			// boolean __running = true
+			_emit_statement_into_start(ctx, sassign(ctx, "__running", bl(ctx, true)))
+
+			// while __running:
+			//   __msg = _mcp_stdio_read()
+			//   if __msg.length() == 0: __running = false
+			//   if __running:
+			//     __response = __mcp_handle(__msg)
+			//     if __response.length() > 0: _mcp_stdio_write(__response)
+			integer wbody = arr0(ctx)
+			_batch_arrayPush(ctx, wbody, sassign(ctx, "__msg", call0(ctx, "_mcp_stdio_read")))
+			integer msglen = methcall0(ctx, "__msg", "length")
+			integer msglen_eq0 = _batch_binop(ctx, "==", msglen, il(ctx, 0))
+			_batch_arrayPush(ctx, wbody, sif1(ctx, msglen_eq0, sassign(ctx, "__running", bl(ctx, false))))
+			integer inner_body = arr0(ctx)
+			_batch_arrayPush(ctx, inner_body, sassign(ctx, "__response", call1(ctx, "__mcp_handle", id(ctx, "__msg"))))
+			integer resplen = methcall0(ctx, "__response", "length")
+			integer resplen_gt0 = _batch_binop(ctx, ">", resplen, il(ctx, 0))
+			integer inner2 = arr0(ctx)
+			_batch_arrayPush(ctx, inner2, _batch_stmtCall(ctx, "_mcp_stdio_write", arr1(ctx, id(ctx, "__response"))))
+			_batch_arrayPush(ctx, inner_body, _batch_stmtIf(ctx, resplen_gt0, inner2, 0))
+			_batch_arrayPush(ctx, wbody, sif1(ctx, id(ctx, "__running"), _batch_stmtBlock(ctx, inner_body)))
+			_emit_statement_into_start(ctx, _batch_stmtWhile(ctx, id(ctx, "__running"), wbody))
+
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-MCP-E050", "emit_start_block sticky-error tripped")
+		return 0
+
+// ============================================================================
+// DSL PARSING HELPERS (unchanged from v1)
+// ============================================================================
+
+functions:
 	string extract_server_name(string attributes)
 		string trimmed = attributes.trim()
 		integer open_q = trimmed.indexOf("\"")
@@ -358,7 +1367,6 @@ functions:
 			return "mcp-server"
 		return after_open.substring(0, close_q)
 
-	// Find a top-level config line: \tkey: "value" → value (without quotes)
 	string extract_config_value(string body, string key)
 		string search = "\t" + key + ": \""
 		integer pos = body.indexOf(search)
@@ -371,7 +1379,6 @@ functions:
 			return ""
 		return after.substring(0, close_q)
 
-	// Extract transport: stdio or http (default: stdio)
 	string extract_transport(string body)
 		string search = "\ttransport: "
 		integer pos = body.indexOf(search)
@@ -389,10 +1396,6 @@ functions:
 			return "http"
 		return "stdio"
 
-	// Extract a nested field (e.g. port:, host:) from inside a
-	// `transport: http:` block. Returns "" if not present.
-	// The nested block is identified by two-tab indented sibling lines
-	// immediately following `\ttransport: http:`.
 	string extract_transport_nested(string body, string key)
 		integer transport_pos = body.indexOf("\ttransport: http:")
 		if transport_pos < 0
@@ -415,7 +1418,6 @@ functions:
 			else
 				line = body.substring(scan, nl)
 				next_scan = nl + 1
-			// Stop scanning when we leave the nested block.
 			if not line.startsWith("\t\t")
 				return ""
 			string trimmed = line.trim()
@@ -428,13 +1430,6 @@ functions:
 			scan = next_scan
 		return ""
 
-// ============================================================================
-// SUB-BLOCK EXTRACTION HELPERS
-// ============================================================================
-
-functions:
-	// Find the first occurrence of a marker starting at or after scan_start.
-	// Returns the position of the marker, or -1 if not found.
 	integer find_block_start(string body, string marker, integer scan_start)
 		string remaining = body.substring(scan_start, body.length())
 		integer rel_pos = remaining.indexOf(marker)
@@ -442,8 +1437,6 @@ functions:
 			return -1
 		return scan_start + rel_pos
 
-	// Given position of \ttool/resource/prompt, find the position of the first
-	// character of the block body (the line after the header line).
 	integer find_block_body_start(string body, integer header_pos)
 		string from_header = body.substring(header_pos, body.length())
 		integer nl = from_header.indexOf("\n")
@@ -451,46 +1444,34 @@ functions:
 			return body.length()
 		return header_pos + nl + 1
 
-	// Find the end of a block that started at body_start.
-	// The block ends when we reach a line that starts with exactly one tab
-	// (the next sibling block) OR end of string. Returns the position in body
-	// of the start of that next sibling line (or body.length()).
 	integer find_block_end_at_one_tab(string body, integer body_start)
 		string remaining = body.substring(body_start, body.length())
 		integer scan = 0
 		integer safety = 0
 		while safety < 2000 and scan < remaining.length()
 			safety = safety + 1
-			// Find next newline
 			string from_scan = remaining.substring(scan, remaining.length())
 			integer nl = from_scan.indexOf("\n")
 			if nl < 0
 				return body.length()
 			integer line_start = scan + nl + 1
-			// Check if the new line starts with exactly one tab (sibling) or no tab (end of outer block)
 			if line_start >= remaining.length()
 				return body.length()
 			string line_first = remaining.substring(line_start, line_start + 1)
 			if line_first == "\t"
-				// Check if second char is NOT a tab (making it a one-tab-indented line = sibling)
 				if line_start + 1 < remaining.length()
 					string line_second = remaining.substring(line_start + 1, line_start + 2)
 					if line_second != "\t"
-						// This is a sibling block start — stop here
 						return body_start + line_start
 			else
-				// Line starts without a tab — we've exited the outer block
 				return body_start + line_start
 			scan = line_start
-
 		return body.length()
 
-	// Extract description: or mimeType: from a sub-block body (2-tab indented)
 	string extract_subconfig_value(string block_body, string key)
 		string search = "\t\t" + key + ": \""
 		integer pos = block_body.indexOf(search)
 		if pos < 0
-			// Try without quotes (e.g. transport: stdio)
 			string search2 = "\t\t" + key + ": "
 			integer pos2 = block_body.indexOf(search2)
 			if pos2 < 0
@@ -508,8 +1489,6 @@ functions:
 			return ""
 		return after.substring(0, close_q)
 
-	// Extract the params: or args: sub-block body from a tool/prompt block body.
-	// Returns the raw text of the params block (lines starting with \t\t\t).
 	string extract_params_body(string block_body, string block_keyword)
 		string search = "\t\t" + block_keyword + ":\n"
 		integer pos = block_body.indexOf(search)
@@ -517,7 +1496,6 @@ functions:
 			return ""
 		integer params_content_start = pos + search.length()
 		string remaining = block_body.substring(params_content_start, block_body.length())
-		// Collect lines starting with three tabs (\t\t\t)
 		string result = ""
 		integer scan = 0
 		integer safety = 0
@@ -530,7 +1508,6 @@ functions:
 				line = from_scan
 			else
 				line = from_scan.substring(0, nl)
-			// Check if line starts with three tabs
 			if line.startsWith("\t\t\t")
 				result = result + line + "\n"
 				if nl < 0
@@ -538,12 +1515,9 @@ functions:
 				else
 					scan = scan + nl + 1
 			else
-				// End of params block
 				scan = remaining.length()
 		return result
 
-	// Extract the handler body lines from a tool/prompt block: everything that
-	// is not a description:, params:, args:, or the params/args sub-lines.
 	string extract_handler_body(string block_body, string params_body)
 		string result = ""
 		string remaining = block_body
@@ -559,15 +1533,11 @@ functions:
 			else
 				line = from_scan.substring(0, nl)
 			string trimmed_line = line.trim()
-			// Skip description: line
 			boolean skip = trimmed_line.startsWith("description:")
-			// Skip params: and args: header lines
 			if trimmed_line == "params:" or trimmed_line == "args:"
 				skip = true
-			// Skip triple-tab lines (those are param declarations)
 			if line.startsWith("\t\t\t")
 				skip = true
-			// Keep double-tab lines that are actual handler code
 			if not skip and line.startsWith("\t\t") and trimmed_line.length() > 0
 				result = result + line + "\n"
 			if nl < 0
@@ -576,7 +1546,6 @@ functions:
 				scan = scan + nl + 1
 		return result
 
-	// Extract resource handler body (same as handler but no params block to skip)
 	string extract_resource_handler_body(string block_body)
 		string result = ""
 		integer scan = 0
@@ -600,114 +1569,40 @@ functions:
 				scan = scan + nl + 1
 		return result
 
-// ============================================================================
-// TOOL CODE GENERATION
-// ============================================================================
-
-functions:
-	// Build the complete handler function for a tool.
-	// fn_name: e.g. __mcp_tool_get_post
-	// params_body: raw param lines (\t\t\tTYPE name = default\n)
-	// handler_body: raw user code lines (\t\tcode\n)
-	string build_tool_handler(string fn_name, string params_body, string handler_body)
-		string out = "\tstring " + fn_name + "(string __params_json)\n"
-		// Emit param extractors
-		out = out + build_param_extractors(params_body)
-		// Inline the user's handler body verbatim (already at \t\t indent)
-		out = out + handler_body
-		out = out + "\n"
-		return out
-
-	// Build the resource handler function (no params).
-	string build_resource_handler(string fn_name, string handler_body)
-		string out = "\tstring " + fn_name + "()\n"
-		out = out + handler_body
-		out = out + "\n"
-		return out
-
-	// Build the prompt handler function.
-	string build_prompt_handler(string fn_name, string args_body, string handler_body)
-		string out = "\tstring " + fn_name + "(string __args_json)\n"
-		out = out + build_param_extractors(args_body)
-		out = out + handler_body
-		out = out + "\n"
-		return out
-
-	// Generate param extraction code from a params block.
-	// Each param line is: \t\t\tTYPE name\n or \t\t\tTYPE name = default\n
-	string build_param_extractors(string params_body)
-		string out = ""
+	// Re-indent handler body lines to remove leading indent (from \t\t block level
+	// down to column 0). _emit_stmt_from_source expects a fragment starting at
+	// column 0 (the compiler wraps it in a synthetic scope per §3.11).
+	string reindent_handler_body(string body, integer strip_tabs)
+		string result = ""
 		integer scan = 0
 		integer safety = 0
-		while safety < 100 and scan < params_body.length()
+		while safety < 500 and scan < body.length()
 			safety = safety + 1
-			string from_scan = params_body.substring(scan, params_body.length())
+			string from_scan = body.substring(scan, body.length())
 			integer nl = from_scan.indexOf("\n")
 			string line = ""
 			if nl < 0
 				line = from_scan
 			else
 				line = from_scan.substring(0, nl)
-			string trimmed = line.trim()
-			if trimmed.length() > 0
-				// Parse: TYPE name or TYPE name = default
-				// Find first space to get type
-				integer sp1 = trimmed.indexOf(" ")
-				if sp1 > 0
-					string ptype = trimmed.substring(0, sp1)
-					string rest_after_type = trimmed.substring(sp1 + 1, trimmed.length()).trim()
-					// Check for default value: "= default"
-					integer eq_pos = rest_after_type.indexOf(" = ")
-					string pname = ""
-					string pdefault = ""
-					boolean has_default = false
-					if eq_pos >= 0
-						pname = rest_after_type.substring(0, eq_pos).trim()
-						pdefault = rest_after_type.substring(eq_pos + 3, rest_after_type.length()).trim()
-						has_default = true
-					else
-						pname = rest_after_type.trim()
-					// Emit the extraction line
-					out = out + build_single_extractor(ptype, pname, pdefault, has_default)
+			// Strip up to strip_tabs leading tabs
+			integer stripped = 0
+			string remaining_line = line
+			while stripped < strip_tabs and remaining_line.startsWith("\t")
+				remaining_line = remaining_line.substring(1, remaining_line.length())
+				stripped = stripped + 1
+			result = result + remaining_line + "\n"
 			if nl < 0
-				scan = params_body.length()
+				scan = body.length()
 			else
 				scan = scan + nl + 1
-		return out
-
-	// Emit the single line that extracts one parameter from __params_json.
-	string build_single_extractor(string ptype, string pname, string pdefault, boolean has_default)
-		if ptype == "string"
-			if has_default
-				// Strip surrounding quotes from default string literal if present
-				string clean_default = pdefault
-				if pdefault.startsWith("\"") and pdefault.length() >= 2
-					clean_default = pdefault.substring(1, pdefault.length() - 1)
-				return "\t\tstring " + pname + " = __mcp_extract_str_default(__params_json, \"" + pname + "\", \"" + clean_default + "\")\n"
-			return "\t\tstring " + pname + " = __mcp_extract_str(__params_json, \"" + pname + "\")\n"
-		if ptype == "integer"
-			if has_default
-				return "\t\tinteger " + pname + " = __mcp_extract_int_default(__params_json, \"" + pname + "\", " + pdefault + ")\n"
-			return "\t\tinteger " + pname + " = __mcp_extract_int(__params_json, \"" + pname + "\")\n"
-		if ptype == "number"
-			if has_default
-				return "\t\tnumber " + pname + " = __mcp_extract_int_default(__params_json, \"" + pname + "\", " + pdefault + ").toNumber()\n"
-			return "\t\tnumber " + pname + " = __mcp_extract_int(__params_json, \"" + pname + "\").toNumber()\n"
-		if ptype == "boolean"
-			if has_default
-				return "\t\tboolean " + pname + " = __mcp_extract_bool_str(__params_json, \"" + pname + "\") == \"true\"\n"
-			return "\t\tboolean " + pname + " = __mcp_extract_bool_str(__params_json, \"" + pname + "\") == \"true\"\n"
-		// list<T> or any — extract as raw string for now
-		if has_default
-			return "\t\tstring " + pname + " = __mcp_extract_str_default(__params_json, \"" + pname + "\", \"" + pdefault + "\")\n"
-		return "\t\tstring " + pname + " = __mcp_extract_str(__params_json, \"" + pname + "\")\n"
+		return result
 
 // ============================================================================
-// JSON SCHEMA GENERATION
+// JSON SCHEMA GENERATION (unchanged from v1)
 // ============================================================================
 
 functions:
-	// Build the inputSchema JSON object for a tool's params block.
 	string build_tool_json_schema(string params_body)
 		if params_body.trim() == ""
 			return "{\"type\":\"object\",\"properties\":{}}"
@@ -760,7 +1655,6 @@ functions:
 		schema = schema + "}"
 		return schema
 
-	// Map a Clean type to its JSON Schema representation.
 	string type_to_json_schema(string clean_type)
 		if clean_type == "string"
 			return "{\"type\":\"string\"}"
@@ -772,7 +1666,6 @@ functions:
 			return "{\"type\":\"boolean\"}"
 		if clean_type == "any"
 			return "{}"
-		// list<T> types
 		if clean_type == "list<string>"
 			return "{\"type\":\"array\",\"items\":{\"type\":\"string\"}}"
 		if clean_type == "list<integer>"
@@ -783,10 +1676,8 @@ functions:
 			return "{\"type\":\"array\",\"items\":{\"type\":\"boolean\"}}"
 		if clean_type == "list<any>"
 			return "{\"type\":\"array\"}"
-		// Named model types → object
 		return "{\"type\":\"object\"}"
 
-	// Build the arguments JSON array for a prompt's prompts/list entry.
 	string build_prompt_args_json(string args_body)
 		if args_body.trim() == ""
 			return "[]"
@@ -829,12 +1720,6 @@ functions:
 				scan = scan + nl + 1
 		return "[" + entries + "]"
 
-// ============================================================================
-// CAPABILITIES AND PROTOCOL GENERATION
-// ============================================================================
-
-functions:
-	// Build the JSON capabilities object for the initialize response.
 	string build_capabilities_json(integer tool_count, integer resource_count, integer prompt_count)
 		string caps = "{"
 		boolean first = true
@@ -853,104 +1738,11 @@ functions:
 		caps = caps + "}"
 		return caps
 
-	// Build the __mcp_handle function that dispatches all JSON-RPC methods.
-	string build_handle_fn(string server_name, string server_version, string capabilities)
-		string out = "\tstring __mcp_handle(string __msg)\n"
-		out = out + "\t\tstring __method = __mcp_extract_str(__msg, \"method\")\n"
-		out = out + "\t\tstring __req_id = __mcp_extract_str(__msg, \"id\")\n\n"
-
-		// initialize
-		out = out + "\t\tif __method == \"initialize\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"protocolVersion\\\":\\\"2024-11-05\\\",\\\"capabilities\\\":" + capabilities + ",\\\"serverInfo\\\":{\\\"name\\\":\\\"" + server_name + "\\\",\\\"version\\\":\\\"" + server_version + "\\\"}}}\"\n\n"
-
-		// initialized (notification — no response)
-		out = out + "\t\tif __method == \"initialized\"\n"
-		out = out + "\t\t\treturn \"\"\n\n"
-
-		// ping
-		out = out + "\t\tif __method == \"ping\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{}}\"\n\n"
-
-		// tools/list
-		out = out + "\t\tif __method == \"tools/list\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"tools\\\":\" + __mcp_tools_list() + \"}}\"\n\n"
-
-		// tools/call
-		out = out + "\t\tif __method == \"tools/call\"\n"
-		out = out + "\t\t\tstring __tool_name = __mcp_extract_str(__msg, \"name\")\n"
-		out = out + "\t\t\tstring __args_key = \"\\\"arguments\\\":\"\n"
-		out = out + "\t\t\tinteger __args_pos = __msg.indexOf(__args_key)\n"
-		out = out + "\t\t\tstring __tool_params = \"{}\"\n"
-		out = out + "\t\t\tif __args_pos >= 0\n"
-		out = out + "\t\t\t\tinteger __args_start = __args_pos + __args_key.length()\n"
-		out = out + "\t\t\t\t__tool_params = __msg.substring(__args_start, __msg.length() - 1)\n"
-		out = out + "\t\t\treturn __mcp_dispatch_tool(__tool_name, __tool_params, __req_id)\n\n"
-
-		// resources/list
-		out = out + "\t\tif __method == \"resources/list\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"resources\\\":\" + __mcp_resources_list() + \"}}\"\n\n"
-
-		// resources/read
-		out = out + "\t\tif __method == \"resources/read\"\n"
-		out = out + "\t\t\tstring __uri = __mcp_extract_str(__msg, \"uri\")\n"
-		out = out + "\t\t\treturn __mcp_dispatch_resource(__uri, __req_id)\n\n"
-
-		// prompts/list
-		out = out + "\t\tif __method == \"prompts/list\"\n"
-		out = out + "\t\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"result\\\":{\\\"prompts\\\":\" + __mcp_prompts_list() + \"}}\"\n\n"
-
-		// prompts/get
-		out = out + "\t\tif __method == \"prompts/get\"\n"
-		out = out + "\t\t\tstring __prompt_name = __mcp_extract_str(__msg, \"name\")\n"
-		out = out + "\t\t\tstring __pargs_key = \"\\\"arguments\\\":\"\n"
-		out = out + "\t\t\tinteger __pargs_pos = __msg.indexOf(__pargs_key)\n"
-		out = out + "\t\t\tstring __prompt_args = \"{}\"\n"
-		out = out + "\t\t\tif __pargs_pos >= 0\n"
-		out = out + "\t\t\t\tinteger __pargs_start = __pargs_pos + __pargs_key.length()\n"
-		out = out + "\t\t\t\t__prompt_args = __msg.substring(__pargs_start, __msg.length() - 1)\n"
-		out = out + "\t\t\treturn __mcp_dispatch_prompt(__prompt_name, __prompt_args, __req_id)\n\n"
-
-		// Unknown method
-		out = out + "\t\treturn \"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":\" + __req_id + \",\\\"error\\\":{\\\"code\\\":-32601,\\\"message\\\":\\\"Method not found: \" + __method + \"\\\"}}\"\n\n"
-		return out
-
-	// Build the start: block for the selected transport.
-	// HTTP port/host come from `transport: http:` nested config; defaults
-	// are 3001 and "0.0.0.0" when unspecified.
-	// NOTE: HTTP response delivery currently routes through _mcp_stdio_write
-	// because no _mcp_http_respond bridge exists yet. This is a server-side
-	// gap tracked separately — see FRAME-MCP-NO-HTTP-RESPONSE-BRIDGE.
-	string build_start_block(string transport, string http_port, string http_host)
-		string out = "start:\n"
-		if transport == "http"
-			out = out + "\t_mcp_http_serve(" + http_port + ", \"" + http_host + "\")\n"
-			out = out + "\tboolean __http_running = true\n"
-			out = out + "\twhile __http_running\n"
-			out = out + "\t\tstring __req = _mcp_http_accept()\n"
-			out = out + "\t\tif __req.length() > 0\n"
-			out = out + "\t\t\tstring __resp = __mcp_handle(__req)\n"
-			out = out + "\t\t\tif __resp.length() > 0\n"
-			out = out + "\t\t\t\t_mcp_stdio_write(__resp)\n"
-		else
-			// stdio (default)
-			out = out + "\tboolean __running = true\n"
-			out = out + "\twhile __running\n"
-			out = out + "\t\tstring __msg = _mcp_stdio_read()\n"
-			out = out + "\t\tif __msg.length() == 0\n"
-			out = out + "\t\t\t__running = false\n"
-			out = out + "\t\tif __running\n"
-			out = out + "\t\t\tstring __response = __mcp_handle(__msg)\n"
-			out = out + "\t\t\tif __response.length() > 0\n"
-			out = out + "\t\t\t\t_mcp_stdio_write(__response)\n"
-		return out
-
 // ============================================================================
-// NAME AND URI SANITIZATION
+// SANITIZATION AND UTILITIES (unchanged from v1)
 // ============================================================================
 
 functions:
-	// Convert a tool/prompt name to a safe Clean Language identifier.
-	// Replaces hyphens and spaces with underscores, keeps letters/digits.
 	string sanitize_name(string name)
 		string result = ""
 		integer i = 0
@@ -966,11 +1758,9 @@ functions:
 			i = i + 1
 		return result
 
-	// Convert a resource URI like "posts://recent" to a safe function name suffix.
 	string sanitize_uri(string uri)
 		return sanitize_name(uri)
 
-	// Escape a string for embedding inside a JSON string literal in generated code.
 	string json_escape_str(string s)
 		string r = s.replace("\\", "\\\\")
 		r = r.replace("\"", "\\\"")
@@ -979,8 +1769,6 @@ functions:
 		r = r.replace("\t", "\\t")
 		return r
 
-	// Extract the quoted name from a position in body where the opening quote is.
-	// body.substring(name_open_pos) should start at the opening quote character.
 	string extract_quoted_name(string body, integer quote_start)
 		string from_here = body.substring(quote_start, body.length())
 		integer open_q = from_here.indexOf("\"")
@@ -993,31 +1781,26 @@ functions:
 		return after_open.substring(0, close_q)
 
 // ============================================================================
-// VALIDATION
+// VALIDATION (unchanged from v1)
 // ============================================================================
 
 functions:
 	string validate_mcp(string attributes, string body)
-		// Must have a server name in attributes
 		string server_name = extract_server_name(attributes)
 		if server_name == "mcp-server"
-			// Might be OK if they named it literally — only error if attributes is empty
 			if attributes.trim() == ""
 				return "mcp: block must have a quoted server name: mcp \"my-server\":"
 
-		// Must have a transport declaration
 		string transport = extract_transport(body)
 		if transport != "stdio" and transport != "http"
 			return "mcp: block must declare transport: stdio or transport: http:"
 
-		// Check for at least one of tool, resource, or prompt
 		integer tool_pos = find_block_start(body, "\ttool \"", 0)
 		integer resource_pos = find_block_start(body, "\tresource \"", 0)
 		integer prompt_pos = find_block_start(body, "\tprompt \"", 0)
 		if tool_pos < 0 and resource_pos < 0 and prompt_pos < 0
 			return "mcp: block must contain at least one tool, resource, or prompt declaration"
 
-		// Validate each tool has a description
 		integer t_scan = 0
 		integer t_count = 0
 		boolean t_going = true
