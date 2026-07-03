@@ -131,6 +131,10 @@ external:
 	integer _batch_arrayPush(integer ctx, integer array_handle, integer item_handle)
 	integer _batch_stmtSeq(integer ctx, string stmts_lp)
 	integer _batch_args(integer ctx, string exprs_lp)
+	// ---- Plugin.toml-registered bridges (also declared here so v3 typed
+	// emission mode can resolve them without ambiguity). ----
+	string _build_state_get(string key)
+	void _build_state_set(string key, string value)
 
 // ============================================================================
 // V3 LIFECYCLE SLOTS (SKELETON — Sub-cycle 1)
@@ -723,27 +727,1608 @@ functions:
 		return _emit_stmt_from_source(ctx, source, origin)
 
 // ============================================================================
-// EMITTER STUBS (SUB-CYCLE 2/3 FILL)
+// SUB-CYCLE 2 EMITTERS (component / page / html)
 // ============================================================================
-// Every arm of expand_block_typed above dispatches to one of these stubs.
-// Sub-cycle 1 ships each returning 0. Sub-cycle 2 fills expand_component,
-// expand_page, expand_html_block. Sub-cycle 3 fills expand_ui.
+// Strategy per Sub-cycle 1 §5 design pivot and user selection (option c):
+//   Verbatim-port v1 emitters (they return Clean-source strings), then wire
+//   the v3 dispatcher arms to call these helpers, take the resulting source
+//   string, and hand it to _emit_stmt_from_source (Am 5+Am 6 sticky-error
+//   compliant). This preserves v1's proven emission logic and gets Am 6
+//   pass-through discipline at the dispatcher boundary.
+//
+// The `_stub` naming from Sub-cycle 1 is retained on the dispatcher entry
+// points to keep expand_block_typed's arm calls stable across sub-cycles;
+// Sub-cycle 2 replaces the bodies with real logic (they are no longer stubs).
 
 functions:
+	// component: dispatcher arm. Calls v1's expand_component to build the
+	// Clean class source (with fields, render(), setSlot(), renderSSR(),
+	// optional module-scope state: block), then hands it through the
+	// _emit_stmt_from_source Am 5+§3.11 boundary.
 	integer expand_component_stub(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_COMPONENT", "expand_component")
+		string source = expand_component(attrs_json, body)
+		_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
+	// page: dispatcher arm. Calls v1's process_html to build the Clean page
+	// class source. For direct page: block (rare — most pages arrive via
+	// process_html_typed), fall back to generate_page_class with defaults.
 	integer expand_page_stub(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_PAGE", "expand_page")
+		// Attrs carry path/layout/auth/roles. Body is the page HTML source.
+		string path = get_attr(attrs_json, "path", "/")
+		string layout = get_attr(attrs_json, "layout", "")
+		string auth = get_attr(attrs_json, "auth", "")
+		string roles = get_attr(attrs_json, "roles", "")
+		string render_code = html_to_render(body, "{}", false)
+		string page_name = path_to_class_name(path)
+		string source = generate_page_class(page_name, path, layout, auth, roles, render_code, "")
+		_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
+	// html: dispatcher arm. Calls v1's expand_html_block to build the Clean
+	// source (either chain-shape or statement-shape). Result is a sequence of
+	// Clean statements the caller wraps in a function body — pass through
+	// _emit_stmt_from_source with origin 0.
 	integer expand_html_block_stub(integer ctx, string attrs_json, string body)
+		_ctx_set_error_context(ctx, "PLUGIN_UI_HTML", "expand_html_block")
+		string source = expand_html_block(attrs_json, body)
+		_emit_stmt_from_source(ctx, source, 0)
+		_ctx_clear_error(ctx)
 		return 0
 
+	// ui: dispatcher arm — Sub-cycle 3 fills the widget renderer. Stub
+	// remains here so the dispatch shape is stable.
 	integer expand_ui_stub(integer ctx, string attrs_json, string body)
 		return 0
 
 // ============================================================================
-// END OF SUB-CYCLE 1 SKELETON — SUB-CYCLE 2 CONTENT BEGINS BELOW
+// V1 HELPER PORTS — HTML PARSING UTILITIES
+// ============================================================================
+// Verbatim ports from main.v1.cln (Sub-cycle 2). These are pure string utilities
+// with no bridge dependency; they build Clean-source strings that the v3
+// dispatcher hands to _emit_stmt_from_source at the emission boundary.
+
+functions:
+	string extract_body(string html)
+		integer body_start = html.indexOf("<body")
+		if body_start != -1
+			integer body_open_end = html.indexOf(">", body_start)
+			integer body_end = html.indexOf("</body>")
+			if body_open_end != -1 and body_end != -1
+				return html.substring(body_open_end + 1, body_end)
+		string result = html
+		integer doctype_end = result.indexOf(">")
+		if result.indexOf("<!DOCTYPE") == 0 and doctype_end != -1
+			result = result.substring(doctype_end + 1, result.length())
+		result = remove_tag(result, "html")
+		result = remove_tag_with_content(result, "head")
+		result = remove_tag(result, "page")
+		return result.trim()
+
+	string remove_tag(string html, string tag_name)
+		string result = html
+		string open_start = "<" + tag_name
+		integer open_pos = result.indexOf(open_start)
+		if open_pos != -1
+			integer open_end = result.indexOf(">", open_pos)
+			if open_end != -1
+				string before = result.substring(0, open_pos)
+				string after = result.substring(open_end + 1, result.length())
+				result = before + after
+		string close_tag = "</" + tag_name + ">"
+		integer close_pos = result.indexOf(close_tag)
+		if close_pos != -1
+			string before = result.substring(0, close_pos)
+			string after = result.substring(close_pos + close_tag.length(), result.length())
+			result = before + after
+		return result
+
+	string remove_tag_with_content(string html, string tag_name)
+		string open_start = "<" + tag_name
+		integer startIdx = html.indexOf(open_start)
+		if startIdx == -1
+			return html
+		string close_tag = "</" + tag_name + ">"
+		integer end = html.indexOf(close_tag)
+		if end == -1
+			return html
+		string before = html.substring(0, startIdx)
+		string after = html.substring(end + close_tag.length(), html.length())
+		return before + after
+
+	integer find_tag_end(string html)
+		integer pos = 1
+		boolean in_string = false
+		string quote_char = ""
+		while pos < html.length()
+			string ch = html.substring(pos, pos + 1)
+			if in_string
+				if ch == quote_char
+					in_string = false
+			else
+				if ch == "\"" or ch == "'"
+					in_string = true
+					quote_char = ch
+				else if ch == ">"
+					return pos
+			pos = pos + 1
+		return -1
+
+	integer find_matching_close(string html, string tag_name)
+		string open_tag = "<" + tag_name
+		string close_tag = "</" + tag_name + ">"
+		integer depth = 1
+		integer pos = html.indexOf(">") + 1
+		while pos < html.length() and depth > 0
+			integer next_open = html.indexOf(open_tag, pos)
+			integer next_close = html.indexOf(close_tag, pos)
+			if next_close == -1
+				return -1
+			if next_open != -1 and next_open < next_close
+				string char_after = html.substring(next_open + open_tag.length(), next_open + open_tag.length() + 1)
+				if char_after == " " or char_after == ">" or char_after == "/"
+					depth = depth + 1
+				pos = next_open + 1
+			else
+				depth = depth - 1
+				if depth == 0
+					return next_close
+				pos = next_close + 1
+		return -1
+
+	boolean is_void_element(string tag_name)
+		string void_elements = ",area,base,br,col,embed,hr,img,input,link,meta,source,track,wbr,"
+		return void_elements.indexOf("," + tag_name + ",") != -1
+
+	boolean is_digit_char(string c)
+		if c == "0" or c == "1" or c == "2" or c == "3" or c == "4"
+			return true
+		if c == "5" or c == "6" or c == "7" or c == "8" or c == "9"
+			return true
+		return false
+
+	boolean is_numeric_literal(string s)
+		string trimmed = s.trim()
+		if trimmed.length() == 0
+			return false
+		string first = trimmed.substring(0, 1)
+		if first == "-"
+			if trimmed.length() < 2
+				return false
+			return is_digit_char(trimmed.substring(1, 2))
+		return is_digit_char(first)
+
+	string find_compare_op(string expr)
+		if expr.indexOf("==") != -1
+			return "=="
+		if expr.indexOf("!=") != -1
+			return "!="
+		if expr.indexOf(">=") != -1
+			return ">="
+		if expr.indexOf("<=") != -1
+			return "<="
+		if expr.indexOf(">") != -1
+			return ">"
+		if expr.indexOf("<") != -1
+			return "<"
+		return ""
+
+	string rewrite_any_int_compare(string expr)
+		string op = find_compare_op(expr)
+		if op == ""
+			return expr
+		integer pos = expr.indexOf(op)
+		string lhs = expr.substring(0, pos).trim()
+		string rhs = expr.substring(pos + op.length(), expr.length()).trim()
+		if not is_numeric_literal(rhs)
+			return expr
+		if lhs.length() == 0
+			return expr
+		return lhs + ".toInteger() " + op + " " + rhs
+
+	boolean is_numeric(string s)
+		if s.length() == 0
+			return false
+		integer i = 0
+		if s.substring(0, 1) == "-"
+			i = 1
+		boolean has_dot = false
+		while i < s.length()
+			string ch = s.substring(i, i + 1)
+			if ch >= "0" and ch <= "9"
+				i = i + 1
+			else if ch == "." and has_dot == false
+				has_dot = true
+				i = i + 1
+			else
+				return false
+		return true
+
+	string kebab_to_camel(string input)
+		string result = ""
+		boolean capitalize_next = false
+		integer i = 0
+		while i < input.length()
+			string ch = input.substring(i, i + 1)
+			if ch == "-"
+				capitalize_next = true
+			else
+				if capitalize_next
+					result = result + ch.toUpperCase()
+					capitalize_next = false
+				else
+					result = result + ch
+			i = i + 1
+		return result
+
+	string tag_to_class_name(string tag_name)
+		string result = ""
+		boolean capitalize_next = true
+		integer i = 0
+		while i < tag_name.length()
+			string ch = tag_name.substring(i, i + 1)
+			if ch == "-"
+				capitalize_next = true
+			else
+				if capitalize_next
+					result = result + ch.toUpperCase()
+					capitalize_next = false
+				else
+					result = result + ch
+			i = i + 1
+		return result
+
+	string escape_string(string input)
+		string result = input
+		result = result.replace("\"", "&quot;")
+		result = result.replace("\n", " ")
+		result = result.replace("\t", " ")
+		result = result.replace("{", "\\{")
+		result = result.replace("}", "\\}")
+		return result
+
+	integer count_chain_pluses(string chain)
+		integer count = 0
+		integer pos = chain.indexOf(" + ")
+		while pos != -1
+			count = count + 1
+			pos = chain.indexOf(" + ", pos + 3)
+		return count
+
+	string get_attr(string attrs, string key, string default_val)
+		string pattern = "\"" + key + "\""
+		integer pos = attrs.indexOf(pattern)
+		if pos == -1
+			return default_val
+		integer colon_pos = attrs.indexOf(":", pos)
+		if colon_pos == -1
+			return default_val
+		integer quote_start = attrs.indexOf("\"", colon_pos + 1)
+		if quote_start == -1
+			return default_val
+		integer quote_end = attrs.indexOf("\"", quote_start + 1)
+		if quote_end == -1
+			return default_val
+		return attrs.substring(quote_start + 1, quote_end)
+
+	string path_to_class_name(string path)
+		string result = ""
+		boolean capitalize_next = true
+		integer last_slash = path.lastIndexOf("/")
+		string filename = path
+		if last_slash != -1
+			filename = path.substring(last_slash + 1, path.length())
+		integer dot_pos = filename.lastIndexOf(".")
+		if dot_pos != -1
+			filename = filename.substring(0, dot_pos)
+		if filename == "index"
+			integer second_last_slash = path.lastIndexOf("/", last_slash - 1)
+			if second_last_slash != -1
+				filename = path.substring(second_last_slash + 1, last_slash)
+			else
+				filename = "Home"
+		integer i = 0
+		while i < filename.length()
+			string ch = filename.substring(i, i + 1)
+			if ch == "-" or ch == "_" or ch == "[" or ch == "]"
+				capitalize_next = true
+			else
+				if capitalize_next
+					result = result + ch.toUpperCase()
+					capitalize_next = false
+				else
+					result = result + ch
+			i = i + 1
+		return result + "Page"
+
+// ============================================================================
+// V1 HELPER PORTS — STATE / COMPONENT UTILITIES
+// ============================================================================
+
+functions:
+	string normalize_handlers(string content)
+		return content
+
+	string remove_state_dot(string s)
+		string result = s
+		integer pos = result.indexOf("state.")
+		while pos != -1
+			result = result.substring(0, pos) + result.substring(pos + 6, result.length())
+			pos = result.indexOf("state.")
+		return result
+
+	string extract_state_fields(string s)
+		string result = ""
+		string padded = "\n" + s
+		integer marker = padded.indexOf("\nstate:\n")
+		if marker == -1
+			return ""
+		integer scan = marker + 9
+		integer slen = padded.length()
+		integer nl = -1
+		integer ch_ok = 1
+		while ch_ok == 1
+			if scan >= slen
+				ch_ok = 0
+			else
+				if padded.substring(scan, scan + 1) != "\t"
+					ch_ok = 0
+				else
+					nl = padded.indexOf("\n", scan + 1)
+					if nl == -1
+						result = result + padded.substring(scan + 1, slen) + "\n"
+						scan = slen
+					else
+						result = result + padded.substring(scan + 1, nl) + "\n"
+						scan = nl + 1
+		return result
+
+	string strip_state_block(string s)
+		string padded = "\n" + s
+		integer marker = padded.indexOf("\nstate:\n")
+		if marker == -1
+			return s
+		string before = padded.substring(1, marker + 1)
+		integer scan = marker + 9
+		integer slen = padded.length()
+		integer nl = -1
+		integer ch_ok = 1
+		while ch_ok == 1
+			if scan >= slen
+				ch_ok = 0
+			else
+				if padded.substring(scan, scan + 1) != "\t"
+					ch_ok = 0
+				else
+					nl = padded.indexOf("\n", scan)
+					if nl == -1
+						scan = slen
+					else
+						scan = nl + 1
+		return before + padded.substring(scan, slen)
+
+// ============================================================================
+// V1 HELPER PORTS — HTML → CLEAN TRANSFORMATION
+// ============================================================================
+
+functions:
+	string html_to_render(string html, string registry_json, boolean has_data)
+		string result = ""
+		string remaining = html
+		while remaining.length() > 0
+			integer tag_start = remaining.indexOf("<")
+			if tag_start == -1
+				string text = remaining.trim()
+				if text.length() > 0
+					result = result + process_text_node(text, has_data)
+				remaining = ""
+			else if tag_start > 0
+				string text = remaining.substring(0, tag_start)
+				if text.trim().length() > 0
+					result = result + process_text_node(text, has_data)
+				remaining = remaining.substring(tag_start, remaining.length())
+			else
+				integer tag_end = find_tag_end(remaining)
+				if tag_end == -1
+					remaining = ""
+				else
+					string tag_content = remaining.substring(1, tag_end)
+					string tag_name = extract_tag_name(tag_content)
+					boolean self_closing = tag_content.endsWith("/") or is_void_element(tag_name)
+					if tag_content.startsWith("/")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if self_closing
+						result = result + process_element(tag_content, "", registry_json, has_data)
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else
+						string close_tag = "</" + tag_name + ">"
+						integer close_pos = find_matching_close(remaining, tag_name)
+						if close_pos == -1
+							result = result + process_element(tag_content, "", registry_json, has_data)
+							remaining = remaining.substring(tag_end + 1, remaining.length())
+						else
+							string inner = remaining.substring(tag_end + 1, close_pos)
+							result = result + process_element(tag_content, inner, registry_json, has_data)
+							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+		return result
+
+	string process_text_node(string text, boolean has_data)
+		string result = "html = html + \""
+		string remaining = text
+		while remaining.length() > 0
+			integer brace_start = remaining.indexOf("{")
+			if brace_start == -1
+				result = result + escape_string(remaining)
+				remaining = ""
+			else
+				string after_brace = ""
+				if brace_start + 1 < remaining.length()
+					after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+				if after_brace == "{"
+					integer dbrace_end = remaining.indexOf("}}", brace_start + 2)
+					if dbrace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						result = result + escape_string(remaining.substring(brace_start, dbrace_end + 2))
+						remaining = remaining.substring(dbrace_end + 2, remaining.length())
+				else
+					integer brace_end = remaining.indexOf("}", brace_start + 1)
+					if brace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						if after_brace == "!"
+							string expr = remaining.substring(brace_start + 2, brace_end)
+							if has_data
+								result = result + "\" + data." + strip_spaces(expr) + " + \""
+							else
+								result = result + "\" + " + strip_spaces(expr) + " + \""
+						else
+							string expr = remaining.substring(brace_start + 1, brace_end)
+							if has_data
+								result = result + "\" + _html_escape(data." + strip_spaces(expr) + ") + \""
+							else
+								result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+						remaining = remaining.substring(brace_end + 1, remaining.length())
+		result = result + "\"\n"
+		return result
+
+	string process_element(string tag_content, string inner_html, string registry_json, boolean has_data)
+		string tag_name = extract_tag_name(tag_content)
+		string if_attr = extract_attr_value("<" + tag_content + ">", "cl-if")
+		string else_attr = extract_attr_value("<" + tag_content + ">", "cl-else")
+		string iterate_attr = extract_attr_value("<" + tag_content + ">", "cl-iterate")
+		string bind_attr = extract_attr_value("<" + tag_content + ">", "cl-bind")
+		string show_attr = extract_attr_value("<" + tag_content + ">", "cl-show")
+		string validate_attr = extract_attr_value("<" + tag_content + ">", "cl-validate")
+		string slot_attr = extract_attr_value("<" + tag_content + ">", "cl-slot")
+		string result = ""
+		if if_attr != ""
+			string if_expr = rewrite_any_int_compare(if_attr)
+			if has_data
+				result = result + "if data." + if_expr + "\n"
+			else
+				result = result + "if " + if_expr + "\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			return result
+		if else_attr != "" or tag_content.indexOf(" cl-else") != -1
+			result = result + "else\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			return result
+		if iterate_attr != ""
+			integer in_pos = iterate_attr.indexOf(" in ")
+			if in_pos != -1
+				string vars = iterate_attr.substring(0, in_pos).trim()
+				string collection = iterate_attr.substring(in_pos + 4, iterate_attr.length()).trim()
+				if has_data
+					result = result + "iterate " + vars + " in data." + collection + "\n"
+				else
+					result = result + "iterate " + vars + " in " + collection + "\n"
+				result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+				return result
+		if show_attr != ""
+			string show_attr_rewritten = rewrite_any_int_compare(show_attr)
+			string show_expr = show_attr_rewritten
+			if has_data
+				show_expr = "data." + show_attr_rewritten
+			result = result + "if " + show_expr + "\n"
+			result = result + "\t" + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			result = result + "else\n"
+			result = result + "\t" + render_element_hidden(tag_name, tag_content, inner_html, registry_json, has_data)
+			return result
+		if slot_attr != ""
+			result = result + "html = html + \"<div data-slot='" + slot_attr + "'>\"\n"
+			if inner_html.trim().length() > 0
+				result = result + html_to_render(inner_html, registry_json, has_data)
+			result = result + "html = html + \"</div>\"\n"
+			return result
+		if validate_attr != ""
+			string error_msg_attr = extract_attr_value("<" + tag_content + ">", "error-message")
+			if error_msg_attr == ""
+				error_msg_attr = "Invalid value"
+			result = result + render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+			result = result + render_validation_error_span(bind_attr, validate_attr, error_msg_attr, has_data)
+			return result
+		string preview_attr = ""
+		if tag_content.indexOf(" cl-preview") != -1
+			preview_attr = "present"
+		if preview_attr != "" and tag_name == "iframe"
+			return render_element_with_preview(tag_name, tag_content, inner_html, registry_json, has_data)
+		string stream_attr = extract_attr_value("<" + tag_content + ">", "cl-stream")
+		if stream_attr != ""
+			return render_element_with_stream(tag_name, tag_content, inner_html, registry_json, has_data, stream_attr)
+		return render_element(tag_name, tag_content, inner_html, registry_json, has_data)
+
+	string render_element(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		if tag_name == "screen"
+			return render_screen_island(tag_content, inner_html, registry_json)
+		if tag_name.indexOf("-") != -1
+			return render_component(tag_name, tag_content, inner_html, registry_json, has_data)
+		string result = "html = html + \"<" + tag_name
+		string attrs = extract_attributes(tag_content)
+		if attrs != ""
+			result = result + " " + attrs
+		result = result + ">\"\n"
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+		if tag_name == "form"
+			string form_method = extract_attr_value("<" + tag_content + ">", "method")
+			string method_upper = form_method.toUpperCase()
+			boolean needs_csrf = method_upper == "POST" or method_upper == "PUT" or method_upper == "PATCH" or method_upper == "DELETE" or form_method == ""
+			if needs_csrf
+				result = result + "html = html + \"<input type='hidden' name='_csrf' value='\" + csrf_generate() + \"'>\"\n"
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+		return result
+
+	string render_element_hidden(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		if tag_name.indexOf("-") != -1
+			return render_component(tag_name, tag_content, inner_html, registry_json, has_data)
+		string result = "html = html + \"<" + tag_name
+		string attrs = extract_attributes(tag_content)
+		if attrs != ""
+			string style_check = " style="
+			if attrs.indexOf(style_check) != -1
+				integer style_pos = attrs.indexOf(style_check)
+				integer style_val_start = style_pos + style_check.length() + 3
+				string before_style = attrs.substring(0, style_val_start)
+				string after_style = attrs.substring(style_val_start, attrs.length())
+				attrs = before_style + "display:none;" + after_style
+			else
+				attrs = attrs + " style='display:none'"
+			result = result + " " + attrs
+		else
+			result = result + " style='display:none'"
+		result = result + ">\"\n"
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+		return result
+
+	string render_validation_error_span(string field_name, string validate_type, string error_msg, boolean has_data)
+		string result = ""
+		string field_ref = field_name
+		if field_ref == ""
+			return ""
+		if has_data
+			field_ref = "data." + field_name
+		string condition = ""
+		if validate_type == "email"
+			condition = field_ref + ".indexOf(\"@\") == -1 or " + field_ref + ".indexOf(\".\") == -1"
+		else if validate_type == "required"
+			condition = field_ref + ".length() == 0"
+		else if validate_type == "min"
+			condition = field_ref + ".length() == 0"
+		else if validate_type == "max"
+			condition = field_ref + ".length() == 0"
+		else
+			condition = field_ref + ".length() == 0"
+		result = result + "if " + condition + "\n"
+		result = result + "\thtml = html + \"<span class='cl-validation-error'>" + escape_string(error_msg) + "</span>\"\n"
+		return result
+
+	string render_element_with_preview(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		string attrs = extract_attributes(tag_content)
+		string result = "html = html + \"<" + tag_name
+		if attrs != ""
+			result = result + " " + attrs
+		result = result + " data-cl-preview='true'"
+		result = result + ">\"\n"
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+		return result
+
+	string render_element_with_stream(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data, string stream_url)
+		string attrs = extract_attributes(tag_content)
+		string result = "html = html + \"<" + tag_name
+		if attrs != ""
+			result = result + " " + attrs
+		if stream_url.indexOf("{") != -1
+			result = result + " data-cl-stream='\" + " + interpolate_attr(stream_url) + " + \"'"
+		else
+			result = result + " data-cl-stream='" + stream_url + "'"
+		result = result + ">\"\n"
+		if inner_html.trim().length() > 0
+			result = result + html_to_render(inner_html, registry_json, has_data)
+		if is_void_element(tag_name) == false
+			result = result + "html = html + \"</" + tag_name + ">\"\n"
+		return result
+
+	string render_screen_island(string tag_content, string inner_html, string registry_json)
+		string screen_name = extract_attr_value("<" + tag_content + ">", "name")
+		if screen_name == ""
+			screen_name = "Unknown"
+		string client = extract_attr_value("<" + tag_content + ">", "client")
+		if client == ""
+			client = "off"
+		string class_name = "__Screen_" + screen_name
+		string result = ""
+		result = result + "{\n"
+		result = result + "\t" + class_name + " _screen = " + class_name + "()\n"
+		string props_code = extract_screen_props(tag_content, screen_name)
+		if props_code != ""
+			result = result + props_code
+		result = result + "\thtml = html + \"<div id='screen-" + screen_name + "'>\"\n"
+		result = result + "\thtml = html + _screen.render()\n"
+		result = result + "\thtml = html + \"</div>\"\n"
+		result = result + "}\n"
+		return result
+
+	string extract_screen_props(string tag_content, string screen_name)
+		string result = ""
+		string excluded = ",name,client,props,"
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos == -1
+			return ""
+		remaining = remaining.substring(space_pos + 1, remaining.length())
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+		remaining = remaining.trim()
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				remaining = ""
+			else
+				string attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if excluded.indexOf("," + attr_name + ",") == -1
+							if is_numeric(attr_value)
+								result = result + "\t_screen." + attr_name + " = " + attr_value + "\n"
+							else if attr_value == "true" or attr_value == "false"
+								result = result + "\t_screen." + attr_name + " = " + attr_value + "\n"
+							else
+								result = result + "\t_screen." + attr_name + " = \"" + attr_value + "\"\n"
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					remaining = ""
+		return result
+
+	string render_component(string tag_name, string tag_content, string inner_html, string registry_json, boolean has_data)
+		string class_name = lookup_component(tag_name, registry_json)
+		if class_name == ""
+			class_name = tag_to_class_name(tag_name)
+		string props = extract_component_props(tag_content)
+		string client = extract_attr_value("<" + tag_content + ">", "client")
+		if client == ""
+			client = "off"
+		string result = ""
+		if client != "off"
+			result = result + "html = html + \"<div data-island='" + tag_name + "' data-client='" + client + "'>\"\n"
+		result = result + "{\n"
+		result = result + "\t" + class_name + " _comp = " + class_name + "()\n"
+		if props != ""
+			result = result + props
+		if inner_html.trim().length() > 0
+			result = result + "\tstring _slot = \"\"\n"
+			string slot_code = html_to_render(inner_html, registry_json, has_data)
+			string slot_remaining = slot_code
+			while slot_remaining.length() > 0
+				integer snl = slot_remaining.indexOf("\n")
+				string sline = ""
+				if snl == -1
+					sline = slot_remaining
+					slot_remaining = ""
+				else
+					sline = slot_remaining.substring(0, snl)
+					slot_remaining = slot_remaining.substring(snl + 1, slot_remaining.length())
+				if sline.startsWith("html = html +")
+					result = result + "\t_slot = _slot +" + sline.substring(13, sline.length()) + "\n"
+				else if sline.trim().length() > 0
+					result = result + "\t" + sline + "\n"
+			result = result + "\t_comp.setSlot(_slot)\n"
+		result = result + "\thtml = html + _comp.render()\n"
+		result = result + "}\n"
+		if client != "off"
+			result = result + "html = html + \"</div>\"\n"
+		return result
+
+	string extract_attributes(string tag_content)
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-show,cl-validate,cl-slot,cl-preview,cl-stream,cl-transition,cl-boundary,error-message,"
+		string events = ",onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onkeypress,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,oncontextmenu,ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,onwheel,onscroll,"
+		string result = ""
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos != -1
+			remaining = remaining.substring(space_pos + 1, remaining.length())
+		else
+			return ""
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+		remaining = remaining.trim()
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				integer next_space = remaining.indexOf(" ")
+				if next_space == -1
+					string attr_name = remaining.trim()
+					if attr_name.length() > 0 and directives.indexOf("," + attr_name + ",") == -1
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = ""
+				else
+					string attr_name = remaining.substring(0, next_space).trim()
+					if attr_name.length() > 0 and directives.indexOf("," + attr_name + ",") == -1
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = remaining.substring(next_space + 1, remaining.length()).trim()
+			else
+				string raw_attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if directives.indexOf("," + raw_attr_name + ",") == -1
+							if result != ""
+								result = result + " "
+							string base_event = raw_attr_name
+							string modifier = ""
+							integer dot_pos = raw_attr_name.indexOf(".")
+							if dot_pos != -1
+								base_event = raw_attr_name.substring(0, dot_pos)
+								modifier = raw_attr_name.substring(dot_pos + 1, raw_attr_name.length())
+							if events.indexOf("," + base_event + ",") != -1
+								string event_name = base_event.substring(2, base_event.length())
+								result = result + "data-on-" + event_name + "='" + attr_value + "'"
+								if modifier != ""
+									result = result + " data-on-" + event_name + "-" + modifier + "='true'"
+							else
+								if attr_value.indexOf("{") != -1
+									result = result + raw_attr_name + "='\" + " + interpolate_attr(attr_value) + " + \"'"
+								else
+									result = result + raw_attr_name + "='" + attr_value + "'"
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					integer next_space = after_eq.indexOf(" ")
+					if next_space == -1
+						next_space = after_eq.length()
+					string attr_value = after_eq.substring(0, next_space)
+					if directives.indexOf("," + raw_attr_name + ",") == -1
+						if result != ""
+							result = result + " "
+						string base_event = raw_attr_name
+						string modifier = ""
+						integer dot_pos = raw_attr_name.indexOf(".")
+						if dot_pos != -1
+							base_event = raw_attr_name.substring(0, dot_pos)
+							modifier = raw_attr_name.substring(dot_pos + 1, raw_attr_name.length())
+						if events.indexOf("," + base_event + ",") != -1
+							string event_name = base_event.substring(2, base_event.length())
+							result = result + "data-on-" + event_name + "='" + attr_value + "'"
+							if modifier != ""
+								result = result + " data-on-" + event_name + "-" + modifier + "='true'"
+						else
+							result = result + raw_attr_name + "='" + attr_value + "'"
+					remaining = after_eq.substring(next_space, after_eq.length()).trim()
+		return result
+
+	string interpolate_attr(string value)
+		string result = "\""
+		string remaining = value
+		while remaining.length() > 0
+			integer startIdx = remaining.indexOf("{")
+			if startIdx == -1
+				result = result + remaining + "\""
+				remaining = ""
+			else
+				if startIdx > 0
+					result = result + remaining.substring(0, startIdx)
+				integer end = remaining.indexOf("}", startIdx + 1)
+				if end == -1
+					end = remaining.length()
+				string after_brace = remaining.substring(startIdx + 1, startIdx + 2)
+				if after_brace == "!"
+					string expr = remaining.substring(startIdx + 2, end)
+					result = result + "\" + " + strip_spaces(expr) + " + \""
+				else
+					string expr = remaining.substring(startIdx + 1, end)
+					result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+				remaining = remaining.substring(end + 1, remaining.length())
+		return result
+
+	string extract_component_props(string tag_content)
+		string directives = ",cl-if,cl-else,cl-iterate,cl-bind,cl-client,cl-slot,cl-show,cl-validate,"
+		string result = ""
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos == -1
+			return ""
+		remaining = remaining.substring(space_pos + 1, remaining.length())
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+		remaining = remaining.trim()
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				remaining = ""
+			else
+				string attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if directives.indexOf("," + attr_name + ",") == -1
+							string prop_name = kebab_to_camel(attr_name)
+							if attr_value.startsWith("{") and attr_value.endsWith("}")
+								string expr = attr_value.substring(1, attr_value.length() - 1).trim()
+								result = result + "\t_comp." + prop_name + " = " + expr + "\n"
+							else
+								result = result + "\t_comp." + prop_name + " = \"" + attr_value + "\"\n"
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					remaining = ""
+		return result
+
+	string lookup_component(string tag_name, string registry_json)
+		string pattern = "\"" + tag_name + "\":\""
+		integer pos = registry_json.indexOf(pattern)
+		if pos == -1
+			return ""
+		integer value_start = pos + pattern.length()
+		integer value_end = registry_json.indexOf("\"", value_start)
+		if value_end == -1
+			return ""
+		return registry_json.substring(value_start, value_end)
+
+// ============================================================================
+// V1 HELPER PORTS — HTML: BLOCK TRANSFORMATION
+// ============================================================================
+
+functions:
+	string expand_html_block(string attributes, string body)
+		string cleaned = strip_block_indent(body)
+		string chain = html_block_to_code(cleaned)
+		integer operand_count = count_chain_pluses(chain) + 1
+		string var_name = get_attr(attributes, "var", "")
+		string target = "__html"
+		if var_name != ""
+			target = var_name
+		string result = "string " + target + " = \"\"\n"
+		if chain != ""
+			if operand_count <= 40
+				result = result + target + " = " + target + " + " + chain + "\n"
+			else
+				string stmts = html_block_to_statements(cleaned)
+				if target != "__html"
+					stmts = stmts.replace("__html", target)
+				result = result + stmts
+		if var_name == ""
+			result = result + "return __html\n"
+		return result
+
+	string html_block_to_code(string html)
+		string result = ""
+		string remaining = html
+		while remaining.length() > 0
+			integer tag_start = remaining.indexOf("<")
+			string piece = ""
+			if tag_start == -1
+				string text = remaining.trim()
+				if text.length() > 0
+					piece = process_block_text_node(text)
+				remaining = ""
+			else if tag_start > 0
+				string text = remaining.substring(0, tag_start)
+				if text.trim().length() > 0
+					piece = process_block_text_node(text)
+				remaining = remaining.substring(tag_start, remaining.length())
+			else
+				integer tag_end = find_tag_end(remaining)
+				if tag_end == -1
+					remaining = ""
+				else
+					string tag_content = remaining.substring(1, tag_end)
+					string tag_name = extract_tag_name(tag_content)
+					boolean self_closing = tag_content.endsWith("/") or is_void_element(tag_name)
+					if tag_content.startsWith("/")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if tag_name.startsWith("!")
+						piece = "\"<" + tag_content + ">\""
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if self_closing
+						piece = process_block_element(tag_content, "")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else
+						string close_tag = "</" + tag_name + ">"
+						integer close_pos = find_matching_close(remaining, tag_name)
+						if close_pos == -1
+							piece = process_block_element(tag_content, "")
+							remaining = remaining.substring(tag_end + 1, remaining.length())
+						else
+							string inner = remaining.substring(tag_end + 1, close_pos)
+							piece = process_block_element(tag_content, inner)
+							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+			if piece != ""
+				if result == ""
+					result = piece
+				else
+					result = result + " + " + piece
+		return result
+
+	string process_block_text_node(string text)
+		string result = "\""
+		string remaining = text
+		while remaining.length() > 0
+			integer brace_start = remaining.indexOf("{")
+			if brace_start == -1
+				result = result + escape_string(remaining)
+				remaining = ""
+			else
+				string after_brace = ""
+				if brace_start + 1 < remaining.length()
+					after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+				if after_brace == "{"
+					integer dbrace_end = remaining.indexOf("}}", brace_start + 2)
+					if dbrace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						result = result + escape_string(remaining.substring(brace_start, dbrace_end + 2))
+						remaining = remaining.substring(dbrace_end + 2, remaining.length())
+				else
+					integer brace_end = remaining.indexOf("}", brace_start + 1)
+					if brace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						if after_brace == "!"
+							string expr = remaining.substring(brace_start + 2, brace_end)
+							result = result + "\" + " + strip_spaces(expr) + " + \""
+						else
+							string expr = remaining.substring(brace_start + 1, brace_end)
+							result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+						remaining = remaining.substring(brace_end + 1, remaining.length())
+		result = result + "\""
+		return result
+
+	string process_block_element(string tag_content, string inner_html)
+		string tag_name = extract_tag_name(tag_content)
+		string open_tag = "\"<" + tag_name
+		string attrs = extract_block_attributes(tag_content)
+		if attrs != ""
+			open_tag = open_tag + " " + attrs
+		open_tag = open_tag + ">\""
+		string result = open_tag
+		if inner_html.trim().length() > 0
+			string inner_chain = html_block_to_code(inner_html)
+			if inner_chain != ""
+				result = result + " + " + inner_chain
+		if is_void_element(tag_name) == false
+			result = result + " + \"</" + tag_name + ">\""
+		return result
+
+	string html_block_to_statements(string html)
+		string result = ""
+		string remaining = html
+		while remaining.length() > 0
+			integer tag_start = remaining.indexOf("<")
+			if tag_start == -1
+				string text = remaining.trim()
+				if text.length() > 0
+					result = result + process_block_text_node_stmt(text)
+				remaining = ""
+			else if tag_start > 0
+				string text = remaining.substring(0, tag_start)
+				if text.trim().length() > 0
+					result = result + process_block_text_node_stmt(text)
+				remaining = remaining.substring(tag_start, remaining.length())
+			else
+				integer tag_end = find_tag_end(remaining)
+				if tag_end == -1
+					remaining = ""
+				else
+					string tag_content = remaining.substring(1, tag_end)
+					string tag_name = extract_tag_name(tag_content)
+					boolean self_closing = tag_content.endsWith("/") or is_void_element(tag_name)
+					if tag_content.startsWith("/")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if tag_name.startsWith("!")
+						result = result + "__html = __html + \"<" + tag_content + ">\"\n"
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else if self_closing
+						result = result + process_block_element_stmt(tag_content, "")
+						remaining = remaining.substring(tag_end + 1, remaining.length())
+					else
+						string close_tag = "</" + tag_name + ">"
+						integer close_pos = find_matching_close(remaining, tag_name)
+						if close_pos == -1
+							result = result + process_block_element_stmt(tag_content, "")
+							remaining = remaining.substring(tag_end + 1, remaining.length())
+						else
+							string inner = remaining.substring(tag_end + 1, close_pos)
+							result = result + process_block_element_stmt(tag_content, inner)
+							remaining = remaining.substring(close_pos + close_tag.length(), remaining.length())
+		return result
+
+	string process_block_text_node_stmt(string text)
+		string result = "__html = __html + \""
+		string remaining = text
+		while remaining.length() > 0
+			integer brace_start = remaining.indexOf("{")
+			if brace_start == -1
+				result = result + escape_string(remaining)
+				remaining = ""
+			else
+				string after_brace = ""
+				if brace_start + 1 < remaining.length()
+					after_brace = remaining.substring(brace_start + 1, brace_start + 2)
+				if after_brace == "{"
+					integer dbrace_end = remaining.indexOf("}}", brace_start + 2)
+					if dbrace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						result = result + escape_string(remaining.substring(brace_start, dbrace_end + 2))
+						remaining = remaining.substring(dbrace_end + 2, remaining.length())
+				else
+					integer brace_end = remaining.indexOf("}", brace_start + 1)
+					if brace_end == -1
+						result = result + escape_string(remaining)
+						remaining = ""
+					else
+						if brace_start > 0
+							result = result + escape_string(remaining.substring(0, brace_start))
+						if after_brace == "!"
+							string expr = remaining.substring(brace_start + 2, brace_end)
+							result = result + "\" + " + strip_spaces(expr) + " + \""
+						else
+							string expr = remaining.substring(brace_start + 1, brace_end)
+							result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+						remaining = remaining.substring(brace_end + 1, remaining.length())
+		result = result + "\"\n"
+		return result
+
+	string process_block_element_stmt(string tag_content, string inner_html)
+		string tag_name = extract_tag_name(tag_content)
+		string result = "__html = __html + \"<" + tag_name
+		string attrs = extract_block_attributes(tag_content)
+		if attrs != ""
+			result = result + " " + attrs
+		result = result + ">\"\n"
+		if inner_html.trim().length() > 0
+			result = result + html_block_to_statements(inner_html)
+		if is_void_element(tag_name) == false
+			result = result + "__html = __html + \"</" + tag_name + ">\"\n"
+		return result
+
+	string extract_block_attributes(string tag_content)
+		string result = ""
+		string remaining = tag_content
+		integer space_pos = remaining.indexOf(" ")
+		if space_pos != -1
+			remaining = remaining.substring(space_pos + 1, remaining.length())
+		else
+			return ""
+		if remaining.endsWith("/")
+			remaining = remaining.substring(0, remaining.length() - 1)
+		remaining = remaining.trim()
+		while remaining.length() > 0
+			integer eq_pos = remaining.indexOf("=")
+			if eq_pos == -1
+				integer next_space = remaining.indexOf(" ")
+				if next_space == -1
+					string attr_name = remaining.trim()
+					if attr_name.length() > 0
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = ""
+				else
+					string attr_name = remaining.substring(0, next_space).trim()
+					if attr_name.length() > 0
+						if result != ""
+							result = result + " "
+						result = result + attr_name
+					remaining = remaining.substring(next_space + 1, remaining.length()).trim()
+			else
+				string attr_name = remaining.substring(0, eq_pos).trim()
+				string after_eq = remaining.substring(eq_pos + 1, remaining.length())
+				string quote = after_eq.substring(0, 1)
+				if quote == "\"" or quote == "'"
+					integer end_quote = after_eq.indexOf(quote, 1)
+					if end_quote != -1
+						string attr_value = after_eq.substring(1, end_quote)
+						if result != ""
+							result = result + " "
+						if attr_value.indexOf("{") != -1
+							result = result + attr_name + "='\" + " + interpolate_block_attr(attr_value) + " + \"'"
+						else
+							result = result + attr_name + "='" + attr_value + "'"
+						remaining = after_eq.substring(end_quote + 1, after_eq.length()).trim()
+					else
+						remaining = ""
+				else
+					integer next_space = after_eq.indexOf(" ")
+					if next_space == -1
+						next_space = after_eq.length()
+					string attr_value = after_eq.substring(0, next_space)
+					if result != ""
+						result = result + " "
+					result = result + attr_name + "='" + attr_value + "'"
+					remaining = after_eq.substring(next_space, after_eq.length()).trim()
+		return result
+
+	string interpolate_block_attr(string value)
+		string result = "\""
+		string remaining = value
+		while remaining.length() > 0
+			integer startIdx = remaining.indexOf("{")
+			if startIdx == -1
+				result = result + remaining
+				remaining = ""
+			else
+				if startIdx > 0
+					result = result + remaining.substring(0, startIdx)
+				integer end = remaining.indexOf("}", startIdx + 1)
+				if end == -1
+					end = remaining.length()
+				string after_brace = remaining.substring(startIdx + 1, startIdx + 2)
+				if after_brace == "!"
+					string expr = remaining.substring(startIdx + 2, end)
+					result = result + "\" + " + strip_spaces(expr) + " + \""
+				else
+					string expr = remaining.substring(startIdx + 1, end)
+					result = result + "\" + _html_escape(" + strip_spaces(expr) + ") + \""
+				remaining = remaining.substring(end + 1, remaining.length())
+		result = result + "\""
+		return result
+
+// ============================================================================
+// V1 HELPER PORTS — COMPONENT / PAGE / RUNTIME
+// ============================================================================
+
+functions:
+	string escape_json_string(string txt)
+		string result = txt
+		result = result.replace("\\", "\\\\")
+		result = result.replace("\"", "\\\"")
+		result = result.replace("\n", "\\n")
+		return result
+
+	string parse_component_body(string body)
+		string before = ""
+		string html_content = ""
+		string after = ""
+		string fallback_content = ""
+		integer html_pos = -1
+		integer search_pos = 0
+		while search_pos < body.length()
+			integer pos = body.indexOf("html:", search_pos)
+			if pos == -1
+				search_pos = body.length()
+			else
+				boolean valid = false
+				if pos == 0
+					valid = true
+				else
+					string char_before = body.substring(pos - 1, pos)
+					if char_before == "\n" or char_before == "\t"
+						valid = true
+				if valid
+					html_pos = pos
+					search_pos = body.length()
+				else
+					search_pos = pos + 5
+		if html_pos == -1
+			return "{\"before\":\"" + escape_json_string(body) + "\",\"html\":\"\",\"after\":\"\",\"fallback\":\"\"}"
+		if html_pos > 0
+			before = body.substring(0, html_pos)
+		integer content_start = body.indexOf("\n", html_pos)
+		if content_start == -1
+			return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"\",\"after\":\"\",\"fallback\":\"\"}"
+		content_start = content_start + 1
+		integer html_line_indent = 0
+		integer scan = html_pos - 1
+		boolean __scan_html_indent = true
+		while __scan_html_indent and scan >= 0
+			string __sc_ch = body.substring(scan, scan + 1)
+			if __sc_ch != "\t"
+				__scan_html_indent = false
+			else
+				html_line_indent = html_line_indent + 1
+				scan = scan - 1
+		integer html_end = body.length()
+		string sections = ",inputs:,state:,functions:,computed:,events:,fallback:,"
+		string search_remaining = body.substring(content_start, body.length())
+		integer line_start = 0
+		while line_start < search_remaining.length()
+			integer nl = search_remaining.indexOf("\n", line_start)
+			if nl == -1
+				nl = search_remaining.length()
+			string line = search_remaining.substring(line_start, nl)
+			integer indent = 0
+			boolean __count_indent_a = true
+			while __count_indent_a and indent < line.length()
+				string __ci_a_ch = line.substring(indent, indent + 1)
+				if __ci_a_ch != "\t"
+					__count_indent_a = false
+				else
+					indent = indent + 1
+			if indent <= html_line_indent and line.trim().length() > 0
+				string trimmed = line.trim()
+				if trimmed.endsWith(":")
+					string section_name = trimmed.substring(0, trimmed.length() - 1)
+					if sections.indexOf("," + section_name + ",") != -1
+						html_end = content_start + line_start
+						after = body.substring(html_end, body.length())
+						line_start = search_remaining.length()
+					else
+						line_start = nl + 1
+				else
+					line_start = nl + 1
+			else
+				line_start = nl + 1
+		html_content = body.substring(content_start, html_end)
+		integer fallback_pos = body.indexOf("fallback:")
+		if fallback_pos != -1
+			boolean fallback_valid = false
+			if fallback_pos == 0
+				fallback_valid = true
+			else
+				string char_before_fallback = body.substring(fallback_pos - 1, fallback_pos)
+				if char_before_fallback == "\n" or char_before_fallback == "\t"
+					fallback_valid = true
+			if fallback_valid
+				integer nl_after_fallback = body.indexOf("\n", fallback_pos)
+				if nl_after_fallback != -1
+					integer fallback_content_start = nl_after_fallback + 1
+					integer fallback_end = body.length()
+					integer fallback_line_indent = 0
+					integer fscan = fallback_pos - 1
+					boolean __scan_fb_indent = true
+					while __scan_fb_indent and fscan >= 0
+						string __sfb_ch = body.substring(fscan, fscan + 1)
+						if __sfb_ch != "\t"
+							__scan_fb_indent = false
+						else
+							fallback_line_indent = fallback_line_indent + 1
+							fscan = fscan - 1
+					string fallback_sections = ",inputs:,state:,functions:,computed:,events:,html:,"
+					string fsearch = body.substring(fallback_content_start, body.length())
+					integer fline_start = 0
+					while fline_start < fsearch.length()
+						integer fnl = fsearch.indexOf("\n", fline_start)
+						if fnl == -1
+							fnl = fsearch.length()
+						string fline = fsearch.substring(fline_start, fnl)
+						integer findent = 0
+						boolean __count_findent = true
+						while __count_findent and findent < fline.length()
+							string __fi_ch = fline.substring(findent, findent + 1)
+							if __fi_ch != "\t"
+								__count_findent = false
+							else
+								findent = findent + 1
+						if findent <= fallback_line_indent and fline.trim().length() > 0
+							string ftrimmed = fline.trim()
+							if ftrimmed.endsWith(":")
+								string fsection_name = ftrimmed.substring(0, ftrimmed.length() - 1)
+								if fallback_sections.indexOf("," + fsection_name + ",") != -1
+									fallback_end = fallback_content_start + fline_start
+									fline_start = fsearch.length()
+								else
+									fline_start = fnl + 1
+							else
+								fline_start = fnl + 1
+						else
+							fline_start = fnl + 1
+					fallback_content = body.substring(fallback_content_start, fallback_end).trim()
+		return "{\"before\":\"" + escape_json_string(before) + "\",\"html\":\"" + escape_json_string(html_content) + "\",\"after\":\"" + escape_json_string(after) + "\",\"fallback\":\"" + escape_json_string(fallback_content) + "\"}"
+
+	string strip_block_indent(string content)
+		integer min_indent = 999
+		string remaining = content
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+			if line.trim().length() > 0
+				integer indent = 0
+				boolean __count_indent_b = true
+				while __count_indent_b and indent < line.length()
+					string __ci_b_ch = line.substring(indent, indent + 1)
+					if __ci_b_ch != "\t"
+						__count_indent_b = false
+					else
+						indent = indent + 1
+				if indent < min_indent
+					min_indent = indent
+		if min_indent == 999
+			min_indent = 0
+		string result = ""
+		remaining = content
+		boolean first = true
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+			if line.trim().length() > 0
+				if first == false
+					result = result + " "
+				first = false
+				if line.length() > min_indent
+					result = result + line.substring(min_indent, line.length()).trim()
+				else
+					result = result + line.trim()
+		return result
+
+	boolean needs_client_runtime(string html)
+		string remaining = html
+		while remaining.indexOf("<screen") != -1
+			integer screen_start = remaining.indexOf("<screen")
+			integer screen_end = remaining.indexOf(">", screen_start)
+			if screen_end == -1
+				return false
+			string screen_tag = remaining.substring(screen_start, screen_end + 1)
+			string client = extract_attr_value(screen_tag, "client")
+			if client == "on" or client == "visible" or client == "idle"
+				return true
+			remaining = remaining.substring(screen_end + 1, remaining.length())
+		if html.indexOf("client=\"on\"") != -1
+			return true
+		if html.indexOf("client=\"visible\"") != -1
+			return true
+		if html.indexOf("client=\"idle\"") != -1
+			return true
+		return false
+
+	string generate_runtime_injection()
+		string result = ""
+		result = result + "html = html + \"<script src='/loader.js' data-wasm='/frontend.wasm'></script>\"\n"
+		return result
+
+	string generate_page_class(string name, string path, string layout, string auth, string roles, string render_code, string companion_json)
+		string result = "class " + name + "\n"
+		result = result + "\tstring _path = \"" + path + "\"\n"
+		if layout != ""
+			result = result + "\tstring _layout = \"" + layout + "\"\n"
+		if auth != ""
+			result = result + "\tstring _auth = \"" + auth + "\"\n"
+		if roles != ""
+			result = result + "\tstring _roles = \"" + roles + "\"\n"
+		result = result + "\n\tfunctions:\n"
+		result = result + "\t\tpublic:\n"
+		result = result + "\t\t\tstring render()\n"
+		if companion_json != ""
+			string module_name = extract_json_field(companion_json, "module_name")
+			if companion_json.indexOf("\"has_guard\":true") != -1
+				result = result + "\t\t\t\tany guard_result = " + module_name + "_guard()\n"
+				result = result + "\t\t\t\tif guard_result != null\n"
+				result = result + "\t\t\t\t\treturn \"\"\n"
+			if companion_json.indexOf("\"has_load\":true") != -1
+				result = result + "\t\t\t\tany data = " + module_name + "_load_impl(null)\n"
+		result = result + "\t\t\t\tstring html = \"\"\n"
+		result = result + "\t\t\t\t" + render_code.replace("\n", "\n\t\t\t\t") + "\n"
+		if layout != ""
+			result = result + "\t\t\t\tstring __page_content = html\n"
+			result = result + "\t\t\t\tstring __layout_html = _ui_load_layout(\"app/ui/web/layouts/" + layout + ".html\")\n"
+			result = result + "\t\t\t\tif __layout_html != \"\"\n"
+			result = result + "\t\t\t\t\tinteger __slot_i = 0\n"
+			result = result + "\t\t\t\t\twhile __slot_i < 10\n"
+			result = result + "\t\t\t\t\t\tinteger __ns_start = __page_content.indexOf(\"<slot name='\")\n"
+			result = result + "\t\t\t\t\t\tif __ns_start == -1\n"
+			result = result + "\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\tinteger __name_start = __ns_start + 12\n"
+			result = result + "\t\t\t\t\t\t\tinteger __name_end = __page_content.indexOf(\"'\", __name_start)\n"
+			result = result + "\t\t\t\t\t\t\tif __name_end == -1\n"
+			result = result + "\t\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\t\tstring __slot_name = __page_content.substring(__name_start, __name_end)\n"
+			result = result + "\t\t\t\t\t\t\t\tinteger __open_end = __page_content.indexOf(\">\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tinteger __close_start = __page_content.indexOf(\"</slot>\", __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\tif __open_end == -1 or __close_start == -1\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__slot_i = 10\n"
+			result = result + "\t\t\t\t\t\t\t\telse\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __layout_placeholder = \"<slot name='\" + __slot_name + \"'></slot>\"\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
+			result = result + "\t\t\t\t\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__page_content = __before + __after\n"
+			result = result + "\t\t\t\t\t\t\t\t\t__slot_i = __slot_i + 1\n"
+			result = result + "\t\t\t\t\t__layout_html = __layout_html.replace(\"<slot></slot>\", __page_content)\n"
+			result = result + "\t\t\t\t\thtml = __layout_html\n"
+		result = result + "\t\t\t\treturn html\n"
+		return result
+
+	string expand_component(string attrs, string body)
+		string tag = get_attr(attrs, "tag", "")
+		string name = get_attr(attrs, "name", "")
+		string client = get_attr(attrs, "client", "off")
+		if name == "" and tag != ""
+			name = tag_to_class_name(tag)
+		if name == ""
+			name = "Component"
+		if tag != ""
+			string components_state = _build_state_get("frame.ui:components")
+			string entry = tag + "," + name + "," + client
+			if components_state == ""
+				_build_state_set("frame.ui:components", entry)
+			else
+				_build_state_set("frame.ui:components", components_state + ";" + entry)
+			string render_export = tag.replace("-", "_") + "_render"
+			string component_obj = "{\"tag\":\"" + tag + "\",\"class\":\"" + name + "\",\"hydration\":\"" + client + "\",\"render_export\":\"" + render_export + "\"}"
+			string manifest_state = _build_state_get("frame.ui.components.json")
+			if manifest_state == ""
+				_build_state_set("frame.ui.components.json", "[" + component_obj + "]")
+			else
+				string without_close = manifest_state.substring(0, manifest_state.length() - 1)
+				_build_state_set("frame.ui.components.json", without_close + "," + component_obj + "]")
+		string result = "// __frame_ui_expanded__\n"
+		result = result + "class " + name + "\n"
+		if tag != ""
+			result = result + "\tstring _tag = \"" + tag + "\"\n"
+		result = result + "\tstring _hydration_mode = \"" + client + "\"\n"
+		result = result + "\tstring _slot_content = \"\"\n"
+		string parsed = parse_component_body(body)
+		string before_html = extract_json_field(parsed, "before")
+		string html_content = extract_json_field(parsed, "html")
+		string after_html = extract_json_field(parsed, "after")
+		string fallback_html = extract_json_field(parsed, "fallback")
+		string state_fields = extract_state_fields(before_html)
+		before_html = strip_state_block(before_html)
+		before_html = remove_state_dot(before_html)
+		if fallback_html != ""
+			result = result + "\tstring _fallback = \"" + escape_string(fallback_html) + "\"\n"
+		boolean has_inputs = (html_content != "" and before_html.indexOf("inputs:") != -1)
+		boolean has_state_fields = state_fields.trim().length() > 0
+		if has_inputs or has_state_fields
+			result = result + "\n\tpublic:\n"
+			if has_inputs
+				result = result + "\t\tInputs inputs\n"
+			if has_state_fields
+				result = result + "\t\t" + state_fields.trim().replace("\n", "\n\t\t") + "\n"
+		if html_content != ""
+			if before_html.trim().length() > 0
+				string norm_before = normalize_handlers(before_html)
+				result = result + "\t" + norm_before.replace("\n", "\n\t") + "\n"
+			string cleaned_html = strip_block_indent(html_content)
+			string render_chain = html_block_to_code(cleaned_html)
+			render_chain = remove_state_dot(render_chain)
+			integer render_operand_count = count_chain_pluses(render_chain) + 1
+			if fallback_html != ""
+				render_operand_count = render_operand_count + 2
+			if fallback_html != ""
+				string escaped_fb = escape_string(fallback_html).replace("'", "&#39;")
+				string fb_open = "\"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\""
+				string fb_close = "\"</div>\""
+				if render_chain == ""
+					render_chain = fb_open + " + " + fb_close
+				else
+					render_chain = fb_open + " + " + render_chain + " + " + fb_close
+			string render_assign = ""
+			if render_chain != ""
+				if render_operand_count <= 40
+					render_assign = "__html = __html + " + render_chain + "\n"
+				else
+					string body_stmts = html_block_to_statements(cleaned_html)
+					body_stmts = remove_state_dot(body_stmts)
+					if fallback_html != ""
+						string escaped_fb2 = escape_string(fallback_html).replace("'", "&#39;")
+						render_assign = "__html = __html + \"<div data-component='" + name + "' data-fallback='" + escaped_fb2 + "'>\"\n"
+						render_assign = render_assign + body_stmts
+						render_assign = render_assign + "__html = __html + \"</div>\"\n"
+					else
+						render_assign = body_stmts
+			if after_html.trim().length() > 0 and after_html.trim().startsWith("functions:")
+				result = result + "\n\t" + after_html.trim().substring(0, 10) + "\n"
+				result = result + "\t\tpublic:\n"
+				result = result + "\t\t\tstring render()\n"
+				result = result + "\t\t\t\tstring __html = \"\"\n"
+				if render_assign != ""
+					result = result + "\t\t\t\t" + render_assign.replace("\n", "\n\t\t\t\t")
+					if result.endsWith("\t\t\t\t")
+						result = result.substring(0, result.length() - 4)
+				result = result + "\t\t\t\treturn __html\n\n"
+				string remaining_funcs = after_html.trim().substring(10, after_html.trim().length())
+				if remaining_funcs.trim().length() > 0
+					result = result + "\t\t\t" + remaining_funcs.trim().replace("\n", "\n\t\t\t") + "\n"
+			else
+				result = result + "\n\tfunctions:\n"
+				result = result + "\t\tpublic:\n"
+				result = result + "\t\t\tstring render()\n"
+				result = result + "\t\t\t\tstring __html = \"\"\n"
+				if render_assign != ""
+					result = result + "\t\t\t\t" + render_assign.replace("\n", "\n\t\t\t\t")
+					if result.endsWith("\t\t\t\t")
+						result = result.substring(0, result.length() - 4)
+				result = result + "\t\t\t\treturn __html\n"
+				if after_html.trim().length() > 0
+					result = result + "\n\t" + after_html + "\n"
+		else
+			string body_fields = extract_state_fields(body)
+			string body_no_state = strip_state_block(body)
+			string body_no_dot = remove_state_dot(body_no_state)
+			string norm_body = normalize_handlers(body_no_dot)
+			result = result + "\t" + body_fields.trim().replace("\n", "\n\t") + "\n"
+			result = result + "\t" + norm_body.replace("\n", "\n\t") + "\n"
+		string ssr_body = "\t\t\t\treturn this.render()\n"
+		if html_content != "" and after_html.trim().startsWith("functions:")
+			result = result + "\n\t\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t\t_slot_content = content\n"
+			result = result + "\n\t\t\tstring renderSSR()\n"
+			result = result + ssr_body
+		else
+			result = result + "\n\tfunctions:\n"
+			result = result + "\t\tpublic:\n"
+			result = result + "\t\t\tvoid setSlot(string content)\n"
+			result = result + "\t\t\t\t_slot_content = content\n"
+			result = result + "\n\t\t\tstring renderSSR()\n"
+			result = result + ssr_body
+		if tag != "" and client != "off"
+			string instance_var = "instance_" + tag.replace("-", "_")
+			result = result + "\nstate:\n"
+			result = result + "\t" + name + " " + instance_var + " = " + name + "()\n"
+		return result
+
+// ============================================================================
+// END OF SUB-CYCLE 2 CONTENT — SUB-CYCLE 3 SCOPE BELOW
 // ============================================================================
 // Sub-cycle 2 will add (~3500–4000 LOC):
 //   - expand_component: build class spec, invoke ui_component_class.
