@@ -1,19 +1,22 @@
 [plugin]
 name = "frame.canvas"
-version = "2.4.4"
-description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects. v2.4.4: plugin contracts v2 sub-cycle 1 — declares [compatibility].abi_version = \"1.0.0\", [lifecycle].module_helpers = \"emit_canvas_helpers\" per migration.md §1.5. Also fixes build.sh to pass --target=plugin so the compiler stamps clean.abi_version into the WASM output (was missing, producing an unstamped plugin per the frame.auth C5 precedent). All bridge functions already carry hosts = [\"browser\"]; slot is a manifest-surface placeholder."
+version = "3.0.0-alpha.1"
+description = "Canvas animation and rendering plugin for Clean Language — drawing, tweens, timelines, state machines, particles, path animation, audio, sprites, input, and effects. v3.0.0-alpha.1: plugin contracts v3 typed-emission migration in progress on internal branch v3/frame.canvas. Sub-cycle 1 of 3: branch setup, plugin.toml v3 stub, and main.cln skeleton with tooling. Sub-cycles 2 and 3 will land the full v3 dispatcher and the remaining expanders. Not shippable until Sub-cycle 3 completes and merges atomically to main. See foundation/spec/plugins/contracts/typed-emission.md and reports/2026-07-03-session-3-frame-canvas-deferred-v4.md §5."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.15.0"
+# Landing C4 + Amendments 5, 6, 7, 8 all required (0.30.421 minimum).
+min_compiler_version = "0.30.421"
 # Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
-# compile time when built with --target=plugin; loader verifies it when
-# present. "1.0.0" is the initial declared value per migration.md §1.5.
-# Note: frame.canvas was one of three plugins known to omit --target=plugin
-# from build.sh, producing unstamped plugin.wasm (same issue as frame.auth,
-# fixed in 4a7c195). build.sh is fixed in this commit.
+# compile time when built with --target=plugin; loader verifies it when present.
 abi_version = "1.0.0"
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# Atomic migration: this plugin.wasm will be v3-only once Sub-cycle 3 lands.
+# emission_ops_hash verified against SHA-256 of
+# foundation/spec/plugins/contracts/typed-emission-ops.toml at compiler 0.30.423.
+expansion_version = "3.0.0"
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
 
 # Canvas/game workloads need frame-stable memory to avoid mid-frame grow stalls.
 # Honored by compiler >= 0.30.57; older compilers silently use target defaults.
@@ -22,31 +25,17 @@ abi_version = "1.0.0"
 tier = "canvas"
 
 [lifecycle]
-# Plugin Contracts v2 — lifecycle.md §3.1. Canvas helper functions (scene
-# registration, asset preload wrappers) are called from plugin-generated
-# canvasScene init code that the BFS cannot statically trace back to user
-# code. Tag them as roots so their bridge imports stay reachable.
+# Plugin Contracts v3 — typed-emission.md §7. Under atomic-migration, every
+# declared slot MUST be a typed variant. frame.canvas emits scene stubs and
+# helpers inline from expand_block_typed; module_helpers is a no-op placeholder
+# — same shape as the v1 slot (see v1 comment in main.v1.cln for context on
+# why per-scene state prevents a static module_helpers emission).
 module_helpers_are_roots = true
-
-# Plugin Contracts v2 — lifecycle.md §3.1. WASM export name; compiler calls
-# emit_canvas_helpers(context_json) once per source file that loads frame.canvas,
-# splices the returned `statements` into the file's symbol table.
-#
-# Deviation from migration.md §1.5 (documented inline in src/main.cln):
-# frame.canvas has no __preamble magic block. The canvas helpers (deltaTime(),
-# time(), Canvas/Sprite/Sound/etc. type stubs) are generated inline by
-# expand_canvas_scene() per canvasScene: block. They reference scene-specific
-# state (canvas ID, registered assets, declared layers) that is only known
-# when the block is expanded. Emitting them unconditionally from module_helpers
-# would produce helpers that reference an unset canvas ID (no canvasScene:
-# present) or duplicate them (canvasScene: present). The behavioral move
-# requires scene-level config (canvas ID, asset list) to land in build_state
-# so the slot can consume it; that is a follow-up cycle. The slot returns an
-# empty body; the declaration completes the migration.md §1.5 manifest surface.
-module_helpers = "emit_canvas_helpers"
+module_helpers = "emit_module_helpers_typed"
 
 [exports]
-expand = "expand_block"
+# v3 typed entry point — typed-emission.md §2.2.
+expand = "expand_block_typed"
 validate = "validate_block"
 get_keywords = "get_keywords"
 
@@ -54,11 +43,17 @@ get_keywords = "get_keywords"
 # Only canvasScene is a top-level block the compiler expands directly.
 # Sub-blocks (state, draw, onFrame, etc.) are nested inside canvasScene and
 # must NOT be listed here — if they were, the compiler would expand them
-# before calling expand_canvas_scene, stripping all sub-block headers from
+# before calling expand_block_typed, stripping all sub-block headers from
 # the body and making the canvasScene expansion unable to find them.
 blocks = [
   "canvasScene",
 ]
+
+# Per-block typed-emission declarations (typed-emission.md §2.1).
+# version = 3 is required when expansion_version = "3.0.0".
+[blocks.canvasScene]
+expand = "expand_block_typed"
+version = 3
 
 [language]
 # Block-level keywords that start a declaration
@@ -821,4 +816,4 @@ anti_pattern = "drawing all background layers at the same scroll speed — layer
 example = "patterns/parallax-layers.cln"
 
 [build]
-built_with_compiler = "0.30.401"
+built_with_compiler = "0.30.423"
