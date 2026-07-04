@@ -390,7 +390,7 @@ functions:
 
 		fn_h = build_tenant_get_id(ctx)
 		if fn_h == 0
-			return plugin_error(ctx, "FRAME-AUTH-E002", "build_tenant_getId failed")
+			return plugin_error(ctx, "FRAME-AUTH-E002", "build_tenant_get_id failed")
 		err = _batch_arrayPush(ctx, fns_arr, fn_h)
 		if err != 0
 			return plugin_error(ctx, "FRAME-AUTH-E002", "arrayPush tenant_getId failed")
