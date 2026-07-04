@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.data"
-version = "3.0.2"
+version = "3.0.3"
 description = "ORM and database plugin for Clean Language — plugin contracts v3 typed-emission. Atomic migration across 5 sub-cycles on branch v3/frame.data (Amendment 1 atomic per plugin). Closes marquee bug a648b4e6a8ec (find/join OOM) structurally: user-authored where/join/set/on_insert/match fragments route through _emit_expr_from_source (Am 6); no plugin-built triangular SQL concat. Predecessor v2.2.4 retained at git tag frame.data-v2.2.4."
 author = "Clean Language Team"
 license = "MIT"
@@ -337,4 +337,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.31.1"
+built_with_compiler = "0.31.5"

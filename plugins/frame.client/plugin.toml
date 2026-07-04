@@ -284,4 +284,4 @@ functions = [
 ]
 
 [build]
-built_with_compiler = "0.30.412"
+built_with_compiler = "0.31.5"
