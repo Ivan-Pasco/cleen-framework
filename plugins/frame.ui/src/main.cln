@@ -98,12 +98,17 @@
 //   _emit_verb_expression (deliberately excluded — Am 9 does not apply).
 
 external:
-	// ---- Declaration emitters (§3.5, §3.11, §3.13, §3.16) ----
+	// ---- Declaration emitters (§3.4, §3.5, §3.11, §3.13, §3.16) ----
 	integer _emit_function(integer ctx, string name, string params_json, string return_type, integer body_stmt_handle, integer flags)
 	integer _emit_class_full(integer ctx, integer class_spec_handle_or_lp, integer flags)
+	integer _emit_state_block(integer ctx, string fields_json)
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
+	// ---- AST type/expression constructors (§3.9, §3.10) — needed for module-scope
+	// state: block fields (Sub-cycle 1 minimal set; Sub-cycles 2/3 may add more) ----
+	integer _type_class_ref(integer ctx, string name)
+	integer _expr_call(integer ctx, string callee, string args_json)
 	// ---- Diagnostics (§5) ----
 	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
 	// ---- Sticky-error context (§3.15) ----
@@ -754,8 +759,14 @@ functions:
 	//
 	// Sub-cycle 2 expand_component and generate_page_class both use this.
 	// Sticky-error propagates — caller checks _ctx_had_error at the boundary.
+	//
+	// Sub-cycle 1 (2026-07-05): body wired via §3.13 LP-string path. The
+	// spec_json string is passed to _batch_stringLit to obtain a handle the
+	// widened _emit_class_full accepts (canvas / data Sub-cycle 2 pattern —
+	// see plugins/frame.data/src/main.cln:2149).
 	integer ui_component_class(integer ctx, string spec_json)
-		return _emit_class_full(ctx, 0, 0)
+		integer spec_ptr = _batch_stringLit(ctx, spec_json)
+		return _emit_class_full(ctx, spec_ptr, 1)
 
 	// ui_event_handler(ctx, source, origin) — Sub-cycle 2/3 event body.
 	//
@@ -769,6 +780,64 @@ functions:
 	// land in the DSL body coord space.
 	integer ui_event_handler(integer ctx, string source, integer origin)
 		return _emit_stmt_from_source(ctx, source, origin)
+
+// ============================================================================
+// SPEC-JSON BUILDER VOCABULARY (Sub-cycle 1 novel contribution)
+// ============================================================================
+// Small utility functions for constructing the §3.13 class-spec JSON that
+// _emit_class_full consumes. Modelled on frame.data Sub-cycle 2's
+// build_fields_json / build_methods_json pattern but adapted to the shapes
+// frame.ui needs (component fields with defaults, method entries with either
+// body_handle from source pass-through or from-spec templates, module-scope
+// state field descriptors).
+//
+// Naming convention:
+//   spec_esc_json(s)        — JSON-escape a string
+//   spec_field(name, type)  — field entry as JSON: {"name":..,"type":..}
+//   spec_field_default(name, type, expr_lit) — with a string-literal default
+//   spec_method_inline_bh(name, params_json, ret, bh) — method entry using body_handle
+//   spec_state_field(name, type_h, default_expr_h) — state: block field entry
+//
+// Sub-cycles 2/3 will extend this vocabulary with:
+//   spec_method_from_spec(...) for Am 10 template method entries
+//   spec_class(name, parent, fields, methods) top-level assembly
+// (Left as inline concatenation in Sub-cycle 1 to keep the LOC delta bounded.)
+
+functions:
+	// JSON-escape a string for embedding in a spec_* JSON literal.
+	string spec_esc_json(string txt)
+		string result = txt
+		result = result.replace("\\", "\\\\")
+		result = result.replace("\"", "\\\"")
+		result = result.replace("\n", "\\n")
+		result = result.replace("\t", "\\t")
+		return result
+
+	// Build a class-spec field entry: {"name":"...","type":"..."}
+	string spec_field(string name, string type_name)
+		return "{\"name\":\"" + spec_esc_json(name) + "\",\"type\":\"" + spec_esc_json(type_name) + "\"}"
+
+	// Build a class-spec method entry (inline body_handle shape, Amendment 3
+	// §3.13). params_json is an already-formatted JSON array like `[]` or
+	// `[{"name":"content","type":"string"}]`.
+	string spec_method_inline_bh(string name, string params_json, string return_type, integer body_handle)
+		string result = "{\"kind\":\"inline\""
+		result = result + ",\"name\":\"" + spec_esc_json(name) + "\""
+		result = result + ",\"params\":" + params_json
+		result = result + ",\"return_type\":\"" + spec_esc_json(return_type) + "\""
+		result = result + ",\"body_handle\":" + body_handle.toString()
+		result = result + "}"
+		return result
+
+	// Build a state:-block field entry: {"name":"...","type_handle":N,"default_expr_handle":N}
+	// per §3.4 fields_json_lp schema.
+	string spec_state_field(string name, integer type_handle, integer default_expr_handle)
+		string result = "{\"name\":\"" + spec_esc_json(name) + "\""
+		result = result + ",\"type_handle\":" + type_handle.toString()
+		if default_expr_handle != 0
+			result = result + ",\"default_expr_handle\":" + default_expr_handle.toString()
+		result = result + "}"
+		return result
 
 // ============================================================================
 // SUB-CYCLE 2 EMITTERS (component / page / html)
@@ -785,14 +854,193 @@ functions:
 // Sub-cycle 2 replaces the bodies with real logic (they are no longer stubs).
 
 functions:
-	// component: dispatcher arm. Calls v1's expand_component to build the
-	// Clean class source (with fields, render(), setSlot(), renderSSR(),
-	// optional module-scope state: block), then hands it through the
-	// _emit_stmt_from_source Am 5+§3.11 boundary.
+	// expand_component_typed — Sub-cycle 1 (2026-07-05) rewrite of the
+	// component: dispatcher path. Builds a §3.13 class spec JSON, emits it
+	// via _emit_class_full (through ui_component_class), and — when the
+	// component declares hydration (tag != "" && client != "off") — emits
+	// a module-scope state: block via _emit_state_block before the class.
+	//
+	// STRATEGY: The class fields, render() body, setSlot() body, and
+	// renderSSR() body are all constructed as Clean SOURCE strings via the
+	// preserved v1 helpers (extract_state_fields, html_block_to_code,
+	// parse_component_body, normalize_handlers, etc.). Each method body
+	// source is parsed once via _emit_stmt_from_source and the resulting
+	// stmt handle is placed in the class spec's method entry as body_handle
+	// (Am 3 §3.13 body_handle composition). Field defaults are inlined in
+	// the class spec `default` field where possible; complex defaults are
+	// left to the runtime constructor emitted implicitly by Clean.
+	//
+	// This mirrors frame.data Sub-cycle 2's expand_data_model shape but with
+	// body_handle populated from source pass-through instead of batch
+	// builders — because frame.ui method bodies mix template-generated
+	// code with user-authored HTML rendering logic and expressing every
+	// html_block_to_code result as batch handles would blow the LOC budget.
+	integer expand_component_typed(integer ctx, string attrs_json, string body)
+		string tag = get_attr(attrs_json, "tag", "")
+		string name = get_attr(attrs_json, "name", "")
+		string client = get_attr(attrs_json, "client", "off")
+		if name == "" and tag != ""
+			name = tag_to_class_name(tag)
+		if name == ""
+			name = "Component"
+
+		// build_state side effects — components registry and manifest JSON.
+		// Preserved verbatim from v1 expand_component.
+		if tag != ""
+			string components_state = _build_state_get("frame.ui:components")
+			string entry = tag + "," + name + "," + client
+			if components_state == ""
+				_build_state_set("frame.ui:components", entry)
+			else
+				_build_state_set("frame.ui:components", components_state + ";" + entry)
+			string render_export = tag.replace("-", "_") + "_render"
+			string component_obj = "{\"tag\":\"" + tag + "\",\"class\":\"" + name + "\",\"hydration\":\"" + client + "\",\"render_export\":\"" + render_export + "\"}"
+			string manifest_state = _build_state_get("frame.ui.components.json")
+			if manifest_state == ""
+				_build_state_set("frame.ui.components.json", "[" + component_obj + "]")
+			else
+				string without_close = manifest_state.substring(0, manifest_state.length() - 1)
+				_build_state_set("frame.ui.components.json", without_close + "," + component_obj + "]")
+
+		// Parse the component body (before html, html content, after html, fallback).
+		string parsed = parse_component_body(body)
+		string before_html = extract_json_field(parsed, "before")
+		string html_content = extract_json_field(parsed, "html")
+		string after_html = extract_json_field(parsed, "after")
+		string fallback_html = extract_json_field(parsed, "fallback")
+		string state_fields = extract_state_fields(before_html)
+		before_html = strip_state_block(before_html)
+		before_html = remove_state_dot(before_html)
+
+		// -------- Build the class-spec `fields` array --------
+		string fields_json = "["
+		boolean first_field = true
+		// _tag (only when tag != "")
+		if tag != ""
+			fields_json = fields_json + spec_field("_tag", "string")
+			first_field = false
+		// _hydration_mode, _slot_content
+		if not first_field
+			fields_json = fields_json + ","
+		fields_json = fields_json + spec_field("_hydration_mode", "string")
+		fields_json = fields_json + "," + spec_field("_slot_content", "string")
+		first_field = false
+		// _fallback (only when component has a fallback)
+		if fallback_html != ""
+			fields_json = fields_json + "," + spec_field("_fallback", "string")
+		// Inputs field (only when html has inputs: sub-block)
+		boolean has_inputs = (html_content != "" and before_html.indexOf("inputs:") != -1)
+		if has_inputs
+			fields_json = fields_json + "," + spec_field("inputs", "Inputs")
+		// State fields extracted from before_html (each line is "type name" or "type name = default")
+		string state_lines_trimmed = state_fields.trim()
+		if state_lines_trimmed.length() > 0
+			string sf_remaining = state_lines_trimmed
+			while sf_remaining.length() > 0
+				integer nl_pos = sf_remaining.indexOf("\n")
+				string sf_line = ""
+				if nl_pos == -1
+					sf_line = sf_remaining
+					sf_remaining = ""
+				else
+					sf_line = sf_remaining.substring(0, nl_pos)
+					sf_remaining = sf_remaining.substring(nl_pos + 1, sf_remaining.length())
+				string sf_trim = sf_line.trim()
+				if sf_trim.length() > 0
+					integer sp = sf_trim.indexOf(" ")
+					if sp > 0
+						string sf_type = sf_trim.substring(0, sp)
+						string sf_rest = sf_trim.substring(sp + 1, sf_trim.length()).trim()
+						// Drop any default assignment: keep only the name segment.
+						integer eq_pos = sf_rest.indexOf("=")
+						string sf_name = sf_rest
+						if eq_pos != -1
+							sf_name = sf_rest.substring(0, eq_pos).trim()
+						fields_json = fields_json + "," + spec_field(sf_name, sf_type)
+		fields_json = fields_json + "]"
+
+		// -------- Build render() method body source --------
+		// Reuses the v1 render-body construction logic verbatim.
+		string render_body_source = "string __html = \"\"\n"
+		if html_content != ""
+			string cleaned_html = strip_block_indent(html_content)
+			string render_chain = html_block_to_code(cleaned_html)
+			render_chain = remove_state_dot(render_chain)
+			integer render_operand_count = count_chain_pluses(render_chain) + 1
+			if fallback_html != ""
+				render_operand_count = render_operand_count + 2
+			if fallback_html != ""
+				string escaped_fb = escape_string(fallback_html).replace("'", "&#39;")
+				string fb_open = "\"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\""
+				string fb_close = "\"</div>\""
+				if render_chain == ""
+					render_chain = fb_open + " + " + fb_close
+				else
+					render_chain = fb_open + " + " + render_chain + " + " + fb_close
+			if render_chain != ""
+				if render_operand_count <= 40
+					render_body_source = render_body_source + "__html = __html + " + render_chain + "\n"
+				else
+					string body_stmts = html_block_to_statements(cleaned_html)
+					body_stmts = remove_state_dot(body_stmts)
+					if fallback_html != ""
+						string escaped_fb2 = escape_string(fallback_html).replace("'", "&#39;")
+						render_body_source = render_body_source + "__html = __html + \"<div data-component='" + name + "' data-fallback='" + escaped_fb2 + "'>\"\n"
+						render_body_source = render_body_source + body_stmts
+						render_body_source = render_body_source + "__html = __html + \"</div>\"\n"
+					else
+						render_body_source = render_body_source + body_stmts
+		render_body_source = render_body_source + "return __html\n"
+
+		// -------- Build setSlot() body source --------
+		string setslot_body_source = "_slot_content = content\n"
+
+		// -------- Build renderSSR() body source --------
+		string renderssr_body_source = "return this.render()\n"
+
+		// -------- Parse method bodies into stmt handles --------
+		integer render_bh = _emit_stmt_from_source(ctx, render_body_source, 0)
+		integer setslot_bh = _emit_stmt_from_source(ctx, setslot_body_source, 0)
+		integer renderssr_bh = _emit_stmt_from_source(ctx, renderssr_body_source, 0)
+
+		// -------- Assemble the methods array --------
+		string methods_json = "["
+		methods_json = methods_json + spec_method_inline_bh("render", "[]", "string", render_bh)
+		methods_json = methods_json + "," + spec_method_inline_bh("setSlot", "[{\"name\":\"content\",\"type\":\"string\"}]", "void", setslot_bh)
+		methods_json = methods_json + "," + spec_method_inline_bh("renderSSR", "[]", "string", renderssr_bh)
+		methods_json = methods_json + "]"
+
+		// -------- Assemble the class spec --------
+		string class_spec = "{\"name\":\"" + spec_esc_json(name) + "\""
+		class_spec = class_spec + ",\"parent\":null"
+		class_spec = class_spec + ",\"fields\":" + fields_json
+		class_spec = class_spec + ",\"methods\":" + methods_json
+		class_spec = class_spec + "}"
+
+		// -------- Emit module-scope state: block BEFORE the class (per plan §4) --------
+		// Only when the component participates in hydration (tag set and client != off).
+		if tag != "" and client != "off"
+			string instance_var = "instance_" + tag.replace("-", "_")
+			integer type_h = _type_class_ref(ctx, name)
+			integer default_h = _expr_call(ctx, name, "[]")
+			string sf_json = "[" + spec_state_field(instance_var, type_h, default_h) + "]"
+			_emit_state_block(ctx, sf_json)
+
+		// -------- Emit the class via _emit_class_full --------
+		ui_component_class(ctx, class_spec)
+		return 0
+
+	// component: dispatcher arm. Sub-cycle 1 (2026-07-05) — routes through
+	// expand_component_typed, which builds a §3.13 class spec JSON and emits
+	// via _emit_class_full instead of routing the whole class through
+	// _emit_stmt_from_source (which mandated statement fragments — §3.11 —
+	// and rejected class declarations with PLUGIN012).
+	//
+	// v1 expand_component (below at line ~2270) is preserved as a reference
+	// helper for other Sub-cycles/paths; it is no longer on the dispatcher path.
 	integer expand_component_stub(integer ctx, string attrs_json, string body)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_COMPONENT", "expand_component")
-		string source = expand_component(attrs_json, body)
-		_emit_stmt_from_source(ctx, source, 0)
+		expand_component_typed(ctx, attrs_json, body)
 		_ctx_clear_error(ctx)
 		return 0
 
