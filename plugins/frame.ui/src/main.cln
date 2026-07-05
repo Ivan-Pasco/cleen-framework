@@ -98,12 +98,17 @@
 //   _emit_verb_expression (deliberately excluded — Am 9 does not apply).
 
 external:
-	// ---- Declaration emitters (§3.5, §3.11, §3.13, §3.16) ----
+	// ---- Declaration emitters (§3.4, §3.5, §3.11, §3.13, §3.16) ----
 	integer _emit_function(integer ctx, string name, string params_json, string return_type, integer body_stmt_handle, integer flags)
 	integer _emit_class_full(integer ctx, integer class_spec_handle_or_lp, integer flags)
+	integer _emit_state_block(integer ctx, string fields_json)
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
+	// ---- AST type/expression constructors (§3.9, §3.10) — needed for module-scope
+	// state: block fields (Sub-cycle 1 minimal set; Sub-cycles 2/3 may add more) ----
+	integer _type_class_ref(integer ctx, string name)
+	integer _expr_call(integer ctx, string callee, string args_json)
 	// ---- Diagnostics (§5) ----
 	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
 	// ---- Sticky-error context (§3.15) ----
@@ -153,12 +158,26 @@ external:
 //     for the small per-component arg lists.
 
 functions:
-	// module_helpers lifecycle slot. Emits SSR response helpers (render, renderWith)
-	// as a full Clean functions: block via _emit_stmt_from_source.
+	// module_helpers lifecycle slot. Sub-cycle 2 (2026-07-05) — emits SSR
+	// response helpers (render, renderWith) as two individual top-level
+	// functions via _emit_function (§3.1), through the ui_helper_function
+	// factory. Previously routed a whole functions:-block source string
+	// through _emit_stmt_from_source, which is a top-level-declaration
+	// misuse of the statement-only §3.11 bridge (same bug class as the
+	// Sub-cycle 1 expand_component_stub fix).
+	//
+	// v1 emit_ssr_helpers at line ~2640 is preserved as a reference — no
+	// longer on the lifecycle slot path.
 	integer emit_ui_helpers_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_HELPERS", "emit_ui_helpers")
-		string source = emit_ssr_helpers()
-		_emit_stmt_from_source(ctx, source, 0)
+		// render(name) -> string
+		string render_params = "[{\"name\":\"name\",\"type\":\"string\"}]"
+		string render_body = "return _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", \"{}\")\n"
+		ui_helper_function(ctx, "render", render_params, "string", render_body, 1)
+		// renderWith(name, data) -> string
+		string rw_params = "[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"data\",\"type\":\"string\"}]"
+		string rw_body = "return _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", data)\n"
+		ui_helper_function(ctx, "renderWith", rw_params, "string", rw_body, 1)
 		_ctx_clear_error(ctx)
 		return 0
 
@@ -241,30 +260,327 @@ functions:
 //   has_frame_server=true. Sub-cycle 3.
 
 functions:
-	// process_html: emit a full page class from a raw HTML page. Reads html, path,
-	// registry_json, companion_json from ctx_json.
+	// process_html: emit a full page class from a raw HTML page. Sub-cycle 3
+	// (2026-07-05) — routes through expand_page_typed (Sub-cycle 2), which
+	// builds a §3.13 class spec JSON and emits via _emit_class_full. v1
+	// generate_page_class + process_html at line ~2808 is preserved as a
+	// reference. The pre-processing (extract attrs, html_to_render, runtime
+	// injection) is inlined here so we can hand the discrete inputs directly
+	// to expand_page_typed.
 	integer process_html_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_PROCESS_HTML", "process_html")
 		string html = extract_json_field(ctx_json, "html")
 		string path = extract_json_field(ctx_json, "path")
 		string registry_json = extract_json_field(ctx_json, "registry_json")
 		string companion_json = extract_json_field(ctx_json, "companion_json")
-		string source = process_html(html, path, registry_json, companion_json)
-		_emit_stmt_from_source(ctx, source, 0)
+		string layout = extract_page_attr(html, "layout")
+		string auth = extract_page_attr(html, "auth")
+		string roles = extract_page_attr(html, "roles")
+		string body_html = extract_body(html)
+		boolean has_data = false
+		if companion_json != ""
+			if companion_json.indexOf("\"has_load\":true") != -1
+				has_data = true
+		string render_code = html_to_render(body_html, registry_json, has_data)
+		if needs_client_runtime(html)
+			render_code = render_code + generate_runtime_injection()
+		string page_name = path_to_class_name(path)
+		expand_page_typed(ctx, page_name, path, layout, auth, roles, render_code, companion_json)
 		_ctx_clear_error(ctx)
 		return 0
 
-	// assemble: emit page companion route module + hydration manifest + component
-	// tag render wrappers + load helpers + diagnostic module by concatenating
-	// their source strings. Each virtual source becomes one _emit_stmt_from_source
-	// call. Legacy assemble() returned envelope JSON; typed emission emits each
-	// module inline.
+	// assemble: emit page companion route module + hydration manifest + load
+	// helpers + diagnostic module. Sub-cycle 3 (2026-07-05) — rewritten to
+	// split the pre-Sub-cycle-3 monolithic source string (which was routed
+	// through _emit_stmt_from_source — a top-level-declaration misuse of the
+	// statement-only §3.11 bridge, same bug class as pre-Sub-cycle-1
+	// expand_component_stub) into typed per-kind emissions:
+	//
+	//   Kind                     | Bridge
+	//   -------------------------|---------------------------------------
+	//   Route registrations      | _emit_stmt_from_source (statements)
+	//   Route render() functions | ui_helper_function (_emit_function)
+	//   Hydration manifest fn    | ui_helper_function
+	//   Load helper fns (×3)     | ui_helper_function
+	//   Diagnostic fn            | ui_helper_function
+	//
+	// v1 assemble_typed_source at line ~3995 is preserved as a reference
+	// (no longer on the lifecycle path).
 	integer assemble_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_ASSEMBLE", "assemble")
-		string source = assemble_typed_source(ctx_json)
-		if source.length() > 0
-			_emit_stmt_from_source(ctx, source, 0)
+		boolean has_server = ctx_json.indexOf("\"has_frame_server\":true") != -1
+		list<string> source_files = parse_source_files(ctx_json)
+
+		// -------- Phase 1: build routes-guard table (unchanged from assemble()) --------
+		string __routes_guard_table = ""
+		integer __gsi = 0
+		while __gsi < source_files.length()
+			string __gsf = source_files[__gsi]
+			string __gsc = extract_json_field(__gsf, "content")
+			__routes_guard_table = scan_routes_guards(__gsc, __routes_guard_table)
+			__gsi = __gsi + 1
+
+		// -------- Phase 2: walk pages, accumulate per-kind pieces --------
+		// route_registrations: source string of `_http_route(...)` statements
+		// route_fn_names / route_fn_bodies: parallel lists of (name, body_source)
+		//   for each `{module}_render()` function to emit via ui_helper_function
+		string route_registrations = ""
+		list<string> route_fn_names = []
+		list<string> route_fn_bodies = []
+		string hydration_entries = ""
+		boolean has_any_load = false
+		integer page_candidates = 0
+		integer pages_with_markers = 0
+		integer pages_emitted = 0
+		integer html_candidates = 0
+		integer html_with_screen = 0
+		integer fi = 0
+		while fi < source_files.length()
+			string file_obj = source_files[fi]
+			boolean candidate = file_obj.indexOf("pages/") != -1 or file_obj.indexOf(".html") != -1
+			if candidate
+				string file_path = extract_json_field(file_obj, "path")
+				boolean in_pages = file_path.indexOf("pages/") != -1
+				boolean is_html = file_path.endsWith(".html")
+				if in_pages
+					page_candidates = page_candidates + 1
+				if is_html
+					html_candidates = html_candidates + 1
+				boolean raw_has_load = false
+				boolean raw_has_guard = false
+				boolean raw_has_screen = false
+				if in_pages
+					raw_has_load = file_obj.indexOf("any load(") != -1
+					raw_has_guard = file_obj.indexOf("any guard(") != -1
+				if is_html
+					raw_has_screen = file_obj.indexOf("<screen") != -1
+				if in_pages and (raw_has_load or raw_has_guard)
+					pages_with_markers = pages_with_markers + 1
+				if is_html and raw_has_screen
+					html_with_screen = html_with_screen + 1
+				if (in_pages or is_html) and (raw_has_load or raw_has_guard or raw_has_screen)
+					string file_content = extract_json_field(file_obj, "content")
+					boolean has_load = raw_has_load
+					boolean has_guard = raw_has_guard
+					if is_html and raw_has_screen
+						hydration_entries = hydration_entries + collect_screens_from_html(file_content)
+					if in_pages and (has_load or has_guard)
+						string module_name = derive_module_name(file_path)
+						if has_load
+							has_any_load = true
+						if has_server
+							string url = derive_url_path(file_path)
+							string html_path = derive_html_path(file_path)
+							// Build the render() body as Clean statements (no method-body
+							// indent — ui_helper_function emits at module scope).
+							string body_source = ""
+							string __routes_guard_roles = lookup_routes_guard(url, __routes_guard_table)
+							if __routes_guard_roles.length() > 0
+								body_source = body_source + assemble_guard_body(__routes_guard_roles)
+							if has_guard
+								body_source = body_source + "any __g = " + module_name + "_guard(null)\n"
+								body_source = body_source + "if __g != null\n"
+								body_source = body_source + "\treturn __g\n"
+							if has_load
+								body_source = body_source + "string __d = " + module_name + "_load(null)\n"
+								body_source = body_source + "return _ui_render_page(\"" + html_path + "\", __d)\n"
+							else
+								body_source = body_source + "return _ui_render_page(\"" + html_path + "\", \"{}\")\n"
+							route_fn_names.push(module_name + "_render")
+							route_fn_bodies.push(body_source)
+							route_registrations = route_registrations + "_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
+							pages_emitted = pages_emitted + 1
+			fi = fi + 1
+
+		// -------- Phase 3: emit route registrations (statements) --------
+		if has_server and route_registrations.length() > 0
+			_emit_stmt_from_source(ctx, route_registrations, 0)
+
+		// -------- Phase 4: emit route render() functions --------
+		integer rfi = 0
+		while rfi < route_fn_names.length()
+			ui_helper_function(ctx, route_fn_names[rfi], "[]", "string", route_fn_bodies[rfi], 1)
+			rfi = rfi + 1
+
+		// -------- Phase 5: hydration manifest function --------
+		if hydration_entries.length() > 0
+			string screens_json = entries_to_screens_json(hydration_entries)
+			string manifest_body = "return \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
+			ui_helper_function(ctx, "_ui_hydration_manifest", "[]", "string", manifest_body, 1)
+
+		// -------- Phase 6: load helper functions --------
+		if has_any_load
+			emit_load_helpers_typed(ctx)
+
+		// -------- Phase 7: diagnostic function --------
+		string total_files_str = source_files.length().toString()
+		string pc_str = page_candidates.toString()
+		string pm_str = pages_with_markers.toString()
+		string pe_str = pages_emitted.toString()
+		string hc_str = html_candidates.toString()
+		string hs_str = html_with_screen.toString()
+		string has_server_str = "false"
+		if has_server
+			has_server_str = "true"
+		string diag_body = "return \"frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
+		ui_helper_function(ctx, "_frame_ui_assemble_diagnostics", "[]", "string", diag_body, 1)
+
 		_ctx_clear_error(ctx)
+		return 0
+
+	// Route-guard check emitted at the top of each generated route render()
+	// function body. Ports the v1 emit_routes_guard_check output but strips
+	// one level of indentation (was designed for method-body \t\t nesting;
+	// Sub-cycle 3 emits at function-body \t scope via ui_helper_function).
+	string assemble_guard_body(string roles)
+		string original = emit_routes_guard_check(roles)
+		// emit_routes_guard_check produces lines with leading \t\t (method-body
+		// indent). Strip one leading \t so it aligns with function-body scope.
+		string result = ""
+		string remaining = original
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+			if line.length() > 0 and line.substring(0, 1) == "\t"
+				line = line.substring(1, line.length())
+			result = result + line + "\n"
+		return result
+
+	// Emit the three _ui_normalize_load_return / _ui_unwrap_json_encoded_string /
+	// _ui_promote_string_fields helper functions inline via ui_helper_function.
+	// Sub-cycle 3 (2026-07-05) — replaces the source-string route through
+	// _emit_stmt_from_source that pre-Sub-cycle-3 assemble_typed emitted for
+	// the __ui_load_helpers.cln virtual module. v1 build_load_helpers_module
+	// at line ~3863 is preserved as a reference.
+	integer emit_load_helpers_typed(integer ctx)
+		// _ui_normalize_load_return(any __r) -> string
+		string norm_body = "string __s = json.encode(__r)\n"
+		norm_body = norm_body + "if __s.length() == 0\n"
+		norm_body = norm_body + "\treturn \"{}\"\n"
+		norm_body = norm_body + "string __first = __s.substring(0, 1)\n"
+		norm_body = norm_body + "if __first == \"{\" or __first == \"[\"\n"
+		norm_body = norm_body + "\treturn _ui_promote_string_fields(__s)\n"
+		norm_body = norm_body + "if __s.length() >= 2 and __first == \"\\\"\"\n"
+		norm_body = norm_body + "\tstring __second = __s.substring(1, 2)\n"
+		norm_body = norm_body + "\tif __second == \"{\" or __second == \"[\"\n"
+		norm_body = norm_body + "\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
+		norm_body = norm_body + "return __s\n"
+		ui_helper_function(ctx, "_ui_normalize_load_return", "[{\"name\":\"__r\",\"type\":\"any\"}]", "string", norm_body, 1)
+
+		// _ui_unwrap_json_encoded_string(string __s) -> string
+		string unwrap_body = "if __s.length() < 2\n"
+		unwrap_body = unwrap_body + "\treturn __s\n"
+		unwrap_body = unwrap_body + "integer __n = __s.length()\n"
+		unwrap_body = unwrap_body + "string __body = __s.substring(1, __n - 1)\n"
+		unwrap_body = unwrap_body + "string __result = \"\"\n"
+		unwrap_body = unwrap_body + "integer __i = 0\n"
+		unwrap_body = unwrap_body + "integer __m = __body.length()\n"
+		unwrap_body = unwrap_body + "while __i < __m\n"
+		unwrap_body = unwrap_body + "\tstring __ch = __body.substring(__i, __i + 1)\n"
+		unwrap_body = unwrap_body + "\tif __ch == \"\\\\\" and __i + 1 < __m\n"
+		unwrap_body = unwrap_body + "\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
+		unwrap_body = unwrap_body + "\t\tif __nx == \"n\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\n\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"t\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\t\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"r\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\r\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"\\\"\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\\"\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"/\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"/\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"\\\\\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\\\\"\n"
+		unwrap_body = unwrap_body + "\t\telse\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + __ch + __nx\n"
+		unwrap_body = unwrap_body + "\t\t__i = __i + 2\n"
+		unwrap_body = unwrap_body + "\telse\n"
+		unwrap_body = unwrap_body + "\t\t__result = __result + __ch\n"
+		unwrap_body = unwrap_body + "\t\t__i = __i + 1\n"
+		unwrap_body = unwrap_body + "return __result\n"
+		ui_helper_function(ctx, "_ui_unwrap_json_encoded_string", "[{\"name\":\"__s\",\"type\":\"string\"}]", "string", unwrap_body, 1)
+
+		// _ui_promote_string_fields(string __input) -> string
+		string promote_body = "if __input.length() < 4\n"
+		promote_body = promote_body + "\treturn __input\n"
+		promote_body = promote_body + "string __out = \"\"\n"
+		promote_body = promote_body + "integer __i = 0\n"
+		promote_body = promote_body + "integer __n = __input.length()\n"
+		promote_body = promote_body + "boolean __in_str = false\n"
+		promote_body = promote_body + "boolean __escape = false\n"
+		promote_body = promote_body + "while __i < __n\n"
+		promote_body = promote_body + "\tstring __ch = __input.substring(__i, __i + 1)\n"
+		promote_body = promote_body + "\tif __in_str\n"
+		promote_body = promote_body + "\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\tif __escape\n"
+		promote_body = promote_body + "\t\t\t__escape = false\n"
+		promote_body = promote_body + "\t\telse if __ch == \"\\\\\"\n"
+		promote_body = promote_body + "\t\t\t__escape = true\n"
+		promote_body = promote_body + "\t\telse if __ch == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t__in_str = false\n"
+		promote_body = promote_body + "\t\t__i = __i + 1\n"
+		promote_body = promote_body + "\telse\n"
+		promote_body = promote_body + "\t\tif __ch == \":\"\n"
+		promote_body = promote_body + "\t\t\tinteger __j = __i + 1\n"
+		promote_body = promote_body + "\t\t\tboolean __ws_keep = true\n"
+		promote_body = promote_body + "\t\t\twhile __ws_keep and __j < __n\n"
+		promote_body = promote_body + "\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
+		promote_body = promote_body + "\t\t\t\tif __ws_ch != \" \"\n"
+		promote_body = promote_body + "\t\t\t\t\t__ws_keep = false\n"
+		promote_body = promote_body + "\t\t\t\telse\n"
+		promote_body = promote_body + "\t\t\t\t\t__j = __j + 1\n"
+		promote_body = promote_body + "\t\t\tboolean __did = false\n"
+		promote_body = promote_body + "\t\t\tboolean __qt_match = false\n"
+		promote_body = promote_body + "\t\t\tif __j + 1 < __n\n"
+		promote_body = promote_body + "\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
+		promote_body = promote_body + "\t\t\t\tif __qt_ch == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t\t\t__qt_match = true\n"
+		promote_body = promote_body + "\t\t\tif __qt_match\n"
+		promote_body = promote_body + "\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
+		promote_body = promote_body + "\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
+		promote_body = promote_body + "\t\t\t\t\tinteger __end = __j + 1\n"
+		promote_body = promote_body + "\t\t\t\t\tboolean __found = false\n"
+		promote_body = promote_body + "\t\t\t\t\twhile __end < __n and not __found\n"
+		promote_body = promote_body + "\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
+		promote_body = promote_body + "\t\t\t\t\t\tif __c == \"\\\\\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__end = __end + 2\n"
+		promote_body = promote_body + "\t\t\t\t\t\telse if __c == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__found = true\n"
+		promote_body = promote_body + "\t\t\t\t\t\telse\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__end = __end + 1\n"
+		promote_body = promote_body + "\t\t\t\t\tif __found\n"
+		promote_body = promote_body + "\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
+		promote_body = promote_body + "\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
+		promote_body = promote_body + "\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
+		promote_body = promote_body + "\t\t\t\t\t\tboolean __ok = false\n"
+		promote_body = promote_body + "\t\t\t\t\t\tif __ulen >= 2\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t\t__ok = true\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t\t__ok = true\n"
+		promote_body = promote_body + "\t\t\t\t\t\tif __ok\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__i = __end + 1\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__did = true\n"
+		promote_body = promote_body + "\t\t\tif not __did\n"
+		promote_body = promote_body + "\t\t\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\t\t\t__i = __i + 1\n"
+		promote_body = promote_body + "\t\telse if __ch == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t__in_str = true\n"
+		promote_body = promote_body + "\t\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\t\t__i = __i + 1\n"
+		promote_body = promote_body + "\t\telse\n"
+		promote_body = promote_body + "\t\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\t\t__i = __i + 1\n"
+		promote_body = promote_body + "return __out\n"
+		ui_helper_function(ctx, "_ui_promote_string_fields", "[{\"name\":\"__input\",\"type\":\"string\"}]", "string", promote_body, 1)
 		return 0
 
 // ============================================================================
@@ -754,8 +1070,14 @@ functions:
 	//
 	// Sub-cycle 2 expand_component and generate_page_class both use this.
 	// Sticky-error propagates — caller checks _ctx_had_error at the boundary.
+	//
+	// Sub-cycle 1 (2026-07-05): body wired via §3.13 LP-string path. The
+	// spec_json string is passed to _batch_stringLit to obtain a handle the
+	// widened _emit_class_full accepts (canvas / data Sub-cycle 2 pattern —
+	// see plugins/frame.data/src/main.cln:2149).
 	integer ui_component_class(integer ctx, string spec_json)
-		return _emit_class_full(ctx, 0, 0)
+		integer spec_ptr = _batch_stringLit(ctx, spec_json)
+		return _emit_class_full(ctx, spec_ptr, 1)
 
 	// ui_event_handler(ctx, source, origin) — Sub-cycle 2/3 event body.
 	//
@@ -769,6 +1091,81 @@ functions:
 	// land in the DSL body coord space.
 	integer ui_event_handler(integer ctx, string source, integer origin)
 		return _emit_stmt_from_source(ctx, source, origin)
+
+	// ui_helper_function — Sub-cycle 2 (2026-07-05) factory for top-level
+	// helper function emission. Wraps _emit_function (§3.1) with body-source
+	// pass-through via _emit_stmt_from_source (§3.11). Callers pass the
+	// helper name, a JSON params array, a return-type name string (per the
+	// external: block's `string return_type` shape — see frame.data's
+	// _emit_function usage at plugins/frame.data/src/main.cln:1951 for the
+	// established convention), and a Clean source string containing the
+	// function body statements.
+	//
+	// Sub-cycle 2 emit_ui_helpers_typed uses this to emit render(name) and
+	// renderWith(name, data). Sub-cycle 3 may reuse for other helpers.
+	//
+	// flags: bit 1 = exported (usually 1 for public helpers).
+	integer ui_helper_function(integer ctx, string name, string params_json, string return_type, string body_source, integer flags)
+		integer body_h = _emit_stmt_from_source(ctx, body_source, 0)
+		return _emit_function(ctx, name, params_json, return_type, body_h, flags)
+
+// ============================================================================
+// SPEC-JSON BUILDER VOCABULARY (Sub-cycle 1 novel contribution)
+// ============================================================================
+// Small utility functions for constructing the §3.13 class-spec JSON that
+// _emit_class_full consumes. Modelled on frame.data Sub-cycle 2's
+// build_fields_json / build_methods_json pattern but adapted to the shapes
+// frame.ui needs (component fields with defaults, method entries with either
+// body_handle from source pass-through or from-spec templates, module-scope
+// state field descriptors).
+//
+// Naming convention:
+//   spec_esc_json(s)        — JSON-escape a string
+//   spec_field(name, type)  — field entry as JSON: {"name":..,"type":..}
+//   spec_field_default(name, type, expr_lit) — with a string-literal default
+//   spec_method_inline_bh(name, params_json, ret, bh) — method entry using body_handle
+//   spec_state_field(name, type_h, default_expr_h) — state: block field entry
+//
+// Sub-cycles 2/3 will extend this vocabulary with:
+//   spec_method_from_spec(...) for Am 10 template method entries
+//   spec_class(name, parent, fields, methods) top-level assembly
+// (Left as inline concatenation in Sub-cycle 1 to keep the LOC delta bounded.)
+
+functions:
+	// JSON-escape a string for embedding in a spec_* JSON literal.
+	string spec_esc_json(string txt)
+		string result = txt
+		result = result.replace("\\", "\\\\")
+		result = result.replace("\"", "\\\"")
+		result = result.replace("\n", "\\n")
+		result = result.replace("\t", "\\t")
+		return result
+
+	// Build a class-spec field entry: {"name":"...","type":"..."}
+	string spec_field(string name, string type_name)
+		return "{\"name\":\"" + spec_esc_json(name) + "\",\"type\":\"" + spec_esc_json(type_name) + "\"}"
+
+	// Build a class-spec method entry (inline body_handle shape, Amendment 3
+	// §3.13). params_json is an already-formatted JSON array like `[]` or
+	// `[{"name":"content","type":"string"}]`.
+	string spec_method_inline_bh(string name, string params_json, string return_type, integer body_handle)
+		string result = "{\"kind\":\"inline\""
+		result = result + ",\"name\":\"" + spec_esc_json(name) + "\""
+		result = result + ",\"params\":" + params_json
+		result = result + ",\"return_type\":\"" + spec_esc_json(return_type) + "\""
+		result = result + ",\"body_handle\":" + body_handle.toString()
+		result = result + "}"
+		return result
+
+	// Build a state:-block field entry: {"name":"...","type_handle":N,"default_expr_handle":N}
+	// per §3.4 fields_json_lp schema.
+	string spec_state_field(string name, integer type_handle, integer default_expr_handle)
+		string result = "{\"name\":\"" + spec_esc_json(name) + "\""
+		result = result + ",\"type_handle\":" + type_handle.toString()
+		if default_expr_handle != 0
+			result = result + ",\"default_expr_handle\":" + default_expr_handle.toString()
+		result = result + "}"
+		return result
 
 // ============================================================================
 // SUB-CYCLE 2 EMITTERS (component / page / html)
@@ -785,20 +1182,291 @@ functions:
 // Sub-cycle 2 replaces the bodies with real logic (they are no longer stubs).
 
 functions:
-	// component: dispatcher arm. Calls v1's expand_component to build the
-	// Clean class source (with fields, render(), setSlot(), renderSSR(),
-	// optional module-scope state: block), then hands it through the
-	// _emit_stmt_from_source Am 5+§3.11 boundary.
+	// expand_component_typed — Sub-cycle 1 (2026-07-05) rewrite of the
+	// component: dispatcher path. Builds a §3.13 class spec JSON, emits it
+	// via _emit_class_full (through ui_component_class), and — when the
+	// component declares hydration (tag != "" && client != "off") — emits
+	// a module-scope state: block via _emit_state_block before the class.
+	//
+	// STRATEGY: The class fields, render() body, setSlot() body, and
+	// renderSSR() body are all constructed as Clean SOURCE strings via the
+	// preserved v1 helpers (extract_state_fields, html_block_to_code,
+	// parse_component_body, normalize_handlers, etc.). Each method body
+	// source is parsed once via _emit_stmt_from_source and the resulting
+	// stmt handle is placed in the class spec's method entry as body_handle
+	// (Am 3 §3.13 body_handle composition). Field defaults are inlined in
+	// the class spec `default` field where possible; complex defaults are
+	// left to the runtime constructor emitted implicitly by Clean.
+	//
+	// This mirrors frame.data Sub-cycle 2's expand_data_model shape but with
+	// body_handle populated from source pass-through instead of batch
+	// builders — because frame.ui method bodies mix template-generated
+	// code with user-authored HTML rendering logic and expressing every
+	// html_block_to_code result as batch handles would blow the LOC budget.
+	integer expand_component_typed(integer ctx, string attrs_json, string body)
+		string tag = get_attr(attrs_json, "tag", "")
+		string name = get_attr(attrs_json, "name", "")
+		string client = get_attr(attrs_json, "client", "off")
+		if name == "" and tag != ""
+			name = tag_to_class_name(tag)
+		if name == ""
+			name = "Component"
+
+		// build_state side effects — components registry and manifest JSON.
+		// Preserved verbatim from v1 expand_component.
+		if tag != ""
+			string components_state = _build_state_get("frame.ui:components")
+			string entry = tag + "," + name + "," + client
+			if components_state == ""
+				_build_state_set("frame.ui:components", entry)
+			else
+				_build_state_set("frame.ui:components", components_state + ";" + entry)
+			string render_export = tag.replace("-", "_") + "_render"
+			string component_obj = "{\"tag\":\"" + tag + "\",\"class\":\"" + name + "\",\"hydration\":\"" + client + "\",\"render_export\":\"" + render_export + "\"}"
+			string manifest_state = _build_state_get("frame.ui.components.json")
+			if manifest_state == ""
+				_build_state_set("frame.ui.components.json", "[" + component_obj + "]")
+			else
+				string without_close = manifest_state.substring(0, manifest_state.length() - 1)
+				_build_state_set("frame.ui.components.json", without_close + "," + component_obj + "]")
+
+		// Parse the component body (before html, html content, after html, fallback).
+		string parsed = parse_component_body(body)
+		string before_html = extract_json_field(parsed, "before")
+		string html_content = extract_json_field(parsed, "html")
+		string after_html = extract_json_field(parsed, "after")
+		string fallback_html = extract_json_field(parsed, "fallback")
+		string state_fields = extract_state_fields(before_html)
+		before_html = strip_state_block(before_html)
+		before_html = remove_state_dot(before_html)
+
+		// -------- Build the class-spec `fields` array --------
+		string fields_json = "["
+		boolean first_field = true
+		// _tag (only when tag != "")
+		if tag != ""
+			fields_json = fields_json + spec_field("_tag", "string")
+			first_field = false
+		// _hydration_mode, _slot_content
+		if not first_field
+			fields_json = fields_json + ","
+		fields_json = fields_json + spec_field("_hydration_mode", "string")
+		fields_json = fields_json + "," + spec_field("_slot_content", "string")
+		first_field = false
+		// _fallback (only when component has a fallback)
+		if fallback_html != ""
+			fields_json = fields_json + "," + spec_field("_fallback", "string")
+		// Inputs field (only when html has inputs: sub-block)
+		boolean has_inputs = (html_content != "" and before_html.indexOf("inputs:") != -1)
+		if has_inputs
+			fields_json = fields_json + "," + spec_field("inputs", "Inputs")
+		// State fields extracted from before_html (each line is "type name" or "type name = default")
+		string state_lines_trimmed = state_fields.trim()
+		if state_lines_trimmed.length() > 0
+			string sf_remaining = state_lines_trimmed
+			while sf_remaining.length() > 0
+				integer nl_pos = sf_remaining.indexOf("\n")
+				string sf_line = ""
+				if nl_pos == -1
+					sf_line = sf_remaining
+					sf_remaining = ""
+				else
+					sf_line = sf_remaining.substring(0, nl_pos)
+					sf_remaining = sf_remaining.substring(nl_pos + 1, sf_remaining.length())
+				string sf_trim = sf_line.trim()
+				if sf_trim.length() > 0
+					integer sp = sf_trim.indexOf(" ")
+					if sp > 0
+						string sf_type = sf_trim.substring(0, sp)
+						string sf_rest = sf_trim.substring(sp + 1, sf_trim.length()).trim()
+						// Drop any default assignment: keep only the name segment.
+						integer eq_pos = sf_rest.indexOf("=")
+						string sf_name = sf_rest
+						if eq_pos != -1
+							sf_name = sf_rest.substring(0, eq_pos).trim()
+						fields_json = fields_json + "," + spec_field(sf_name, sf_type)
+		fields_json = fields_json + "]"
+
+		// -------- Build render() method body source --------
+		// Reuses the v1 render-body construction logic verbatim.
+		string render_body_source = "string __html = \"\"\n"
+		if html_content != ""
+			string cleaned_html = strip_block_indent(html_content)
+			string render_chain = html_block_to_code(cleaned_html)
+			render_chain = remove_state_dot(render_chain)
+			integer render_operand_count = count_chain_pluses(render_chain) + 1
+			if fallback_html != ""
+				render_operand_count = render_operand_count + 2
+			if fallback_html != ""
+				string escaped_fb = escape_string(fallback_html).replace("'", "&#39;")
+				string fb_open = "\"<div data-component='" + name + "' data-fallback='" + escaped_fb + "'>\""
+				string fb_close = "\"</div>\""
+				if render_chain == ""
+					render_chain = fb_open + " + " + fb_close
+				else
+					render_chain = fb_open + " + " + render_chain + " + " + fb_close
+			if render_chain != ""
+				if render_operand_count <= 40
+					render_body_source = render_body_source + "__html = __html + " + render_chain + "\n"
+				else
+					string body_stmts = html_block_to_statements(cleaned_html)
+					body_stmts = remove_state_dot(body_stmts)
+					if fallback_html != ""
+						string escaped_fb2 = escape_string(fallback_html).replace("'", "&#39;")
+						render_body_source = render_body_source + "__html = __html + \"<div data-component='" + name + "' data-fallback='" + escaped_fb2 + "'>\"\n"
+						render_body_source = render_body_source + body_stmts
+						render_body_source = render_body_source + "__html = __html + \"</div>\"\n"
+					else
+						render_body_source = render_body_source + body_stmts
+		render_body_source = render_body_source + "return __html\n"
+
+		// -------- Build setSlot() body source --------
+		string setslot_body_source = "_slot_content = content\n"
+
+		// -------- Build renderSSR() body source --------
+		string renderssr_body_source = "return this.render()\n"
+
+		// -------- Parse method bodies into stmt handles --------
+		integer render_bh = _emit_stmt_from_source(ctx, render_body_source, 0)
+		integer setslot_bh = _emit_stmt_from_source(ctx, setslot_body_source, 0)
+		integer renderssr_bh = _emit_stmt_from_source(ctx, renderssr_body_source, 0)
+
+		// -------- Assemble the methods array --------
+		string methods_json = "["
+		methods_json = methods_json + spec_method_inline_bh("render", "[]", "string", render_bh)
+		methods_json = methods_json + "," + spec_method_inline_bh("setSlot", "[{\"name\":\"content\",\"type\":\"string\"}]", "void", setslot_bh)
+		methods_json = methods_json + "," + spec_method_inline_bh("renderSSR", "[]", "string", renderssr_bh)
+		methods_json = methods_json + "]"
+
+		// -------- Assemble the class spec --------
+		string class_spec = "{\"name\":\"" + spec_esc_json(name) + "\""
+		class_spec = class_spec + ",\"parent\":null"
+		class_spec = class_spec + ",\"fields\":" + fields_json
+		class_spec = class_spec + ",\"methods\":" + methods_json
+		class_spec = class_spec + "}"
+
+		// -------- Emit module-scope state: block BEFORE the class (per plan §4) --------
+		// Only when the component participates in hydration (tag set and client != off).
+		if tag != "" and client != "off"
+			string instance_var = "instance_" + tag.replace("-", "_")
+			integer type_h = _type_class_ref(ctx, name)
+			integer default_h = _expr_call(ctx, name, "[]")
+			string sf_json = "[" + spec_state_field(instance_var, type_h, default_h) + "]"
+			_emit_state_block(ctx, sf_json)
+
+		// -------- Emit the class via _emit_class_full --------
+		ui_component_class(ctx, class_spec)
+		return 0
+
+	// component: dispatcher arm. Sub-cycle 1 (2026-07-05) — routes through
+	// expand_component_typed, which builds a §3.13 class spec JSON and emits
+	// via _emit_class_full instead of routing the whole class through
+	// _emit_stmt_from_source (which mandated statement fragments — §3.11 —
+	// and rejected class declarations with PLUGIN012).
+	//
+	// v1 expand_component (below at line ~2270) is preserved as a reference
+	// helper for other Sub-cycles/paths; it is no longer on the dispatcher path.
 	integer expand_component_stub(integer ctx, string attrs_json, string body)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_COMPONENT", "expand_component")
-		string source = expand_component(attrs_json, body)
-		_emit_stmt_from_source(ctx, source, 0)
+		expand_component_typed(ctx, attrs_json, body)
 		_ctx_clear_error(ctx)
 		return 0
 
-	// page: dispatcher arm. Calls v1's process_html to build the Clean page
-	// class source. For direct page: block (rare — most pages arrive via
-	// process_html_typed), fall back to generate_page_class with defaults.
+	// expand_page_typed — Sub-cycle 2 (2026-07-05) rewrite of the page:
+	// dispatcher path. Builds a §3.13 page-class spec JSON and emits via
+	// _emit_class_full (through ui_component_class — the "component_class"
+	// name from Sub-cycle 1's factory is generic: both components and pages
+	// are Clean classes).
+	//
+	// STRATEGY: mirrors expand_component_typed but simpler:
+	//   - Pages are stateless — no module-scope state: block, no hydration
+	//     side effects, no build_state writes.
+	//   - Single method: render() returning HTML.
+	//   - Fields: _path (always), _layout / _auth / _roles (when present in
+	//     attrs). Same shape as v1 generate_page_class.
+	//   - Optional companion_json guard/load prelude and layout wrapping
+	//     copied verbatim from v1 into the render() body source (so the
+	//     Sub-cycle 2 change is behavior-preserving).
+	//
+	// Called by expand_page_stub and (Sub-cycle 3) process_html_typed.
+	integer expand_page_typed(integer ctx, string page_name, string path, string layout, string auth, string roles, string render_code, string companion_json)
+		// -------- Build the class-spec `fields` array --------
+		string fields_json = "[" + spec_field("_path", "string")
+		if layout != ""
+			fields_json = fields_json + "," + spec_field("_layout", "string")
+		if auth != ""
+			fields_json = fields_json + "," + spec_field("_auth", "string")
+		if roles != ""
+			fields_json = fields_json + "," + spec_field("_roles", "string")
+		fields_json = fields_json + "]"
+
+		// -------- Build render() method body source --------
+		// Faithful port of v1 generate_page_class's render() body construction
+		// (see plugins/frame.ui/src/main.cln:2452-2495 pre-Sub-cycle-2).
+		string render_body_source = ""
+		if companion_json != ""
+			string module_name = extract_json_field(companion_json, "module_name")
+			if companion_json.indexOf("\"has_guard\":true") != -1
+				render_body_source = render_body_source + "any guard_result = " + module_name + "_guard()\n"
+				render_body_source = render_body_source + "if guard_result != null\n"
+				render_body_source = render_body_source + "\treturn \"\"\n"
+			if companion_json.indexOf("\"has_load\":true") != -1
+				render_body_source = render_body_source + "any data = " + module_name + "_load_impl(null)\n"
+		render_body_source = render_body_source + "string html = \"\"\n"
+		render_body_source = render_body_source + render_code + "\n"
+		if layout != ""
+			render_body_source = render_body_source + "string __page_content = html\n"
+			render_body_source = render_body_source + "string __layout_html = _ui_load_layout(\"app/ui/web/layouts/" + layout + ".html\")\n"
+			render_body_source = render_body_source + "if __layout_html != \"\"\n"
+			render_body_source = render_body_source + "\tinteger __slot_i = 0\n"
+			render_body_source = render_body_source + "\twhile __slot_i < 10\n"
+			render_body_source = render_body_source + "\t\tinteger __ns_start = __page_content.indexOf(\"<slot name='\")\n"
+			render_body_source = render_body_source + "\t\tif __ns_start == -1\n"
+			render_body_source = render_body_source + "\t\t\t__slot_i = 10\n"
+			render_body_source = render_body_source + "\t\telse\n"
+			render_body_source = render_body_source + "\t\t\tinteger __name_start = __ns_start + 12\n"
+			render_body_source = render_body_source + "\t\t\tinteger __name_end = __page_content.indexOf(\"'\", __name_start)\n"
+			render_body_source = render_body_source + "\t\t\tif __name_end == -1\n"
+			render_body_source = render_body_source + "\t\t\t\t__slot_i = 10\n"
+			render_body_source = render_body_source + "\t\t\telse\n"
+			render_body_source = render_body_source + "\t\t\t\tstring __slot_name = __page_content.substring(__name_start, __name_end)\n"
+			render_body_source = render_body_source + "\t\t\t\tinteger __open_end = __page_content.indexOf(\">\", __ns_start)\n"
+			render_body_source = render_body_source + "\t\t\t\tinteger __close_start = __page_content.indexOf(\"</slot>\", __ns_start)\n"
+			render_body_source = render_body_source + "\t\t\t\tif __open_end == -1 or __close_start == -1\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__slot_i = 10\n"
+			render_body_source = render_body_source + "\t\t\t\telse\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __layout_placeholder = \"<slot name='\" + __slot_name + \"'></slot>\"\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__page_content = __before + __after\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__slot_i = __slot_i + 1\n"
+			render_body_source = render_body_source + "\t\t__layout_html = __layout_html.replace(\"<slot></slot>\", __page_content)\n"
+			render_body_source = render_body_source + "\t\thtml = __layout_html\n"
+		render_body_source = render_body_source + "return html\n"
+
+		// -------- Parse render body into stmt handle --------
+		integer render_bh = _emit_stmt_from_source(ctx, render_body_source, 0)
+
+		// -------- Assemble the methods array --------
+		string methods_json = "[" + spec_method_inline_bh("render", "[]", "string", render_bh) + "]"
+
+		// -------- Assemble the class spec --------
+		string class_spec = "{\"name\":\"" + spec_esc_json(page_name) + "\""
+		class_spec = class_spec + ",\"parent\":null"
+		class_spec = class_spec + ",\"fields\":" + fields_json
+		class_spec = class_spec + ",\"methods\":" + methods_json
+		class_spec = class_spec + "}"
+
+		// -------- Emit the class via _emit_class_full --------
+		ui_component_class(ctx, class_spec)
+		return 0
+
+	// page: dispatcher arm. Sub-cycle 2 (2026-07-05) — routes through
+	// expand_page_typed, which builds a §3.13 class spec JSON and emits via
+	// _emit_class_full. v1 generate_page_class at line ~2443 is preserved as
+	// a reference helper for Sub-cycle 3's assemble_typed rewrite.
 	integer expand_page_stub(integer ctx, string attrs_json, string body)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_PAGE", "expand_page")
 		// Attrs carry path/layout/auth/roles. Body is the page HTML source.
@@ -808,8 +1476,7 @@ functions:
 		string roles = get_attr(attrs_json, "roles", "")
 		string render_code = html_to_render(body, "{}", false)
 		string page_name = path_to_class_name(path)
-		string source = generate_page_class(page_name, path, layout, auth, roles, render_code, "")
-		_emit_stmt_from_source(ctx, source, 0)
+		expand_page_typed(ctx, page_name, path, layout, auth, roles, render_code, "")
 		_ctx_clear_error(ctx)
 		return 0
 
