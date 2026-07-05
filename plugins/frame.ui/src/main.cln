@@ -260,30 +260,327 @@ functions:
 //   has_frame_server=true. Sub-cycle 3.
 
 functions:
-	// process_html: emit a full page class from a raw HTML page. Reads html, path,
-	// registry_json, companion_json from ctx_json.
+	// process_html: emit a full page class from a raw HTML page. Sub-cycle 3
+	// (2026-07-05) — routes through expand_page_typed (Sub-cycle 2), which
+	// builds a §3.13 class spec JSON and emits via _emit_class_full. v1
+	// generate_page_class + process_html at line ~2808 is preserved as a
+	// reference. The pre-processing (extract attrs, html_to_render, runtime
+	// injection) is inlined here so we can hand the discrete inputs directly
+	// to expand_page_typed.
 	integer process_html_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_PROCESS_HTML", "process_html")
 		string html = extract_json_field(ctx_json, "html")
 		string path = extract_json_field(ctx_json, "path")
 		string registry_json = extract_json_field(ctx_json, "registry_json")
 		string companion_json = extract_json_field(ctx_json, "companion_json")
-		string source = process_html(html, path, registry_json, companion_json)
-		_emit_stmt_from_source(ctx, source, 0)
+		string layout = extract_page_attr(html, "layout")
+		string auth = extract_page_attr(html, "auth")
+		string roles = extract_page_attr(html, "roles")
+		string body_html = extract_body(html)
+		boolean has_data = false
+		if companion_json != ""
+			if companion_json.indexOf("\"has_load\":true") != -1
+				has_data = true
+		string render_code = html_to_render(body_html, registry_json, has_data)
+		if needs_client_runtime(html)
+			render_code = render_code + generate_runtime_injection()
+		string page_name = path_to_class_name(path)
+		expand_page_typed(ctx, page_name, path, layout, auth, roles, render_code, companion_json)
 		_ctx_clear_error(ctx)
 		return 0
 
-	// assemble: emit page companion route module + hydration manifest + component
-	// tag render wrappers + load helpers + diagnostic module by concatenating
-	// their source strings. Each virtual source becomes one _emit_stmt_from_source
-	// call. Legacy assemble() returned envelope JSON; typed emission emits each
-	// module inline.
+	// assemble: emit page companion route module + hydration manifest + load
+	// helpers + diagnostic module. Sub-cycle 3 (2026-07-05) — rewritten to
+	// split the pre-Sub-cycle-3 monolithic source string (which was routed
+	// through _emit_stmt_from_source — a top-level-declaration misuse of the
+	// statement-only §3.11 bridge, same bug class as pre-Sub-cycle-1
+	// expand_component_stub) into typed per-kind emissions:
+	//
+	//   Kind                     | Bridge
+	//   -------------------------|---------------------------------------
+	//   Route registrations      | _emit_stmt_from_source (statements)
+	//   Route render() functions | ui_helper_function (_emit_function)
+	//   Hydration manifest fn    | ui_helper_function
+	//   Load helper fns (×3)     | ui_helper_function
+	//   Diagnostic fn            | ui_helper_function
+	//
+	// v1 assemble_typed_source at line ~3995 is preserved as a reference
+	// (no longer on the lifecycle path).
 	integer assemble_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_ASSEMBLE", "assemble")
-		string source = assemble_typed_source(ctx_json)
-		if source.length() > 0
-			_emit_stmt_from_source(ctx, source, 0)
+		boolean has_server = ctx_json.indexOf("\"has_frame_server\":true") != -1
+		list<string> source_files = parse_source_files(ctx_json)
+
+		// -------- Phase 1: build routes-guard table (unchanged from assemble()) --------
+		string __routes_guard_table = ""
+		integer __gsi = 0
+		while __gsi < source_files.length()
+			string __gsf = source_files[__gsi]
+			string __gsc = extract_json_field(__gsf, "content")
+			__routes_guard_table = scan_routes_guards(__gsc, __routes_guard_table)
+			__gsi = __gsi + 1
+
+		// -------- Phase 2: walk pages, accumulate per-kind pieces --------
+		// route_registrations: source string of `_http_route(...)` statements
+		// route_fn_names / route_fn_bodies: parallel lists of (name, body_source)
+		//   for each `{module}_render()` function to emit via ui_helper_function
+		string route_registrations = ""
+		list<string> route_fn_names = []
+		list<string> route_fn_bodies = []
+		string hydration_entries = ""
+		boolean has_any_load = false
+		integer page_candidates = 0
+		integer pages_with_markers = 0
+		integer pages_emitted = 0
+		integer html_candidates = 0
+		integer html_with_screen = 0
+		integer fi = 0
+		while fi < source_files.length()
+			string file_obj = source_files[fi]
+			boolean candidate = file_obj.indexOf("pages/") != -1 or file_obj.indexOf(".html") != -1
+			if candidate
+				string file_path = extract_json_field(file_obj, "path")
+				boolean in_pages = file_path.indexOf("pages/") != -1
+				boolean is_html = file_path.endsWith(".html")
+				if in_pages
+					page_candidates = page_candidates + 1
+				if is_html
+					html_candidates = html_candidates + 1
+				boolean raw_has_load = false
+				boolean raw_has_guard = false
+				boolean raw_has_screen = false
+				if in_pages
+					raw_has_load = file_obj.indexOf("any load(") != -1
+					raw_has_guard = file_obj.indexOf("any guard(") != -1
+				if is_html
+					raw_has_screen = file_obj.indexOf("<screen") != -1
+				if in_pages and (raw_has_load or raw_has_guard)
+					pages_with_markers = pages_with_markers + 1
+				if is_html and raw_has_screen
+					html_with_screen = html_with_screen + 1
+				if (in_pages or is_html) and (raw_has_load or raw_has_guard or raw_has_screen)
+					string file_content = extract_json_field(file_obj, "content")
+					boolean has_load = raw_has_load
+					boolean has_guard = raw_has_guard
+					if is_html and raw_has_screen
+						hydration_entries = hydration_entries + collect_screens_from_html(file_content)
+					if in_pages and (has_load or has_guard)
+						string module_name = derive_module_name(file_path)
+						if has_load
+							has_any_load = true
+						if has_server
+							string url = derive_url_path(file_path)
+							string html_path = derive_html_path(file_path)
+							// Build the render() body as Clean statements (no method-body
+							// indent — ui_helper_function emits at module scope).
+							string body_source = ""
+							string __routes_guard_roles = lookup_routes_guard(url, __routes_guard_table)
+							if __routes_guard_roles.length() > 0
+								body_source = body_source + assemble_guard_body(__routes_guard_roles)
+							if has_guard
+								body_source = body_source + "any __g = " + module_name + "_guard(null)\n"
+								body_source = body_source + "if __g != null\n"
+								body_source = body_source + "\treturn __g\n"
+							if has_load
+								body_source = body_source + "string __d = " + module_name + "_load(null)\n"
+								body_source = body_source + "return _ui_render_page(\"" + html_path + "\", __d)\n"
+							else
+								body_source = body_source + "return _ui_render_page(\"" + html_path + "\", \"{}\")\n"
+							route_fn_names.push(module_name + "_render")
+							route_fn_bodies.push(body_source)
+							route_registrations = route_registrations + "_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
+							pages_emitted = pages_emitted + 1
+			fi = fi + 1
+
+		// -------- Phase 3: emit route registrations (statements) --------
+		if has_server and route_registrations.length() > 0
+			_emit_stmt_from_source(ctx, route_registrations, 0)
+
+		// -------- Phase 4: emit route render() functions --------
+		integer rfi = 0
+		while rfi < route_fn_names.length()
+			ui_helper_function(ctx, route_fn_names[rfi], "[]", "string", route_fn_bodies[rfi], 1)
+			rfi = rfi + 1
+
+		// -------- Phase 5: hydration manifest function --------
+		if hydration_entries.length() > 0
+			string screens_json = entries_to_screens_json(hydration_entries)
+			string manifest_body = "return \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
+			ui_helper_function(ctx, "_ui_hydration_manifest", "[]", "string", manifest_body, 1)
+
+		// -------- Phase 6: load helper functions --------
+		if has_any_load
+			emit_load_helpers_typed(ctx)
+
+		// -------- Phase 7: diagnostic function --------
+		string total_files_str = source_files.length().toString()
+		string pc_str = page_candidates.toString()
+		string pm_str = pages_with_markers.toString()
+		string pe_str = pages_emitted.toString()
+		string hc_str = html_candidates.toString()
+		string hs_str = html_with_screen.toString()
+		string has_server_str = "false"
+		if has_server
+			has_server_str = "true"
+		string diag_body = "return \"frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
+		ui_helper_function(ctx, "_frame_ui_assemble_diagnostics", "[]", "string", diag_body, 1)
+
 		_ctx_clear_error(ctx)
+		return 0
+
+	// Route-guard check emitted at the top of each generated route render()
+	// function body. Ports the v1 emit_routes_guard_check output but strips
+	// one level of indentation (was designed for method-body \t\t nesting;
+	// Sub-cycle 3 emits at function-body \t scope via ui_helper_function).
+	string assemble_guard_body(string roles)
+		string original = emit_routes_guard_check(roles)
+		// emit_routes_guard_check produces lines with leading \t\t (method-body
+		// indent). Strip one leading \t so it aligns with function-body scope.
+		string result = ""
+		string remaining = original
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+			if line.length() > 0 and line.substring(0, 1) == "\t"
+				line = line.substring(1, line.length())
+			result = result + line + "\n"
+		return result
+
+	// Emit the three _ui_normalize_load_return / _ui_unwrap_json_encoded_string /
+	// _ui_promote_string_fields helper functions inline via ui_helper_function.
+	// Sub-cycle 3 (2026-07-05) — replaces the source-string route through
+	// _emit_stmt_from_source that pre-Sub-cycle-3 assemble_typed emitted for
+	// the __ui_load_helpers.cln virtual module. v1 build_load_helpers_module
+	// at line ~3863 is preserved as a reference.
+	integer emit_load_helpers_typed(integer ctx)
+		// _ui_normalize_load_return(any __r) -> string
+		string norm_body = "string __s = json.encode(__r)\n"
+		norm_body = norm_body + "if __s.length() == 0\n"
+		norm_body = norm_body + "\treturn \"{}\"\n"
+		norm_body = norm_body + "string __first = __s.substring(0, 1)\n"
+		norm_body = norm_body + "if __first == \"{\" or __first == \"[\"\n"
+		norm_body = norm_body + "\treturn _ui_promote_string_fields(__s)\n"
+		norm_body = norm_body + "if __s.length() >= 2 and __first == \"\\\"\"\n"
+		norm_body = norm_body + "\tstring __second = __s.substring(1, 2)\n"
+		norm_body = norm_body + "\tif __second == \"{\" or __second == \"[\"\n"
+		norm_body = norm_body + "\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
+		norm_body = norm_body + "return __s\n"
+		ui_helper_function(ctx, "_ui_normalize_load_return", "[{\"name\":\"__r\",\"type\":\"any\"}]", "string", norm_body, 1)
+
+		// _ui_unwrap_json_encoded_string(string __s) -> string
+		string unwrap_body = "if __s.length() < 2\n"
+		unwrap_body = unwrap_body + "\treturn __s\n"
+		unwrap_body = unwrap_body + "integer __n = __s.length()\n"
+		unwrap_body = unwrap_body + "string __body = __s.substring(1, __n - 1)\n"
+		unwrap_body = unwrap_body + "string __result = \"\"\n"
+		unwrap_body = unwrap_body + "integer __i = 0\n"
+		unwrap_body = unwrap_body + "integer __m = __body.length()\n"
+		unwrap_body = unwrap_body + "while __i < __m\n"
+		unwrap_body = unwrap_body + "\tstring __ch = __body.substring(__i, __i + 1)\n"
+		unwrap_body = unwrap_body + "\tif __ch == \"\\\\\" and __i + 1 < __m\n"
+		unwrap_body = unwrap_body + "\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
+		unwrap_body = unwrap_body + "\t\tif __nx == \"n\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\n\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"t\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\t\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"r\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\r\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"\\\"\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\\"\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"/\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"/\"\n"
+		unwrap_body = unwrap_body + "\t\telse if __nx == \"\\\\\"\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\\\\"\n"
+		unwrap_body = unwrap_body + "\t\telse\n"
+		unwrap_body = unwrap_body + "\t\t\t__result = __result + __ch + __nx\n"
+		unwrap_body = unwrap_body + "\t\t__i = __i + 2\n"
+		unwrap_body = unwrap_body + "\telse\n"
+		unwrap_body = unwrap_body + "\t\t__result = __result + __ch\n"
+		unwrap_body = unwrap_body + "\t\t__i = __i + 1\n"
+		unwrap_body = unwrap_body + "return __result\n"
+		ui_helper_function(ctx, "_ui_unwrap_json_encoded_string", "[{\"name\":\"__s\",\"type\":\"string\"}]", "string", unwrap_body, 1)
+
+		// _ui_promote_string_fields(string __input) -> string
+		string promote_body = "if __input.length() < 4\n"
+		promote_body = promote_body + "\treturn __input\n"
+		promote_body = promote_body + "string __out = \"\"\n"
+		promote_body = promote_body + "integer __i = 0\n"
+		promote_body = promote_body + "integer __n = __input.length()\n"
+		promote_body = promote_body + "boolean __in_str = false\n"
+		promote_body = promote_body + "boolean __escape = false\n"
+		promote_body = promote_body + "while __i < __n\n"
+		promote_body = promote_body + "\tstring __ch = __input.substring(__i, __i + 1)\n"
+		promote_body = promote_body + "\tif __in_str\n"
+		promote_body = promote_body + "\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\tif __escape\n"
+		promote_body = promote_body + "\t\t\t__escape = false\n"
+		promote_body = promote_body + "\t\telse if __ch == \"\\\\\"\n"
+		promote_body = promote_body + "\t\t\t__escape = true\n"
+		promote_body = promote_body + "\t\telse if __ch == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t__in_str = false\n"
+		promote_body = promote_body + "\t\t__i = __i + 1\n"
+		promote_body = promote_body + "\telse\n"
+		promote_body = promote_body + "\t\tif __ch == \":\"\n"
+		promote_body = promote_body + "\t\t\tinteger __j = __i + 1\n"
+		promote_body = promote_body + "\t\t\tboolean __ws_keep = true\n"
+		promote_body = promote_body + "\t\t\twhile __ws_keep and __j < __n\n"
+		promote_body = promote_body + "\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
+		promote_body = promote_body + "\t\t\t\tif __ws_ch != \" \"\n"
+		promote_body = promote_body + "\t\t\t\t\t__ws_keep = false\n"
+		promote_body = promote_body + "\t\t\t\telse\n"
+		promote_body = promote_body + "\t\t\t\t\t__j = __j + 1\n"
+		promote_body = promote_body + "\t\t\tboolean __did = false\n"
+		promote_body = promote_body + "\t\t\tboolean __qt_match = false\n"
+		promote_body = promote_body + "\t\t\tif __j + 1 < __n\n"
+		promote_body = promote_body + "\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
+		promote_body = promote_body + "\t\t\t\tif __qt_ch == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t\t\t__qt_match = true\n"
+		promote_body = promote_body + "\t\t\tif __qt_match\n"
+		promote_body = promote_body + "\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
+		promote_body = promote_body + "\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
+		promote_body = promote_body + "\t\t\t\t\tinteger __end = __j + 1\n"
+		promote_body = promote_body + "\t\t\t\t\tboolean __found = false\n"
+		promote_body = promote_body + "\t\t\t\t\twhile __end < __n and not __found\n"
+		promote_body = promote_body + "\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
+		promote_body = promote_body + "\t\t\t\t\t\tif __c == \"\\\\\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__end = __end + 2\n"
+		promote_body = promote_body + "\t\t\t\t\t\telse if __c == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__found = true\n"
+		promote_body = promote_body + "\t\t\t\t\t\telse\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__end = __end + 1\n"
+		promote_body = promote_body + "\t\t\t\t\tif __found\n"
+		promote_body = promote_body + "\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
+		promote_body = promote_body + "\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
+		promote_body = promote_body + "\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
+		promote_body = promote_body + "\t\t\t\t\t\tboolean __ok = false\n"
+		promote_body = promote_body + "\t\t\t\t\t\tif __ulen >= 2\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t\t__ok = true\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t\t__ok = true\n"
+		promote_body = promote_body + "\t\t\t\t\t\tif __ok\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__i = __end + 1\n"
+		promote_body = promote_body + "\t\t\t\t\t\t\t__did = true\n"
+		promote_body = promote_body + "\t\t\tif not __did\n"
+		promote_body = promote_body + "\t\t\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\t\t\t__i = __i + 1\n"
+		promote_body = promote_body + "\t\telse if __ch == \"\\\"\"\n"
+		promote_body = promote_body + "\t\t\t__in_str = true\n"
+		promote_body = promote_body + "\t\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\t\t__i = __i + 1\n"
+		promote_body = promote_body + "\t\telse\n"
+		promote_body = promote_body + "\t\t\t__out = __out + __ch\n"
+		promote_body = promote_body + "\t\t\t__i = __i + 1\n"
+		promote_body = promote_body + "return __out\n"
+		ui_helper_function(ctx, "_ui_promote_string_fields", "[{\"name\":\"__input\",\"type\":\"string\"}]", "string", promote_body, 1)
 		return 0
 
 // ============================================================================
