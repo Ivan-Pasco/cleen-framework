@@ -158,12 +158,26 @@ external:
 //     for the small per-component arg lists.
 
 functions:
-	// module_helpers lifecycle slot. Emits SSR response helpers (render, renderWith)
-	// as a full Clean functions: block via _emit_stmt_from_source.
+	// module_helpers lifecycle slot. Sub-cycle 2 (2026-07-05) — emits SSR
+	// response helpers (render, renderWith) as two individual top-level
+	// functions via _emit_function (§3.1), through the ui_helper_function
+	// factory. Previously routed a whole functions:-block source string
+	// through _emit_stmt_from_source, which is a top-level-declaration
+	// misuse of the statement-only §3.11 bridge (same bug class as the
+	// Sub-cycle 1 expand_component_stub fix).
+	//
+	// v1 emit_ssr_helpers at line ~2640 is preserved as a reference — no
+	// longer on the lifecycle slot path.
 	integer emit_ui_helpers_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_HELPERS", "emit_ui_helpers")
-		string source = emit_ssr_helpers()
-		_emit_stmt_from_source(ctx, source, 0)
+		// render(name) -> string
+		string render_params = "[{\"name\":\"name\",\"type\":\"string\"}]"
+		string render_body = "return _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", \"{}\")\n"
+		ui_helper_function(ctx, "render", render_params, "string", render_body, 1)
+		// renderWith(name, data) -> string
+		string rw_params = "[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"data\",\"type\":\"string\"}]"
+		string rw_body = "return _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", data)\n"
+		ui_helper_function(ctx, "renderWith", rw_params, "string", rw_body, 1)
 		_ctx_clear_error(ctx)
 		return 0
 
@@ -781,6 +795,23 @@ functions:
 	integer ui_event_handler(integer ctx, string source, integer origin)
 		return _emit_stmt_from_source(ctx, source, origin)
 
+	// ui_helper_function — Sub-cycle 2 (2026-07-05) factory for top-level
+	// helper function emission. Wraps _emit_function (§3.1) with body-source
+	// pass-through via _emit_stmt_from_source (§3.11). Callers pass the
+	// helper name, a JSON params array, a return-type name string (per the
+	// external: block's `string return_type` shape — see frame.data's
+	// _emit_function usage at plugins/frame.data/src/main.cln:1951 for the
+	// established convention), and a Clean source string containing the
+	// function body statements.
+	//
+	// Sub-cycle 2 emit_ui_helpers_typed uses this to emit render(name) and
+	// renderWith(name, data). Sub-cycle 3 may reuse for other helpers.
+	//
+	// flags: bit 1 = exported (usually 1 for public helpers).
+	integer ui_helper_function(integer ctx, string name, string params_json, string return_type, string body_source, integer flags)
+		integer body_h = _emit_stmt_from_source(ctx, body_source, 0)
+		return _emit_function(ctx, name, params_json, return_type, body_h, flags)
+
 // ============================================================================
 // SPEC-JSON BUILDER VOCABULARY (Sub-cycle 1 novel contribution)
 // ============================================================================
@@ -1044,9 +1075,101 @@ functions:
 		_ctx_clear_error(ctx)
 		return 0
 
-	// page: dispatcher arm. Calls v1's process_html to build the Clean page
-	// class source. For direct page: block (rare — most pages arrive via
-	// process_html_typed), fall back to generate_page_class with defaults.
+	// expand_page_typed — Sub-cycle 2 (2026-07-05) rewrite of the page:
+	// dispatcher path. Builds a §3.13 page-class spec JSON and emits via
+	// _emit_class_full (through ui_component_class — the "component_class"
+	// name from Sub-cycle 1's factory is generic: both components and pages
+	// are Clean classes).
+	//
+	// STRATEGY: mirrors expand_component_typed but simpler:
+	//   - Pages are stateless — no module-scope state: block, no hydration
+	//     side effects, no build_state writes.
+	//   - Single method: render() returning HTML.
+	//   - Fields: _path (always), _layout / _auth / _roles (when present in
+	//     attrs). Same shape as v1 generate_page_class.
+	//   - Optional companion_json guard/load prelude and layout wrapping
+	//     copied verbatim from v1 into the render() body source (so the
+	//     Sub-cycle 2 change is behavior-preserving).
+	//
+	// Called by expand_page_stub and (Sub-cycle 3) process_html_typed.
+	integer expand_page_typed(integer ctx, string page_name, string path, string layout, string auth, string roles, string render_code, string companion_json)
+		// -------- Build the class-spec `fields` array --------
+		string fields_json = "[" + spec_field("_path", "string")
+		if layout != ""
+			fields_json = fields_json + "," + spec_field("_layout", "string")
+		if auth != ""
+			fields_json = fields_json + "," + spec_field("_auth", "string")
+		if roles != ""
+			fields_json = fields_json + "," + spec_field("_roles", "string")
+		fields_json = fields_json + "]"
+
+		// -------- Build render() method body source --------
+		// Faithful port of v1 generate_page_class's render() body construction
+		// (see plugins/frame.ui/src/main.cln:2452-2495 pre-Sub-cycle-2).
+		string render_body_source = ""
+		if companion_json != ""
+			string module_name = extract_json_field(companion_json, "module_name")
+			if companion_json.indexOf("\"has_guard\":true") != -1
+				render_body_source = render_body_source + "any guard_result = " + module_name + "_guard()\n"
+				render_body_source = render_body_source + "if guard_result != null\n"
+				render_body_source = render_body_source + "\treturn \"\"\n"
+			if companion_json.indexOf("\"has_load\":true") != -1
+				render_body_source = render_body_source + "any data = " + module_name + "_load_impl(null)\n"
+		render_body_source = render_body_source + "string html = \"\"\n"
+		render_body_source = render_body_source + render_code + "\n"
+		if layout != ""
+			render_body_source = render_body_source + "string __page_content = html\n"
+			render_body_source = render_body_source + "string __layout_html = _ui_load_layout(\"app/ui/web/layouts/" + layout + ".html\")\n"
+			render_body_source = render_body_source + "if __layout_html != \"\"\n"
+			render_body_source = render_body_source + "\tinteger __slot_i = 0\n"
+			render_body_source = render_body_source + "\twhile __slot_i < 10\n"
+			render_body_source = render_body_source + "\t\tinteger __ns_start = __page_content.indexOf(\"<slot name='\")\n"
+			render_body_source = render_body_source + "\t\tif __ns_start == -1\n"
+			render_body_source = render_body_source + "\t\t\t__slot_i = 10\n"
+			render_body_source = render_body_source + "\t\telse\n"
+			render_body_source = render_body_source + "\t\t\tinteger __name_start = __ns_start + 12\n"
+			render_body_source = render_body_source + "\t\t\tinteger __name_end = __page_content.indexOf(\"'\", __name_start)\n"
+			render_body_source = render_body_source + "\t\t\tif __name_end == -1\n"
+			render_body_source = render_body_source + "\t\t\t\t__slot_i = 10\n"
+			render_body_source = render_body_source + "\t\t\telse\n"
+			render_body_source = render_body_source + "\t\t\t\tstring __slot_name = __page_content.substring(__name_start, __name_end)\n"
+			render_body_source = render_body_source + "\t\t\t\tinteger __open_end = __page_content.indexOf(\">\", __ns_start)\n"
+			render_body_source = render_body_source + "\t\t\t\tinteger __close_start = __page_content.indexOf(\"</slot>\", __ns_start)\n"
+			render_body_source = render_body_source + "\t\t\t\tif __open_end == -1 or __close_start == -1\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__slot_i = 10\n"
+			render_body_source = render_body_source + "\t\t\t\telse\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __slot_content = __page_content.substring(__open_end + 1, __close_start)\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __layout_placeholder = \"<slot name='\" + __slot_name + \"'></slot>\"\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__layout_html = __layout_html.replace(__layout_placeholder, __slot_content)\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __before = __page_content.substring(0, __ns_start)\n"
+			render_body_source = render_body_source + "\t\t\t\t\tstring __after = __page_content.substring(__close_start + 7, __page_content.length())\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__page_content = __before + __after\n"
+			render_body_source = render_body_source + "\t\t\t\t\t__slot_i = __slot_i + 1\n"
+			render_body_source = render_body_source + "\t\t__layout_html = __layout_html.replace(\"<slot></slot>\", __page_content)\n"
+			render_body_source = render_body_source + "\t\thtml = __layout_html\n"
+		render_body_source = render_body_source + "return html\n"
+
+		// -------- Parse render body into stmt handle --------
+		integer render_bh = _emit_stmt_from_source(ctx, render_body_source, 0)
+
+		// -------- Assemble the methods array --------
+		string methods_json = "[" + spec_method_inline_bh("render", "[]", "string", render_bh) + "]"
+
+		// -------- Assemble the class spec --------
+		string class_spec = "{\"name\":\"" + spec_esc_json(page_name) + "\""
+		class_spec = class_spec + ",\"parent\":null"
+		class_spec = class_spec + ",\"fields\":" + fields_json
+		class_spec = class_spec + ",\"methods\":" + methods_json
+		class_spec = class_spec + "}"
+
+		// -------- Emit the class via _emit_class_full --------
+		ui_component_class(ctx, class_spec)
+		return 0
+
+	// page: dispatcher arm. Sub-cycle 2 (2026-07-05) — routes through
+	// expand_page_typed, which builds a §3.13 class spec JSON and emits via
+	// _emit_class_full. v1 generate_page_class at line ~2443 is preserved as
+	// a reference helper for Sub-cycle 3's assemble_typed rewrite.
 	integer expand_page_stub(integer ctx, string attrs_json, string body)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_PAGE", "expand_page")
 		// Attrs carry path/layout/auth/roles. Body is the page HTML source.
@@ -1056,8 +1179,7 @@ functions:
 		string roles = get_attr(attrs_json, "roles", "")
 		string render_code = html_to_render(body, "{}", false)
 		string page_name = path_to_class_name(path)
-		string source = generate_page_class(page_name, path, layout, auth, roles, render_code, "")
-		_emit_stmt_from_source(ctx, source, 0)
+		expand_page_typed(ctx, page_name, path, layout, auth, roles, render_code, "")
 		_ctx_clear_error(ctx)
 		return 0
 
