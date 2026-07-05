@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.8.0"
+version = "2.8.1"
 description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
 author = "Clean Language Team"
 license = "MIT"
@@ -467,4 +467,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.31.5"
+built_with_compiler = "0.32.0"

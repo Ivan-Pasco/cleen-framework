@@ -26,7 +26,9 @@ external:
 	integer _expr_bool_lit(integer ctx, integer value)
 	integer _expr_ident(integer ctx, string name)
 	integer _expr_call(integer ctx, string callee, string args_json)
-	integer _expr_binop(integer ctx, integer op_code, integer lhs_handle, integer rhs_handle)
+	// _expr_binop takes the operator as an LP-string (e.g. "+", "==") — the
+	// compiler's typed-emission bridge routes through map_binary_op(&str).
+	integer _expr_binop(integer ctx, string op, integer lhs_handle, integer rhs_handle)
 	// Type constructors (typed-emission.md §3.10)
 	integer _type_string(integer ctx)
 	integer _type_integer(integer ctx)
@@ -34,7 +36,6 @@ external:
 	integer _type_void(integer ctx)
 	// Declaration emitters (typed-emission.md §3.1–3.7)
 	integer _emit_function(integer ctx, string name, string params_json, integer return_type, integer body_stmt, integer flags)
-	integer _emit_route(integer ctx, string method, string path, integer handler_fn_handle, string attrs_json)
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
 	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
 	// Pass-through bridge for user-authored handler bodies (typed-emission.md §3.11)
@@ -53,10 +54,9 @@ external:
 
 functions:
 	integer emit_module_helpers_typed(integer ctx, string ctx_json)
-		integer str_t = _type_string(ctx)
-		integer int_t = _type_integer(ctx)
-		integer bool_t = _type_boolean(ctx)
-		integer void_t = _type_void(ctx)
+		// Type handles are single-consumption per typed-emission.md §4 clause 2.
+		// Each _emit_function consumes one handle per param + one for the return
+		// type, so every use-site allocates fresh handles instead of caching.
 
 		// ── jsonResponse(data: string) -> string ──
 		// return _http_respond(200, "application/json", data)
@@ -66,7 +66,9 @@ functions:
 		integer jr_call = _expr_call(ctx, "_http_respond", "[" + jr_s200.toString() + "," + jr_ct.toString() + "," + jr_data.toString() + "]")
 		integer jr_ret = _stmt_return(ctx, jr_call)
 		integer jr_body = _stmt_block(ctx, "[" + jr_ret.toString() + "]")
-		integer jr_err = _emit_function(ctx, "jsonResponse", "[{\"name\":\"data\",\"type_handle\":" + str_t.toString() + "}]", str_t, jr_body, 2)
+		integer jr_p_str = _type_string(ctx)
+		integer jr_r_str = _type_string(ctx)
+		integer jr_err = _emit_function(ctx, "jsonResponse", "[{\"name\":\"data\",\"type_handle\":" + jr_p_str.toString() + "}]", jr_r_str, jr_body, 2)
 		if jr_err != 0
 			return 1
 
@@ -78,7 +80,10 @@ functions:
 		integer jrs_call = _expr_call(ctx, "_http_respond", "[" + jrs_sc.toString() + "," + jrs_ct.toString() + "," + jrs_data.toString() + "]")
 		integer jrs_ret = _stmt_return(ctx, jrs_call)
 		integer jrs_body = _stmt_block(ctx, "[" + jrs_ret.toString() + "]")
-		integer jrs_err = _emit_function(ctx, "jsonResponseStatus", "[{\"name\":\"data\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"status_code\",\"type_handle\":" + int_t.toString() + "}]", str_t, jrs_body, 2)
+		integer jrs_p_str = _type_string(ctx)
+		integer jrs_p_int = _type_integer(ctx)
+		integer jrs_r_str = _type_string(ctx)
+		integer jrs_err = _emit_function(ctx, "jsonResponseStatus", "[{\"name\":\"data\",\"type_handle\":" + jrs_p_str.toString() + "},{\"name\":\"status_code\",\"type_handle\":" + jrs_p_int.toString() + "}]", jrs_r_str, jrs_body, 2)
 		if jrs_err != 0
 			return 1
 
@@ -90,31 +95,18 @@ functions:
 		integer hr_call = _expr_call(ctx, "_http_respond", "[" + hr_s200.toString() + "," + hr_ct.toString() + "," + hr_cont.toString() + "]")
 		integer hr_ret = _stmt_return(ctx, hr_call)
 		integer hr_body = _stmt_block(ctx, "[" + hr_ret.toString() + "]")
-		integer hr_err = _emit_function(ctx, "htmlResponse", "[{\"name\":\"content\",\"type_handle\":" + str_t.toString() + "}]", str_t, hr_body, 2)
+		integer hr_p_str = _type_string(ctx)
+		integer hr_r_str = _type_string(ctx)
+		integer hr_err = _emit_function(ctx, "htmlResponse", "[{\"name\":\"content\",\"type_handle\":" + hr_p_str.toString() + "}]", hr_r_str, hr_body, 2)
 		if hr_err != 0
 			return 1
 
-		// ── redirectTo(url: string) -> string ──
-		// return _http_redirect(302, url)
-		integer rto_s302 = _expr_int_lit(ctx, 302, 0)
-		integer rto_url = _expr_ident(ctx, "url")
-		integer rto_call = _expr_call(ctx, "_http_redirect", "[" + rto_s302.toString() + "," + rto_url.toString() + "]")
-		integer rto_ret = _stmt_return(ctx, rto_call)
-		integer rto_body = _stmt_block(ctx, "[" + rto_ret.toString() + "]")
-		integer rto_err = _emit_function(ctx, "redirectTo", "[{\"name\":\"url\",\"type_handle\":" + str_t.toString() + "}]", str_t, rto_body, 2)
-		if rto_err != 0
-			return 1
-
-		// ── redirectToStatus(url: string, status_code: integer) -> string ──
-		// return _http_redirect(status_code, url)
-		integer rts_sc = _expr_ident(ctx, "status_code")
-		integer rts_url = _expr_ident(ctx, "url")
-		integer rts_call = _expr_call(ctx, "_http_redirect", "[" + rts_sc.toString() + "," + rts_url.toString() + "]")
-		integer rts_ret = _stmt_return(ctx, rts_call)
-		integer rts_body = _stmt_block(ctx, "[" + rts_ret.toString() + "]")
-		integer rts_err = _emit_function(ctx, "redirectToStatus", "[{\"name\":\"url\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"status_code\",\"type_handle\":" + int_t.toString() + "}]", str_t, rts_body, 2)
-		if rts_err != 0
-			return 1
+		// redirectTo / redirectToStatus / redirect DEFERRED — reference
+		// `_http_redirect`, which the current compiler resolves to a
+		// SymbolId at semantic time but does not carry into the codegen
+		// function map when emitted through the typed bridge surface.
+		// User endpoints can still redirect by calling `http.respond(302, …)`
+		// with a `Location` header directly through `http.setHeader`.
 
 		// ── notFound() -> string ──
 		// return _http_respond(404, "application/json", "{\"ok\":false,\"err\":{\"code\":\"NOT_FOUND\",\"message\":\"Resource not found\"}}")
@@ -124,68 +116,23 @@ functions:
 		integer nf_call = _expr_call(ctx, "_http_respond", "[" + nf_s404.toString() + "," + nf_ct.toString() + "," + nf_msg.toString() + "]")
 		integer nf_ret = _stmt_return(ctx, nf_call)
 		integer nf_body = _stmt_block(ctx, "[" + nf_ret.toString() + "]")
-		integer nf_err = _emit_function(ctx, "notFound", "[]", str_t, nf_body, 2)
+		integer nf_r_str = _type_string(ctx)
+		integer nf_err = _emit_function(ctx, "notFound", "[]", nf_r_str, nf_body, 2)
 		if nf_err != 0
 			return 1
 
-		// ── __json_escape(s: string) -> string ──
-		// string r = s.replace("\\", "\\\\")
-		// r = r.replace("\"", "\\\"")
-		// return r
-		integer jse_src_expr = _expr_ident(ctx, "s")
-		integer jse_bs = _expr_string_lit(ctx, "\\")
-		integer jse_bsbs = _expr_string_lit(ctx, "\\\\")
-		integer jse_call1 = _expr_call(ctx, "s.replace", "[" + jse_bs.toString() + "," + jse_bsbs.toString() + "]")
-		integer jse_assign1 = _stmt_assign(ctx, "r", jse_call1)
-		integer jse_dq = _expr_string_lit(ctx, "\"")
-		integer jse_edq = _expr_string_lit(ctx, "\\\"")
-		integer jse_r1 = _expr_ident(ctx, "r")
-		integer jse_call2 = _expr_call(ctx, "r.replace", "[" + jse_dq.toString() + "," + jse_edq.toString() + "]")
-		integer jse_assign2 = _stmt_assign(ctx, "r", jse_call2)
-		integer jse_r2 = _expr_ident(ctx, "r")
-		integer jse_ret = _stmt_return(ctx, jse_r2)
-		integer jse_body = _stmt_block(ctx, "[" + jse_assign1.toString() + "," + jse_assign2.toString() + "," + jse_ret.toString() + "]")
-		integer jse_err = _emit_function(ctx, "__json_escape", "[{\"name\":\"s\",\"type_handle\":" + str_t.toString() + "}]", str_t, jse_body, 2)
-		if jse_err != 0
-			return 1
+		// ── __json_escape(s: string) -> string ── (DEFERRED)
+		// The typed-emission bridge surface has no method-call bridge (issue
+		// tracked separately), so `s.replace(...)` cannot be reconstructed
+		// through `_expr_call`. Emission of `__json_escape` and the three
+		// helpers that reference it (`notFoundMsg`, `badRequest`, `httpError`)
+		// is deferred until the bridge lands. User endpoints do not call these
+		// helpers directly, and `http.respond(...)` / `jsonResponse(...)` cover
+		// the common paths.
 
-		// ── notFoundMsg(message: string) -> string ──
-		// return _http_respond(404, "application/json", "{...}" + __json_escape(message) + "...}")
-		// Build: _http_respond(404, "application/json",
-		//          "{\"ok\":false,\"err\":{\"code\":\"NOT_FOUND\",\"message\":\"" + __json_escape(message) + "\"}}")
-		// Use _expr_binop with op_code=0 ("+") for string concatenation
-		integer nfm_s404 = _expr_int_lit(ctx, 404, 0)
-		integer nfm_ct = _expr_string_lit(ctx, "application/json")
-		integer nfm_prefix = _expr_string_lit(ctx, "{\"ok\":false,\"err\":{\"code\":\"NOT_FOUND\",\"message\":\"")
-		integer nfm_msg_arg = _expr_ident(ctx, "message")
-		integer nfm_esc_call = _expr_call(ctx, "__json_escape", "[" + nfm_msg_arg.toString() + "]")
-		integer nfm_suffix = _expr_string_lit(ctx, "\"}}")
-		// concat: prefix + __json_escape(message) → part1
-		integer nfm_part1 = _expr_binop(ctx, 0, nfm_prefix, nfm_esc_call)
-		// concat: part1 + suffix → full_body
-		integer nfm_full = _expr_binop(ctx, 0, nfm_part1, nfm_suffix)
-		integer nfm_respond = _expr_call(ctx, "_http_respond", "[" + nfm_s404.toString() + "," + nfm_ct.toString() + "," + nfm_full.toString() + "]")
-		integer nfm_ret = _stmt_return(ctx, nfm_respond)
-		integer nfm_body = _stmt_block(ctx, "[" + nfm_ret.toString() + "]")
-		integer nfm_err = _emit_function(ctx, "notFoundMsg", "[{\"name\":\"message\",\"type_handle\":" + str_t.toString() + "}]", str_t, nfm_body, 2)
-		if nfm_err != 0
-			return 1
-
-		// ── badRequest(message: string) -> string ──
-		integer br_s400 = _expr_int_lit(ctx, 400, 0)
-		integer br_ct = _expr_string_lit(ctx, "application/json")
-		integer br_prefix = _expr_string_lit(ctx, "{\"ok\":false,\"err\":{\"code\":\"VALIDATION_ERROR\",\"message\":\"")
-		integer br_msg_arg = _expr_ident(ctx, "message")
-		integer br_esc_call = _expr_call(ctx, "__json_escape", "[" + br_msg_arg.toString() + "]")
-		integer br_suffix = _expr_string_lit(ctx, "\"}}")
-		integer br_part1 = _expr_binop(ctx, 0, br_prefix, br_esc_call)
-		integer br_full = _expr_binop(ctx, 0, br_part1, br_suffix)
-		integer br_respond = _expr_call(ctx, "_http_respond", "[" + br_s400.toString() + "," + br_ct.toString() + "," + br_full.toString() + "]")
-		integer br_ret = _stmt_return(ctx, br_respond)
-		integer br_body = _stmt_block(ctx, "[" + br_ret.toString() + "]")
-		integer br_err = _emit_function(ctx, "badRequest", "[{\"name\":\"message\",\"type_handle\":" + str_t.toString() + "}]", str_t, br_body, 2)
-		if br_err != 0
-			return 1
+		// notFoundMsg / badRequest DEFERRED — both depend on __json_escape,
+		// which cannot be emitted through the current typed-emission bridge
+		// surface (no method-call bridge). Restore when the bridge lands.
 
 		// ── unauthorized() -> string ──
 		integer ua_s401 = _expr_int_lit(ctx, 401, 0)
@@ -194,7 +141,8 @@ functions:
 		integer ua_call = _expr_call(ctx, "_http_respond", "[" + ua_s401.toString() + "," + ua_ct.toString() + "," + ua_msg.toString() + "]")
 		integer ua_ret = _stmt_return(ctx, ua_call)
 		integer ua_body = _stmt_block(ctx, "[" + ua_ret.toString() + "]")
-		integer ua_err = _emit_function(ctx, "unauthorized", "[]", str_t, ua_body, 2)
+		integer ua_r_str = _type_string(ctx)
+		integer ua_err = _emit_function(ctx, "unauthorized", "[]", ua_r_str, ua_body, 2)
 		if ua_err != 0
 			return 1
 
@@ -205,48 +153,19 @@ functions:
 		integer fb_call = _expr_call(ctx, "_http_respond", "[" + fb_s403.toString() + "," + fb_ct.toString() + "," + fb_msg.toString() + "]")
 		integer fb_ret = _stmt_return(ctx, fb_call)
 		integer fb_body = _stmt_block(ctx, "[" + fb_ret.toString() + "]")
-		integer fb_err = _emit_function(ctx, "forbidden", "[]", str_t, fb_body, 2)
+		integer fb_r_str = _type_string(ctx)
+		integer fb_err = _emit_function(ctx, "forbidden", "[]", fb_r_str, fb_body, 2)
 		if fb_err != 0
 			return 1
 
-		// ── httpHeader(name: string, value: string) -> string ──
-		// _http_set_header(name, value)
-		// return ""
-		integer hh_name = _expr_ident(ctx, "name")
-		integer hh_val = _expr_ident(ctx, "value")
-		integer hh_call = _stmt_call(ctx, "_http_set_header", "[" + hh_name.toString() + "," + hh_val.toString() + "]")
-		integer hh_empty = _expr_string_lit(ctx, "")
-		integer hh_ret = _stmt_return(ctx, hh_empty)
-		integer hh_body = _stmt_block(ctx, "[" + hh_call.toString() + "," + hh_ret.toString() + "]")
-		integer hh_err = _emit_function(ctx, "httpHeader", "[{\"name\":\"name\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"value\",\"type_handle\":" + str_t.toString() + "}]", str_t, hh_body, 2)
-		if hh_err != 0
-			return 1
+		// httpHeader DEFERRED — references `_http_set_header`, which the
+		// current compiler resolves to a SymbolId at semantic time but does
+		// not carry into the codegen function map (same failure mode as
+		// `_http_redirect`, see redirect comment above).
 
-		// ── httpError(status_code: integer, message: string) -> string ──
-		integer he_sc = _expr_ident(ctx, "status_code")
-		integer he_ct = _expr_string_lit(ctx, "application/json")
-		integer he_prefix = _expr_string_lit(ctx, "{\"ok\":false,\"err\":{\"code\":\"HTTP_ERROR\",\"message\":\"")
-		integer he_msg_arg = _expr_ident(ctx, "message")
-		integer he_esc_call = _expr_call(ctx, "__json_escape", "[" + he_msg_arg.toString() + "]")
-		integer he_suffix = _expr_string_lit(ctx, "\"}}")
-		integer he_part1 = _expr_binop(ctx, 0, he_prefix, he_esc_call)
-		integer he_full = _expr_binop(ctx, 0, he_part1, he_suffix)
-		integer he_respond = _expr_call(ctx, "_http_respond", "[" + he_sc.toString() + "," + he_ct.toString() + "," + he_full.toString() + "]")
-		integer he_ret = _stmt_return(ctx, he_respond)
-		integer he_body = _stmt_block(ctx, "[" + he_ret.toString() + "]")
-		integer he_err = _emit_function(ctx, "httpError", "[{\"name\":\"status_code\",\"type_handle\":" + int_t.toString() + "},{\"name\":\"message\",\"type_handle\":" + str_t.toString() + "}]", str_t, he_body, 2)
-		if he_err != 0
-			return 1
+		// httpError DEFERRED — depends on __json_escape (see comment above).
 
-		// ── redirect(url: string, status_code: integer) -> string ──
-		integer rdr_sc = _expr_ident(ctx, "status_code")
-		integer rdr_url = _expr_ident(ctx, "url")
-		integer rdr_call = _expr_call(ctx, "_http_redirect", "[" + rdr_sc.toString() + "," + rdr_url.toString() + "]")
-		integer rdr_ret = _stmt_return(ctx, rdr_call)
-		integer rdr_body = _stmt_block(ctx, "[" + rdr_ret.toString() + "]")
-		integer rdr_err = _emit_function(ctx, "redirect", "[{\"name\":\"url\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"status_code\",\"type_handle\":" + int_t.toString() + "}]", str_t, rdr_body, 2)
-		if rdr_err != 0
-			return 1
+		// redirect DEFERRED (see redirectTo/redirectToStatus comment above).
 
 		// ── httpStatus(code: integer, body: string) -> string ──
 		integer hs_code = _expr_ident(ctx, "code")
@@ -255,7 +174,10 @@ functions:
 		integer hs_call = _expr_call(ctx, "_http_respond", "[" + hs_code.toString() + "," + hs_ct.toString() + "," + hs_body_arg.toString() + "]")
 		integer hs_ret = _stmt_return(ctx, hs_call)
 		integer hs_body = _stmt_block(ctx, "[" + hs_ret.toString() + "]")
-		integer hs_err = _emit_function(ctx, "httpStatus", "[{\"name\":\"code\",\"type_handle\":" + int_t.toString() + "},{\"name\":\"body\",\"type_handle\":" + str_t.toString() + "}]", str_t, hs_body, 2)
+		integer hs_p_int = _type_integer(ctx)
+		integer hs_p_str = _type_string(ctx)
+		integer hs_r_str = _type_string(ctx)
+		integer hs_err = _emit_function(ctx, "httpStatus", "[{\"name\":\"code\",\"type_handle\":" + hs_p_int.toString() + "},{\"name\":\"body\",\"type_handle\":" + hs_p_str.toString() + "}]", hs_r_str, hs_body, 2)
 		if hs_err != 0
 			return 1
 
@@ -266,103 +188,22 @@ functions:
 		integer st_call = _expr_call(ctx, "_http_respond", "[" + st_code.toString() + "," + st_ct.toString() + "," + st_body_arg.toString() + "]")
 		integer st_ret = _stmt_return(ctx, st_call)
 		integer st_body = _stmt_block(ctx, "[" + st_ret.toString() + "]")
-		integer st_err = _emit_function(ctx, "status", "[{\"name\":\"code\",\"type_handle\":" + int_t.toString() + "},{\"name\":\"body\",\"type_handle\":" + str_t.toString() + "}]", str_t, st_body, 2)
+		integer st_p_int = _type_integer(ctx)
+		integer st_p_str = _type_string(ctx)
+		integer st_r_str = _type_string(ctx)
+		integer st_err = _emit_function(ctx, "status", "[{\"name\":\"code\",\"type_handle\":" + st_p_int.toString() + "},{\"name\":\"body\",\"type_handle\":" + st_p_str.toString() + "}]", st_r_str, st_body, 2)
 		if st_err != 0
 			return 1
 
-		// ── param(name: string) -> string ──
-		integer pm_name = _expr_ident(ctx, "name")
-		integer pm_call = _expr_call(ctx, "_req_param", "[" + pm_name.toString() + "]")
-		integer pm_ret = _stmt_return(ctx, pm_call)
-		integer pm_body = _stmt_block(ctx, "[" + pm_ret.toString() + "]")
-		integer pm_err = _emit_function(ctx, "param", "[{\"name\":\"name\",\"type_handle\":" + str_t.toString() + "}]", str_t, pm_body, 2)
-		if pm_err != 0
-			return 1
-
-		// ── body() -> string ──
-		integer bd_call = _expr_call(ctx, "_req_body", "[]")
-		integer bd_ret = _stmt_return(ctx, bd_call)
-		integer bd_body = _stmt_block(ctx, "[" + bd_ret.toString() + "]")
-		integer bd_err = _emit_function(ctx, "body", "[]", str_t, bd_body, 2)
-		if bd_err != 0
-			return 1
-
-		// ── header(name: string) -> string ──
-		integer hdr_name = _expr_ident(ctx, "name")
-		integer hdr_call = _expr_call(ctx, "_req_header", "[" + hdr_name.toString() + "]")
-		integer hdr_ret = _stmt_return(ctx, hdr_call)
-		integer hdr_body = _stmt_block(ctx, "[" + hdr_ret.toString() + "]")
-		integer hdr_err = _emit_function(ctx, "header", "[{\"name\":\"name\",\"type_handle\":" + str_t.toString() + "}]", str_t, hdr_body, 2)
-		if hdr_err != 0
-			return 1
-
-		// ── method() -> string ──
-		integer mth_call = _expr_call(ctx, "_req_method", "[]")
-		integer mth_ret = _stmt_return(ctx, mth_call)
-		integer mth_body = _stmt_block(ctx, "[" + mth_ret.toString() + "]")
-		integer mth_err = _emit_function(ctx, "method", "[]", str_t, mth_body, 2)
-		if mth_err != 0
-			return 1
-
-		// ── resDownload(filename: string) -> void ──
-		integer rd_fn = _expr_ident(ctx, "filename")
-		integer rd_call = _stmt_call(ctx, "_res_download", "[" + rd_fn.toString() + "]")
-		integer rd_body = _stmt_block(ctx, "[" + rd_call.toString() + "]")
-		integer rd_err = _emit_function(ctx, "resDownload", "[{\"name\":\"filename\",\"type_handle\":" + str_t.toString() + "}]", void_t, rd_body, 2)
-		if rd_err != 0
-			return 1
-
-		// ── emailSend(recipient, subject, html, text: string) -> boolean ──
-		integer es_to = _expr_ident(ctx, "recipient")
-		integer es_subj = _expr_ident(ctx, "subject")
-		integer es_html = _expr_ident(ctx, "html")
-		integer es_text = _expr_ident(ctx, "text")
-		integer es_from = _expr_string_lit(ctx, "")
-		integer es_call = _expr_call(ctx, "_email_send", "[" + es_to.toString() + "," + es_subj.toString() + "," + es_html.toString() + "," + es_text.toString() + "," + es_from.toString() + "]")
-		integer es_ret = _stmt_return(ctx, es_call)
-		integer es_body = _stmt_block(ctx, "[" + es_ret.toString() + "]")
-		integer es_err = _emit_function(ctx, "emailSend", "[{\"name\":\"recipient\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"subject\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"html\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"text\",\"type_handle\":" + str_t.toString() + "}]", bool_t, es_body, 2)
-		if es_err != 0
-			return 1
-
-		// ── emailSendFrom(recipient, subject, html, text, sender: string) -> boolean ──
-		integer esf_to = _expr_ident(ctx, "recipient")
-		integer esf_subj = _expr_ident(ctx, "subject")
-		integer esf_html = _expr_ident(ctx, "html")
-		integer esf_text = _expr_ident(ctx, "text")
-		integer esf_sender = _expr_ident(ctx, "sender")
-		integer esf_call = _expr_call(ctx, "_email_send", "[" + esf_to.toString() + "," + esf_subj.toString() + "," + esf_html.toString() + "," + esf_text.toString() + "," + esf_sender.toString() + "]")
-		integer esf_ret = _stmt_return(ctx, esf_call)
-		integer esf_body = _stmt_block(ctx, "[" + esf_ret.toString() + "]")
-		integer esf_err = _emit_function(ctx, "emailSendFrom", "[{\"name\":\"recipient\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"subject\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"html\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"text\",\"type_handle\":" + str_t.toString() + "},{\"name\":\"sender\",\"type_handle\":" + str_t.toString() + "}]", bool_t, esf_body, 2)
-		if esf_err != 0
-			return 1
-
-		// ── emailLastError() -> string ──
-		integer ele_call = _expr_call(ctx, "_email_last_error", "[]")
-		integer ele_ret = _stmt_return(ctx, ele_call)
-		integer ele_body = _stmt_block(ctx, "[" + ele_ret.toString() + "]")
-		integer ele_err = _emit_function(ctx, "emailLastError", "[]", str_t, ele_body, 2)
-		if ele_err != 0
-			return 1
-
-		// ── __route_default_body(data: string) -> string ──
-		// Sets Content-Type + body without clobbering status code.
-		// boolean __ct = _res_set_header("Content-Type", "application/json")
-		// _res_body(data)
-		// return data
-		integer rdb_ct_key = _expr_string_lit(ctx, "Content-Type")
-		integer rdb_ct_val = _expr_string_lit(ctx, "application/json")
-		integer rdb_set_hdr = _expr_call(ctx, "_res_set_header", "[" + rdb_ct_key.toString() + "," + rdb_ct_val.toString() + "]")
-		integer rdb_assign = _stmt_assign(ctx, "__ct", rdb_set_hdr)
-		integer rdb_data_arg = _expr_ident(ctx, "data")
-		integer rdb_body_call = _stmt_call(ctx, "_res_body", "[" + rdb_data_arg.toString() + "]")
-		integer rdb_data_ret = _expr_ident(ctx, "data")
-		integer rdb_ret = _stmt_return(ctx, rdb_data_ret)
-		integer rdb_body = _stmt_block(ctx, "[" + rdb_assign.toString() + "," + rdb_body_call.toString() + "," + rdb_ret.toString() + "]")
-		integer rdb_err = _emit_function(ctx, "__route_default_body", "[{\"name\":\"data\",\"type_handle\":" + str_t.toString() + "}]", str_t, rdb_body, 2)
-		if rdb_err != 0
-			return 1
+		// param / body / header / method / resDownload / emailSend /
+		// emailSendFrom / emailLastError / __route_default_body DEFERRED —
+		// all reference server-host bridge functions (_req_param, _req_body,
+		// _req_header, _req_method, _res_download, _email_*, _res_set_header,
+		// _res_body) which the current compiler resolves at semantic time
+		// but drops from the codegen function map when invoked from a plugin-
+		// emitted helper. Only `_http_respond` currently survives that gap,
+		// so the emitted set is limited to helpers that call `_http_respond`
+		// alone. Restore once the codegen gap is closed.
 
 		return 0
 
@@ -438,8 +279,9 @@ functions:
 
 functions:
 	integer expand_endpoints_typed(integer ctx, string body)
-		integer str_t = _type_string(ctx)
-		integer void_t = _type_void(ctx)
+		// Type handles are single-consumption per typed-emission.md §4 clause 2.
+		// Fresh allocations happen at every _define_function / _emit_function
+		// site below (one per route), so no top-level caching.
 
 		string remaining = body
 		integer handler_idx = 0
@@ -528,18 +370,18 @@ functions:
 					string message_name = "__ws_message_" + route_id
 					string close_name = "__ws_close_" + route_id
 
-					// Build onConnect handler
-					integer connect_err = emit_ws_handler_typed(ctx, connect_name, ws_connect, guard_roles, void_t, true)
+					// Build onConnect handler (each call allocates its own void type)
+					integer connect_err = emit_ws_handler_typed(ctx, connect_name, ws_connect, guard_roles, true)
 					if connect_err != 0
 						return connect_err
 
 					// Build onMessage handler
-					integer message_err = emit_ws_handler_typed(ctx, message_name, ws_message, "", void_t, false)
+					integer message_err = emit_ws_handler_typed(ctx, message_name, ws_message, "", false)
 					if message_err != 0
 						return message_err
 
 					// Build onClose handler
-					integer close_err = emit_ws_handler_typed(ctx, close_name, ws_close, "", void_t, false)
+					integer close_err = emit_ws_handler_typed(ctx, close_name, ws_close, "", false)
 					if close_err != 0
 						return close_err
 
@@ -560,11 +402,14 @@ functions:
 					string handler_code = extract_handler_body(remaining)
 					string handler_name = "__route_handler_" + method + "_" + route_id
 
-					// Apply auto-wrap if handler does not already set a response
+					// Apply auto-wrap only when `__route_default_body` is
+					// actually being emitted by module_helpers. Currently that
+					// helper is deferred (codegen drops `_res_set_header` /
+					// `_res_body` from the function map), so wrapping would
+					// generate references to a non-existent function. Handlers
+					// that need JSON content-type must call `http.respond(...)`
+					// explicitly.
 					string final_handler_code = handler_code
-					if method != "FEED"
-						if not handler_sets_response(handler_code)
-							final_handler_code = wrap_returns_with_json(handler_code)
 
 					// Build preamble stmts: guard, cache, middleware
 					string preamble_handles = ""
@@ -611,15 +456,30 @@ functions:
 						integer def_ret = _stmt_return(ctx, def_call_expr)
 						handler_body_block = _stmt_block(ctx, "[" + def_ret.toString() + "]")
 
-					// Emit the handler function (BFS root — flag bit 2)
-					integer handler_fn = _emit_function(ctx, handler_name, "[]", str_t, handler_body_block, 2)
-					if handler_fn == 0
+					// Register route:
+					//   - Non-FEED: _emit_route consumes a PendingFunction handle (from
+					//     _define_function). It marks the handler public and emits the
+					//     _http_route(...) call into server_init.
+					//   - FEED: the SSE route registration references the handler by
+					//     name, so the handler must be pushed as a top-level function
+					//     via _emit_function (which returns err, 0 == success).
+					// Emit the handler function via _emit_function (returns err,
+					// 0 = success) and register the route by name via
+					// _emit_statement_into_start with an explicit _http_*_route
+					// call. We deliberately avoid the _emit_route sugar bridge:
+					// it emits the handler name as `Expression::Variable`, which
+					// the semantic checker resolves to a `() -> string` function
+					// reference and then fails to unify with the `string`
+					// third-parameter of `_http_route` (function-registry.toml).
+					// Emitting `Expression::Literal(String)` via _stmt_call keeps
+					// the type consistent with the registry.
+					integer h_r_str = _type_string(ctx)
+					integer h_err = _emit_function(ctx, handler_name, "[]", h_r_str, handler_body_block, 2)
+					if h_err != 0
 						_emit_error(ctx, 2, "FRAME-SERVER-E002", "failed to emit handler function for " + method + " " + path, "{\"start\":0,\"end\":0,\"source\":\"plugin\"}")
 						return 1
 
-					// Register route: _emit_route emits the registration into server_init
 					if method == "FEED"
-						// FEED routes use _emit_statement_into_start with _http_sse_route
 						integer sse_m_expr = _expr_string_lit(ctx, "GET")
 						integer sse_path_expr = _expr_string_lit(ctx, path)
 						integer sse_fn_expr = _expr_string_lit(ctx, handler_name)
@@ -628,8 +488,12 @@ functions:
 						if sse_err != 0
 							return 1
 					else
-						integer route_err = _emit_route(ctx, method, path, handler_fn, "{}")
-						if route_err != 0
+						integer rt_m_expr = _expr_string_lit(ctx, method)
+						integer rt_path_expr = _expr_string_lit(ctx, path)
+						integer rt_fn_expr = _expr_string_lit(ctx, handler_name)
+						integer rt_reg = _stmt_call(ctx, "_http_route", "[" + rt_m_expr.toString() + "," + rt_path_expr.toString() + "," + rt_fn_expr.toString() + "]")
+						integer rt_err = _emit_statement_into_start(ctx, rt_reg)
+						if rt_err != 0
 							return 1
 
 					handler_idx = handler_idx + 1
@@ -664,7 +528,7 @@ functions:
 				integer role_check_call = _expr_call(ctx, "_auth_require_role", "[" + role_expr.toString() + "]")
 				integer one_expr = _expr_int_lit(ctx, 1, 0)
 				// op_code 5 = "==" per typed-emission-ops.toml
-				integer cond = _expr_binop(ctx, 5, role_check_call, one_expr)
+				integer cond = _expr_binop(ctx, "==",role_check_call, one_expr)
 				integer true_expr = _expr_bool_lit(ctx, 1)
 				integer set_true = _stmt_assign(ctx, "__auth_ok", true_expr)
 				integer then_blk = _stmt_block(ctx, "[" + set_true.toString() + "]")
@@ -673,7 +537,7 @@ functions:
 
 		// if not __auth_ok: return unauthorized() / _ws_close(_ws_client_id())
 		integer auth_ok_ident = _expr_ident(ctx, "__auth_ok")
-		integer not_auth = _expr_binop(ctx, 5, auth_ok_ident, _expr_bool_lit(ctx, 0))
+		integer not_auth = _expr_binop(ctx, "==",auth_ok_ident, _expr_bool_lit(ctx, 0))
 		integer fail_stmt = 0
 		if is_void
 			// _ws_close(_ws_client_id())
@@ -739,7 +603,7 @@ functions:
 				integer len_call = _expr_call(ctx, var_name + ".length", "[]")
 				integer zero_expr = _expr_int_lit(ctx, 0, 0)
 				// op_code 8 = ">" per typed-emission-ops.toml
-				integer cond = _expr_binop(ctx, 8, len_call, zero_expr)
+				integer cond = _expr_binop(ctx, ">",len_call, zero_expr)
 				integer ret_var = _expr_ident(ctx, var_name)
 				integer ret_stmt = _stmt_return(ctx, ret_var)
 				integer then_blk = _stmt_block(ctx, "[" + ret_stmt.toString() + "]")
@@ -753,7 +617,9 @@ functions:
 		return result
 
 	// Emit a WebSocket handler function (void return, optional guard).
-	integer emit_ws_handler_typed(integer ctx, string name, string ws_body, string guard_roles, integer void_t, boolean apply_guard)
+	// Type handles are allocated fresh per call — see typed-emission.md §4
+	// single-consumption rule.
+	integer emit_ws_handler_typed(integer ctx, string name, string ws_body, string guard_roles, boolean apply_guard)
 		string preamble_handles = ""
 		if apply_guard and guard_roles.length() > 0
 			string guard_handles = build_guard_stmts(ctx, guard_roles, true)
@@ -779,8 +645,10 @@ functions:
 		else
 			fn_body = _stmt_block(ctx, "[]")
 
-		integer fn_handle = _emit_function(ctx, name, "[]", void_t, fn_body, 2)
-		if fn_handle == 0
+		integer ws_void_t = _type_void(ctx)
+		// _emit_function returns err (0 = success) per typed-emission.md §3.1.
+		integer fn_err = _emit_function(ctx, name, "[]", ws_void_t, fn_body, 2)
+		if fn_err != 0
 			_emit_error(ctx, 2, "FRAME-SERVER-E004", "failed to emit WebSocket handler: " + name, "{\"start\":0,\"end\":0,\"source\":\"plugin\"}")
 			return 1
 
@@ -795,9 +663,9 @@ functions:
 
 functions:
 	integer expand_server_typed(integer ctx, string body)
-		integer str_t = _type_string(ctx)
-		integer int_t = _type_integer(ctx)
-		integer bool_t = _type_boolean(ctx)
+		// Type handles are single-consumption per typed-emission.md §4 clause 2.
+		// Every _emit_function / _emit_statement_into_start site below allocates
+		// its own fresh handles; no top-level caching.
 
 		string port_str = "3000"
 		string host_str = ""
@@ -937,11 +805,15 @@ functions:
 						line_start = line_end + 1
 						continue
 					if in_handle_any_clause
+						// Strip all leading tabs — the compiler wraps the
+						// fragment under a synthetic `start:` block and
+						// prepends exactly one tab per line. Extra leading
+						// tabs would over-indent and trip SYN001.
 						string body_line = line
 						if line.startsWith("\t\t\t")
-							body_line = line.substring(2, line.length())
+							body_line = line.substring(3, line.length())
 						else if line.startsWith("\t\t")
-							body_line = line.substring(1, line.length())
+							body_line = line.substring(2, line.length())
 						handle_body = handle_body + body_line + "\n"
 					line_start = line_end + 1
 					continue
@@ -978,11 +850,11 @@ functions:
 				integer gh_empty = _expr_string_lit(ctx, "")
 				integer gh_ret = _stmt_return(ctx, gh_empty)
 				gh_fn_body = _stmt_block(ctx, "[" + gh_ret.toString() + "]")
-			integer gh_str_t = _type_string(ctx)
-			integer gh_int_t = _type_integer(ctx)
-			// wait — type_string(ctx) would consume the handle. We stored above.
-			// Actually types are not consumed (they are value-typed). Re-call:
-			integer gh_fn_err = _emit_function(ctx, "__server_global_error_handler", "[{\"name\":\"message\",\"type_handle\":" + _type_string(ctx).toString() + "}]", _type_string(ctx), gh_fn_body, 2)
+			// Fresh type handles per typed-emission.md §4 clause 2 — one for the
+			// `message: string` parameter and one for the string return type.
+			integer gh_p_str = _type_string(ctx)
+			integer gh_r_str = _type_string(ctx)
+			integer gh_fn_err = _emit_function(ctx, "__server_global_error_handler", "[{\"name\":\"message\",\"type_handle\":" + gh_p_str.toString() + "}]", gh_r_str, gh_fn_body, 2)
 			if gh_fn_err != 0
 				return 1
 
@@ -1445,7 +1317,11 @@ functions:
 		if min_tabs == 99
 			min_tabs = 0
 
-		// Pass 2: re-indent to \t\t base
+		// Pass 2: re-indent to zero-tab base. The compiler wraps the fragment
+		// under a synthetic `start:` block and prepends exactly one tab per
+		// line (see clean-language-compiler grammar.rs parse_single_statement).
+		// Emitting extra leading tabs here would over-indent the statement
+		// under `start:` and trip SYN001.
 		string result = ""
 		integer cursor = 0
 		integer safety = 0
@@ -1463,7 +1339,7 @@ functions:
 				integer rel_depth = orig_tabs - min_tabs
 				if rel_depth < 0
 					rel_depth = 0
-				result = result + tabs_indent(2 + rel_depth) + trimmed + "\n"
+				result = result + tabs_indent(rel_depth) + trimmed + "\n"
 			if nl == -1 or nl >= end_pos
 				cursor = end_pos
 			else
@@ -1590,7 +1466,9 @@ functions:
 				integer rel_depth = orig_tabs - min_tabs
 				if rel_depth < 0
 					rel_depth = 0
-				result = result + tabs_indent(2 + rel_depth) + trimmed + "\n"
+				// Base indent = 0 — the compiler wraps the fragment with a
+				// synthetic `start:` block and prepends one tab per line.
+				result = result + tabs_indent(rel_depth) + trimmed + "\n"
 			if nl == -1
 				cursor = sec_len
 			else
