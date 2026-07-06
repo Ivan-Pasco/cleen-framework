@@ -1490,6 +1490,7 @@ functions:
 		string source = expand_html_block(attrs_json, body)
 		integer stmt_h = _emit_stmt_from_source(ctx, source, 0)
 		if stmt_h == 0
+			plugin_error(ctx, "DBG-HTML-SRC", source)
 			return plugin_error(ctx, "FRAME-UI-E001", "expand_html_block_stub: parse failed")
 		integer err = _emit_statement_inline(ctx, stmt_h)
 		if err != 0

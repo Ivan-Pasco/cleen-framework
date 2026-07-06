@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.ui"
-version = "3.2.0"
-description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.2.0: expand_html_block_stub + expand_ui_stub now route emitted stmt handles through Amendment 11 _emit_statement_inline (§3.5.1), closing the block-body inline-splice gap. Requires compiler 0.33.0+."
+version = "3.2.1"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.2.1: probe build — emits generated Clean source in DBG-HTML-SRC diagnostic when parse fails, to isolate #01e8ae402cd3 nested-multi-line generator bug. Requires compiler 0.33.0+."
 author = "Clean Language Team"
 license = "MIT"
 
