@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.ui"
-version = "3.1.0"
-description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.1.0: assemble + process_html + module emitters routed through typed bridges (_emit_class_full / _emit_function / _emit_state_block) instead of source-string pass-through."
+version = "3.2.0"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.2.0: expand_html_block_stub + expand_ui_stub now route emitted stmt handles through Amendment 11 _emit_statement_inline (§3.5.1), closing the block-body inline-splice gap. Requires compiler 0.33.0+."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -13,7 +13,7 @@ license = "MIT"
 # Amendment 3 (§3.13 _emit_class_full) collapses the component/page class
 # envelopes; Amendment 10 (§3.18 _emit_class_methods_from_spec via extended
 # class-spec method-entry union) covers accessor scaffolding where applicable.
-min_compiler_version = "0.30.423"
+min_compiler_version = "0.33.0"
 
 # Plugin Contracts v2 — foundation/spec/plugins/contracts/runtime-abi.md §4.
 # Floor declaration. Stamped into plugin.wasm's clean.abi_version custom
@@ -613,4 +613,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.31.5"
+built_with_compiler = "0.33.0"

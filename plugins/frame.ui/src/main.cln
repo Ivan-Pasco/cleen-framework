@@ -103,6 +103,7 @@ external:
 	integer _emit_class_full(integer ctx, integer class_spec_handle_or_lp, integer flags)
 	integer _emit_state_block(integer ctx, string fields_json)
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
+	integer _emit_statement_inline(integer ctx, integer stmt_handle)
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
 	// ---- AST type/expression constructors (§3.9, §3.10) — needed for module-scope
@@ -1487,7 +1488,12 @@ functions:
 	integer expand_html_block_stub(integer ctx, string attrs_json, string body)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_HTML", "expand_html_block")
 		string source = expand_html_block(attrs_json, body)
-		_emit_stmt_from_source(ctx, source, 0)
+		integer stmt_h = _emit_stmt_from_source(ctx, source, 0)
+		if stmt_h == 0
+			return plugin_error(ctx, "FRAME-UI-E001", "expand_html_block_stub: parse failed")
+		integer err = _emit_statement_inline(ctx, stmt_h)
+		if err != 0
+			return plugin_error(ctx, "FRAME-UI-E002", "expand_html_block_stub: inline emit failed")
 		_ctx_clear_error(ctx)
 		return 0
 
@@ -1498,7 +1504,12 @@ functions:
 		list<string> lines = split_lines(body)
 		string source = render_ui_tree(lines, 0, -1)
 		if source.length() > 0
-			_emit_stmt_from_source(ctx, source, 0)
+			integer stmt_h = _emit_stmt_from_source(ctx, source, 0)
+			if stmt_h == 0
+				return plugin_error(ctx, "FRAME-UI-E003", "expand_ui_stub: parse failed")
+			integer err = _emit_statement_inline(ctx, stmt_h)
+			if err != 0
+				return plugin_error(ctx, "FRAME-UI-E004", "expand_ui_stub: inline emit failed")
 		_ctx_clear_error(ctx)
 		return 0
 
