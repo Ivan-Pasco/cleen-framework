@@ -1488,9 +1488,13 @@ functions:
 	integer expand_html_block_stub(integer ctx, string attrs_json, string body)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_HTML", "expand_html_block")
 		string source = expand_html_block(attrs_json, body)
-		integer stmt_h = _emit_stmt_from_source(ctx, source, 0)
+		// Indent each line with a tab so the compiler's fragment parser sees
+		// the statements as belonging to a single block body, not top-level
+		// declarations. Fixes #01e8ae402cd3 nested-multi-line generator bug.
+		string indented = indent_source(source)
+		integer stmt_h = _emit_stmt_from_source(ctx, indented, 0)
 		if stmt_h == 0
-			plugin_error(ctx, "DBG-HTML-SRC", source)
+			plugin_error(ctx, "DBG-HTML-SRC", indented)
 			return plugin_error(ctx, "FRAME-UI-E001", "expand_html_block_stub: parse failed")
 		integer err = _emit_statement_inline(ctx, stmt_h)
 		if err != 0
@@ -1505,7 +1509,8 @@ functions:
 		list<string> lines = split_lines(body)
 		string source = render_ui_tree(lines, 0, -1)
 		if source.length() > 0
-			integer stmt_h = _emit_stmt_from_source(ctx, source, 0)
+			string indented = indent_source(source)
+			integer stmt_h = _emit_stmt_from_source(ctx, indented, 0)
 			if stmt_h == 0
 				return plugin_error(ctx, "FRAME-UI-E003", "expand_ui_stub: parse failed")
 			integer err = _emit_statement_inline(ctx, stmt_h)
@@ -1718,6 +1723,28 @@ functions:
 		result = result.replace("\t", " ")
 		result = result.replace("{", "\\{")
 		result = result.replace("}", "\\}")
+		return result
+
+	// Prepend a tab to every non-empty line so the compiler's fragment parser
+	// treats the source as a block body rather than top-level declarations.
+	// Required by _emit_stmt_from_source when the fragment contains multiple
+	// statements — see #01e8ae402cd3.
+	string indent_source(string src)
+		string result = ""
+		string remaining = src
+		while remaining.length() > 0
+			integer nl = remaining.indexOf("\n")
+			string line = ""
+			if nl == -1
+				line = remaining
+				remaining = ""
+			else
+				line = remaining.substring(0, nl)
+				remaining = remaining.substring(nl + 1, remaining.length())
+			if line.length() > 0
+				result = result + "\t" + line + "\n"
+			else
+				result = result + "\n"
 		return result
 
 	integer count_chain_pluses(string chain)

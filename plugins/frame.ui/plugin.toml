@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.ui"
-version = "3.2.1"
-description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.2.1: probe build — emits generated Clean source in DBG-HTML-SRC diagnostic when parse fails, to isolate #01e8ae402cd3 nested-multi-line generator bug. Requires compiler 0.33.0+."
+version = "3.2.2"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.2.2: fix #01e8ae402cd3 — expand_html_block_stub and expand_ui_stub now tab-indent the generated Clean source before _emit_stmt_from_source, so the compiler's fragment parser treats multi-statement source as a block body rather than top-level declarations. Requires compiler 0.33.0+."
 author = "Clean Language Team"
 license = "MIT"
 
