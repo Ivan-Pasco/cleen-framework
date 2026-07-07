@@ -1,12 +1,12 @@
 [plugin]
 name = "frame.auth"
-version = "2.4.0"
-description = "Authentication and authorization plugin — v2.4.0: password reset tokens. Adds auth.createResetToken(userId, ttlSeconds) and auth.consumeResetToken(token) as direct 1:1 aliases over the clean-server 1.9.71 bridges _auth_create_reset_token / _auth_consume_reset_token. The server stores only sha256(token) under an in-memory PasswordResets map and enforces atomic single-use consumption under the SessionStore write lock. Closes FRAME-AUTH-RESET-TOKEN-BRIDGES-MISSING (fingerprint 22e30f7da2ad). — v2.3.0: single-use refresh-token rotation via _jwt_refresh_and_rotate (clean-server 1.9.70). jwt.sign() injects a random jti (16 bytes hex via _crypto_random_hex) on every token so rotation can detect replay. Closes FRAME-AUTH-REFRESH-TOKEN-NO-ROTATION (fingerprint 8c3b4a8103ad). Spec: AUTH-J007 / AUTH-J009 (frame-auth-semantics.md)."
+version = "2.4.1"
+description = "Authentication and authorization plugin — v2.4.1: user-facing auth.jwt.sign/verify/refresh now resolve via maps_to_helper (compiler 0.33.14+) to the plugin-emitted jwt_sign/jwt_verify/jwt_refresh helpers, closing FRAME-AUTH-JWT-HELPERS-UNREACHABLE (fingerprint 7eb619a1d49e). — v2.4.0: password reset tokens via auth.createResetToken(userId, ttlSeconds) / auth.consumeResetToken(token), direct 1:1 aliases over clean-server 1.9.71 bridges _auth_create_reset_token / _auth_consume_reset_token; server stores only sha256(token) under in-memory PasswordResets map with atomic single-use consumption under SessionStore write lock. Closes FRAME-AUTH-RESET-TOKEN-BRIDGES-MISSING (fingerprint 22e30f7da2ad). — v2.3.0: single-use refresh-token rotation via _jwt_refresh_and_rotate (clean-server 1.9.70); jwt.sign() injects a random jti (16 bytes hex via _crypto_random_hex) on every token so rotation can detect replay. Closes FRAME-AUTH-REFRESH-TOKEN-NO-ROTATION (fingerprint 8c3b4a8103ad). Spec: AUTH-J007 / AUTH-J009 (frame-auth-semantics.md)."
 author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-min_compiler_version = "0.30.416"
+min_compiler_version = "0.33.14"
 # Plugin Contracts v3 — typed-emission.md §2.1.
 # expansion_version = "3.0.0" opts into typed emission. Atomic migration:
 # every block and lifecycle slot is a v3 typed variant in this release.
@@ -160,9 +160,14 @@ functions = [
   { name = "auth.session.setCookie", signature = "auth.session.setCookie(sessionId)", description = "Set session cookie on response" },
   { name = "auth.session.get", signature = "auth.session.get()", description = "Get current session data (checks expiry)", maps_to = "_session_get", params = [], returns = "string" },
   { name = "auth.session.destroy", signature = "auth.session.destroy()", description = "End session and clear cookie", maps_to = "_auth_clear_session", params = [], returns = "boolean" },
-  { name = "auth.jwt.sign", signature = "auth.jwt.sign(claims)", description = "Sign JWT with configured secret and algorithm" },
-  { name = "auth.jwt.verify", signature = "auth.jwt.verify(token)", description = "Verify JWT and return payload or empty string" },
-  { name = "auth.jwt.refresh", signature = "auth.jwt.refresh(refreshToken)", description = "Refresh a JWT token" },
+  # auth.jwt.* wrappers resolve to the plugin-emitted helpers `jwt_sign`, `jwt_verify`,
+  # `jwt_refresh` (emitted by expand_block_typed → build_jwt_sign/verify/refresh at
+  # src/main.cln:1211, 1332, 1390). The helpers read the auth-block-configured
+  # __jwt_secret / __jwt_alg locals and delegate to the _jwt_* bridges. Requires
+  # compiler 0.33.14+ maps_to_helper support (see foundation team prompt c6682df8).
+  { name = "auth.jwt.sign",    signature = "auth.jwt.sign(claims)",         description = "Sign JWT with configured secret and algorithm",  maps_to_helper = "jwt_sign",    params = ["string"], returns = "string" },
+  { name = "auth.jwt.verify",  signature = "auth.jwt.verify(token)",        description = "Verify JWT and return payload or empty string",  maps_to_helper = "jwt_verify",  params = ["string"], returns = "string" },
+  { name = "auth.jwt.refresh", signature = "auth.jwt.refresh(refreshToken)", description = "Refresh a JWT refresh token (single-use rotation)", maps_to_helper = "jwt_refresh", params = ["string"], returns = "string" },
   { name = "auth.hashPassword", signature = "auth.hashPassword(password)", description = "Hash password with Argon2id", maps_to = "_crypto_hash_password", params = ["string"], returns = "string" },
   { name = "auth.verifyPassword", signature = "auth.verifyPassword(password, hash)", description = "Verify password against Argon2id hash", maps_to = "_crypto_verify_password", params = ["string", "string"], returns = "boolean" },
 
@@ -280,4 +285,4 @@ anti_pattern = "no CSRF protection on POST endpoints — a third-party site can 
 example = "patterns/csrf-protection.cln"
 
 [build]
-built_with_compiler = "0.33.12"
+built_with_compiler = "0.33.14"

@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.ui"
-version = "3.2.3"
-description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.2.3: reverts the failed 3.2.1/3.2.2 attempts at fingerprint #01e8ae402cd3. Investigation revealed the root cause is compiler-side: ErrorRecoveringParser (used by _emit_stmt_from_source) rejects Clean reserved words (build, state, screen, source, spec, intent, rules, ...) as identifiers, while SpecificationParser (used by cln check on user files) accepts them. Any html: block whose interpolation extracts a user identifier that collides with a reserved word fails. Deferred to a compiler fix — see follow-up fingerprint. Requires compiler 0.33.0+."
+version = "3.2.4"
+description = "HTML-first UI framework plugin - processes HTML pages with custom tags, event handling, hydration, and component definitions. v3.2.4: fixes FRAME-UI-HTML-INTERP-CORRUPTION-AND-WS-DROP (fingerprint 95bdb1bb4b890c7a). Two changes in expand_html_block: (1) strip_block_indent no longer .trim()s the indent-stripped substring, preserving legitimate inter-fragment whitespace between {ident} and neighboring literal text when lines are joined with a single-space separator; (2) generated html: helpers now `return string.concat(__html, \"\")` instead of `return __html`, forcing a fresh string allocation per call so that helpers invoked inside `iterate` cannot corrupt previously-returned strings via shared scratch-buffer reuse. — v3.2.3: reverts the failed 3.2.1/3.2.2 attempts at fingerprint #01e8ae402cd3. Root cause is compiler-side; deferred. Requires compiler 0.33.0+."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -613,4 +613,4 @@ anti_pattern = "triggering the destructive action immediately on click — alway
 example = "patterns/modal-confirm.cln"
 
 [build]
-built_with_compiler = "0.33.12"
+built_with_compiler = "0.33.14"

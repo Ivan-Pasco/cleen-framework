@@ -2370,7 +2370,12 @@ functions:
 					stmts = stmts.replace("__html", target)
 				result = result + stmts
 		if var_name == ""
-			result = result + "return __html\n"
+			// FRAME-UI-HTML-INTERP-CORRUPTION-AND-WS-DROP (fp 95bdb1bb4b890c7a):
+			// return a fresh string, not the local scratch buffer. When card() is
+			// called inside iterate the caller may retain a reference to `__html`;
+			// concat-with-empty forces a snapshot allocation so subsequent calls'
+			// mutations of `__html` cannot corrupt previously-returned strings.
+			result = result + "return string.concat(__html, \"\")\n"
 		return result
 
 	string html_block_to_code(string html)
@@ -2839,8 +2844,14 @@ functions:
 				if first == false
 					result = result + " "
 				first = false
+				// FRAME-UI-HTML-INTERP-CORRUPTION-AND-WS-DROP (fp 95bdb1bb4b890c7a):
+				// Do NOT .trim() the content-side substring — that drops legitimate
+				// spaces between an `{ident}` at end-of-line and following literal
+				// text when lines are joined with a single space separator. The
+				// indent-stripped substring is already free of leading tabs; any
+				// remaining whitespace is intentional inter-fragment spacing.
 				if line.length() > min_indent
-					result = result + line.substring(min_indent, line.length()).trim()
+					result = result + line.substring(min_indent, line.length())
 				else
 					result = result + line.trim()
 		return result
