@@ -1,6 +1,6 @@
 // frame.auth plugin - Authentication and Authorization DSL
 // Provides: auth config, session handling, JWT, roles/permissions, CSRF
-// Version: 2.2.0
+// Version: 2.3.0
 // ABI: Plugin Contracts v3 — typed AST emission (typed-emission.md)
 
 // ============================================================================
@@ -36,6 +36,10 @@ external:
 	// Declaration emitters (§3.12, §3.5)
 	integer _emit_helpers_batch(integer ctx, integer spec_handle_or_lp, integer flags)
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
+	// Amendment 11 (§3.11) — source-string statement emission. Used to build
+	// helper bodies that need `.method()` calls or `+` operator machinery which
+	// the batch expression builder cannot express directly.
+	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	// Diagnostics (§5)
 	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
 
@@ -331,6 +335,14 @@ functions:
 		err = _batch_arrayPush(ctx, fns_arr, fn_h)
 		if err != 0
 			return plugin_error(ctx, "FRAME-AUTH-E002", "arrayPush jwt_refresh failed")
+
+		// Internal helper used by jwt_sign (builds payload JSON with jti).
+		fn_h = build_jwt_build_payload_helper(ctx)
+		if fn_h == 0
+			return plugin_error(ctx, "FRAME-AUTH-E002", "build_jwt_build_payload_helper failed")
+		err = _batch_arrayPush(ctx, fns_arr, fn_h)
+		if err != 0
+			return plugin_error(ctx, "FRAME-AUTH-E002", "arrayPush __auth_build_jwt_payload failed")
 
 		fn_h = build_hash_password(ctx)
 		if fn_h == 0
@@ -1193,6 +1205,9 @@ functions:
 		return _batch_func(ctx, "session_destroy", params, "boolean", body_arr)
 
 	// 5. jwt_sign(claims: string) -> string
+	// Emits: iat/exp/jti + payload built by __auth_build_jwt_payload helper (see #19).
+	// jti is a per-token unique id required by _jwt_refresh_and_rotate for replay
+	// detection (AUTH-J009). 16 random bytes -> 32-char hex string (128 bits entropy).
 	integer build_jwt_sign(integer ctx)
 		integer params = one_param(ctx, "claims", "string")
 		if params == 0
@@ -1230,12 +1245,26 @@ functions:
 		if p2 != 0
 			return 0
 
-		// string payload = __auth_build_jwt_payload(iat, exp, claims)
+		// string jti = _crypto_random_hex(16)   // 128 bits -> 32 hex chars
+		integer jti_call = call1_int(ctx, "_crypto_random_hex", 16)
+		if jti_call == 0
+			return 0
+		integer s_jti = _batch_stmtAssign(ctx, "jti", jti_call)
+		if s_jti == 0
+			return 0
+		integer p_jti = _batch_arrayPush(ctx, body_arr, s_jti)
+		if p_jti != 0
+			return 0
+
+		// string payload = __auth_build_jwt_payload(iat, exp, jti, claims)
 		integer bpld_e_iat = _batch_ident(ctx, "iat")
 		if bpld_e_iat == 0
 			return 0
 		integer bpld_e_exp = _batch_ident(ctx, "exp")
 		if bpld_e_exp == 0
+			return 0
+		integer bpld_e_jti = _batch_ident(ctx, "jti")
+		if bpld_e_jti == 0
 			return 0
 		integer bpld_e_claims = _batch_ident(ctx, "claims")
 		if bpld_e_claims == 0
@@ -1248,6 +1277,9 @@ functions:
 			return 0
 		integer bpa2 = _batch_arrayPush(ctx, bpld_args, bpld_e_exp)
 		if bpa2 != 0
+			return 0
+		integer bpa_jti = _batch_arrayPush(ctx, bpld_args, bpld_e_jti)
+		if bpa_jti != 0
 			return 0
 		integer bpa3 = _batch_arrayPush(ctx, bpld_args, bpld_e_claims)
 		if bpa3 != 0
@@ -1341,6 +1373,20 @@ functions:
 		return _batch_func(ctx, "jwt_verify", params, "string", body_arr)
 
 	// 7. jwt_refresh(refreshToken: string) -> string
+	//
+	// AUTH-J007 / AUTH-J009 (foundation/spec/plugins/frame-auth-semantics.md):
+	// refresh MUST detect replay of a consumed refresh token. Verify+re-sign in
+	// pure Clean cannot do this atomically. Delegated to server bridge:
+	//
+	//   _jwt_refresh_and_rotate(token, secret, algorithm, new_ttl_seconds) -> string
+	//
+	// Semantics (clean-server 1.9.70+): atomically verifies signature+expiry,
+	// extracts jti, marks it consumed under the SessionStore write lock, signs a
+	// new token preserving original claims but with fresh jti / iat / exp.
+	// Replay of a consumed jti or missing-jti token returns empty string.
+	//
+	// Because the rotate bridge also does verify, the plugin no longer needs the
+	// early verify+guard pattern.
 	integer build_jwt_refresh(integer ctx)
 		integer params = one_param(ctx, "refreshToken", "string")
 		if params == 0
@@ -1350,7 +1396,7 @@ functions:
 		if body_arr == 0
 			return 0
 
-		// string claims = _jwt_verify(refreshToken, __jwt_secret, __jwt_alg)
+		// return _jwt_refresh_and_rotate(refreshToken, __jwt_secret, __jwt_alg, __jwt_refresh_ttl * 60)
 		integer rt_e = _batch_ident(ctx, "refreshToken")
 		if rt_e == 0
 			return 0
@@ -1360,57 +1406,93 @@ functions:
 		integer a_e = _batch_ident(ctx, "__jwt_alg")
 		if a_e == 0
 			return 0
-		integer jra = _batch_arrayNew(ctx)
-		if jra == 0
+		integer new_ttl_e = mul_ident_int(ctx, "__jwt_refresh_ttl", 60)
+		if new_ttl_e == 0
 			return 0
-		integer jrp1 = _batch_arrayPush(ctx, jra, rt_e)
-		if jrp1 != 0
+
+		integer rr_args = _batch_arrayNew(ctx)
+		if rr_args == 0
 			return 0
-		integer jrp2 = _batch_arrayPush(ctx, jra, s_e)
-		if jrp2 != 0
+		integer rp1 = _batch_arrayPush(ctx, rr_args, rt_e)
+		if rp1 != 0
 			return 0
-		integer jrp3 = _batch_arrayPush(ctx, jra, a_e)
-		if jrp3 != 0
+		integer rp2 = _batch_arrayPush(ctx, rr_args, s_e)
+		if rp2 != 0
 			return 0
-		integer verify_call = _batch_call(ctx, "_jwt_verify", jra)
-		if verify_call == 0
+		integer rp3 = _batch_arrayPush(ctx, rr_args, a_e)
+		if rp3 != 0
 			return 0
-		integer s1 = _batch_stmtAssign(ctx, "claims", verify_call)
-		if s1 == 0
+		integer rp4 = _batch_arrayPush(ctx, rr_args, new_ttl_e)
+		if rp4 != 0
 			return 0
-		integer p1 = _batch_arrayPush(ctx, body_arr, s1)
+		integer rotate_call = _batch_call(ctx, "_jwt_refresh_and_rotate", rr_args)
+		if rotate_call == 0
+			return 0
+		integer ret_s = _batch_stmtReturn(ctx, rotate_call)
+		if ret_s == 0
+			return 0
+		integer p1 = _batch_arrayPush(ctx, body_arr, ret_s)
 		if p1 != 0
 			return 0
 
-		// if claims == "" { return "" }
-		integer cond1 = eq_ident_str(ctx, "claims", "")
-		if cond1 == 0
-			return 0
-		integer ret_es = ret_empty_str(ctx)
-		if ret_es == 0
-			return 0
-		integer then1 = body1(ctx, ret_es)
-		if then1 == 0
-			return 0
-		integer if1 = if_no_else(ctx, cond1, then1)
-		if if1 == 0
-			return 0
-		integer p2 = _batch_arrayPush(ctx, body_arr, if1)
-		if p2 != 0
-			return 0
-
-		// return jwt_sign(claims)
-		integer jsc_e = call1_ident(ctx, "jwt_sign", "claims")
-		if jsc_e == 0
-			return 0
-		integer ret_s = _batch_stmtReturn(ctx, jsc_e)
-		if ret_s == 0
-			return 0
-		integer p3 = _batch_arrayPush(ctx, body_arr, ret_s)
-		if p3 != 0
-			return 0
-
 		return _batch_func(ctx, "jwt_refresh", params, "string", body_arr)
+
+	// 7b. __auth_build_jwt_payload(iat, exp, jti, claims) -> string
+	//
+	// Emits the Clean helper that assembles the JWT payload JSON. The four inputs
+	// are already validated by callers (jwt_sign) — `iat`/`exp` are integers,
+	// `jti` is 32 hex chars from _crypto_random_hex(16), `claims` is caller-supplied
+	// JSON. `claims` is NOT re-escaped: callers pass a well-formed JSON object.
+	//
+	// Emitted as: (composed via _emit_stmt_from_source so the runtime `+` /
+	// `.toString()` machinery is used — the batch expression builder has no
+	// method-call variant).
+	//
+	//   string __auth_build_jwt_payload(integer iat, integer exp, string jti, string claims)
+	//       return "{\"iat\":" + iat.toString() + ",\"exp\":" + exp.toString()
+	//              + ",\"jti\":\"" + jti + "\",\"claims\":" + claims + "}"
+	integer build_jwt_build_payload_helper(integer ctx)
+		integer params = _batch_arrayNew(ctx)
+		if params == 0
+			return 0
+		integer p_iat = _batch_param(ctx, "iat", "integer")
+		if p_iat == 0
+			return 0
+		integer pp1 = _batch_arrayPush(ctx, params, p_iat)
+		if pp1 != 0
+			return 0
+		integer p_exp = _batch_param(ctx, "exp", "integer")
+		if p_exp == 0
+			return 0
+		integer pp2 = _batch_arrayPush(ctx, params, p_exp)
+		if pp2 != 0
+			return 0
+		integer p_jti = _batch_param(ctx, "jti", "string")
+		if p_jti == 0
+			return 0
+		integer pp3 = _batch_arrayPush(ctx, params, p_jti)
+		if pp3 != 0
+			return 0
+		integer p_claims = _batch_param(ctx, "claims", "string")
+		if p_claims == 0
+			return 0
+		integer pp4 = _batch_arrayPush(ctx, params, p_claims)
+		if pp4 != 0
+			return 0
+
+		integer body_arr = _batch_arrayNew(ctx)
+		if body_arr == 0
+			return 0
+
+		// Emit the return via source so `+` and `.toString()` resolve via runtime.
+		integer ret_h = _emit_stmt_from_source(ctx, "return \"{\\\"iat\\\":\" + iat.toString() + \",\\\"exp\\\":\" + exp.toString() + \",\\\"jti\\\":\\\"\" + jti + \"\\\",\\\"claims\\\":\" + claims + \"}\"", 0)
+		if ret_h == 0
+			return 0
+		integer rp = _batch_arrayPush(ctx, body_arr, ret_h)
+		if rp != 0
+			return 0
+
+		return _batch_func(ctx, "__auth_build_jwt_payload", params, "string", body_arr)
 
 	// 8. hashPassword(password: string) -> string
 	integer build_hash_password(integer ctx)

@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.auth"
-version = "2.2.0"
-description = "Authentication and authorization plugin — v2.2.0: plugin contracts v3 typed-emission migration. Atomic switch from v1 string emission to v3 typed AST emission via batch-spec builder API (typed-emission.md Amendment 4 §3.14). Closes bug #4790d26673d1. Bridges: 18 batch-builder families, _emit_helpers_batch, _emit_statement_into_start. Helper functions emitted by expand_block_typed via emit_auth_helpers_batch (one _emit_helpers_batch call, 18 synthetic functions). Config vars emitted via _emit_statement_into_start typed assignments. login: block emits FRAME-AUTH-W001 warning (ORM query expression deferred, tracked separately)."
+version = "2.3.0"
+description = "Authentication and authorization plugin — v2.3.0: single-use refresh-token rotation. jwt.refresh() delegates to the new clean-server 1.9.70 bridge _jwt_refresh_and_rotate which atomically verifies+consumes the presented jti under the SessionStore write lock, then re-signs preserving claims with a fresh jti/iat/exp. jwt.sign() now injects a random jti (16 bytes hex via _crypto_random_hex) on every token so rotation can detect replay. Closes FRAME-AUTH-REFRESH-TOKEN-NO-ROTATION (fingerprint 8c3b4a8103ad). Payload assembly moved into an emitted plugin-local helper (__auth_build_jwt_payload) via _emit_stmt_from_source. Spec: AUTH-J007 / AUTH-J009 (frame-auth-semantics.md)."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -84,6 +84,7 @@ functions = [
   { name = "_jwt_sign", params = ["string", "string", "string"], returns = "ptr", description = "Sign JWT: payload, secret, algorithm", expand_strings = true, hosts = ["server"] },
   { name = "_jwt_verify", params = ["string", "string", "string"], returns = "ptr", description = "Verify JWT: token, secret, algorithm - returns payload or empty", expand_strings = true, hosts = ["server"] },
   { name = "_jwt_decode", params = ["string"], returns = "ptr", description = "Decode JWT without verification (for debugging)", expand_strings = true, hosts = ["server"] },
+  { name = "_jwt_refresh_and_rotate", params = ["string", "string", "string", "i32"], returns = "ptr", description = "Atomically verify + consume jti + re-sign a refresh token. Args: token, secret, algorithm, new_ttl_seconds. Returns empty string on replay/expired/invalid or missing-jti. Backs auth.jwt.refresh().", expand_strings = true, hosts = ["server"] },
 
   # Session - Storage (server-only; sessions live in server-side store)
   { name = "_session_store", params = ["string", "string", "string", "i32", "i32"], returns = "boolean", description = "Store session: sessionId, key (empty=blob), data, ttl, flags - returns 1 on success", hosts = ["server"] },
@@ -266,4 +267,4 @@ anti_pattern = "no CSRF protection on POST endpoints — a third-party site can 
 example = "patterns/csrf-protection.cln"
 
 [build]
-built_with_compiler = "0.33.9"
+built_with_compiler = "0.33.12"
