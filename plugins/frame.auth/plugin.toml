@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.auth"
-version = "2.3.0"
-description = "Authentication and authorization plugin — v2.3.0: single-use refresh-token rotation. jwt.refresh() delegates to the new clean-server 1.9.70 bridge _jwt_refresh_and_rotate which atomically verifies+consumes the presented jti under the SessionStore write lock, then re-signs preserving claims with a fresh jti/iat/exp. jwt.sign() now injects a random jti (16 bytes hex via _crypto_random_hex) on every token so rotation can detect replay. Closes FRAME-AUTH-REFRESH-TOKEN-NO-ROTATION (fingerprint 8c3b4a8103ad). Payload assembly moved into an emitted plugin-local helper (__auth_build_jwt_payload) via _emit_stmt_from_source. Spec: AUTH-J007 / AUTH-J009 (frame-auth-semantics.md)."
+version = "2.4.0"
+description = "Authentication and authorization plugin — v2.4.0: password reset tokens. Adds auth.createResetToken(userId, ttlSeconds) and auth.consumeResetToken(token) as direct 1:1 aliases over the clean-server 1.9.71 bridges _auth_create_reset_token / _auth_consume_reset_token. The server stores only sha256(token) under an in-memory PasswordResets map and enforces atomic single-use consumption under the SessionStore write lock. Closes FRAME-AUTH-RESET-TOKEN-BRIDGES-MISSING (fingerprint 22e30f7da2ad). — v2.3.0: single-use refresh-token rotation via _jwt_refresh_and_rotate (clean-server 1.9.70). jwt.sign() injects a random jti (16 bytes hex via _crypto_random_hex) on every token so rotation can detect replay. Closes FRAME-AUTH-REFRESH-TOKEN-NO-ROTATION (fingerprint 8c3b4a8103ad). Spec: AUTH-J007 / AUTH-J009 (frame-auth-semantics.md)."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -112,6 +112,12 @@ functions = [
   { name = "_auth_user_id", params = [], returns = "i32", description = "Get current authenticated user ID; returns 0 if not authenticated", hosts = ["server"] },
   { name = "_auth_user_role", params = [], returns = "ptr", description = "Get current authenticated user role; returns empty string if unauthenticated", hosts = ["server"] },
 
+  # Password Reset Tokens (server-only; opaque hex token, sha256 stored server-side)
+  # Registered in function-registry.toml (server-only, layer 3). WASM ABI: (i64, i64) -> ptr / (ptr+len) -> i64.
+  # Backs auth.createResetToken / auth.consumeResetToken. Introduced with clean-server 1.9.71.
+  { name = "_auth_create_reset_token", params = ["integer", "integer"], returns = "ptr", description = "Create a password reset token for user_id with ttl_seconds lifetime. Returns opaque hex token; server stores only sha256(token). Empty string on error.", hosts = ["server"] },
+  { name = "_auth_consume_reset_token", params = ["string"], returns = "integer", description = "Atomically validate and consume a password reset token. Returns user_id on success, or 0 if invalid/expired/already-consumed.", expand_strings = true, hosts = ["server"] },
+
   # JSON helpers (pure compute — portable Layer 2)
   { name = "_json_get", params = ["string", "string"], returns = "ptr", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true, hosts = ["all"] },
 ]
@@ -187,6 +193,13 @@ functions = [
   { name = "auth.clearSession", signature = "auth.clearSession()", description = "Destroy current user session and clear session cookie", maps_to = "_auth_clear_session", params = [], returns = "boolean" },
   { name = "auth.userId", signature = "auth.userId()", description = "Get current authenticated user ID (0 if unauthenticated)", maps_to = "_auth_user_id", params = [], returns = "integer" },
   { name = "auth.userRole", signature = "auth.userRole()", description = "Get current authenticated user role (empty string if unauthenticated)", maps_to = "_auth_user_role", params = [], returns = "string" },
+
+  # Password reset tokens (server-only). Direct 1:1 aliases over the clean-server 1.9.71 bridges.
+  # createResetToken returns an opaque hex token whose sha256 is stored server-side under an
+  # in-memory PasswordResets map keyed by hash; consumeResetToken atomically validates and
+  # invalidates the token under the SessionStore write lock. Returns 0 on invalid/expired/replayed.
+  { name = "auth.createResetToken", signature = "auth.createResetToken(userId, ttlSeconds)", description = "Create a password reset token for userId with ttlSeconds lifetime; returns opaque hex token (empty string on error)", maps_to = "_auth_create_reset_token", params = ["integer", "integer"], returns = "string" },
+  { name = "auth.consumeResetToken", signature = "auth.consumeResetToken(token)", description = "Atomically validate and consume a password reset token; returns userId on success, 0 if invalid/expired/replayed", maps_to = "_auth_consume_reset_token", params = ["string"], returns = "integer" },
   { name = "session.get", signature = "session.get()", description = "Get current session data as JSON string", maps_to = "_session_get", params = [], returns = "string" },
   { name = "session.delete", signature = "session.delete()", description = "Delete current session from request context", maps_to = "_session_delete", params = [], returns = "boolean" },
   { name = "session.exists", signature = "session.exists(id)", description = "Check if session exists by ID", maps_to = "_session_exists", params = ["string"], returns = "boolean" },
