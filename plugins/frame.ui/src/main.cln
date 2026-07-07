@@ -2370,12 +2370,7 @@ functions:
 					stmts = stmts.replace("__html", target)
 				result = result + stmts
 		if var_name == ""
-			// FRAME-UI-HTML-INTERP-CORRUPTION-AND-WS-DROP (fp 95bdb1bb4b890c7a):
-			// return a fresh string, not the local scratch buffer. When card() is
-			// called inside iterate the caller may retain a reference to `__html`;
-			// concat-with-empty forces a snapshot allocation so subsequent calls'
-			// mutations of `__html` cannot corrupt previously-returned strings.
-			result = result + "return string.concat(__html, \"\")\n"
+			result = result + "return __html\n"
 		return result
 
 	string html_block_to_code(string html)
