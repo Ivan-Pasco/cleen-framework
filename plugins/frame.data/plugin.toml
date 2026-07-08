@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.data"
-version = "3.0.4"
-description = "ORM and database plugin for Clean Language — plugin contracts v3 typed-emission. Atomic migration across 5 sub-cycles on branch v3/frame.data (Amendment 1 atomic per plugin). Closes marquee bug a648b4e6a8ec (find/join OOM) structurally: user-authored where/join/set/on_insert/match fragments route through _emit_expr_from_source (Am 6); no plugin-built triangular SQL concat. Predecessor v2.2.4 retained at git tag frame.data-v2.2.4."
+version = "3.0.5"
+description = "ORM and database plugin for Clean Language — v3.0.5: fix SEM007 __find_sql / __first_sql / __where_json_pg / __where_json_cur / __paged_json / __cursor_json when Model.find:/first:/paginate:/cursor: are expanded with a multi-branch preamble. Root cause: multi-statement preambles built as one string were passed to a single _emit_stmt_from_source + _emit_statement_into_start pair, so the local declarations landed inside a nested block scope invisible to the tail statement's _db_query call. Each preamble statement is now emitted individually into the enclosing scope. Closes fingerprint 031060c8e272 (framework SEM007). — v3.0.4 baseline: plugin contracts v3 typed-emission. Atomic migration across 5 sub-cycles on branch v3/frame.data (Amendment 1 atomic per plugin). Closes marquee bug a648b4e6a8ec (find/join OOM) structurally: user-authored where/join/set/on_insert/match fragments route through _emit_expr_from_source (Am 6); no plugin-built triangular SQL concat. Predecessor v2.2.4 retained at git tag frame.data-v2.2.4."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -337,4 +337,4 @@ anti_pattern = "recursive self-joins at query time for deep trees — use parent
 example = "patterns/tree-structure.cln"
 
 [build]
-built_with_compiler = "0.33.14"
+built_with_compiler = "0.33.19"

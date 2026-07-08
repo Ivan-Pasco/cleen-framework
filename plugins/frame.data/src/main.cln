@@ -2989,40 +2989,98 @@ functions:
 			return 0
 
 		// Multi-branch path: emit statement preamble + trailing statement.
-		string preamble = ""
+		// Each source line is emitted as its own top-level statement so the
+		// __find_sql declaration lives in the same scope as its mutations and
+		// the tail's _db_query call. Emitting the preamble as one multi-stmt
+		// _emit_stmt_from_source call would nest the declaration inside a
+		// block and make it invisible to the tail (SEM007 __find_sql).
 		if resolved_order.length() > 0 and is_dynamic_order(resolved_order.trim())
 			string dyn_var = resolved_order.trim()
-			preamble = preamble + "if not _db_valid_field(\"" + table_name + "\", " + dyn_var + ")\n"
-			preamble = preamble + "\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + dyn_var + " + \"\\\"}}\"\n"
-		preamble = preamble + "string __find_sql = \"" + sql_prefix + "\"\n"
-		if has_tenant
-			preamble = preamble + "string __find_tenant = tenant_getId()\n"
-			preamble = preamble + "string __find_tf = \"tenant_id = '\" + __find_tenant + \"'\"\n"
-			if resolved_where.length() > 0
-				preamble = preamble + "__find_sql = __find_sql + \" WHERE \" + __find_tf + \" AND \" + (" + build_where_expr(resolved_where) + ")\n"
-			else
-				preamble = preamble + "__find_sql = __find_sql + \" WHERE \" + __find_tf\n"
-		else if resolved_where.length() > 0
-			preamble = preamble + "__find_sql = __find_sql + \" WHERE \" + (" + build_where_expr(resolved_where) + ")\n"
-		if group_sql.length() > 0
-			preamble = preamble + "__find_sql = __find_sql + \"" + group_sql + "\"\n"
-		if having_sql.length() > 0
-			preamble = preamble + "__find_sql = __find_sql + \"" + having_sql + "\"\n"
-		if resolved_order.length() > 0
-			if is_dynamic_order(resolved_order.trim())
-				preamble = preamble + "__find_sql = __find_sql + \" ORDER BY \" + " + resolved_order.trim() + "\n"
-			else
-				preamble = preamble + "__find_sql = __find_sql + \" ORDER BY " + parse_order_clause(resolved_order) + "\"\n"
-		if limit_clause.length() > 0
-			preamble = preamble + "__find_sql = __find_sql + \" LIMIT " + limit_clause.trim() + "\"\n"
-		if offset_clause.length() > 0
-			preamble = preamble + "__find_sql = __find_sql + \" OFFSET " + offset_clause.trim() + "\"\n"
-		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+			string guard_src = "if not _db_valid_field(\"" + table_name + "\", " + dyn_var + ")\n"
+			guard_src = guard_src + "\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + dyn_var + " + \"\\\"}}\"\n"
+			integer guard_h = _emit_stmt_from_source(ctx, guard_src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find guard parse failed for " + model_name)
+			integer emit_guard = _emit_statement_into_start(ctx, guard_h)
+			if emit_guard != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find guard emit failed for " + model_name)
+		integer decl_h = _emit_stmt_from_source(ctx, "string __find_sql = \"" + sql_prefix + "\"\n", 0)
 		if _ctx_had_error(ctx) != 0
-			return plugin_error(ctx, "FRAME-DATA-E003", "expand_find preamble parse failed for " + model_name)
-		integer emit_pre = _emit_statement_into_start(ctx, stmt_h)
-		if emit_pre != 0
-			return plugin_error(ctx, "FRAME-DATA-E003", "expand_find preamble emit failed for " + model_name)
+			return plugin_error(ctx, "FRAME-DATA-E003", "expand_find __find_sql decl parse failed for " + model_name)
+		integer emit_decl = _emit_statement_into_start(ctx, decl_h)
+		if emit_decl != 0
+			return plugin_error(ctx, "FRAME-DATA-E003", "expand_find __find_sql decl emit failed for " + model_name)
+		if has_tenant
+			integer t_decl_h = _emit_stmt_from_source(ctx, "string __find_tenant = tenant_getId()\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find tenant decl parse failed for " + model_name)
+			integer emit_t_decl = _emit_statement_into_start(ctx, t_decl_h)
+			if emit_t_decl != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find tenant decl emit failed for " + model_name)
+			integer tf_decl_h = _emit_stmt_from_source(ctx, "string __find_tf = \"tenant_id = '\" + __find_tenant + \"'\"\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find tf decl parse failed for " + model_name)
+			integer emit_tf_decl = _emit_statement_into_start(ctx, tf_decl_h)
+			if emit_tf_decl != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find tf decl emit failed for " + model_name)
+			string where_src = ""
+			if resolved_where.length() > 0
+				where_src = "__find_sql = __find_sql + \" WHERE \" + __find_tf + \" AND \" + (" + build_where_expr(resolved_where) + ")\n"
+			else
+				where_src = "__find_sql = __find_sql + \" WHERE \" + __find_tf\n"
+			integer where_h = _emit_stmt_from_source(ctx, where_src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find where parse failed for " + model_name)
+			integer emit_where = _emit_statement_into_start(ctx, where_h)
+			if emit_where != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find where emit failed for " + model_name)
+		else if resolved_where.length() > 0
+			integer where_h = _emit_stmt_from_source(ctx, "__find_sql = __find_sql + \" WHERE \" + (" + build_where_expr(resolved_where) + ")\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find where parse failed for " + model_name)
+			integer emit_where = _emit_statement_into_start(ctx, where_h)
+			if emit_where != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find where emit failed for " + model_name)
+		if group_sql.length() > 0
+			integer group_h = _emit_stmt_from_source(ctx, "__find_sql = __find_sql + \"" + group_sql + "\"\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find group parse failed for " + model_name)
+			integer emit_group = _emit_statement_into_start(ctx, group_h)
+			if emit_group != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find group emit failed for " + model_name)
+		if having_sql.length() > 0
+			integer having_h = _emit_stmt_from_source(ctx, "__find_sql = __find_sql + \"" + having_sql + "\"\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find having parse failed for " + model_name)
+			integer emit_having = _emit_statement_into_start(ctx, having_h)
+			if emit_having != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find having emit failed for " + model_name)
+		if resolved_order.length() > 0
+			string order_src = ""
+			if is_dynamic_order(resolved_order.trim())
+				order_src = "__find_sql = __find_sql + \" ORDER BY \" + " + resolved_order.trim() + "\n"
+			else
+				order_src = "__find_sql = __find_sql + \" ORDER BY " + parse_order_clause(resolved_order) + "\"\n"
+			integer order_h = _emit_stmt_from_source(ctx, order_src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find order parse failed for " + model_name)
+			integer emit_order = _emit_statement_into_start(ctx, order_h)
+			if emit_order != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find order emit failed for " + model_name)
+		if limit_clause.length() > 0
+			integer limit_h = _emit_stmt_from_source(ctx, "__find_sql = __find_sql + \" LIMIT " + limit_clause.trim() + "\"\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find limit parse failed for " + model_name)
+			integer emit_limit = _emit_statement_into_start(ctx, limit_h)
+			if emit_limit != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find limit emit failed for " + model_name)
+		if offset_clause.length() > 0
+			integer offset_h = _emit_stmt_from_source(ctx, "__find_sql = __find_sql + \" OFFSET " + offset_clause.trim() + "\"\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find offset parse failed for " + model_name)
+			integer emit_offset = _emit_statement_into_start(ctx, offset_h)
+			if emit_offset != 0
+				return plugin_error(ctx, "FRAME-DATA-E003", "expand_find offset emit failed for " + model_name)
 		string tail = "json.get(json.get(_db_query(__find_sql, \"[]\"), \"data\"), \"rows\")"
 		string tail_stmt_src = ""
 		if binding.length() > 0
@@ -3068,26 +3126,60 @@ functions:
 				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first emit failed for " + model_name)
 			return 0
 
-		// Multi-branch path (tenant or dynamic where): emit preamble + tail stmt.
-		string preamble = "string __first_sql = \"SELECT * FROM " + table_name + "\"\n"
-		if has_tenant
-			preamble = preamble + "string __first_tenant = tenant_getId()\n"
-			preamble = preamble + "string __first_tf = \"tenant_id = '\" + __first_tenant + \"'\"\n"
-			if where_clause.length() > 0
-				preamble = preamble + "__first_sql = __first_sql + \" WHERE \" + __first_tf + \" AND \" + (" + build_where_expr(where_clause) + ")\n"
-			else
-				preamble = preamble + "__first_sql = __first_sql + \" WHERE \" + __first_tf\n"
-		else if where_clause.length() > 0
-			preamble = preamble + "__first_sql = __first_sql + \" WHERE \" + (" + build_where_expr(where_clause) + ")\n"
-		if order_clause.length() > 0
-			preamble = preamble + "__first_sql = __first_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
-		preamble = preamble + "__first_sql = __first_sql + \" LIMIT 1\"\n"
-		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+		// Multi-branch path (tenant or dynamic where): emit each statement
+		// individually so the __first_sql declaration lives in the same scope
+		// as its mutations and the tail's _db_query call (SEM007 __first_sql
+		// otherwise — same class of bug as expand_find's multi-branch path).
+		integer decl_h = _emit_stmt_from_source(ctx, "string __first_sql = \"SELECT * FROM " + table_name + "\"\n", 0)
 		if _ctx_had_error(ctx) != 0
-			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first preamble parse failed for " + model_name)
-		integer emit_pre = _emit_statement_into_start(ctx, stmt_h)
-		if emit_pre != 0
-			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first preamble emit failed for " + model_name)
+			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first __first_sql decl parse failed for " + model_name)
+		integer emit_decl = _emit_statement_into_start(ctx, decl_h)
+		if emit_decl != 0
+			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first __first_sql decl emit failed for " + model_name)
+		if has_tenant
+			integer t_decl_h = _emit_stmt_from_source(ctx, "string __first_tenant = tenant_getId()\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first tenant decl parse failed for " + model_name)
+			integer emit_t_decl = _emit_statement_into_start(ctx, t_decl_h)
+			if emit_t_decl != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first tenant decl emit failed for " + model_name)
+			integer tf_decl_h = _emit_stmt_from_source(ctx, "string __first_tf = \"tenant_id = '\" + __first_tenant + \"'\"\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first tf decl parse failed for " + model_name)
+			integer emit_tf_decl = _emit_statement_into_start(ctx, tf_decl_h)
+			if emit_tf_decl != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first tf decl emit failed for " + model_name)
+			string where_src = ""
+			if where_clause.length() > 0
+				where_src = "__first_sql = __first_sql + \" WHERE \" + __first_tf + \" AND \" + (" + build_where_expr(where_clause) + ")\n"
+			else
+				where_src = "__first_sql = __first_sql + \" WHERE \" + __first_tf\n"
+			integer where_h = _emit_stmt_from_source(ctx, where_src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first where parse failed for " + model_name)
+			integer emit_where = _emit_statement_into_start(ctx, where_h)
+			if emit_where != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first where emit failed for " + model_name)
+		else if where_clause.length() > 0
+			integer where_h = _emit_stmt_from_source(ctx, "__first_sql = __first_sql + \" WHERE \" + (" + build_where_expr(where_clause) + ")\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first where parse failed for " + model_name)
+			integer emit_where = _emit_statement_into_start(ctx, where_h)
+			if emit_where != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first where emit failed for " + model_name)
+		if order_clause.length() > 0
+			integer order_h = _emit_stmt_from_source(ctx, "__first_sql = __first_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n", 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first order parse failed for " + model_name)
+			integer emit_order = _emit_statement_into_start(ctx, order_h)
+			if emit_order != 0
+				return plugin_error(ctx, "FRAME-DATA-E004", "expand_first order emit failed for " + model_name)
+		integer limit_h = _emit_stmt_from_source(ctx, "__first_sql = __first_sql + \" LIMIT 1\"\n", 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first limit parse failed for " + model_name)
+		integer emit_limit = _emit_statement_into_start(ctx, limit_h)
+		if emit_limit != 0
+			return plugin_error(ctx, "FRAME-DATA-E004", "expand_first limit emit failed for " + model_name)
 		string tail = "json.get(json.get(json.get(_db_query(__first_sql, \"[]\"), \"data\"), \"rows\"), \"0\")"
 		string tail_stmt_src = ""
 		if binding.length() > 0
@@ -3212,23 +3304,41 @@ functions:
 			else
 				order_out = "\"" + parsed_order + "\""
 
-		string preamble = ""
+		// Emit each preamble statement individually so their declarations
+		// stay in the same scope as the tail (SEM007 __where_json_pg /
+		// __paged_json otherwise — same class of bug as expand_find).
 		if order_is_dynamic
-			preamble = preamble + "if not _db_valid_field(\"" + table_name + "\", " + order_out + ")\n"
-			preamble = preamble + "\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + order_out + " + \"\\\"}}\"\n"
-		preamble = preamble + "string __where_json_pg = " + where_json_expr + "\n"
-		if order_clause.length() > 0
-			preamble = preamble + "if __where_json_pg == \"{}\"\n"
-			preamble = preamble + "\t__where_json_pg = \"{\\\"__order\\\":\\\"\" + " + order_out + " + \"\\\"}\"\n"
-			preamble = preamble + "else\n"
-			preamble = preamble + "\t__where_json_pg = __where_json_pg.substring(0, __where_json_pg.length() - 1) + \",\\\"__order\\\":\\\"\" + " + order_out + " + \"\\\"}\"\n"
-		preamble = preamble + "string __paged_json = _db_paginate(\"" + table_name + "\", __where_json_pg, " + page_expr + ", " + per_page_expr + ")\n"
-		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+			string guard_src = "if not _db_valid_field(\"" + table_name + "\", " + order_out + ")\n"
+			guard_src = guard_src + "\treturn \"{\\\"ok\\\":false,\\\"err\\\":{\\\"code\\\":\\\"VALIDATION_ERROR\\\",\\\"message\\\":\\\"Unknown sort field: \\\" + " + order_out + " + \"\\\"}}\"\n"
+			integer guard_h = _emit_stmt_from_source(ctx, guard_src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate guard parse failed for " + model_name)
+			integer emit_guard = _emit_statement_into_start(ctx, guard_h)
+			if emit_guard != 0
+				return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate guard emit failed for " + model_name)
+		integer wj_h = _emit_stmt_from_source(ctx, "string __where_json_pg = " + where_json_expr + "\n", 0)
 		if _ctx_had_error(ctx) != 0
-			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate preamble parse failed for " + model_name)
-		integer emit_pre = _emit_statement_into_start(ctx, stmt_h)
-		if emit_pre != 0
-			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate preamble emit failed for " + model_name)
+			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate where_json decl parse failed for " + model_name)
+		integer emit_wj = _emit_statement_into_start(ctx, wj_h)
+		if emit_wj != 0
+			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate where_json decl emit failed for " + model_name)
+		if order_clause.length() > 0
+			string order_inject_src = "if __where_json_pg == \"{}\"\n"
+			order_inject_src = order_inject_src + "\t__where_json_pg = \"{\\\"__order\\\":\\\"\" + " + order_out + " + \"\\\"}\"\n"
+			order_inject_src = order_inject_src + "else\n"
+			order_inject_src = order_inject_src + "\t__where_json_pg = __where_json_pg.substring(0, __where_json_pg.length() - 1) + \",\\\"__order\\\":\\\"\" + " + order_out + " + \"\\\"}\"\n"
+			integer order_inject_h = _emit_stmt_from_source(ctx, order_inject_src, 0)
+			if _ctx_had_error(ctx) != 0
+				return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate order injection parse failed for " + model_name)
+			integer emit_order_inject = _emit_statement_into_start(ctx, order_inject_h)
+			if emit_order_inject != 0
+				return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate order injection emit failed for " + model_name)
+		integer pj_h = _emit_stmt_from_source(ctx, "string __paged_json = _db_paginate(\"" + table_name + "\", __where_json_pg, " + page_expr + ", " + per_page_expr + ")\n", 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate paged_json decl parse failed for " + model_name)
+		integer emit_pj = _emit_statement_into_start(ctx, pj_h)
+		if emit_pj != 0
+			return plugin_error(ctx, "FRAME-DATA-E008", "expand_paginate paged_json decl emit failed for " + model_name)
 		string tail = "json.parse(__paged_json)"
 		string tail_stmt_src = ""
 		if binding.length() > 0
@@ -3268,14 +3378,20 @@ functions:
 				by_expr = by_val
 
 		string where_json_expr = build_where_json_expr(where_clause)
-		string preamble = "string __where_json_cur = " + where_json_expr + "\n"
-		preamble = preamble + "string __cursor_json = _db_cursor_page(\"" + table_name + "\", __where_json_cur, " + per_page_expr + ", " + after_expr + ", " + by_expr + ")\n"
-		integer stmt_h = _emit_stmt_from_source(ctx, preamble, 0)
+		// Emit each preamble statement individually — same scoping fix as
+		// expand_find / expand_first / expand_paginate.
+		integer wj_h = _emit_stmt_from_source(ctx, "string __where_json_cur = " + where_json_expr + "\n", 0)
 		if _ctx_had_error(ctx) != 0
-			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor preamble parse failed for " + model_name)
-		integer emit_pre = _emit_statement_into_start(ctx, stmt_h)
-		if emit_pre != 0
-			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor preamble emit failed for " + model_name)
+			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor where_json decl parse failed for " + model_name)
+		integer emit_wj = _emit_statement_into_start(ctx, wj_h)
+		if emit_wj != 0
+			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor where_json decl emit failed for " + model_name)
+		integer cj_h = _emit_stmt_from_source(ctx, "string __cursor_json = _db_cursor_page(\"" + table_name + "\", __where_json_cur, " + per_page_expr + ", " + after_expr + ", " + by_expr + ")\n", 0)
+		if _ctx_had_error(ctx) != 0
+			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor cursor_json decl parse failed for " + model_name)
+		integer emit_cj = _emit_statement_into_start(ctx, cj_h)
+		if emit_cj != 0
+			return plugin_error(ctx, "FRAME-DATA-E009", "expand_cursor cursor_json decl emit failed for " + model_name)
 		string tail = "json.parse(__cursor_json)"
 		string tail_stmt_src = ""
 		if binding.length() > 0
