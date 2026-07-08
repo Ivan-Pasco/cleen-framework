@@ -1,0 +1,93 @@
+name: Nightly Canaries (Layer 2 — browser)
+
+# Layer 2 canary runner for frame.ui. Instantiates the compiler's canary
+# corpus in headless Chromium via Playwright and diffs stdout against each
+# canary's expected output block. Companion to the compiler's Layer 1
+# corpus (owned by clean-language-compiler at tests/cln/canaries/*.cln)
+# and the L3 aggregate matrix in the compiler repo.
+#
+# Runs nightly and on-demand. If this job goes red, the framework's
+# browser host bridge has diverged from the registry contract at
+# foundation/platform-architecture/function-registry.toml.
+
+on:
+  schedule:
+    # 03:17 UTC nightly. Off-peak; deliberately not on the hour so we do
+    # not clash with the compiler's L3 matrix job kicking off at 03:00.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      compiler_ref:
+        description: 'Compiler ref (branch/tag/sha) to pull canaries from. Defaults to main.'
+        required: false
+        default: 'main'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/frame.ui/scripts/run_canaries.mjs'
+      - 'plugins/frame.ui/scripts/package.json'
+      - 'plugins/frame.ui/runtime/loader.js'
+      - '.github/workflows/nightly-canaries.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  browser-canaries:
+    name: Layer 2 canaries (headless Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout framework
+        uses: actions/checkout@v4
+
+      - name: Checkout compiler (for canary corpus)
+        uses: actions/checkout@v4
+        with:
+          repository: Ivan-Pasco/clean-language-compiler
+          ref: ${{ inputs.compiler_ref || 'main' }}
+          path: _compiler
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install cleen (Clean Language version manager)
+        run: |
+          curl -fsSL https://github.com/Ivan-Pasco/clean-language-manager/releases/latest/download/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cleen/bin" >> "$GITHUB_PATH"
+
+      - name: Install latest Clean Language compiler
+        run: |
+          cleen install latest
+          ver="$(ls -1 "$HOME/.cleen/versions" | sort -V | tail -n1)"
+          echo "Activating Clean Language compiler $ver"
+          cleen use "$ver"
+          cln --version
+
+      - name: Install latest Frame plugins
+        run: cleen frame install latest
+
+      - name: Install runner dependencies
+        working-directory: plugins/frame.ui/scripts
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run Layer 2 canaries
+        env:
+          CANARY_DIR: ${{ github.workspace }}/_compiler/tests/cln/canaries
+        working-directory: plugins/frame.ui/scripts
+        run: node run_canaries.mjs
+
+      - name: Upload canary report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-report
+          path: plugins/frame.ui/.canary-run
+          if-no-files-found: ignore
+          retention-days: 7

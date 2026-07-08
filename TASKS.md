@@ -27,6 +27,19 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 ### Browser Host Bridge Parity 🟡 MEDIUM-HIGH
 
+- ⬜ **Layer 2 canary runner is red for 7 of 10 applicable canaries** — Nightly `.github/workflows/nightly-canaries.yml` compiles the compiler's canary corpus with `cln` and instantiates each canary in headless Chromium via `plugins/frame.ui/runtime/loader.js`. Currently fails LOUDLY for canaries whose namespace bridges are not implemented in the browser loader:
+  - `math.cln` — `math_pow`, `math_sqrt`, `math_abs`, `math_min`, `math_max`, `math_floor`, `math_ceil`, `math_round` (subset of the 16 `math_*` items in the parity gap below)
+  - `crypto.cln` — `_crypto_hash_sha256`, `_crypto_hash_sha512`, `_crypto_hmac`, `_crypto_hash_password`, `_crypto_verify_password`, `_crypto_random_hex`, `_crypto_random_bytes`
+  - `http_client.cln` — `http_get`, `http_post`, `http_put`, `http_patch`, `http_delete`, `http_head`, `http_options`, `http_post_json`, `http_put_json`, `http_patch_json`, `http_post_form`, `http_encode_url`, `http_decode_url`, `http_build_query`, `http_get_response_headers`, `http_get_response_header`
+  - `time.cln` — `_time_now`, `_time_now_iso`, `_time_now_ms`, `_time_format`, `_time_parse`, `_time_add`, `_time_diff`
+  - `api.cln` — `_api_get`, `_api_post`, `_api_put`, `_api_patch`, `_api_delete`, `_api_ok`, `_api_status`, `_api_json`, `_api_body` (frame.client — bridge.js may cover some; the loader used by the canary shell is frame.ui's, which does not)
+  - `canvas.cln` — full `_canvas_*`, `_camera_*`, `_scene_*`, `_input_*`, `_audio_*` (frame.canvas — same routing issue as api; canvas has its own loader that does cover these, but the canary shell uses frame.ui's loader)
+  - `json.cln` — `_json_get` (currently throws with SERVER-GUARD; partial output produced before trap)
+
+  The first four are the correct fix path: extend `plugins/frame.ui/runtime/loader.js` with `math_*`, `_crypto_*`, `http_*`, `_time_*` bridges. See the 60-function parity list below — the canaries are the machine-checkable subset of that same gap.
+
+  The api / canvas canaries would ideally target their owning plugin's loader; the L2 runner currently hard-wires `plugins/frame.ui/runtime/loader.js`. If we go the multi-loader route, extend `run_canaries.mjs` to pick a loader per namespace.
+
 - ⬜ **60 missing stdlib bridge functions in browser host JS** — `check_host_parity.py --host browser --strict` reports 60 functions declared `hosts = ["all"]` in `foundation/platform-architecture/function-registry.toml` that no browser-side JS runtime implements. Three runtime files share the gap: `plugins/frame.canvas/runtime/loader.js`, `plugins/frame.ui/runtime/loader.js`, `plugins/frame.client/runtime/bridge.js`. Families:
   - `array_*` (13): push, pop, get, set, slice, map, filter, find, reduce, sort, reverse, concat, contains
   - `list.*` (10): add, allocate, clear, contains, get, isEmpty, push, remove, set

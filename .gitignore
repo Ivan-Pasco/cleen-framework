@@ -45,3 +45,8 @@ package-lock.json
 # Windows
 ehthumbs.db
 Desktop.ini
+
+# frame.ui canary runner (Layer 2 nightly)
+plugins/frame.ui/scripts/node_modules/
+plugins/frame.ui/scripts/package-lock.json
+plugins/frame.ui/.canary-run/
