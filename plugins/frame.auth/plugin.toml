@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.auth"
-version = "2.4.1"
-description = "Authentication and authorization plugin — v2.4.1: user-facing auth.jwt.sign/verify/refresh now resolve via maps_to_helper (compiler 0.33.14+) to the plugin-emitted jwt_sign/jwt_verify/jwt_refresh helpers, closing FRAME-AUTH-JWT-HELPERS-UNREACHABLE (fingerprint 7eb619a1d49e). — v2.4.0: password reset tokens via auth.createResetToken(userId, ttlSeconds) / auth.consumeResetToken(token), direct 1:1 aliases over clean-server 1.9.71 bridges _auth_create_reset_token / _auth_consume_reset_token; server stores only sha256(token) under in-memory PasswordResets map with atomic single-use consumption under SessionStore write lock. Closes FRAME-AUTH-RESET-TOKEN-BRIDGES-MISSING (fingerprint 22e30f7da2ad). — v2.3.0: single-use refresh-token rotation via _jwt_refresh_and_rotate (clean-server 1.9.70); jwt.sign() injects a random jti (16 bytes hex via _crypto_random_hex) on every token so rotation can detect replay. Closes FRAME-AUTH-REFRESH-TOKEN-NO-ROTATION (fingerprint 8c3b4a8103ad). Spec: AUTH-J007 / AUTH-J009 (frame-auth-semantics.md)."
+version = "2.4.2"
+description = "Authentication and authorization plugin — v2.4.2: widen bridge ABI declarations for _jwt_refresh_and_rotate (new_ttl_seconds i32→i64), _auth_create_reset_token (user_id + ttl_seconds i32→i64 params), and _auth_consume_reset_token (return i32→i64) so the plugin registry contract matches the compiler-side registry snapshot that expects i64 for time/id-typed args. Unblocks COMPILER-REGISTRY-SNAPSHOT-STALE (fingerprint b1babb1048f1); pairs with the compiler-side registry widening landing in the next compiler release. Mirrors the _time_now i64 precedent. — v2.4.1: user-facing auth.jwt.sign/verify/refresh now resolve via maps_to_helper (compiler 0.33.14+) to the plugin-emitted jwt_sign/jwt_verify/jwt_refresh helpers, closing FRAME-AUTH-JWT-HELPERS-UNREACHABLE (fingerprint 7eb619a1d49e). — v2.4.0: password reset tokens via auth.createResetToken(userId, ttlSeconds) / auth.consumeResetToken(token), direct 1:1 aliases over clean-server 1.9.71 bridges _auth_create_reset_token / _auth_consume_reset_token; server stores only sha256(token) under in-memory PasswordResets map with atomic single-use consumption under SessionStore write lock. Closes FRAME-AUTH-RESET-TOKEN-BRIDGES-MISSING (fingerprint 22e30f7da2ad). — v2.3.0: single-use refresh-token rotation via _jwt_refresh_and_rotate (clean-server 1.9.70); jwt.sign() injects a random jti (16 bytes hex via _crypto_random_hex) on every token so rotation can detect replay. Closes FRAME-AUTH-REFRESH-TOKEN-NO-ROTATION (fingerprint 8c3b4a8103ad). Spec: AUTH-J007 / AUTH-J009 (frame-auth-semantics.md)."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -84,7 +84,7 @@ functions = [
   { name = "_jwt_sign", params = ["string", "string", "string"], returns = "ptr", description = "Sign JWT: payload, secret, algorithm", expand_strings = true, hosts = ["server"] },
   { name = "_jwt_verify", params = ["string", "string", "string"], returns = "ptr", description = "Verify JWT: token, secret, algorithm - returns payload or empty", expand_strings = true, hosts = ["server"] },
   { name = "_jwt_decode", params = ["string"], returns = "ptr", description = "Decode JWT without verification (for debugging)", expand_strings = true, hosts = ["server"] },
-  { name = "_jwt_refresh_and_rotate", params = ["string", "string", "string", "i32"], returns = "ptr", description = "Atomically verify + consume jti + re-sign a refresh token. Args: token, secret, algorithm, new_ttl_seconds. Returns empty string on replay/expired/invalid or missing-jti. Backs auth.jwt.refresh().", expand_strings = true, hosts = ["server"] },
+  { name = "_jwt_refresh_and_rotate", params = ["string", "string", "string", "i64"], returns = "ptr", description = "Atomically verify + consume jti + re-sign a refresh token. Args: token, secret, algorithm, new_ttl_seconds (i64). Returns empty string on replay/expired/invalid or missing-jti. Backs auth.jwt.refresh().", expand_strings = true, hosts = ["server"] },
 
   # Session - Storage (server-only; sessions live in server-side store)
   { name = "_session_store", params = ["string", "string", "string", "i32", "i32"], returns = "boolean", description = "Store session: sessionId, key (empty=blob), data, ttl, flags - returns 1 on success", hosts = ["server"] },
@@ -115,8 +115,8 @@ functions = [
   # Password Reset Tokens (server-only; opaque hex token, sha256 stored server-side)
   # Registered in function-registry.toml (server-only, layer 3). WASM ABI: (i64, i64) -> ptr / (ptr+len) -> i64.
   # Backs auth.createResetToken / auth.consumeResetToken. Introduced with clean-server 1.9.71.
-  { name = "_auth_create_reset_token", params = ["integer", "integer"], returns = "ptr", description = "Create a password reset token for user_id with ttl_seconds lifetime. Returns opaque hex token; server stores only sha256(token). Empty string on error.", hosts = ["server"] },
-  { name = "_auth_consume_reset_token", params = ["string"], returns = "integer", description = "Atomically validate and consume a password reset token. Returns user_id on success, or 0 if invalid/expired/already-consumed.", expand_strings = true, hosts = ["server"] },
+  { name = "_auth_create_reset_token", params = ["i64", "i64"], returns = "ptr", description = "Create a password reset token for user_id (i64) with ttl_seconds (i64) lifetime. Returns opaque hex token; server stores only sha256(token). Empty string on error.", hosts = ["server"] },
+  { name = "_auth_consume_reset_token", params = ["string"], returns = "i64", description = "Atomically validate and consume a password reset token. Returns user_id (i64) on success, or 0 if invalid/expired/already-consumed.", expand_strings = true, hosts = ["server"] },
 
   # JSON helpers (pure compute — portable Layer 2)
   { name = "_json_get", params = ["string", "string"], returns = "ptr", description = "Get nested value from JSON: json, path (e.g., 'claims.role')", expand_strings = true, hosts = ["all"] },
@@ -285,4 +285,4 @@ anti_pattern = "no CSRF protection on POST endpoints — a third-party site can 
 example = "patterns/csrf-protection.cln"
 
 [build]
-built_with_compiler = "0.33.14"
+built_with_compiler = "0.33.17"
