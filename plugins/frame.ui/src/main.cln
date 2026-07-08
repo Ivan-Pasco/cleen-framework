@@ -2370,7 +2370,15 @@ functions:
 					stmts = stmts.replace("__html", target)
 				result = result + stmts
 		if var_name == ""
-			result = result + "return __html\n"
+			// FRAME-UI-HTML-INTERP-CORRUPTION-AND-WS-DROP (fp 95bdb1bb4b890c7a):
+			// Concatenate with an empty literal via the `+` operator to force a
+			// fresh allocation. When card() is called inside iterate the caller
+			// retains references to prior `__html` values; without a snapshot,
+			// later calls' mutations of `__html` corrupt earlier returns.
+			// Note: v3.2.4 tried string.concat(__html, "") for this and it made
+			// helpers return null. The `+ ""` path goes through the string_concat
+			// codegen instead, which is the same path other callers rely on.
+			result = result + "return __html + \"\"\n"
 		return result
 
 	string html_block_to_code(string html)
