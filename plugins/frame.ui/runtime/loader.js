@@ -88,6 +88,31 @@
 		}
 	}
 
+	// Ensure `memory.buffer` has at least `endOffset` bytes available. Called
+	// from writeString before the write. Without this, a bump-allocated write
+	// past the current buffer end causes a WASM-side "memory access out of
+	// bounds" trap on the next read (fingerprint d2ad4501bae5 — arithmetic
+	// combining two bridge-returned string .length() values).
+	function ensureCapacity(endOffset) {
+		if (!memory) return;
+		const currentBytes = memory.buffer.byteLength;
+		if (endOffset <= currentBytes) return;
+		const currentPages = currentBytes / WASM_PAGE_SIZE;
+		const neededPages = Math.ceil(endOffset / WASM_PAGE_SIZE);
+		const growBy = neededPages - currentPages;
+		// Grow with headroom (double the deficit, minimum 1 page) to avoid
+		// grow-per-call in tight loops.
+		const growPages = Math.max(growBy * 2, 1);
+		try {
+			memory.grow(growPages);
+		} catch (e) {
+			// Fall back to the minimum needed; if this also fails, the trap
+			// message will identify the cause.
+			memory.grow(growBy);
+		}
+		checkMemoryGrowth();
+	}
+
 	function memoryStats() {
 		const size = memory ? memory.buffer.byteLength : 0;
 		return {
@@ -155,10 +180,17 @@
 		checkMemoryGrowth();
 		const bytes = new TextEncoder().encode(str);
 		const ptr = heapPtr;
+		const padding = (4 - (bytes.length % 4)) % 4;
+		const totalSize = bytes.length + 4 + padding;
+		// Grow memory BEFORE constructing views, so both the length header
+		// write (line +2) and the payload write land in valid buffer bytes.
+		// Also guarantees the returned pointer is still readable when WASM
+		// later loads the 4-byte length prefix during .length() calls.
+		ensureCapacity(ptr + totalSize);
 		const view = new Uint8Array(memory.buffer, ptr, bytes.length + 4);
 		new DataView(memory.buffer).setUint32(ptr, bytes.length, true);
 		view.set(bytes, 4);
-		heapPtr += bytes.length + 4 + ((4 - (bytes.length % 4)) % 4);
+		heapPtr += totalSize;
 		return ptr;
 	}
 
@@ -504,8 +536,10 @@
 		memory_runtime: {
 			// Memory management — spec: platform-architecture/HOST_BRIDGE.md
 			mem_alloc: (size) => {
+				const padded = size + (8 - (size % 8));
 				const ptr = heapPtr;
-				heapPtr += size + (8 - (size % 8));
+				ensureCapacity(ptr + padded);
+				heapPtr += padded;
 				return ptr;
 			},
 			mem_retain: (ptr) => {},
@@ -1071,7 +1105,9 @@
 				const count = parts.length;
 				// Allocate list header (16 bytes) + pointer slots (count * 4 bytes each)
 				const listPtr = heapPtr;
-				heapPtr += 16 + count * 4;
+				const listSize = 16 + count * 4;
+				ensureCapacity(listPtr + listSize);
+				heapPtr += listSize;
 				// Write each part string, collect pointers (after all allocs, buffer may grow)
 				const ptrs = parts.map(p => writeString(p));
 				// Write list header using fresh DataView (memory may have grown)
