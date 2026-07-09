@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.server"
-version = "2.8.2"
-description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.2: WS-SEND-I32-VS-I64-001 coordination (e6e66d65) — five _ws_* bridge entries and their live.* language aliases changed client_id from `integer` to `i64` to match clean-server's i64 end-to-end handling. Coordinated with compiler prompt cceb276d and server prompt fa7765e2. Compiler registry edit lands after this plugin ships. Do not touch _ws_broadcast / _ws_room_broadcast — they take room name (string), not client_id. — v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
+version = "2.8.3"
+description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.3: plugin.wasm rebuild against 2.8.2 i64 signatures using cln 0.33.27 — pairs with WS-SEND-I32-VS-I64-001 (e6e66d65) fix. Compiler team baselines registry edit against this artifact. v2.8.2: WS-SEND-I32-VS-I64-001 coordination (e6e66d65) — five _ws_* bridge entries and their live.* language aliases changed client_id from `integer` to `i64` to match clean-server's i64 end-to-end handling. Coordinated with compiler prompt cceb276d and server prompt fa7765e2. Compiler registry edit lands after this plugin ships. Do not touch _ws_broadcast / _ws_room_broadcast — they take room name (string), not client_id. — v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -467,4 +467,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.33.20"
+built_with_compiler = "0.33.27"
