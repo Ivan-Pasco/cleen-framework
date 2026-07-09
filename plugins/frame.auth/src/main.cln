@@ -32,6 +32,13 @@ external:
 	// Function and terminal builders (§3.14)
 	integer _batch_param(integer ctx, string name, string type_name)
 	integer _batch_func(integer ctx, string name, integer params_array_handle, string return_type, integer body_array_handle)
+	// Amendment 12 (§3.14) — sibling of batch.func with a from_source path.
+	// Exactly one of body_array_handle_or_0 / from_source_handle_or_0 must
+	// be non-zero. Use this when the body was built via _emit_stmt_from_source
+	// (§3.11), which returns a plain arena stmt handle (no BATCH_TAG) that
+	// cannot be pushed into a batch array. Contract from compiler prompt
+	// ad41f1b4-7bbd-11f1.
+	integer _batch_func2(integer ctx, string name, integer params_array_handle, string return_type, integer body_array_handle_or_0, integer from_source_handle_or_0)
 	integer _batch_spec(integer ctx, integer functions_array_handle)
 	// Declaration emitters (§3.12, §3.5)
 	integer _emit_helpers_batch(integer ctx, integer spec_handle_or_lp, integer flags)
@@ -1480,19 +1487,16 @@ functions:
 		if pp4 != 0
 			return 0
 
-		integer body_arr = _batch_arrayNew(ctx)
-		if body_arr == 0
-			return 0
-
 		// Emit the return via source so `+` and `.toString()` resolve via runtime.
+		// _emit_stmt_from_source returns a plain arena stmt handle (no BATCH_TAG),
+		// which cannot be pushed into a batch stmt array. Use batch.func2's
+		// from_source_handle path instead of batch.func + arrayPush (which
+		// triggers PLUGIN013 batch/arena handle-kind mismatch, fp f81afcc2).
 		integer ret_h = _emit_stmt_from_source(ctx, "return \"{\\\"iat\\\":\" + iat.toString() + \",\\\"exp\\\":\" + exp.toString() + \",\\\"jti\\\":\\\"\" + jti + \"\\\",\\\"claims\\\":\" + claims + \"}\"", 0)
 		if ret_h == 0
 			return 0
-		integer rp = _batch_arrayPush(ctx, body_arr, ret_h)
-		if rp != 0
-			return 0
 
-		return _batch_func(ctx, "__auth_build_jwt_payload", params, "string", body_arr)
+		return _batch_func2(ctx, "__auth_build_jwt_payload", params, "string", 0, ret_h)
 
 	// 8. hashPassword(password: string) -> string
 	integer build_hash_password(integer ctx)
