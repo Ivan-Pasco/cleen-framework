@@ -18,7 +18,7 @@ package: BugReproDbInBrowser
 
 // Inlined so `cln build main.cln` discovers the model without needing a
 // package.clean.toml or explicit `use` directive.
-data Todo
+data Todo:
 	integer id
 	string title
 	integer completed

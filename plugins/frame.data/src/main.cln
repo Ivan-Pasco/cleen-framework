@@ -55,11 +55,19 @@
 
 external:
 	// ---- Declaration emitters (§3.5, §3.11, §3.13, §3.16, §3.17, §3.18) ----
-	integer _emit_function(integer ctx, string name, string params_json, string return_type, integer body_stmt_handle, integer flags)
+	integer _emit_function(integer ctx, string name, string params_json, integer return_type, integer body_stmt_handle, integer flags)
 	integer _emit_class_full(integer ctx, integer class_spec_handle_or_lp, integer flags)
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
+	// ---- AST type constructors (§3.9) — for typed-emission return types
+	// and params_json type_handle fields per compiler contract at
+	// bridges.rs:1116. ----
+	integer _type_string(integer ctx)
+	integer _type_integer(integer ctx)
+	integer _type_boolean(integer ctx)
+	integer _type_array(integer ctx, integer elem_type_handle)
+	integer _type_class_ref(integer ctx, string name)
 	// ---- Diagnostics (§5) ----
 	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
 	// ---- Sticky-error context (§3.15) ----
@@ -1948,7 +1956,10 @@ functions:
 		src = src + "\t\t__i = __i + 1\n"
 		src = src + "\t\t__check = json.get(__pa_rows, __i.toString())\n"
 		src = src + "\treturn __result\n"
-		return _emit_function(ctx, "__parse_as_" + model_name, "[{\"name\":\"__json\",\"type\":\"string\"}]", "list<" + model_name + ">", _emit_stmt_from_source(ctx, src, 0), 0)
+		integer pa_p_str = _type_string(ctx)
+		integer pa_r_elem = _type_class_ref(ctx, model_name)
+		integer pa_r_list = _type_array(ctx, pa_r_elem)
+		return _emit_function(ctx, "__parse_as_" + model_name, "[{\"name\":\"__json\",\"type_handle\":" + pa_p_str.toString() + "}]", pa_r_list, _emit_stmt_from_source(ctx, src, 0), 0)
 
 	// Emit the top-level __find_as_strings_<Model> function.
 	integer emit_json_rows_function(integer ctx, string model_name)
@@ -1962,7 +1973,10 @@ functions:
 		src = src + "\t__fstr_i = __fstr_i + 1\n"
 		src = src + "\t__fstr_check = json.get(__fstr_rows, __fstr_i.toString())\n"
 		src = src + "return __fstr_result\n"
-		return _emit_function(ctx, "__find_as_strings_" + model_name, "[{\"name\":\"__json\",\"type\":\"string\"}]", "list<string>", _emit_stmt_from_source(ctx, src, 0), 0)
+		integer fs_p_str = _type_string(ctx)
+		integer fs_r_elem = _type_string(ctx)
+		integer fs_r_list = _type_array(ctx, fs_r_elem)
+		return _emit_function(ctx, "__find_as_strings_" + model_name, "[{\"name\":\"__json\",\"type_handle\":" + fs_p_str.toString() + "}]", fs_r_list, _emit_stmt_from_source(ctx, src, 0), 0)
 
 	// Emit top-level ORM helper functions: __<Model>_exists, __<Model>_count,
 	// __<Model>_raw_update, __<Model>_raw_delete.
@@ -1994,9 +2008,11 @@ functions:
 		exists_src = exists_src + "\treturn true\n"
 		exists_src = exists_src + "return false\n"
 		string fname_exists = "__" + model_name + "_exists"
-		string exists_params = "[{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer exists_p_str = _type_string(ctx)
+		integer exists_r_bool = _type_boolean(ctx)
+		string exists_params = "[{\"name\":\"__where_sql\",\"type_handle\":" + exists_p_str.toString() + "}]"
 		integer exists_h = _emit_stmt_from_source(ctx, exists_src, 0)
-		_emit_function(ctx, fname_exists, exists_params, "boolean", exists_h, 0)
+		_emit_function(ctx, fname_exists, exists_params, exists_r_bool, exists_h, 0)
 
 		// __<Model>_count(string __where_sql) -> integer
 		string count_src = "string sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
@@ -2019,9 +2035,11 @@ functions:
 		count_src = count_src + "string __cnt_str = json.get(__cnt_row, \"count\")\n"
 		count_src = count_src + "return __cnt_str.toInteger()\n"
 		string fname_count = "__" + model_name + "_count"
-		string count_params = "[{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer count_p_str = _type_string(ctx)
+		integer count_r_int = _type_integer(ctx)
+		string count_params = "[{\"name\":\"__where_sql\",\"type_handle\":" + count_p_str.toString() + "}]"
 		integer count_h = _emit_stmt_from_source(ctx, count_src, 0)
-		_emit_function(ctx, fname_count, count_params, "integer", count_h, 0)
+		_emit_function(ctx, fname_count, count_params, count_r_int, count_h, 0)
 
 		// __<Model>_raw_update(string __set_sql, string __where_sql) -> integer
 		string update_src = "string sql = \"UPDATE " + table_name + " SET \" + __set_sql\n"
@@ -2037,9 +2055,12 @@ functions:
 			update_src = update_src + "\tsql = sql + \" WHERE \" + __where_sql\n"
 		update_src = update_src + "return _db_execute(sql, \"[]\")\n"
 		string fname_update = "__" + model_name + "_raw_update"
-		string update_params = "[{\"name\":\"__set_sql\",\"type\":\"string\"},{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer update_p_set = _type_string(ctx)
+		integer update_p_where = _type_string(ctx)
+		integer update_r_int = _type_integer(ctx)
+		string update_params = "[{\"name\":\"__set_sql\",\"type_handle\":" + update_p_set.toString() + "},{\"name\":\"__where_sql\",\"type_handle\":" + update_p_where.toString() + "}]"
 		integer update_h = _emit_stmt_from_source(ctx, update_src, 0)
-		_emit_function(ctx, fname_update, update_params, "integer", update_h, 0)
+		_emit_function(ctx, fname_update, update_params, update_r_int, update_h, 0)
 
 		// __<Model>_raw_delete(string __where_sql) -> integer
 		string delete_src = ""
@@ -2057,9 +2078,11 @@ functions:
 			delete_src = delete_src + "\tsql = sql + \" WHERE \" + __where_sql\n"
 		delete_src = delete_src + "return _db_execute(sql, \"[]\")\n"
 		string fname_delete = "__" + model_name + "_raw_delete"
-		string delete_params = "[{\"name\":\"__where_sql\",\"type\":\"string\"}]"
+		integer delete_p_where = _type_string(ctx)
+		integer delete_r_int = _type_integer(ctx)
+		string delete_params = "[{\"name\":\"__where_sql\",\"type_handle\":" + delete_p_where.toString() + "}]"
 		integer delete_h = _emit_stmt_from_source(ctx, delete_src, 0)
-		_emit_function(ctx, fname_delete, delete_params, "integer", delete_h, 0)
+		_emit_function(ctx, fname_delete, delete_params, delete_r_int, delete_h, 0)
 
 		if _ctx_had_error(ctx) != 0
 			return 1
@@ -3977,14 +4000,16 @@ functions:
 		if escaped_up.length() > 0
 			up_body_src = "return _db_execute(\"" + escaped_up + "\", \"[]\")"
 		integer up_stmt = _emit_stmt_from_source(ctx, up_body_src, 0)
-		_emit_function(ctx, "__migration_" + func_name + "_up", "[]", "integer", up_stmt, 0)
+		integer up_r_int = _type_integer(ctx)
+		_emit_function(ctx, "__migration_" + func_name + "_up", "[]", up_r_int, up_stmt, 0)
 
 		// Down function.
 		string down_body_src = "return 0"
 		if escaped_down.length() > 0
 			down_body_src = "return _db_execute(\"" + escaped_down + "\", \"[]\")"
 		integer down_stmt = _emit_stmt_from_source(ctx, down_body_src, 0)
-		_emit_function(ctx, "__migration_" + func_name + "_down", "[]", "integer", down_stmt, 0)
+		integer down_r_int = _type_integer(ctx)
+		_emit_function(ctx, "__migration_" + func_name + "_down", "[]", down_r_int, down_stmt, 0)
 
 		// Register the migration in start:.
 		integer name_lit = sl(ctx, migration_name)
