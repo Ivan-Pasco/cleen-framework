@@ -1326,7 +1326,7 @@ functions:
 		_batch_arrayPush(ctx, body_arr, ret_stmt)
 		return sblk(ctx, body_arr)
 
-	// Build body for: integer exists(string where_clause)
+	// Build body for: boolean exists(string where_clause)
 	integer build_exists_body(integer ctx, string table_name, boolean has_tenant)
 		integer body_arr = _batch_arrayNew(ctx)
 		integer sql_base = sl(ctx, "SELECT COUNT(*) as count FROM " + table_name)
@@ -1391,18 +1391,18 @@ functions:
 		integer dbq = call2(ctx, "_db_query", sql_r5, ep)
 		integer exr_assign = sassign(ctx, "__exists_result", dbq)
 		_batch_arrayPush(ctx, body_arr, exr_assign)
-		// if __extract_count(__exists_result) > 0 { return 1 } return 0
+		// if __extract_count(__exists_result) > 0 { return true } return false
 		integer exr_ref = ident(ctx, "__exists_result")
 		integer ec_call = call1(ctx, "__extract_count", exr_ref)
 		integer zero_lit = il(ctx, 0)
 		integer ec_cond = _batch_binop(ctx, ">", ec_call, zero_lit)
-		integer one_lit = il(ctx, 1)
-		integer ret1 = sr(ctx, one_lit)
+		integer true_lit = bl(ctx, true)
+		integer ret1 = sr(ctx, true_lit)
 		integer ex_then = arr1(ctx, ret1)
 		integer ex_if = _batch_stmtIf(ctx, ec_cond, ex_then, 0)
 		_batch_arrayPush(ctx, body_arr, ex_if)
-		integer zero2 = il(ctx, 0)
-		integer ret0 = sr(ctx, zero2)
+		integer false_lit = bl(ctx, false)
+		integer ret0 = sr(ctx, false_lit)
 		_batch_arrayPush(ctx, body_arr, ret0)
 		return sblk(ctx, body_arr)
 
@@ -1860,7 +1860,7 @@ functions:
 		integer exists_bh = build_exists_body(ctx, table_name, has_tenant)
 		if _ctx_had_error(ctx) != 0
 			return ""
-		methods = methods + ",{\"kind\":\"inline\",\"name\":\"exists\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"}],\"return_type\":\"integer\",\"body_handle\":" + exists_bh.toString() + "}"
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"exists\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"}],\"return_type\":\"boolean\",\"body_handle\":" + exists_bh.toString() + "}"
 
 		// --- findOrFail(string where_clause) ---
 		integer fof_bh = build_find_or_fail_body(ctx, table_name, has_tenant)
@@ -1967,7 +1967,7 @@ functions:
 	// Emit top-level ORM helper functions: __<Model>_exists, __<Model>_count,
 	// __<Model>_raw_update, __<Model>_raw_delete.
 	integer emit_orm_helpers(integer ctx, string model_name, string table_name, boolean has_tenant)
-		// __<Model>_exists(string __where_sql) -> integer
+		// __<Model>_exists(string __where_sql) -> boolean
 		string exists_src = "string sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
 		if has_tenant
 			exists_src = exists_src + "string __tenant = tenant_getId()\n"
@@ -1985,18 +1985,18 @@ functions:
 		exists_src = exists_src + "string __ex_rows = json.get(__ex_data, \"rows\")\n"
 		exists_src = exists_src + "string __ex_row = json.get(__ex_rows, \"0\")\n"
 		exists_src = exists_src + "if __ex_row == \"\"\n"
-		exists_src = exists_src + "\treturn 0\n"
+		exists_src = exists_src + "\treturn false\n"
 		exists_src = exists_src + "if __ex_row == \"null\"\n"
-		exists_src = exists_src + "\treturn 0\n"
+		exists_src = exists_src + "\treturn false\n"
 		exists_src = exists_src + "string __ex_cnt_str = json.get(__ex_row, \"count\")\n"
 		exists_src = exists_src + "integer __ex_cnt = __ex_cnt_str.toInteger()\n"
 		exists_src = exists_src + "if __ex_cnt > 0\n"
-		exists_src = exists_src + "\treturn 1\n"
-		exists_src = exists_src + "return 0\n"
+		exists_src = exists_src + "\treturn true\n"
+		exists_src = exists_src + "return false\n"
 		string fname_exists = "__" + model_name + "_exists"
 		string exists_params = "[{\"name\":\"__where_sql\",\"type\":\"string\"}]"
 		integer exists_h = _emit_stmt_from_source(ctx, exists_src, 0)
-		_emit_function(ctx, fname_exists, exists_params, "integer", exists_h, 0)
+		_emit_function(ctx, fname_exists, exists_params, "boolean", exists_h, 0)
 
 		// __<Model>_count(string __where_sql) -> integer
 		string count_src = "string sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"

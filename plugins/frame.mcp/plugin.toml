@@ -135,7 +135,7 @@ constraints = [
   "Tool params without a default value are required — the AI must supply them; params with a default are optional",
   "Resource bodies must not use the params: block — use a tool if you need parameterized data access",
   "Every tool, resource, and prompt body must end with return json(), return text(), or return error()",
-  "Never call _mcp_stdio_write() or _mcp_log() directly — use the response helpers and the log bridge via mcp.log()",
+  "Never call _mcp_stdio_write() directly — use the json(), text(), or error() response helpers. For diagnostics, log to stderr via _mcp_log(level, message); stderr never pollutes the stdio JSON-RPC stream",
   "Do not print to stdout inside tool/resource/prompt bodies when using stdio transport — it corrupts the JSON-RPC stream",
   "Required params must be declared before optional params in the params: block",
 ]
@@ -153,4 +153,4 @@ anti_pattern = "adding unnecessary database queries just to follow a pattern —
 example = "patterns/basic-tools.cln"
 
 [build]
-built_with_compiler = "0.33.14"
+built_with_compiler = "0.33.29"

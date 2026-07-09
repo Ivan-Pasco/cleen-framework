@@ -477,6 +477,28 @@ async function main() {
 		process.stdout.write(JSON.stringify({ results }, null, 2) + '\n');
 	}
 
+	// Emit canary-report.json for the cross-repo L3 matrix aggregator.
+	// Schema: { results: { <namespace>: { passed: bool, reason?: string } } }
+	// See clean-language-compiler/scripts/canary_matrix.py.
+	const reportResults = {};
+	for (const r of results) {
+		const key = (r.namespace || r.canary.replace(/\.cln$/, '')).split(/[\s+]/)[0].toLowerCase();
+		const entry = { passed: r.status === 'pass' };
+		if (!entry.passed) {
+			const reason =
+				r.error ||
+				r.navError ||
+				(r.pageErrors && r.pageErrors[0]) ||
+				(r.status === 'diff' ? 'stdout diff' : r.status);
+			if (reason) entry.reason = String(reason).slice(0, 500);
+		}
+		reportResults[key] = entry;
+	}
+	await writeFile(
+		join(runDir, 'canary-report.json'),
+		JSON.stringify({ results: reportResults }, null, 2) + '\n'
+	);
+
 	const failed = results.filter((r) => r.status !== 'pass');
 	if (failed.length > 0) {
 		if (!asJson) {

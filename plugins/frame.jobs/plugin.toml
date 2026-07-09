@@ -148,14 +148,20 @@ constraints = [
 [[ai.patterns]]
 name = "email-notification"
 use_when = "a user action (registration, assignment, status change) should trigger an email without delaying the HTTP response"
-anti_pattern = "calling email.send() inside the endpoint handler — the HTTP response waits for the SMTP call; if SMTP is slow or down, the user gets a timeout. Always enqueue."
+anti_pattern = "calling the SMTP client inline inside the endpoint handler — the HTTP response waits for the SMTP round trip; if SMTP is slow or down, the user gets a timeout. Always enqueue a job that performs the SMTP call."
 example = "patterns/email-notification.cln"
 
 [[ai.patterns]]
 name = "scheduled-cleanup"
-use_when = "recurring maintenance tasks (expiring sessions, archiving old records, sending weekly digests)"
-anti_pattern = "triggering cleanup from a user-facing endpoint with a cron-like timer check — that ties cleanup to traffic and fails silently when the endpoint is not called. Use schedule instead."
+use_when = "recurring maintenance tasks (expiring sessions, archiving old records, sending weekly digests) that must run on a fixed cadence independent of user traffic"
+anti_pattern = "triggering cleanup from a user-facing endpoint with a cron-like timer check — that ties cleanup to traffic and fails silently when the endpoint is not called. Use schedule.cron() at server boot to register a cron expression, or queue.enqueueAt(name, args, timestamp) to schedule a one-shot future run."
 example = "patterns/scheduled-cleanup.cln"
 
+[[ai.patterns]]
+name = "retry-policy"
+use_when = "a job handler calls a flaky external service (payment provider, third-party API, SMTP relay) and transient failures should be retried with backoff rather than dropped"
+anti_pattern = "catching the error and returning silently — the job is marked succeeded and the work is lost. Instead call job.retryAfter(seconds) to reschedule with backoff, or job.fail(reason) to send it to the dead-letter queue after retries are exhausted. Read job.attempt() to decide which."
+example = "patterns/retry-policy.cln"
+
 [build]
-built_with_compiler = "0.33.14"
+built_with_compiler = "0.33.29"
