@@ -629,6 +629,14 @@
 			_state_reset_all: () => {},
 			_state_reset_named: () => {},
 
+			// Compiler-emitted arena-scope markers (typed-emission ABI, no-op on
+			// browser hosts per foundation/spec/plugins/contracts/typed-emission.md:1015
+			// and clean-node-server session 2026-07-06-arena-scope-bridges). These
+			// are allocation-scope hints used by the compiler's arena; the runtime
+			// does not need to observe them here.
+			_arena_scope_push: () => 0,
+			_arena_scope_pop: () => {},
+
 			// ========== DOM Manipulation ==========
 
 			_ui_update_element: (selectorPtr, selectorLen, contentPtr, contentLen) => {
