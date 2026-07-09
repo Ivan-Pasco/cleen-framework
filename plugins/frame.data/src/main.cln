@@ -951,101 +951,36 @@ functions:
 	// Build body for: boolean save()
 	// Emits an if/else on id==0 (INSERT path) and UPDATE path.
 	// has_tenant controls whether the INSERT path includes tenant scaffolding.
+	// build_save_body — returns an ARENA stmt handle via _emit_stmt_from_source.
+	// Rebuilt per compiler prompts 5aa24d74-7bdb-11f1 and d76220b6-7be0-11f1:
+	// the batch-array construction was reusing prior-arena batch handles across
+	// class-spec assembly (PLUGIN008 handle-already-consumed / PLUGIN013
+	// OutOfRange). Emitting the body as a single source fragment sidesteps the
+	// batch-handle-reuse problem entirely. Compiler 0.33.33's _emit_class_full
+	// dispatch accepts arena handles (via EmitArena::is_batch_handle branch).
 	integer build_save_body(integer ctx, string table_name, boolean has_tenant)
-		// INSERT branch body (id == 0)
-		integer insert_stmts = _batch_arrayNew(ctx)
+		string src = "if id == 0\n"
 		if has_tenant
-			// string __tenant_id = tenant_getId()
-			integer tid_expr = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant_id", tid_expr)
-			_batch_arrayPush(ctx, insert_stmts, tid_assign)
-			// string sql = "INSERT INTO <table> (" + __field_list() + ") VALUES (" + __placeholder_list() + ") RETURNING id"
-			integer fl = call0(ctx, "__field_list")
-			integer pl = call0(ctx, "__placeholder_list")
-			integer prefix = sl(ctx, "INSERT INTO " + table_name + " (")
-			integer mid = sl(ctx, ") VALUES (")
-			integer suffix = sl(ctx, ") RETURNING id")
-			integer p1 = _batch_binop(ctx, "+", prefix, fl)
-			integer p2 = _batch_binop(ctx, "+", p1, mid)
-			integer p3 = _batch_binop(ctx, "+", p2, pl)
-			integer sql_expr = _batch_binop(ctx, "+", p3, suffix)
-			integer sql_assign = sassign(ctx, "sql", sql_expr)
-			_batch_arrayPush(ctx, insert_stmts, sql_assign)
-			// string params = __to_params_with_tenant(__tenant_id)
-			integer tid_ref = ident(ctx, "__tenant_id")
-			integer tp_expr = call1(ctx, "__to_params_with_tenant", tid_ref)
-			integer params_assign = sassign(ctx, "params", tp_expr)
-			_batch_arrayPush(ctx, insert_stmts, params_assign)
+			src = src + "\tstring __tenant_id = tenant_getId()\n"
+			src = src + "\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
+			src = src + "\tstring params = __to_params_with_tenant(__tenant_id)\n"
 		else
-			// string sql = "INSERT INTO <table> (" + __field_list() + ") VALUES (" + __placeholder_list() + ") RETURNING id"
-			integer fl2 = call0(ctx, "__field_list")
-			integer pl2 = call0(ctx, "__placeholder_list")
-			integer prefix2 = sl(ctx, "INSERT INTO " + table_name + " (")
-			integer mid2 = sl(ctx, ") VALUES (")
-			integer suffix2 = sl(ctx, ") RETURNING id")
-			integer q1 = _batch_binop(ctx, "+", prefix2, fl2)
-			integer q2 = _batch_binop(ctx, "+", q1, mid2)
-			integer q3 = _batch_binop(ctx, "+", q2, pl2)
-			integer sql_expr2 = _batch_binop(ctx, "+", q3, suffix2)
-			integer sql_assign2 = sassign(ctx, "sql", sql_expr2)
-			_batch_arrayPush(ctx, insert_stmts, sql_assign2)
-			// string params = __to_params()
-			integer tp_expr2 = call0(ctx, "__to_params")
-			integer params_assign2 = sassign(ctx, "params", tp_expr2)
-			_batch_arrayPush(ctx, insert_stmts, params_assign2)
-		// string result = _db_query(sql, params)
-		integer sql_ref = ident(ctx, "sql")
-		integer params_ref = ident(ctx, "params")
-		integer dbq_expr = call2(ctx, "_db_query", sql_ref, params_ref)
-		integer res_assign = sassign(ctx, "__ins_result", dbq_expr)
-		_batch_arrayPush(ctx, insert_stmts, res_assign)
-		// id = __extract_id(result)
-		integer ins_res_ref = ident(ctx, "__ins_result")
-		integer eid_expr = call1(ctx, "__extract_id", ins_res_ref)
-		integer id_assign = sassign(ctx, "id", eid_expr)
-		_batch_arrayPush(ctx, insert_stmts, id_assign)
-		// return id > 0
-		integer id_ref = ident(ctx, "id")
-		integer zero_lit = il(ctx, 0)
-		integer cmp_expr = _batch_binop(ctx, ">", id_ref, zero_lit)
-		integer ret_insert = sr(ctx, cmp_expr)
-		_batch_arrayPush(ctx, insert_stmts, ret_insert)
-
-		// UPDATE branch (id != 0): always the same
-		integer update_stmts = _batch_arrayNew(ctx)
-		// string sql = "UPDATE <table> SET " + __update_set() + " WHERE id = $1"
-		integer us_expr = call0(ctx, "__update_set")
-		integer upd_prefix = sl(ctx, "UPDATE " + table_name + " SET ")
-		integer upd_where = sl(ctx, " WHERE id = $1")
-		integer upd1 = _batch_binop(ctx, "+", upd_prefix, us_expr)
-		integer upd_sql_expr = _batch_binop(ctx, "+", upd1, upd_where)
-		integer upd_sql_assign = sassign(ctx, "sql", upd_sql_expr)
-		_batch_arrayPush(ctx, update_stmts, upd_sql_assign)
-		// string params = __to_update_params()
-		integer tup_expr = call0(ctx, "__to_update_params")
-		integer upd_params_assign = sassign(ctx, "params", tup_expr)
-		_batch_arrayPush(ctx, update_stmts, upd_params_assign)
-		// integer affected = _db_execute(sql, params)
-		integer upd_sql_ref = ident(ctx, "sql")
-		integer upd_params_ref = ident(ctx, "params")
-		integer dbe_expr = call2(ctx, "_db_execute", upd_sql_ref, upd_params_ref)
-		integer aff_assign = sassign(ctx, "affected", dbe_expr)
-		_batch_arrayPush(ctx, update_stmts, aff_assign)
-		// return affected > 0
-		integer aff_ref = ident(ctx, "affected")
-		integer zero2 = il(ctx, 0)
-		integer aff_cmp = _batch_binop(ctx, ">", aff_ref, zero2)
-		integer ret_upd = sr(ctx, aff_cmp)
-		_batch_arrayPush(ctx, update_stmts, ret_upd)
-
-		// if id == 0 { insert } else { update }  — outer if/else on id
-		integer id_ref2 = ident(ctx, "id")
-		integer zero3 = il(ctx, 0)
-		integer id_eq_zero = _batch_binop(ctx, "==", id_ref2, zero3)
-		integer if_stmt = _batch_stmtIf(ctx, id_eq_zero, insert_stmts, update_stmts)
-
-		integer body_arr = arr1(ctx, if_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
+			src = src + "\tstring params = __to_params()\n"
+		src = src + "\tstring __ins_result = _db_query(sql, params)\n"
+		src = src + "\tid = __extract_id(__ins_result)\n"
+		src = src + "\treturn id > 0\n"
+		src = src + "else\n"
+		src = src + "\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
+		src = src + "\tstring params = __to_update_params()\n"
+		src = src + "\tinteger affected = _db_execute(sql, params)\n"
+		src = src + "\treturn affected > 0\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: boolean delete()
 	// build_delete_body — returns an ARENA stmt handle (not a batch handle).
@@ -1084,581 +1019,183 @@ functions:
 functions:
 	// Build body for: list<M> find(string where_clause, string order_clause, string limit_clause)
 	integer build_find_body(integer ctx, string model_name, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
-		// string sql = "SELECT * FROM <table>"
-		integer sql_base = sl(ctx, "SELECT * FROM " + table_name)
-		integer sql_assign = sassign(ctx, "sql", sql_base)
-		_batch_arrayPush(ctx, body_arr, sql_assign)
-
+		string src = "string sql = \"SELECT * FROM " + table_name + "\"\n"
 		if has_tenant
-			// string __tenant = tenant_getId()
-			integer tid = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant", tid)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			// string __tenant_filter = "tenant_id = '" + __tenant + "'"
-			integer tf_prefix = sl(ctx, "tenant_id = '")
-			integer tf_suffix = sl(ctx, "'")
-			integer tenant_ref = ident(ctx, "__tenant")
-			integer p1 = _batch_binop(ctx, "+", tf_prefix, tenant_ref)
-			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
-			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
-			_batch_arrayPush(ctx, body_arr, tf_assign)
-			// if where_clause.length() > 0 { sql += " WHERE " + __tenant_filter + " AND " + where_clause } else { sql += " WHERE " + __tenant_filter }
-			integer wc_ref = ident(ctx, "where_clause")
-			integer wc_len = _batch_field(ctx, wc_ref, "length")
-			integer wc_len_call = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero = il(ctx, 0)
-			integer wc_cond = _batch_binop(ctx, ">", wc_len_call, wc_zero)
-			// then: sql = sql + " WHERE " + __tenant_filter + " AND " + where_clause
-			integer sql_ref1 = ident(ctx, "sql")
-			integer tf_ref1 = ident(ctx, "__tenant_filter")
-			integer wc_ref1 = ident(ctx, "where_clause")
-			integer where_kw = sl(ctx, " WHERE ")
-			integer and_kw = sl(ctx, " AND ")
-			integer t1 = _batch_binop(ctx, "+", sql_ref1, where_kw)
-			integer t2 = _batch_binop(ctx, "+", t1, tf_ref1)
-			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
-			integer t4 = _batch_binop(ctx, "+", t3, wc_ref1)
-			integer then_assign = sassign(ctx, "sql", t4)
-			integer then_arr = arr1(ctx, then_assign)
-			// else: sql = sql + " WHERE " + __tenant_filter
-			integer sql_ref2 = ident(ctx, "sql")
-			integer tf_ref2 = ident(ctx, "__tenant_filter")
-			integer where_kw2 = sl(ctx, " WHERE ")
-			integer e1 = _batch_binop(ctx, "+", sql_ref2, where_kw2)
-			integer e2 = _batch_binop(ctx, "+", e1, tf_ref2)
-			integer else_assign = sassign(ctx, "sql", e2)
-			integer else_arr = arr1(ctx, else_assign)
-			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
-			_batch_arrayPush(ctx, body_arr, where_if)
+			src = src + "string __tenant = tenant_getId()\n"
+			src = src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			src = src + "else\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			// if where_clause.length() > 0 { sql += " WHERE " + where_clause }
-			integer wc_ref2 = ident(ctx, "where_clause")
-			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero2 = il(ctx, 0)
-			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
-			integer sql_ref3 = ident(ctx, "sql")
-			integer wc_ref3 = ident(ctx, "where_clause")
-			integer where_kw3 = sl(ctx, " WHERE ")
-			integer wn1 = _batch_binop(ctx, "+", sql_ref3, where_kw3)
-			integer wn2 = _batch_binop(ctx, "+", wn1, wc_ref3)
-			integer wn_assign = sassign(ctx, "sql", wn2)
-			integer wn_then = arr1(ctx, wn_assign)
-			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
-			_batch_arrayPush(ctx, body_arr, wn_if)
-
-		// if order_clause.length() > 0 { sql += " ORDER BY " + order_clause }
-		integer oc_len = _batch_call(ctx, "order_clause.length", _batch_arrayNew(ctx))
-		integer oc_zero = il(ctx, 0)
-		integer oc_cond = _batch_binop(ctx, ">", oc_len, oc_zero)
-		integer sql_ref4 = ident(ctx, "sql")
-		integer oc_ref = ident(ctx, "order_clause")
-		integer order_kw = sl(ctx, " ORDER BY ")
-		integer oa1 = _batch_binop(ctx, "+", sql_ref4, order_kw)
-		integer oa2 = _batch_binop(ctx, "+", oa1, oc_ref)
-		integer oa_assign = sassign(ctx, "sql", oa2)
-		integer oa_then = arr1(ctx, oa_assign)
-		integer oa_if = _batch_stmtIf(ctx, oc_cond, oa_then, 0)
-		_batch_arrayPush(ctx, body_arr, oa_if)
-
-		// if limit_clause.length() > 0 { sql += " LIMIT " + limit_clause }
-		integer lc_len = _batch_call(ctx, "limit_clause.length", _batch_arrayNew(ctx))
-		integer lc_zero = il(ctx, 0)
-		integer lc_cond = _batch_binop(ctx, ">", lc_len, lc_zero)
-		integer sql_ref5 = ident(ctx, "sql")
-		integer lc_ref = ident(ctx, "limit_clause")
-		integer limit_kw = sl(ctx, " LIMIT ")
-		integer la1 = _batch_binop(ctx, "+", sql_ref5, limit_kw)
-		integer la2 = _batch_binop(ctx, "+", la1, lc_ref)
-		integer la_assign = sassign(ctx, "sql", la2)
-		integer la_then = arr1(ctx, la_assign)
-		integer la_if = _batch_stmtIf(ctx, lc_cond, la_then, 0)
-		_batch_arrayPush(ctx, body_arr, la_if)
-
-		// return __parse_as_<model>(_db_query(sql, "[]"))
-		integer sql_ref6 = ident(ctx, "sql")
-		integer empty_params = sl(ctx, "[]")
-		integer dbq = call2(ctx, "_db_query", sql_ref6, empty_params)
-		integer parse_ret = call1(ctx, "__parse_as_" + model_name, dbq)
-		integer ret_stmt = sr(ctx, parse_ret)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + where_clause\n"
+		src = src + "if order_clause.length() > 0\n"
+		src = src + "\tsql = sql + \" ORDER BY \" + order_clause\n"
+		src = src + "if limit_clause.length() > 0\n"
+		src = src + "\tsql = sql + \" LIMIT \" + limit_clause\n"
+		src = src + "return __parse_as_" + model_name + "(_db_query(sql, \"[]\"))\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: string first(string where_clause)
 	integer build_first_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
-		integer sql_base = sl(ctx, "SELECT * FROM " + table_name)
-		integer sql_assign = sassign(ctx, "sql", sql_base)
-		_batch_arrayPush(ctx, body_arr, sql_assign)
-
+		string src = "string sql = \"SELECT * FROM " + table_name + "\"\n"
 		if has_tenant
-			integer tid = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant", tid)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			integer tf_prefix = sl(ctx, "tenant_id = '")
-			integer tf_suffix = sl(ctx, "'")
-			integer tenant_ref = ident(ctx, "__tenant")
-			integer p1 = _batch_binop(ctx, "+", tf_prefix, tenant_ref)
-			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
-			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
-			_batch_arrayPush(ctx, body_arr, tf_assign)
-			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero = il(ctx, 0)
-			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
-			integer sql_r1 = ident(ctx, "sql")
-			integer tf_r1 = ident(ctx, "__tenant_filter")
-			integer wc_r1 = ident(ctx, "where_clause")
-			integer where_kw = sl(ctx, " WHERE ")
-			integer and_kw = sl(ctx, " AND ")
-			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
-			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
-			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
-			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
-			integer then_assign = sassign(ctx, "sql", t4)
-			integer then_arr = arr1(ctx, then_assign)
-			integer sql_r2 = ident(ctx, "sql")
-			integer tf_r2 = ident(ctx, "__tenant_filter")
-			integer where_kw2 = sl(ctx, " WHERE ")
-			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
-			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
-			integer else_assign = sassign(ctx, "sql", e2)
-			integer else_arr = arr1(ctx, else_assign)
-			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
-			_batch_arrayPush(ctx, body_arr, where_if)
+			src = src + "string __tenant = tenant_getId()\n"
+			src = src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			src = src + "else\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero2 = il(ctx, 0)
-			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
-			integer sql_r3 = ident(ctx, "sql")
-			integer wc_r2 = ident(ctx, "where_clause")
-			integer where_kw3 = sl(ctx, " WHERE ")
-			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
-			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
-			integer wn_assign = sassign(ctx, "sql", wn2)
-			integer wn_then = arr1(ctx, wn_assign)
-			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
-			_batch_arrayPush(ctx, body_arr, wn_if)
-
-		// sql = sql + " LIMIT 1"
-		integer sql_r4 = ident(ctx, "sql")
-		integer limit1 = sl(ctx, " LIMIT 1")
-		integer lim_expr = _batch_binop(ctx, "+", sql_r4, limit1)
-		integer lim_assign = sassign(ctx, "sql", lim_expr)
-		_batch_arrayPush(ctx, body_arr, lim_assign)
-		// return _db_query(sql, "[]")
-		integer sql_r5 = ident(ctx, "sql")
-		integer ep = sl(ctx, "[]")
-		integer dbq = call2(ctx, "_db_query", sql_r5, ep)
-		integer ret_stmt = sr(ctx, dbq)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + where_clause\n"
+		src = src + "sql = sql + \" LIMIT 1\"\n"
+		src = src + "return _db_query(sql, \"[]\")\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: integer count(string where_clause)
 	integer build_count_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
-		integer sql_base = sl(ctx, "SELECT COUNT(*) as count FROM " + table_name)
-		integer sql_assign = sassign(ctx, "sql", sql_base)
-		_batch_arrayPush(ctx, body_arr, sql_assign)
+		string src = "string sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
 		if has_tenant
-			integer tid = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant", tid)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			integer tf_prefix = sl(ctx, "tenant_id = '")
-			integer tf_suffix = sl(ctx, "'")
-			integer tr = ident(ctx, "__tenant")
-			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
-			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
-			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
-			_batch_arrayPush(ctx, body_arr, tf_assign)
-			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero = il(ctx, 0)
-			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
-			integer sql_r1 = ident(ctx, "sql")
-			integer tf_r1 = ident(ctx, "__tenant_filter")
-			integer wc_r1 = ident(ctx, "where_clause")
-			integer where_kw = sl(ctx, " WHERE ")
-			integer and_kw = sl(ctx, " AND ")
-			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
-			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
-			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
-			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
-			integer then_assign = sassign(ctx, "sql", t4)
-			integer then_arr = arr1(ctx, then_assign)
-			integer sql_r2 = ident(ctx, "sql")
-			integer tf_r2 = ident(ctx, "__tenant_filter")
-			integer where_kw2 = sl(ctx, " WHERE ")
-			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
-			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
-			integer else_assign = sassign(ctx, "sql", e2)
-			integer else_arr = arr1(ctx, else_assign)
-			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
-			_batch_arrayPush(ctx, body_arr, where_if)
+			src = src + "string __tenant = tenant_getId()\n"
+			src = src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			src = src + "else\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero2 = il(ctx, 0)
-			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
-			integer sql_r3 = ident(ctx, "sql")
-			integer wc_r2 = ident(ctx, "where_clause")
-			integer where_kw3 = sl(ctx, " WHERE ")
-			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
-			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
-			integer wn_assign = sassign(ctx, "sql", wn2)
-			integer wn_then = arr1(ctx, wn_assign)
-			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
-			_batch_arrayPush(ctx, body_arr, wn_if)
-		// string result = _db_query(sql, "[]")
-		integer sql_r4 = ident(ctx, "sql")
-		integer ep = sl(ctx, "[]")
-		integer dbq = call2(ctx, "_db_query", sql_r4, ep)
-		integer res_assign = sassign(ctx, "__count_result", dbq)
-		_batch_arrayPush(ctx, body_arr, res_assign)
-		// return __extract_count(result)
-		integer res_ref = ident(ctx, "__count_result")
-		integer ec_expr = call1(ctx, "__extract_count", res_ref)
-		integer ret_stmt = sr(ctx, ec_expr)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + where_clause\n"
+		src = src + "string __count_result = _db_query(sql, \"[]\")\n"
+		src = src + "return __extract_count(__count_result)\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: boolean exists(string where_clause)
 	integer build_exists_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
-		integer sql_base = sl(ctx, "SELECT COUNT(*) as count FROM " + table_name)
-		integer sql_assign = sassign(ctx, "sql", sql_base)
-		_batch_arrayPush(ctx, body_arr, sql_assign)
+		string src = "string sql = \"SELECT COUNT(*) as count FROM " + table_name + "\"\n"
 		if has_tenant
-			integer tid = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant", tid)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			integer tf_prefix = sl(ctx, "tenant_id = '")
-			integer tf_suffix = sl(ctx, "'")
-			integer tr = ident(ctx, "__tenant")
-			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
-			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
-			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
-			_batch_arrayPush(ctx, body_arr, tf_assign)
-			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero = il(ctx, 0)
-			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
-			integer sql_r1 = ident(ctx, "sql")
-			integer tf_r1 = ident(ctx, "__tenant_filter")
-			integer wc_r1 = ident(ctx, "where_clause")
-			integer where_kw = sl(ctx, " WHERE ")
-			integer and_kw = sl(ctx, " AND ")
-			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
-			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
-			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
-			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
-			integer then_assign = sassign(ctx, "sql", t4)
-			integer then_arr = arr1(ctx, then_assign)
-			integer sql_r2 = ident(ctx, "sql")
-			integer tf_r2 = ident(ctx, "__tenant_filter")
-			integer where_kw2 = sl(ctx, " WHERE ")
-			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
-			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
-			integer else_assign = sassign(ctx, "sql", e2)
-			integer else_arr = arr1(ctx, else_assign)
-			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
-			_batch_arrayPush(ctx, body_arr, where_if)
+			src = src + "string __tenant = tenant_getId()\n"
+			src = src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			src = src + "else\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero2 = il(ctx, 0)
-			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
-			integer sql_r3 = ident(ctx, "sql")
-			integer wc_r2 = ident(ctx, "where_clause")
-			integer where_kw3 = sl(ctx, " WHERE ")
-			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
-			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
-			integer wn_assign = sassign(ctx, "sql", wn2)
-			integer wn_then = arr1(ctx, wn_assign)
-			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
-			_batch_arrayPush(ctx, body_arr, wn_if)
-		// sql = sql + " LIMIT 1"
-		integer sql_r4 = ident(ctx, "sql")
-		integer limit1 = sl(ctx, " LIMIT 1")
-		integer lim_expr = _batch_binop(ctx, "+", sql_r4, limit1)
-		integer lim_assign = sassign(ctx, "sql", lim_expr)
-		_batch_arrayPush(ctx, body_arr, lim_assign)
-		// string __exists_result = _db_query(sql, "[]")
-		integer sql_r5 = ident(ctx, "sql")
-		integer ep = sl(ctx, "[]")
-		integer dbq = call2(ctx, "_db_query", sql_r5, ep)
-		integer exr_assign = sassign(ctx, "__exists_result", dbq)
-		_batch_arrayPush(ctx, body_arr, exr_assign)
-		// if __extract_count(__exists_result) > 0 { return true } return false
-		integer exr_ref = ident(ctx, "__exists_result")
-		integer ec_call = call1(ctx, "__extract_count", exr_ref)
-		integer zero_lit = il(ctx, 0)
-		integer ec_cond = _batch_binop(ctx, ">", ec_call, zero_lit)
-		integer true_lit = bl(ctx, true)
-		integer ret1 = sr(ctx, true_lit)
-		integer ex_then = arr1(ctx, ret1)
-		integer ex_if = _batch_stmtIf(ctx, ec_cond, ex_then, 0)
-		_batch_arrayPush(ctx, body_arr, ex_if)
-		integer false_lit = bl(ctx, false)
-		integer ret0 = sr(ctx, false_lit)
-		_batch_arrayPush(ctx, body_arr, ret0)
-		return sblk(ctx, body_arr)
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + where_clause\n"
+		src = src + "sql = sql + \" LIMIT 1\"\n"
+		src = src + "string __exists_result = _db_query(sql, \"[]\")\n"
+		src = src + "if __extract_count(__exists_result) > 0\n"
+		src = src + "\treturn true\n"
+		src = src + "return false\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: string findOrFail(string where_clause)
 	integer build_find_or_fail_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
-		integer sql_base = sl(ctx, "SELECT * FROM " + table_name)
-		integer sql_assign = sassign(ctx, "sql", sql_base)
-		_batch_arrayPush(ctx, body_arr, sql_assign)
+		string src = "string sql = \"SELECT * FROM " + table_name + "\"\n"
 		if has_tenant
-			integer tid = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant", tid)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			integer tf_prefix = sl(ctx, "tenant_id = '")
-			integer tf_suffix = sl(ctx, "'")
-			integer tr = ident(ctx, "__tenant")
-			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
-			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
-			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
-			_batch_arrayPush(ctx, body_arr, tf_assign)
-			integer wc_len = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero = il(ctx, 0)
-			integer wc_cond = _batch_binop(ctx, ">", wc_len, wc_zero)
-			integer sql_r1 = ident(ctx, "sql")
-			integer tf_r1 = ident(ctx, "__tenant_filter")
-			integer wc_r1 = ident(ctx, "where_clause")
-			integer where_kw = sl(ctx, " WHERE ")
-			integer and_kw = sl(ctx, " AND ")
-			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
-			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
-			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
-			integer t4 = _batch_binop(ctx, "+", t3, wc_r1)
-			integer then_assign = sassign(ctx, "sql", t4)
-			integer then_arr = arr1(ctx, then_assign)
-			integer sql_r2 = ident(ctx, "sql")
-			integer tf_r2 = ident(ctx, "__tenant_filter")
-			integer where_kw2 = sl(ctx, " WHERE ")
-			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
-			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
-			integer else_assign = sassign(ctx, "sql", e2)
-			integer else_arr = arr1(ctx, else_assign)
-			integer where_if = _batch_stmtIf(ctx, wc_cond, then_arr, else_arr)
-			_batch_arrayPush(ctx, body_arr, where_if)
+			src = src + "string __tenant = tenant_getId()\n"
+			src = src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_clause\n"
+			src = src + "else\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			integer wc_len2 = _batch_call(ctx, "where_clause.length", _batch_arrayNew(ctx))
-			integer wc_zero2 = il(ctx, 0)
-			integer wc_cond2 = _batch_binop(ctx, ">", wc_len2, wc_zero2)
-			integer sql_r3 = ident(ctx, "sql")
-			integer wc_r2 = ident(ctx, "where_clause")
-			integer where_kw3 = sl(ctx, " WHERE ")
-			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
-			integer wn2 = _batch_binop(ctx, "+", wn1, wc_r2)
-			integer wn_assign = sassign(ctx, "sql", wn2)
-			integer wn_then = arr1(ctx, wn_assign)
-			integer wn_if = _batch_stmtIf(ctx, wc_cond2, wn_then, 0)
-			_batch_arrayPush(ctx, body_arr, wn_if)
-		// sql = sql + " LIMIT 1"
-		integer sql_r4 = ident(ctx, "sql")
-		integer limit1 = sl(ctx, " LIMIT 1")
-		integer lim_expr = _batch_binop(ctx, "+", sql_r4, limit1)
-		integer lim_assign = sassign(ctx, "sql", lim_expr)
-		_batch_arrayPush(ctx, body_arr, lim_assign)
-		// string __fail_result = _db_query(sql, "[]")
-		integer sql_r5 = ident(ctx, "sql")
-		integer ep = sl(ctx, "[]")
-		integer dbq = call2(ctx, "_db_query", sql_r5, ep)
-		integer fr_assign = sassign(ctx, "__fail_result", dbq)
-		_batch_arrayPush(ctx, body_arr, fr_assign)
-		// if __fail_result == "[]" { error("NOT_FOUND") }
-		integer fr_ref = ident(ctx, "__fail_result")
-		integer empty_json = sl(ctx, "[]")
-		integer fr_cond = _batch_binop(ctx, "==", fr_ref, empty_json)
-		integer not_found_lit = sl(ctx, "NOT_FOUND")
-		integer err_call = call1(ctx, "error", not_found_lit)
-		integer err_stmt = _batch_stmtCall(ctx, "error", arr1(ctx, not_found_lit))
-		integer fail_then = arr1(ctx, err_stmt)
-		integer fail_if = _batch_stmtIf(ctx, fr_cond, fail_then, 0)
-		_batch_arrayPush(ctx, body_arr, fail_if)
-		// return __fail_result
-		integer fr_ref2 = ident(ctx, "__fail_result")
-		integer ret_stmt = sr(ctx, fr_ref2)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "if where_clause.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + where_clause\n"
+		src = src + "sql = sql + \" LIMIT 1\"\n"
+		src = src + "string __fail_result = _db_query(sql, \"[]\")\n"
+		src = src + "if __fail_result == \"[]\"\n"
+		src = src + "\terror(\"NOT_FOUND\")\n"
+		src = src + "return __fail_result\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: boolean migrate()
 	integer build_migrate_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
+		string src = ""
 		if has_tenant
-			// string __field_defs = __field_definitions()
-			integer fd_expr = call0(ctx, "__field_definitions")
-			integer fd_assign = sassign(ctx, "__field_defs", fd_expr)
-			_batch_arrayPush(ctx, body_arr, fd_assign)
-			// if __field_defs.indexOf("tenant_id") == -1 { __field_defs = "tenant_id TEXT NOT NULL, " + __field_defs }
-			integer fd_ref = ident(ctx, "__field_defs")
-			integer tid_lit = sl(ctx, "tenant_id")
-			integer iof_call = call1(ctx, "__field_defs.indexOf", tid_lit)
-			integer neg1 = il(ctx, -1)
-			integer iof_cond = _batch_binop(ctx, "==", iof_call, neg1)
-			integer prepend_lit = sl(ctx, "tenant_id TEXT NOT NULL, ")
-			integer fd_ref2 = ident(ctx, "__field_defs")
-			integer prepend_expr = _batch_binop(ctx, "+", prepend_lit, fd_ref2)
-			integer prepend_assign = sassign(ctx, "__field_defs", prepend_expr)
-			integer prepend_then = arr1(ctx, prepend_assign)
-			integer prepend_if = _batch_stmtIf(ctx, iof_cond, prepend_then, 0)
-			_batch_arrayPush(ctx, body_arr, prepend_if)
-			// string sql = "CREATE TABLE IF NOT EXISTS <table> (id SERIAL PRIMARY KEY, " + __field_defs + ")"
-			integer sql_prefix = sl(ctx, "CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, ")
-			integer sql_suffix = sl(ctx, ")")
-			integer fd_ref3 = ident(ctx, "__field_defs")
-			integer sm1 = _batch_binop(ctx, "+", sql_prefix, fd_ref3)
-			integer sql_expr = _batch_binop(ctx, "+", sm1, sql_suffix)
-			integer sql_assign = sassign(ctx, "sql", sql_expr)
-			_batch_arrayPush(ctx, body_arr, sql_assign)
+			src = src + "string __field_defs = __field_definitions()\n"
+			src = src + "if __field_defs.indexOf(\"tenant_id\") == -1\n"
+			src = src + "\t__field_defs = \"tenant_id TEXT NOT NULL, \" + __field_defs\n"
+			src = src + "string sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_defs + \")\"\n"
 		else
-			// string sql = "CREATE TABLE IF NOT EXISTS <table> (id SERIAL PRIMARY KEY, " + __field_definitions() + ")"
-			integer fd_call = call0(ctx, "__field_definitions")
-			integer sql_prefix2 = sl(ctx, "CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, ")
-			integer sql_suffix2 = sl(ctx, ")")
-			integer sm2 = _batch_binop(ctx, "+", sql_prefix2, fd_call)
-			integer sql_expr2 = _batch_binop(ctx, "+", sm2, sql_suffix2)
-			integer sql_assign2 = sassign(ctx, "sql", sql_expr2)
-			_batch_arrayPush(ctx, body_arr, sql_assign2)
-		// integer affected = _db_execute(sql, "[]")
-		integer sql_r = ident(ctx, "sql")
-		integer ep = sl(ctx, "[]")
-		integer dbe = call2(ctx, "_db_execute", sql_r, ep)
-		integer aff_assign = sassign(ctx, "affected", dbe)
-		_batch_arrayPush(ctx, body_arr, aff_assign)
-		// return affected >= 0
-		integer aff_ref = ident(ctx, "affected")
-		integer zero_lit = il(ctx, 0)
-		integer ret_cond = _batch_binop(ctx, ">=", aff_ref, zero_lit)
-		integer ret_stmt = sr(ctx, ret_cond)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "string sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_definitions() + \")\"\n"
+		src = src + "integer affected = _db_execute(sql, \"[]\")\n"
+		src = src + "return affected >= 0\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: integer __raw_update(string set_sql, string where_sql)
 	integer build_raw_update_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
-		// string sql = "UPDATE <table> SET " + set_sql
-		integer set_ref = ident(ctx, "set_sql")
-		integer upd_prefix = sl(ctx, "UPDATE " + table_name + " SET ")
-		integer sql_expr = _batch_binop(ctx, "+", upd_prefix, set_ref)
-		integer sql_assign = sassign(ctx, "sql", sql_expr)
-		_batch_arrayPush(ctx, body_arr, sql_assign)
+		string src = "string sql = \"UPDATE " + table_name + " SET \" + set_sql\n"
 		if has_tenant
-			integer tid = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant", tid)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			integer tf_prefix = sl(ctx, "tenant_id = '")
-			integer tf_suffix = sl(ctx, "'")
-			integer tr = ident(ctx, "__tenant")
-			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
-			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
-			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
-			_batch_arrayPush(ctx, body_arr, tf_assign)
-			integer ws_len = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
-			integer ws_zero = il(ctx, 0)
-			integer ws_cond = _batch_binop(ctx, ">", ws_len, ws_zero)
-			integer sql_r1 = ident(ctx, "sql")
-			integer tf_r1 = ident(ctx, "__tenant_filter")
-			integer ws_r1 = ident(ctx, "where_sql")
-			integer where_kw = sl(ctx, " WHERE ")
-			integer and_kw = sl(ctx, " AND ")
-			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
-			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
-			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
-			integer t4 = _batch_binop(ctx, "+", t3, ws_r1)
-			integer then_assign = sassign(ctx, "sql", t4)
-			integer then_arr = arr1(ctx, then_assign)
-			integer sql_r2 = ident(ctx, "sql")
-			integer tf_r2 = ident(ctx, "__tenant_filter")
-			integer where_kw2 = sl(ctx, " WHERE ")
-			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
-			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
-			integer else_assign = sassign(ctx, "sql", e2)
-			integer else_arr = arr1(ctx, else_assign)
-			integer where_if = _batch_stmtIf(ctx, ws_cond, then_arr, else_arr)
-			_batch_arrayPush(ctx, body_arr, where_if)
+			src = src + "string __tenant = tenant_getId()\n"
+			src = src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			src = src + "if where_sql.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
+			src = src + "else\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			integer ws_len2 = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
-			integer ws_zero2 = il(ctx, 0)
-			integer ws_cond2 = _batch_binop(ctx, ">", ws_len2, ws_zero2)
-			integer sql_r3 = ident(ctx, "sql")
-			integer ws_r2 = ident(ctx, "where_sql")
-			integer where_kw3 = sl(ctx, " WHERE ")
-			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
-			integer wn2 = _batch_binop(ctx, "+", wn1, ws_r2)
-			integer wn_assign = sassign(ctx, "sql", wn2)
-			integer wn_then = arr1(ctx, wn_assign)
-			integer wn_if = _batch_stmtIf(ctx, ws_cond2, wn_then, 0)
-			_batch_arrayPush(ctx, body_arr, wn_if)
-		// return _db_execute(sql, "[]")
-		integer sql_r4 = ident(ctx, "sql")
-		integer ep = sl(ctx, "[]")
-		integer dbe = call2(ctx, "_db_execute", sql_r4, ep)
-		integer ret_stmt = sr(ctx, dbe)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "if where_sql.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + where_sql\n"
+		src = src + "return _db_execute(sql, \"[]\")\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 	// Build body for: integer __raw_delete(string where_sql)
 	integer build_raw_delete_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
+		string src = "string sql = \"DELETE FROM " + table_name + "\"\n"
 		if has_tenant
-			integer sql_base = sl(ctx, "DELETE FROM " + table_name)
-			integer sql_assign = sassign(ctx, "sql", sql_base)
-			_batch_arrayPush(ctx, body_arr, sql_assign)
-			integer tid = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant", tid)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			integer tf_prefix = sl(ctx, "tenant_id = '")
-			integer tf_suffix = sl(ctx, "'")
-			integer tr = ident(ctx, "__tenant")
-			integer p1 = _batch_binop(ctx, "+", tf_prefix, tr)
-			integer tf_expr = _batch_binop(ctx, "+", p1, tf_suffix)
-			integer tf_assign = sassign(ctx, "__tenant_filter", tf_expr)
-			_batch_arrayPush(ctx, body_arr, tf_assign)
-			integer ws_len = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
-			integer ws_zero = il(ctx, 0)
-			integer ws_cond = _batch_binop(ctx, ">", ws_len, ws_zero)
-			integer sql_r1 = ident(ctx, "sql")
-			integer tf_r1 = ident(ctx, "__tenant_filter")
-			integer ws_r1 = ident(ctx, "where_sql")
-			integer where_kw = sl(ctx, " WHERE ")
-			integer and_kw = sl(ctx, " AND ")
-			integer t1 = _batch_binop(ctx, "+", sql_r1, where_kw)
-			integer t2 = _batch_binop(ctx, "+", t1, tf_r1)
-			integer t3 = _batch_binop(ctx, "+", t2, and_kw)
-			integer t4 = _batch_binop(ctx, "+", t3, ws_r1)
-			integer then_assign = sassign(ctx, "sql", t4)
-			integer then_arr = arr1(ctx, then_assign)
-			integer sql_r2 = ident(ctx, "sql")
-			integer tf_r2 = ident(ctx, "__tenant_filter")
-			integer where_kw2 = sl(ctx, " WHERE ")
-			integer e1 = _batch_binop(ctx, "+", sql_r2, where_kw2)
-			integer e2 = _batch_binop(ctx, "+", e1, tf_r2)
-			integer else_assign = sassign(ctx, "sql", e2)
-			integer else_arr = arr1(ctx, else_assign)
-			integer where_if = _batch_stmtIf(ctx, ws_cond, then_arr, else_arr)
-			_batch_arrayPush(ctx, body_arr, where_if)
+			src = src + "string __tenant = tenant_getId()\n"
+			src = src + "string __tenant_filter = \"tenant_id = '\" + __tenant + \"'\"\n"
+			src = src + "if where_sql.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter + \" AND \" + where_sql\n"
+			src = src + "else\n"
+			src = src + "\tsql = sql + \" WHERE \" + __tenant_filter\n"
 		else
-			integer sql_base2 = sl(ctx, "DELETE FROM " + table_name)
-			integer sql_assign2 = sassign(ctx, "sql", sql_base2)
-			_batch_arrayPush(ctx, body_arr, sql_assign2)
-			integer ws_len2 = _batch_call(ctx, "where_sql.length", _batch_arrayNew(ctx))
-			integer ws_zero2 = il(ctx, 0)
-			integer ws_cond2 = _batch_binop(ctx, ">", ws_len2, ws_zero2)
-			integer sql_r3 = ident(ctx, "sql")
-			integer ws_r2 = ident(ctx, "where_sql")
-			integer where_kw3 = sl(ctx, " WHERE ")
-			integer wn1 = _batch_binop(ctx, "+", sql_r3, where_kw3)
-			integer wn2 = _batch_binop(ctx, "+", wn1, ws_r2)
-			integer wn_assign = sassign(ctx, "sql", wn2)
-			integer wn_then = arr1(ctx, wn_assign)
-			integer wn_if = _batch_stmtIf(ctx, ws_cond2, wn_then, 0)
-			_batch_arrayPush(ctx, body_arr, wn_if)
-		// return _db_execute(sql, "[]")
-		integer sql_r4 = ident(ctx, "sql")
-		integer ep = sl(ctx, "[]")
-		integer dbe = call2(ctx, "_db_execute", sql_r4, ep)
-		integer ret_stmt = sr(ctx, dbe)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+			src = src + "if where_sql.length() > 0\n"
+			src = src + "\tsql = sql + \" WHERE \" + where_sql\n"
+		src = src + "return _db_execute(sql, \"[]\")\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if body_h == 0
+			return 0
+		return body_h
 
 // ============================================================================
 // SUB-CYCLE 2: HELPER METHOD BODY BUILDERS
