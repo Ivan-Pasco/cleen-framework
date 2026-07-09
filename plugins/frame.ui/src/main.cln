@@ -99,7 +99,7 @@
 
 external:
 	// ---- Declaration emitters (§3.4, §3.5, §3.11, §3.13, §3.16) ----
-	integer _emit_function(integer ctx, string name, string params_json, string return_type, integer body_stmt_handle, integer flags)
+	integer _emit_function(integer ctx, string name, string params_json, integer return_type, integer body_stmt_handle, integer flags)
 	integer _emit_class_full(integer ctx, integer class_spec_handle_or_lp, integer flags)
 	integer _emit_state_block(integer ctx, string fields_json)
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
@@ -109,6 +109,7 @@ external:
 	// ---- AST type/expression constructors (§3.9, §3.10) — needed for module-scope
 	// state: block fields (Sub-cycle 1 minimal set; Sub-cycles 2/3 may add more) ----
 	integer _type_class_ref(integer ctx, string name)
+	integer _type_string(integer ctx)
 	integer _expr_call(integer ctx, string callee, string args_json)
 	// ---- Diagnostics (§5) ----
 	integer _emit_error(integer ctx, integer severity, string code, string message, string span)
@@ -171,14 +172,23 @@ functions:
 	// longer on the lifecycle slot path.
 	integer emit_ui_helpers_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_HELPERS", "emit_ui_helpers")
-		// render(name) -> string
-		string render_params = "[{\"name\":\"name\",\"type\":\"string\"}]"
+		// Type handles are single-consumption per typed-emission.md §4 clause 2:
+		// each _emit_function consumes one handle per parameter plus one for the
+		// return type, so every use-site allocates fresh handles.
+		//
+		// render(name: string) -> string
+		integer render_p_str = _type_string(ctx)
+		integer render_r_str = _type_string(ctx)
+		string render_params = "[{\"name\":\"name\",\"type_handle\":" + render_p_str.toString() + "}]"
 		string render_body = "return _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", \"{}\")\n"
-		ui_helper_function(ctx, "render", render_params, "string", render_body, 1)
-		// renderWith(name, data) -> string
-		string rw_params = "[{\"name\":\"name\",\"type\":\"string\"},{\"name\":\"data\",\"type\":\"string\"}]"
+		ui_helper_function(ctx, "render", render_params, render_r_str, render_body, 1)
+		// renderWith(name: string, data: string) -> string
+		integer rw_p_name = _type_string(ctx)
+		integer rw_p_data = _type_string(ctx)
+		integer rw_r_str = _type_string(ctx)
+		string rw_params = "[{\"name\":\"name\",\"type_handle\":" + rw_p_name.toString() + "},{\"name\":\"data\",\"type_handle\":" + rw_p_data.toString() + "}]"
 		string rw_body = "return _ui_render_page(\"app/ui/web/pages/\" + name + \".html\", data)\n"
-		ui_helper_function(ctx, "renderWith", rw_params, "string", rw_body, 1)
+		ui_helper_function(ctx, "renderWith", rw_params, rw_r_str, rw_body, 1)
 		_ctx_clear_error(ctx)
 		return 0
 
@@ -400,14 +410,16 @@ functions:
 		// -------- Phase 4: emit route render() functions --------
 		integer rfi = 0
 		while rfi < route_fn_names.length()
-			ui_helper_function(ctx, route_fn_names[rfi], "[]", "string", route_fn_bodies[rfi], 1)
+			integer route_r_str = _type_string(ctx)
+			ui_helper_function(ctx, route_fn_names[rfi], "[]", route_r_str, route_fn_bodies[rfi], 1)
 			rfi = rfi + 1
 
 		// -------- Phase 5: hydration manifest function --------
 		if hydration_entries.length() > 0
 			string screens_json = entries_to_screens_json(hydration_entries)
 			string manifest_body = "return \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
-			ui_helper_function(ctx, "_ui_hydration_manifest", "[]", "string", manifest_body, 1)
+			integer manifest_r_str = _type_string(ctx)
+			ui_helper_function(ctx, "_ui_hydration_manifest", "[]", manifest_r_str, manifest_body, 1)
 
 		// -------- Phase 6: load helper functions --------
 		if has_any_load
@@ -424,7 +436,8 @@ functions:
 		if has_server
 			has_server_str = "true"
 		string diag_body = "return \"frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
-		ui_helper_function(ctx, "_frame_ui_assemble_diagnostics", "[]", "string", diag_body, 1)
+		integer diag_r_str = _type_string(ctx)
+		ui_helper_function(ctx, "_frame_ui_assemble_diagnostics", "[]", diag_r_str, diag_body, 1)
 
 		_ctx_clear_error(ctx)
 		return 0
@@ -472,7 +485,9 @@ functions:
 		norm_body = norm_body + "\tif __second == \"{\" or __second == \"[\"\n"
 		norm_body = norm_body + "\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
 		norm_body = norm_body + "return __s\n"
-		ui_helper_function(ctx, "_ui_normalize_load_return", "[{\"name\":\"__r\",\"type\":\"any\"}]", "string", norm_body, 1)
+		integer norm_p_any = _type_class_ref(ctx, "any")
+		integer norm_r_str = _type_string(ctx)
+		ui_helper_function(ctx, "_ui_normalize_load_return", "[{\"name\":\"__r\",\"type_handle\":" + norm_p_any.toString() + "}]", norm_r_str, norm_body, 1)
 
 		// _ui_unwrap_json_encoded_string(string __s) -> string
 		string unwrap_body = "if __s.length() < 2\n"
@@ -505,7 +520,9 @@ functions:
 		unwrap_body = unwrap_body + "\t\t__result = __result + __ch\n"
 		unwrap_body = unwrap_body + "\t\t__i = __i + 1\n"
 		unwrap_body = unwrap_body + "return __result\n"
-		ui_helper_function(ctx, "_ui_unwrap_json_encoded_string", "[{\"name\":\"__s\",\"type\":\"string\"}]", "string", unwrap_body, 1)
+		integer unwrap_p_str = _type_string(ctx)
+		integer unwrap_r_str = _type_string(ctx)
+		ui_helper_function(ctx, "_ui_unwrap_json_encoded_string", "[{\"name\":\"__s\",\"type_handle\":" + unwrap_p_str.toString() + "}]", unwrap_r_str, unwrap_body, 1)
 
 		// _ui_promote_string_fields(string __input) -> string
 		string promote_body = "if __input.length() < 4\n"
@@ -581,7 +598,9 @@ functions:
 		promote_body = promote_body + "\t\t\t__out = __out + __ch\n"
 		promote_body = promote_body + "\t\t\t__i = __i + 1\n"
 		promote_body = promote_body + "return __out\n"
-		ui_helper_function(ctx, "_ui_promote_string_fields", "[{\"name\":\"__input\",\"type\":\"string\"}]", "string", promote_body, 1)
+		integer promote_p_str = _type_string(ctx)
+		integer promote_r_str = _type_string(ctx)
+		ui_helper_function(ctx, "_ui_promote_string_fields", "[{\"name\":\"__input\",\"type_handle\":" + promote_p_str.toString() + "}]", promote_r_str, promote_body, 1)
 		return 0
 
 // ============================================================================
@@ -1095,18 +1114,19 @@ functions:
 
 	// ui_helper_function — Sub-cycle 2 (2026-07-05) factory for top-level
 	// helper function emission. Wraps _emit_function (§3.1) with body-source
-	// pass-through via _emit_stmt_from_source (§3.11). Callers pass the
-	// helper name, a JSON params array, a return-type name string (per the
-	// external: block's `string return_type` shape — see frame.data's
-	// _emit_function usage at plugins/frame.data/src/main.cln:1951 for the
-	// established convention), and a Clean source string containing the
-	// function body statements.
+	// pass-through via _emit_stmt_from_source (§3.11).
+	//
+	// params_json must use the typed-emission shape:
+	//   [{"name":"<name>","type_handle":<int>}, ...]
+	// and return_type must be an integer type handle produced by _type_string /
+	// _type_integer / _type_class_ref, per compiler contract (see
+	// clean-language-compiler/src/plugins/typed_emission/bridges.rs:1116).
 	//
 	// Sub-cycle 2 emit_ui_helpers_typed uses this to emit render(name) and
 	// renderWith(name, data). Sub-cycle 3 may reuse for other helpers.
 	//
 	// flags: bit 1 = exported (usually 1 for public helpers).
-	integer ui_helper_function(integer ctx, string name, string params_json, string return_type, string body_source, integer flags)
+	integer ui_helper_function(integer ctx, string name, string params_json, integer return_type, string body_source, integer flags)
 		integer body_h = _emit_stmt_from_source(ctx, body_source, 0)
 		return _emit_function(ctx, name, params_json, return_type, body_h, flags)
 
