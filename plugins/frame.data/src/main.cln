@@ -1080,10 +1080,19 @@ functions:
 			_batch_arrayPush(ctx, body_arr, sql_assign2)
 
 		// string params = "[" + id.toString() + "]"
-		// Use _emit_stmt_from_source for this line: method call syntax requires receiver.method()
-		// which the batch builder does not natively express as a dotted call.
-		integer params_src_h = _emit_stmt_from_source(ctx, "string params = \"[\" + id.toString() + \"]\"\n", 0)
-		_batch_arrayPush(ctx, body_arr, params_src_h)
+		// Method call syntax requires receiver.method() which the batch expr
+		// builder does not natively express. Use _batch_stmtSeq (returns a
+		// batch stmt handle) instead of _emit_stmt_from_source (returns a
+		// plain arena handle that cannot be pushed into a batch stmt array
+		// — that pattern triggers PLUGIN013 batch.arrayPush per compiler
+		// prompt 58764a2b-7bd8-11f1 and the cross-arena OutOfRange cascade
+		// downstream).
+		integer params_stmt = _batch_stmtSeq(ctx, "string params = \"[\" + id.toString() + \"]\"\n")
+		if _ctx_had_error(ctx) != 0
+			return 0
+		if params_stmt == 0
+			return 0
+		_batch_arrayPush(ctx, body_arr, params_stmt)
 
 		// integer affected = _db_execute(sql, params)
 		integer sql_ref = ident(ctx, "sql")
