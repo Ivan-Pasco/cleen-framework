@@ -55,6 +55,12 @@
 	// heapPtr MUST be initialized from the WASM module's __heap_ptr export.
 	// See platform-architecture/MEMORY_POLICY.md §7.2.
 	let heapPtr = -1;
+	// scopeMarks — stack of heapPtr snapshots pushed by _arena_scope_push and
+	// popped by _arena_scope_pop. Bracket-emitted by the compiler's dual-
+	// accumulator loop rewrite (rewrite_dual_accumulator_loops); see the
+	// bridge registration below and prompt 8ac2c282-7bbe-11f1 for the
+	// contract.
+	const scopeMarks = [];
 	let currentEvent = null;
 	let currentEventTarget = null;
 	const componentRegistry = new Map();
@@ -663,13 +669,31 @@
 			_state_reset_all: () => {},
 			_state_reset_named: () => {},
 
-			// Compiler-emitted arena-scope markers (typed-emission ABI, no-op on
-			// browser hosts per foundation/spec/plugins/contracts/typed-emission.md:1015
-			// and clean-node-server session 2026-07-06-arena-scope-bridges). These
-			// are allocation-scope hints used by the compiler's arena; the runtime
-			// does not need to observe them here.
-			_arena_scope_push: () => 0,
-			_arena_scope_pop: () => {},
+			// Compiler-emitted arena-scope markers. Contract confirmed by
+			// compiler team via prompt 8ac2c282-7bbe-11f1:
+			// - Only emitted around HIR-rewritten dual-accumulator loops
+			//   (rewrite_dual_accumulator_loops, src/hir/hir_builder.rs) as
+			//   a triangular-sum OOM guard, NOT around every function call.
+			// - push() snapshots heapPtr and returns a 1-based depth counter.
+			// - pop(handle) resets heapPtr to the snapshot at target depth;
+			//   handle <= 0 is a no-op. Reference impl in wasmtime_runner.rs.
+			// - The earlier no-op stub (commit ad75d7a) satisfied host-parity
+			//   but was contract-broken: returning 0 makes the paired pop a
+			//   no-op, defeating the compiler's OOM guard for the rewritten
+			//   loops. This impl matches the reference semantics.
+			_arena_scope_push: () => {
+				scopeMarks.push(heapPtr);
+				return scopeMarks.length;
+			},
+			_arena_scope_pop: (handle) => {
+				if (handle <= 0) return;
+				let resetTo = null;
+				while (scopeMarks.length >= handle) {
+					const mark = scopeMarks.pop();
+					if (resetTo === null) resetTo = mark;
+				}
+				if (resetTo !== null) heapPtr = resetTo;
+			},
 
 			// ========== DOM Manipulation ==========
 
