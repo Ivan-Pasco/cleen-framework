@@ -1,6 +1,14 @@
 // Frame UI Runtime Loader
 // WASM loader with full browser API bridge
-// Version: 2.2.1
+// Version: 2.3.0
+// 2.3.0 (2026-07-08): Layer 2 canary bridge fill-in — added math_*, _time_*,
+//   http_encode_url/decode_url/build_query/get_response_*, _crypto_hash_sha256/
+//   sha512/hmac/random_hex/random_bytes/hash_password/verify_password, and
+//   _json_encode/decode/get bridges. Also added pure-JS SHA-256/512 helpers
+//   at the top of the IIFE (adapted from frame.canvas/runtime/loader.js).
+//   Canaries console/crypto/math/storage/ui pass end-to-end in headless
+//   Chromium; time/json remain red pending upstream compiler bugs #97d07985b422
+//   and #a89cf930e6e3.
 //
 // All interactivity uses _ui_on_event delegation + targeted DOM updates.
 // WASM _start() registers handlers, handlers update DOM via bridge functions.
@@ -278,6 +286,186 @@
 	// Wheel events registered as passive cannot call preventDefault().
 	// We track passive registrations separately.
 	const passiveEventSelectors = new Set();
+
+	// --- Crypto helpers (pure-JS SHA-256/512 + HMAC) ---
+	// Adapted from plugins/frame.canvas/runtime/loader.js so the browser bridge
+	// can satisfy Layer 2's crypto.* canary synchronously. WASM's bridge
+	// boundary is synchronous, so we cannot use crypto.subtle.digest (which is
+	// Promise-returning). TASKS.md tracks the shared clean-stdlib.js extraction
+	// that would deduplicate this between frame.ui and frame.canvas.
+
+	function sha256Hex(input) {
+		const K = [
+			0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+			0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+			0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+			0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+			0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+			0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+			0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+			0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+		];
+		const enc = new TextEncoder().encode(input);
+		const bitLen = enc.length * 8;
+		const padLen = (Math.floor((enc.length + 9 + 63) / 64) * 64) - enc.length;
+		const msg = new Uint8Array(enc.length + padLen);
+		msg.set(enc, 0);
+		msg[enc.length] = 0x80;
+		const dv = new DataView(msg.buffer);
+		dv.setUint32(msg.length - 8, Math.floor(bitLen / 0x100000000), false);
+		dv.setUint32(msg.length - 4, bitLen >>> 0, false);
+		let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
+		let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+		const w = new Uint32Array(64);
+		const rotr = (x, n) => ((x >>> n) | (x << (32 - n))) >>> 0;
+		for (let i = 0; i < msg.length; i += 64) {
+			for (let t = 0; t < 16; t++) w[t] = dv.getUint32(i + t * 4, false);
+			for (let t = 16; t < 64; t++) {
+				const s0 = rotr(w[t - 15], 7) ^ rotr(w[t - 15], 18) ^ (w[t - 15] >>> 3);
+				const s1 = rotr(w[t - 2], 17) ^ rotr(w[t - 2], 19) ^ (w[t - 2] >>> 10);
+				w[t] = (w[t - 16] + s0 + w[t - 7] + s1) >>> 0;
+			}
+			let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, hh = h7;
+			for (let t = 0; t < 64; t++) {
+				const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+				const ch = (e & f) ^ (~e & g);
+				const t1 = (hh + S1 + ch + K[t] + w[t]) >>> 0;
+				const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+				const maj = (a & b) ^ (a & c) ^ (b & c);
+				const t2 = (S0 + maj) >>> 0;
+				hh = g; g = f; f = e; e = (d + t1) >>> 0;
+				d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+			}
+			h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0;
+			h4 = (h4 + e) >>> 0; h5 = (h5 + f) >>> 0; h6 = (h6 + g) >>> 0; h7 = (h7 + hh) >>> 0;
+		}
+		const toHex = (n) => n.toString(16).padStart(8, '0');
+		return toHex(h0) + toHex(h1) + toHex(h2) + toHex(h3) + toHex(h4) + toHex(h5) + toHex(h6) + toHex(h7);
+	}
+
+	function sha256Bytes(input) {
+		const hex = sha256Hex(input);
+		const out = new Uint8Array(32);
+		for (let i = 0; i < 32; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+		return out;
+	}
+
+	function sha512Hex(input) {
+		const K = [
+			0x428a2f98d728ae22n, 0x7137449123ef65cdn, 0xb5c0fbcfec4d3b2fn, 0xe9b5dba58189dbbcn,
+			0x3956c25bf348b538n, 0x59f111f1b605d019n, 0x923f82a4af194f9bn, 0xab1c5ed5da6d8118n,
+			0xd807aa98a3030242n, 0x12835b0145706fben, 0x243185be4ee4b28cn, 0x550c7dc3d5ffb4e2n,
+			0x72be5d74f27b896fn, 0x80deb1fe3b1696b1n, 0x9bdc06a725c71235n, 0xc19bf174cf692694n,
+			0xe49b69c19ef14ad2n, 0xefbe4786384f25e3n, 0x0fc19dc68b8cd5b5n, 0x240ca1cc77ac9c65n,
+			0x2de92c6f592b0275n, 0x4a7484aa6ea6e483n, 0x5cb0a9dcbd41fbd4n, 0x76f988da831153b5n,
+			0x983e5152ee66dfabn, 0xa831c66d2db43210n, 0xb00327c898fb213fn, 0xbf597fc7beef0ee4n,
+			0xc6e00bf33da88fc2n, 0xd5a79147930aa725n, 0x06ca6351e003826fn, 0x142929670a0e6e70n,
+			0x27b70a8546d22ffcn, 0x2e1b21385c26c926n, 0x4d2c6dfc5ac42aedn, 0x53380d139d95b3dfn,
+			0x650a73548baf63den, 0x766a0abb3c77b2a8n, 0x81c2c92e47edaee6n, 0x92722c851482353bn,
+			0xa2bfe8a14cf10364n, 0xa81a664bbc423001n, 0xc24b8b70d0f89791n, 0xc76c51a30654be30n,
+			0xd192e819d6ef5218n, 0xd69906245565a910n, 0xf40e35855771202an, 0x106aa07032bbd1b8n,
+			0x19a4c116b8d2d0c8n, 0x1e376c085141ab53n, 0x2748774cdf8eeb99n, 0x34b0bcb5e19b48a8n,
+			0x391c0cb3c5c95a63n, 0x4ed8aa4ae3418acbn, 0x5b9cca4f7763e373n, 0x682e6ff3d6b2b8a3n,
+			0x748f82ee5defb2fcn, 0x78a5636f43172f60n, 0x84c87814a1f0ab72n, 0x8cc702081a6439ecn,
+			0x90befffa23631e28n, 0xa4506cebde82bde9n, 0xbef9a3f7b2c67915n, 0xc67178f2e372532bn,
+			0xca273eceea26619cn, 0xd186b8c721c0c207n, 0xeada7dd6cde0eb1en, 0xf57d4f7fee6ed178n,
+			0x06f067aa72176fban, 0x0a637dc5a2c898a6n, 0x113f9804bef90daen, 0x1b710b35131c471bn,
+			0x28db77f523047d84n, 0x32caab7b40c72493n, 0x3c9ebe0a15c9bebcn, 0x431d67c49c100d4cn,
+			0x4cc5d4becb3e42b6n, 0x597f299cfc657e2an, 0x5fcb6fab3ad6faecn, 0x6c44198c4a475817n,
+		];
+		const enc = new TextEncoder().encode(input);
+		const bitLen = BigInt(enc.length) * 8n;
+		const padLen = (Math.floor((enc.length + 17 + 127) / 128) * 128) - enc.length;
+		const msg = new Uint8Array(enc.length + padLen);
+		msg.set(enc, 0);
+		msg[enc.length] = 0x80;
+		const dv = new DataView(msg.buffer);
+		dv.setBigUint64(msg.length - 8, bitLen, false);
+		const MASK64 = 0xffffffffffffffffn;
+		let h = [
+			0x6a09e667f3bcc908n, 0xbb67ae8584caa73bn, 0x3c6ef372fe94f82bn, 0xa54ff53a5f1d36f1n,
+			0x510e527fade682d1n, 0x9b05688c2b3e6c1fn, 0x1f83d9abfb41bd6bn, 0x5be0cd19137e2179n,
+		];
+		const rotr = (x, n) => ((x >> n) | ((x << (64n - n)) & MASK64)) & MASK64;
+		const w = new Array(80);
+		for (let i = 0; i < msg.length; i += 128) {
+			for (let t = 0; t < 16; t++) w[t] = dv.getBigUint64(i + t * 8, false);
+			for (let t = 16; t < 80; t++) {
+				const s0 = rotr(w[t - 15], 1n) ^ rotr(w[t - 15], 8n) ^ (w[t - 15] >> 7n);
+				const s1 = rotr(w[t - 2], 19n) ^ rotr(w[t - 2], 61n) ^ (w[t - 2] >> 6n);
+				w[t] = (w[t - 16] + s0 + w[t - 7] + s1) & MASK64;
+			}
+			let [a, b, c, d, e, f, g, hh] = h;
+			for (let t = 0; t < 80; t++) {
+				const S1 = rotr(e, 14n) ^ rotr(e, 18n) ^ rotr(e, 41n);
+				const ch = (e & f) ^ ((~e) & MASK64 & g);
+				const t1 = (hh + S1 + ch + K[t] + w[t]) & MASK64;
+				const S0 = rotr(a, 28n) ^ rotr(a, 34n) ^ rotr(a, 39n);
+				const maj = (a & b) ^ (a & c) ^ (b & c);
+				const t2 = (S0 + maj) & MASK64;
+				hh = g; g = f; f = e; e = (d + t1) & MASK64;
+				d = c; c = b; b = a; a = (t1 + t2) & MASK64;
+			}
+			h = [
+				(h[0] + a) & MASK64, (h[1] + b) & MASK64, (h[2] + c) & MASK64, (h[3] + d) & MASK64,
+				(h[4] + e) & MASK64, (h[5] + f) & MASK64, (h[6] + g) & MASK64, (h[7] + hh) & MASK64,
+			];
+		}
+		return h.map(x => x.toString(16).padStart(16, '0')).join('');
+	}
+
+	function sha512Bytes(input) {
+		const hex = sha512Hex(input);
+		const out = new Uint8Array(64);
+		for (let i = 0; i < 64; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+		return out;
+	}
+
+	function hmacHex(key, data, alg) {
+		const blockSize = alg === 'sha512' ? 128 : 64;
+		const hash = alg === 'sha512' ? sha512Bytes : sha256Bytes;
+		const hashHex = alg === 'sha512' ? sha512Hex : sha256Hex;
+		let keyBytes = new TextEncoder().encode(key);
+		if (keyBytes.length > blockSize) keyBytes = hash(key);
+		if (keyBytes.length < blockSize) {
+			const padded = new Uint8Array(blockSize);
+			padded.set(keyBytes);
+			keyBytes = padded;
+		}
+		const oKey = new Uint8Array(blockSize);
+		const iKey = new Uint8Array(blockSize);
+		for (let i = 0; i < blockSize; i++) {
+			oKey[i] = keyBytes[i] ^ 0x5c;
+			iKey[i] = keyBytes[i] ^ 0x36;
+		}
+		const dataBytes = new TextEncoder().encode(data);
+		const inner = new Uint8Array(iKey.length + dataBytes.length);
+		inner.set(iKey, 0); inner.set(dataBytes, iKey.length);
+		const innerHash = hash(new TextDecoder().decode(inner));
+		const outer = new Uint8Array(oKey.length + innerHash.length);
+		outer.set(oKey, 0); outer.set(innerHash, oKey.length);
+		return hashHex(new TextDecoder().decode(outer));
+	}
+
+	function cryptoRandomHex(byteCount) {
+		const n = Math.max(0, byteCount | 0);
+		const b = new Uint8Array(n);
+		if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(b);
+		else for (let i = 0; i < n; i++) b[i] = Math.floor(Math.random() * 256);
+		let hex = '';
+		for (let i = 0; i < n; i++) hex += b[i].toString(16).padStart(2, '0');
+		return hex;
+	}
+
+	function cryptoRandomBase64(byteCount) {
+		const n = Math.max(0, byteCount | 0);
+		const b = new Uint8Array(n);
+		if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(b);
+		else for (let i = 0; i < n; i++) b[i] = Math.floor(Math.random() * 256);
+		let bin = '';
+		for (let i = 0; i < n; i++) bin += String.fromCharCode(b[i]);
+		return btoa(bin);
+	}
 
 	// --- Bridge Object ---
 
@@ -875,6 +1063,153 @@
 			string_to_float: (ptr, len) => {
 				const n = parseFloat(readString(ptr, len));
 				return Number.isNaN(n) ? 0.0 : n;
+			},
+
+			// ========== math.* bridges ==========
+			// All entries here are emitted as WASM imports whenever any Clean
+			// program references the math namespace. The compiler emits
+			// math_random unconditionally (codegen_registration.rs), so it must
+			// be supplied even for programs that don't call math.random. Pure-
+			// WASM intrinsics (sqrt / abs / min / max / floor / ceil / round /
+			// trunc / sign) are compiled inline and never appear as imports.
+			math_pow:    (base, exp) => Math.pow(base, exp),
+			math_sin:    (x) => Math.sin(x),
+			math_cos:    (x) => Math.cos(x),
+			math_tan:    (x) => Math.tan(x),
+			math_asin:   (x) => Math.asin(x),
+			math_acos:   (x) => Math.acos(x),
+			math_atan:   (x) => Math.atan(x),
+			math_atan2:  (y, x) => Math.atan2(y, x),
+			math_sinh:   (x) => Math.sinh(x),
+			math_cosh:   (x) => Math.cosh(x),
+			math_tanh:   (x) => Math.tanh(x),
+			math_ln:     (x) => Math.log(x),
+			math_log10:  (x) => Math.log10(x),
+			math_log2:   (x) => Math.log2(x),
+			math_exp:    (x) => Math.exp(x),
+			math_exp2:   (x) => Math.pow(2, x),
+			math_random: () => Math.random(),
+
+			// ========== time.* bridges ==========
+			// _time_now returns Unix seconds as i64 (BigInt in JS-WASM boundary).
+			// _time_now_seconds returns fractional seconds; _time_performance_now
+			// returns high-res monotonic milliseconds. See function-registry.toml.
+			_time_now:             () => BigInt(Math.floor(Date.now() / 1000)),
+			_time_now_seconds:     () => Date.now() / 1000,
+			_time_performance_now: () => (typeof performance !== 'undefined' ? performance.now() : Date.now()),
+
+			// ========== http_* bridges (URL helpers + response accessors) ==========
+			// Only URL helpers and getResponseHeaders/Code run on the browser side;
+			// the network verbs (http_get / http_post / etc) live in the server-
+			// guard throw block further down because the browser has no synchronous
+			// HTTP client. Callers that need async browser fetch use _ui_fetch_cb.
+			http_encode_url: (ptr, len) => writeString(encodeURIComponent(readString(ptr, len))),
+			http_decode_url: (ptr, len) => {
+				try {
+					return writeString(decodeURIComponent(readString(ptr, len)));
+				} catch (_) {
+					return writeString(readString(ptr, len));
+				}
+			},
+			http_build_query: (ptr, len) => {
+				// Matches clean-server semantics: accepts a JSON object of
+				// key-value pairs and produces a url-encoded query string. A
+				// non-JSON string is treated as an already-formed query and
+				// returned unchanged.
+				const input = readString(ptr, len);
+				try {
+					const obj = JSON.parse(input);
+					if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+						const parts = [];
+						for (const [k, v] of Object.entries(obj)) {
+							const val = typeof v === 'string' ? v : String(v);
+							parts.push(encodeURIComponent(k) + '=' + encodeURIComponent(val));
+						}
+						return writeString(parts.join('&'));
+					}
+				} catch (_) { /* fall through */ }
+				return writeString(input);
+			},
+			// The browser is a client, not a request handler; there is no
+			// "last response" to inspect. Return 0 (JSON null) so the compiled
+			// wrappers see a null result — .length() on null resolves to 0.
+			http_get_response_code:    () => 0,
+			http_get_response_headers: () => 0,
+
+			// ========== _crypto_* bridges (SHA-256/512, HMAC, random, password) ==========
+			// The frame.auth 'crypto' namespace lowers to these bridges. Real
+			// synchronous implementations are required — see the SHA-256/512
+			// and HMAC helpers at the top of the IIFE.
+			_crypto_hash_sha256: (ptr, len) => writeString(sha256Hex(readString(ptr, len))),
+			_crypto_hash_sha512: (ptr, len) => writeString(sha512Hex(readString(ptr, len))),
+			_crypto_hmac: (dataPtr, dataLen, keyPtr, keyLen, algPtr, algLen) => {
+				const data = readString(dataPtr, dataLen);
+				const key = readString(keyPtr, keyLen);
+				const alg = readString(algPtr, algLen).toLowerCase();
+				return writeString(hmacHex(key, data, alg === 'sha512' ? 'sha512' : 'sha256'));
+			},
+			_crypto_random_hex:   (count) => writeString(cryptoRandomHex(count)),
+			_crypto_random_bytes: (count) => writeString(cryptoRandomBase64(count)),
+			// Deterministic browser-side password digest — bcrypt is not
+			// available synchronously in the browser. Uses salt|sha256(salt|pw)
+			// as an encode-once format compatible with verify below. Not
+			// intended for production password storage in a browser context.
+			_crypto_hash_password: (ptr, len) => {
+				const pw = readString(ptr, len);
+				const salt = cryptoRandomHex(16);
+				return writeString(salt + '$' + sha256Hex(salt + pw));
+			},
+			_crypto_verify_password: (pwPtr, pwLen, hashPtr, hashLen) => {
+				const pw = readString(pwPtr, pwLen);
+				const stored = readString(hashPtr, hashLen);
+				const dollar = stored.indexOf('$');
+				if (dollar < 0) return 0;
+				const salt = stored.slice(0, dollar);
+				const digest = stored.slice(dollar + 1);
+				return sha256Hex(salt + pw) === digest ? 1 : 0;
+			},
+
+			// ========== _json_* bridges (browser-side) ==========
+			// _json_encode round-trips through JSON.parse/stringify so the
+			// caller can rely on normalized output; non-JSON strings are
+			// encoded as JSON string values (matching server semantics).
+			// _json_decode returns the input unchanged when it parses, or an
+			// error object payload when it doesn't. _json_get walks a dotted
+			// key path into the parsed value and returns the string form.
+			_json_encode: (ptr, len) => {
+				const input = readString(ptr, len);
+				try {
+					return writeString(JSON.stringify(JSON.parse(input)));
+				} catch (_) {
+					return writeString(JSON.stringify(input));
+				}
+			},
+			_json_decode: (ptr, len) => {
+				const input = readString(ptr, len);
+				try {
+					JSON.parse(input);
+					return writeString(input);
+				} catch (e) {
+					return writeString(JSON.stringify({ error: e.message || 'parse failure' }));
+				}
+			},
+			_json_get: (docPtr, docLen, keyPtr, keyLen) => {
+				const doc = readString(docPtr, docLen);
+				const key = readString(keyPtr, keyLen);
+				let parsed;
+				try {
+					parsed = JSON.parse(doc);
+				} catch (_) {
+					return writeString('');
+				}
+				const parts = key.split('.');
+				let node = parsed;
+				for (const p of parts) {
+					if (node == null || typeof node !== 'object') return writeString('');
+					node = node[p];
+				}
+				if (node == null) return writeString('');
+				return writeString(typeof node === 'string' ? node : String(node));
 			},
 
 			// List operations — layout: [length:i32][capacity:i32][type_id:i32][pad:i32][elements...]
@@ -1893,13 +2228,7 @@
 					http_patch_with_headers: _sg('http_patch_with_headers'),
 					http_delete_with_headers: _sg('http_delete_with_headers'),
 					http_set_user_agent: _sg('http_set_user_agent'),
-					http_get_response_code: _sg('http_get_response_code'),
-					http_get_response_headers: _sg('http_get_response_headers'),
-					http_encode_url: _sg('http_encode_url'),
 					// frame.server — JSON utilities
-					_json_encode: _sg('_json_encode'),
-					_json_decode: _sg('_json_decode'),
-					_json_get: _sg('_json_get'),
 					// frame.data — database
 					_db_query: _sg('_db_query'),
 					_db_execute: _sg('_db_execute'),
