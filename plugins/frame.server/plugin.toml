@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.server"
-version = "2.8.1"
-description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
+version = "2.8.2"
+description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.2: WS-SEND-I32-VS-I64-001 coordination (e6e66d65) — five _ws_* bridge entries and their live.* language aliases changed client_id from `integer` to `i64` to match clean-server's i64 end-to-end handling. Coordinated with compiler prompt cceb276d and server prompt fa7765e2. Compiler registry edit lands after this plugin ships. Do not touch _ws_broadcast / _ws_room_broadcast — they take room name (string), not client_id. — v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -95,13 +95,13 @@ functions = [
   { name = "_http_ws_route", params = ["string", "string", "string", "string", "string"], returns = "void", description = "Register WebSocket route: method, path, onConnect handler, onMessage handler, onClose handler", expand_strings = true, hosts = ["server"] },
 
   # §15: WebSocket bridge functions (server-only; used inside LIVE endpoint handlers)
-  { name = "_ws_send", params = ["integer", "string"], returns = "void", description = "Send message to a specific WebSocket client by ID", expand_strings = true, hosts = ["server"] },
+  { name = "_ws_send", params = ["i64", "string"], returns = "void", description = "Send message to a specific WebSocket client by ID", expand_strings = true, hosts = ["server"] },
   { name = "_ws_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true, hosts = ["server"] },
-  { name = "_ws_close", params = ["integer"], returns = "void", description = "Close WebSocket connection for a specific client ID", hosts = ["server"] },
-  { name = "_ws_client_id", params = [], returns = "integer", description = "Get the current WebSocket client ID", hosts = ["server"] },
+  { name = "_ws_close", params = ["i64"], returns = "void", description = "Close WebSocket connection for a specific client ID", hosts = ["server"] },
+  { name = "_ws_client_id", params = [], returns = "i64", description = "Get the current WebSocket client ID", hosts = ["server"] },
   { name = "_ws_message", params = [], returns = "string", description = "Get the current incoming WebSocket message payload", hosts = ["server"] },
-  { name = "_ws_room_join", params = ["integer", "string"], returns = "void", description = "Add a client to a named room: clientId, room", expand_strings = true, hosts = ["server"] },
-  { name = "_ws_room_leave", params = ["integer", "string"], returns = "void", description = "Remove a client from a named room: clientId, room", expand_strings = true, hosts = ["server"] },
+  { name = "_ws_room_join", params = ["i64", "string"], returns = "void", description = "Add a client to a named room: clientId, room", expand_strings = true, hosts = ["server"] },
+  { name = "_ws_room_leave", params = ["i64", "string"], returns = "void", description = "Remove a client from a named room: clientId, room", expand_strings = true, hosts = ["server"] },
   { name = "_ws_room_broadcast", params = ["string", "string"], returns = "void", description = "Broadcast message to all clients in a room: room, message", expand_strings = true, hosts = ["server"] },
 
   # §FEXT-4: Server-Sent Events bridge functions (server-only; emits to the active SSE stream)
@@ -341,13 +341,13 @@ functions = [
   { name = "feed.retry", signature = "feed.retry(ms)", description = "Set the client reconnect interval in milliseconds", maps_to = "_sse_retry", params = ["integer"], returns = "integer" },
   { name = "feed.isConnected", signature = "feed.isConnected() -> boolean", description = "Returns true if the SSE client is still connected", maps_to = "_sse_is_connected", params = [], returns = "boolean" },
   # §15: WebSocket helpers (usable inside LIVE endpoint handlers)
-  { name = "live.send", signature = "live.send(clientId, message)", description = "Send message to a specific WebSocket client", maps_to = "_ws_send", params = ["integer", "string"], returns = "void" },
+  { name = "live.send", signature = "live.send(clientId, message)", description = "Send message to a specific WebSocket client", maps_to = "_ws_send", params = ["i64", "string"], returns = "void" },
   { name = "live.broadcast", signature = "live.broadcast(room, message)", description = "Broadcast message to all clients in a room", maps_to = "_ws_broadcast", params = ["string", "string"], returns = "void" },
-  { name = "live.close", signature = "live.close(clientId)", description = "Close a WebSocket connection by client ID", maps_to = "_ws_close", params = ["integer"], returns = "void" },
-  { name = "live.clientId", signature = "live.clientId() -> integer", description = "Get the current WebSocket client ID", maps_to = "_ws_client_id", params = [], returns = "integer" },
+  { name = "live.close", signature = "live.close(clientId)", description = "Close a WebSocket connection by client ID", maps_to = "_ws_close", params = ["i64"], returns = "void" },
+  { name = "live.clientId", signature = "live.clientId() -> i64", description = "Get the current WebSocket client ID", maps_to = "_ws_client_id", params = [], returns = "i64" },
   { name = "live.message", signature = "live.message() -> string", description = "Get the current incoming WebSocket message payload", maps_to = "_ws_message", params = [], returns = "string" },
-  { name = "live.roomJoin", signature = "live.roomJoin(clientId, room)", description = "Add a client to a named room", maps_to = "_ws_room_join", params = ["integer", "string"], returns = "void" },
-  { name = "live.roomLeave", signature = "live.roomLeave(clientId, room)", description = "Remove a client from a named room", maps_to = "_ws_room_leave", params = ["integer", "string"], returns = "void" },
+  { name = "live.roomJoin", signature = "live.roomJoin(clientId, room)", description = "Add a client to a named room", maps_to = "_ws_room_join", params = ["i64", "string"], returns = "void" },
+  { name = "live.roomLeave", signature = "live.roomLeave(clientId, room)", description = "Remove a client from a named room", maps_to = "_ws_room_leave", params = ["i64", "string"], returns = "void" },
   { name = "live.roomBroadcast", signature = "live.roomBroadcast(room, message)", description = "Broadcast message to all clients in a named room", maps_to = "_ws_room_broadcast", params = ["string", "string"], returns = "void" },
   # File download
   { name = "res.download", signature = "res.download(filename)", description = "Set Content-Disposition: attachment header so the browser downloads the response as a file named filename", maps_to = "_res_download", params = ["string"], returns = "void" },
@@ -467,4 +467,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.33.14"
+built_with_compiler = "0.33.20"
