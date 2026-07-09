@@ -1048,65 +1048,34 @@ functions:
 		return sblk(ctx, body_arr)
 
 	// Build body for: boolean delete()
+	// build_delete_body — returns an ARENA stmt handle (not a batch handle).
+	// The body needs `id.toString()` (method call syntax) which the batch
+	// expression builder cannot natively express (batch.call takes a string
+	// callee, not an expression handle for chained receiver.method calls).
+	// Rather than mix batch and arena handles inside the body_arr (which
+	// tripped PLUGIN013 batch.arrayPush + downstream OutOfRange cascade —
+	// compiler prompts 58764a2b-7bd8-11f1 and c81db7f1-7bda-11f1), the whole
+	// body is built as a source string and emitted via _emit_stmt_from_source.
+	// The class-spec inline method's `body_handle` field accepts arena stmt
+	// handles per typed-emission §3.13 (resolved via arena.take_stmt() in
+	// _emit_class_full — see batch_schema.rs BatchMethod.body_handle).
 	integer build_delete_body(integer ctx, string table_name, boolean has_tenant)
-		integer body_arr = _batch_arrayNew(ctx)
-		// if id == 0 { return false }
-		integer id_ref = ident(ctx, "id")
-		integer zero_lit = il(ctx, 0)
-		integer id_eq_zero = _batch_binop(ctx, "==", id_ref, zero_lit)
-		integer false_lit = bl(ctx, false)
-		integer ret_false = sr(ctx, false_lit)
-		integer early_stmts = arr1(ctx, ret_false)
-		integer early_if = _batch_stmtIf(ctx, id_eq_zero, early_stmts, 0)
-		_batch_arrayPush(ctx, body_arr, early_if)
-
+		string src = "if id == 0\n"
+		src = src + "\treturn false\n"
 		if has_tenant
-			// string __tenant_id = tenant_getId()
-			integer tid_expr = call0(ctx, "tenant_getId")
-			integer tid_assign = sassign(ctx, "__tenant_id", tid_expr)
-			_batch_arrayPush(ctx, body_arr, tid_assign)
-			// string sql = "DELETE FROM <table> WHERE id = $1 AND tenant_id = '" + __tenant_id + "'"
-			integer tid_ref = ident(ctx, "__tenant_id")
-			integer prefix = sl(ctx, "DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '")
-			integer suffix = sl(ctx, "'")
-			integer p1 = _batch_binop(ctx, "+", prefix, tid_ref)
-			integer sql_expr = _batch_binop(ctx, "+", p1, suffix)
-			integer sql_assign = sassign(ctx, "sql", sql_expr)
-			_batch_arrayPush(ctx, body_arr, sql_assign)
+			src = src + "string __tenant_id = tenant_getId()\n"
+			src = src + "string sql = \"DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '\" + __tenant_id + \"'\"\n"
 		else
-			// string sql = "DELETE FROM <table> WHERE id = $1"
-			integer sql_lit = sl(ctx, "DELETE FROM " + table_name + " WHERE id = $1")
-			integer sql_assign2 = sassign(ctx, "sql", sql_lit)
-			_batch_arrayPush(ctx, body_arr, sql_assign2)
-
-		// string params = "[" + id.toString() + "]"
-		// Method call syntax requires receiver.method() which the batch expr
-		// builder does not natively express. Use _batch_stmtSeq (returns a
-		// batch stmt handle) instead of _emit_stmt_from_source (returns a
-		// plain arena handle that cannot be pushed into a batch stmt array
-		// — that pattern triggers PLUGIN013 batch.arrayPush per compiler
-		// prompt 58764a2b-7bd8-11f1 and the cross-arena OutOfRange cascade
-		// downstream).
-		integer params_stmt = _batch_stmtSeq(ctx, "string params = \"[\" + id.toString() + \"]\"\n")
+			src = src + "string sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
+		src = src + "string params = \"[\" + id.toString() + \"]\"\n"
+		src = src + "integer affected = _db_execute(sql, params)\n"
+		src = src + "return affected > 0\n"
+		integer body_h = _emit_stmt_from_source(ctx, src, 0)
 		if _ctx_had_error(ctx) != 0
 			return 0
-		if params_stmt == 0
+		if body_h == 0
 			return 0
-		_batch_arrayPush(ctx, body_arr, params_stmt)
-
-		// integer affected = _db_execute(sql, params)
-		integer sql_ref = ident(ctx, "sql")
-		integer params_ref = ident(ctx, "params")
-		integer dbe_expr = call2(ctx, "_db_execute", sql_ref, params_ref)
-		integer aff_assign = sassign(ctx, "affected", dbe_expr)
-		_batch_arrayPush(ctx, body_arr, aff_assign)
-		// return affected > 0
-		integer aff_ref = ident(ctx, "affected")
-		integer zero2 = il(ctx, 0)
-		integer aff_cmp = _batch_binop(ctx, ">", aff_ref, zero2)
-		integer ret_stmt = sr(ctx, aff_cmp)
-		_batch_arrayPush(ctx, body_arr, ret_stmt)
-		return sblk(ctx, body_arr)
+		return body_h
 
 // ============================================================================
 // SUB-CYCLE 2: STATIC METHOD BODY BUILDERS
