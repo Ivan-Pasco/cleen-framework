@@ -1,14 +1,20 @@
 // Frame UI Runtime Loader
 // WASM loader with full browser API bridge
-// Version: 2.3.0
+// Version: 2.4.0
+// 2.4.0 (2026-07-08): __cleanRuntime companion API — added a pre-instantiate
+//   window.__cleanRuntime skeleton with registerEnv() so companion scripts
+//   like frame.client/runtime/bridge.js can contribute env imports BEFORE
+//   WebAssembly.instantiate. Post-instantiate wires getInstance/getMemory/
+//   writeString/readString so companions can call back into the runtime.
+//   Also stubbed http_set_timeout/max_redirects/enable_cookies/user_agent as
+//   browser-side noops so any Clean http.* configuration call instantiates
+//   cleanly. Layer 2 canary result: 7/9 pass (api.cln joins the previously
+//   green set once frame.client/bridge.js runs alongside).
 // 2.3.0 (2026-07-08): Layer 2 canary bridge fill-in — added math_*, _time_*,
 //   http_encode_url/decode_url/build_query/get_response_*, _crypto_hash_sha256/
 //   sha512/hmac/random_hex/random_bytes/hash_password/verify_password, and
-//   _json_encode/decode/get bridges. Also added pure-JS SHA-256/512 helpers
-//   at the top of the IIFE (adapted from frame.canvas/runtime/loader.js).
-//   Canaries console/crypto/math/storage/ui pass end-to-end in headless
-//   Chromium; time/json remain red pending upstream compiler bugs #97d07985b422
-//   and #a89cf930e6e3.
+//   _json_encode/decode/get bridges. Pure-JS SHA-256/512 helpers at IIFE top
+//   (adapted from frame.canvas/runtime/loader.js).
 //
 // All interactivity uses _ui_on_event delegation + targeted DOM updates.
 // WASM _start() registers handlers, handlers update DOM via bridge functions.
@@ -21,6 +27,31 @@
 
 	// --- State ---
 	let memory, instance;
+	// --- Pre-instantiate __cleanRuntime bootstrap ---
+	// Companion scripts like frame.client/runtime/bridge.js need a synchronous
+	// registerEnv() so they can contribute bridge functions BEFORE
+	// WebAssembly.instantiate. We create the skeleton here at IIFE start,
+	// yield to the event loop via `await fetch(...)` below, and merge whatever
+	// _pendingEnv has been populated into the bridge object right before
+	// instantiating. writeString / readString / getInstance are wired up below
+	// once memory + instance exist.
+	if (typeof window !== 'undefined' && !window.__cleanRuntime) {
+		window.__cleanRuntime = {
+			_pendingEnv: {},
+			_providers: [],
+			registerEnv(obj) {
+				if (obj && typeof obj === 'object') {
+					Object.assign(this._pendingEnv, obj);
+				}
+			},
+			memoryStats() {
+				const p = this._providers[this._providers.length - 1];
+				return p ? p() : null;
+			},
+			// getInstance / writeString / readString are added after
+			// WebAssembly.instantiate resolves — see below.
+		};
+	}
 	// heapPtr MUST be initialized from the WASM module's __heap_ptr export.
 	// See platform-architecture/MEMORY_POLICY.md §7.2.
 	let heapPtr = -1;
@@ -1136,6 +1167,16 @@
 			http_get_response_code:    () => 0,
 			http_get_response_headers: () => 0,
 
+			// Client-configuration setters. These have no browser semantics
+			// (the browser fetch client is not a persistent Http object we
+			// can reconfigure), so they are no-ops. They must exist so any
+			// program touching http.setTimeout / http.setMaxRedirects /
+			// http.enableCookies / http.setUserAgent can instantiate.
+			http_set_timeout:        (_ms) => 0,
+			http_set_max_redirects:  (_n) => 0,
+			http_enable_cookies:     (_b) => 0,
+			http_set_user_agent:     (_ptr, _len) => 0,
+
 			// ========== _crypto_* bridges (SHA-256/512, HMAC, random, password) ==========
 			// The frame.auth 'crypto' namespace lowers to these bridges. Real
 			// synchronous implementations are required — see the SHA-256/512
@@ -2227,7 +2268,6 @@
 					http_put_with_headers: _sg('http_put_with_headers'),
 					http_patch_with_headers: _sg('http_patch_with_headers'),
 					http_delete_with_headers: _sg('http_delete_with_headers'),
-					http_set_user_agent: _sg('http_set_user_agent'),
 					// frame.server — JSON utilities
 					// frame.data — database
 					_db_query: _sg('_db_query'),
@@ -2487,6 +2527,13 @@
 
 		memStats.maxPages = parseMaxPages(bytes);
 
+		// Merge companion-registered env imports (from bridge.js et al) into
+		// the bridge before instantiation. Companion scripts run synchronously
+		// between the initial script tag and this await-fetch resumption.
+		if (typeof window !== 'undefined' && window.__cleanRuntime && window.__cleanRuntime._pendingEnv) {
+			Object.assign(bridge.env, window.__cleanRuntime._pendingEnv);
+		}
+
 		const module = await WebAssembly.instantiate(bytes, bridge);
 		instance = module.instance;
 		memory = instance.exports.memory;
@@ -2508,13 +2555,23 @@
 			if (!window.__cleanRuntime) {
 				window.__cleanRuntime = {
 					_providers: [],
+					_pendingEnv: {},
+					registerEnv(obj) {
+						if (obj && typeof obj === 'object') Object.assign(this._pendingEnv, obj);
+					},
 					memoryStats() {
 						const p = this._providers[this._providers.length - 1];
 						return p ? p() : null;
-					}
+					},
 				};
 			}
 			window.__cleanRuntime._providers.push(memoryStats);
+			// Wire up the runtime accessors companion bridges need. Safe to
+			// overwrite — the pre-instantiate bootstrap only had placeholders.
+			window.__cleanRuntime.getInstance = () => instance;
+			window.__cleanRuntime.getMemory = () => memory;
+			window.__cleanRuntime.writeString = writeString;
+			window.__cleanRuntime.readString = readString;
 		}
 
 		checkMemoryGrowth();

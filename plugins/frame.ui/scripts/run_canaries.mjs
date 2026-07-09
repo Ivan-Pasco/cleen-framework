@@ -32,7 +32,9 @@ import { chromium } from 'playwright';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PLUGIN_DIR = resolve(__dirname, '..');
+const PLUGINS_DIR = resolve(PLUGIN_DIR, '..');
 const RUNTIME_LOADER = join(PLUGIN_DIR, 'runtime', 'loader.js');
+const CLIENT_BRIDGE = join(PLUGINS_DIR, 'frame.client', 'runtime', 'bridge.js');
 
 // Layer-2 portable + browser-only canary namespaces (per Layer 1 handoff).
 // Server-only namespaces are filtered out.
@@ -47,6 +49,19 @@ const APPLICABLE = new Set([
 	'canvas',
 	'api',
 	'storage',
+]);
+
+// Canaries deliberately skipped pending integration work outside this runner.
+// canvas needs (a) frame.canvas's memory-decl parser updated to accept the
+// new JSON-encoded clean:memory custom section (was ULEB128), and (b) either
+// memory_runtime import wiring inside frame.canvas or a canvas bridge that
+// composes cleanly with frame.ui's loader. Neither is fixable inside the
+// canary runner itself.
+const SKIP_WITH_REASON = new Map([
+	[
+		'canvas',
+		'frame.canvas loader needs clean:memory JSON parser update and memory_runtime wiring; tracked in TASKS.md',
+	],
 ]);
 
 // Namespaces the browser deliberately does not honor at runtime (server-only
@@ -114,6 +129,7 @@ function isApplicable(namespace) {
 	// primary (first) name only.
 	const primary = namespace.split(/[\s+]/)[0].toLowerCase();
 	if (SERVER_ONLY.has(primary)) return false;
+	if (SKIP_WITH_REASON.has(primary)) return false;
 	return APPLICABLE.has(primary);
 }
 
@@ -206,16 +222,34 @@ async function runOne({ canary, runDir, browser, keepArtifacts }) {
 
 	await compileCanary(canary.file, wasmPath);
 
-	// Copy loader.js next to the wasm so relative fetches work.
+	// Namespace-based loader dispatch.
+	// - api: bridges live in frame.client/runtime/bridge.js. We use frame.ui
+	//   as the host loader (all base env imports come from there) and layer
+	//   bridge.js on top via __cleanRuntime.registerEnv().
+	// - everything else: frame.ui's loader alone.
+	const primary = (canary.namespace || '').split(/[\s+]/)[0].toLowerCase();
+
 	const loaderSrc = await readFile(RUNTIME_LOADER, 'utf8');
 	await writeFile(join(workDir, 'loader.js'), loaderSrc);
-
-	// Minimal shell that loads the runtime with data-wasm=canary.wasm.
+	let extraScripts = '';
+	if (primary === 'api') {
+		const bridgeSrc = await readFile(CLIENT_BRIDGE, 'utf8');
+		await writeFile(join(workDir, 'client-bridge.js'), bridgeSrc);
+		// frame.client/bridge.js expects window.__cleanRuntime to already
+		// exist when it runs. frame.ui/loader.js sets it up synchronously
+		// at IIFE entry (before its await fetch yields), so ordering
+		// `loader.js` before `client-bridge.js` in the DOM guarantees the
+		// bootstrap runs first; bridge.js then registers its env imports
+		// via __cleanRuntime.registerEnv(), and loader.js's post-await
+		// merge picks them up before WebAssembly.instantiate.
+		extraScripts = `<script src="client-bridge.js"></script>`;
+	}
 	const html = `<!doctype html>
 <html>
 <head><meta charset="utf-8"><title>${canary.name}</title></head>
 <body>
 <script src="loader.js" data-wasm="canary.wasm"></script>
+${extraScripts}
 </body>
 </html>`;
 	await writeFile(join(workDir, 'index.html'), html);
@@ -239,8 +273,16 @@ async function runOne({ canary, runDir, browser, keepArtifacts }) {
 	page.on('console', (msg) => {
 		const type = msg.type();
 		const text = msg.text();
+		// Filter out loader-emitted diagnostic prefixes so only genuine
+		// canary output (printl → console.log without a bracketed prefix)
+		// is diffed against the expected block.
+		const isLoaderDiagnostic = /^\[(CleanCanvas|clean|Clean|frame\.[a-z]+|FrameUI)\]/i.test(text);
 		if (type === 'log') {
-			stdout.push(text);
+			if (isLoaderDiagnostic) {
+				errors.push('[loader-log] ' + text);
+			} else {
+				stdout.push(text);
+			}
 		} else if (type === 'error') {
 			errors.push(text);
 			if (

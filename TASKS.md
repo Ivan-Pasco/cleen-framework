@@ -29,13 +29,13 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 - ✅ ~~**Layer 2 canary runner missing bridges: math_*, _time_*, http_*, _crypto_*, _json_***~~ — Fixed 2026-07-08: added pure-JS SHA-256/512 + HMAC helpers (adapted from frame.canvas loader), plus wired 17 `math_*` transcendentals, 3 `_time_*`, 5 `http_*` URL/response helpers, 7 `_crypto_*` functions, and 3 `_json_*` bridges directly in `plugins/frame.ui/runtime/loader.js`. Verified locally against the compiler canary corpus at v0.33.22: `console`, `crypto`, `math`, `storage`, `ui` all pass; `http_client` passes when the compiler-side setUserAgent registration lands (currently blocks it with COD000 in the compiler tree).
 
-- ⬜ **Layer 2 canary runner is still red for 4 canaries — all blocked upstream** —
+- ✅ ~~**api.cln canary red — frame.client bridge integration broken**~~ — Fixed 2026-07-08: `frame.client/runtime/bridge.js` expected `__cleanRuntime.registerEnv()` / `writeString()` / `readString()` / `getInstance()` which frame.ui's loader never provided (silent no-op). Added a pre-instantiate `__cleanRuntime` skeleton in `plugins/frame.ui/runtime/loader.js` (v2.4.0) that exposes those methods and merges companion-registered env imports before `WebAssembly.instantiate`. Canary runner now loads `client-bridge.js` alongside `loader.js` for `api.*` canaries.
+
+- ⬜ **Layer 2 canary runner is still red for 2 canaries — both blocked upstream compiler bugs** —
   - `time.cln` — blocked by compiler bug **#97d07985b422** (i64 → string OOM at values ≥ 10^9; `_time_now` returns wall-clock unix seconds which triggers it).
   - `json.cln` — blocked by compiler bug **#a89cf930e6e3** (numeric field in `json.get(...)` traps; string fields work).
-  - `api.cln` — API bridges live in `frame.client/runtime/bridge.js`, not `frame.ui/runtime/loader.js`. Two options: (1) teach `run_canaries.mjs` to dispatch canary → loader per namespace, or (2) import the api bridges into frame.ui's loader too. Option (1) is architecturally cleaner.
-  - `canvas.cln` — same routing issue as api; canvas bridges live in `frame.canvas/runtime/loader.js`. Same fix options.
 
-  When #97d07985b422 and #a89cf930e6e3 are resolved and the multi-loader dispatch lands, all 10 applicable canaries should be green.
+- ⬜ **canvas.cln canary skipped in runner — frame.canvas loader has two independent gaps** — (1) `frame.canvas/runtime/loader.js` parses the compiler's `clean:memory` custom section as ULEB128 ints, but the compiler now emits JSON (`{"initial_pages":256,"max_pages":1024,"tier":"canvas"}`). Parser reads `123` / `34` from the first two bytes → invalid Memory limits. (2) frame.canvas's loader doesn't declare a `memory_runtime` imports module, so canary WASMs that import `mem_alloc` etc fail at instantiate. Fixing both would let canvas.cln land through frame.canvas's own loader. Currently the runner filters it out via `SKIP_WITH_REASON` in `plugins/frame.ui/scripts/run_canaries.mjs`.
 
 - ⬜ **60 missing stdlib bridge functions in browser host JS** — `check_host_parity.py --host browser --strict` reports 60 functions declared `hosts = ["all"]` in `foundation/platform-architecture/function-registry.toml` that no browser-side JS runtime implements. Three runtime files share the gap: `plugins/frame.canvas/runtime/loader.js`, `plugins/frame.ui/runtime/loader.js`, `plugins/frame.client/runtime/bridge.js`. Families:
   - `array_*` (13): push, pop, get, set, slice, map, filter, find, reduce, sort, reverse, concat, contains
