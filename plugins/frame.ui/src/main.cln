@@ -410,8 +410,15 @@ functions:
 								// second page's `load`; that requires a compiler-side
 								// transform-source bridge (filed as follow-up to
 								// fingerprint 6c6f3d61).
+								//
+								// Skip _ui_normalize_load_return / _ui_promote_string_fields
+								// and go straight to json.encode — the promote pass was
+								// designed for a legacy quoted-JSON-in-string workaround
+								// and produces invalid JSON (key must be a string at col 2)
+								// when the load result is a plain object (fingerprint
+								// a2b84ca5 — companion handler returned unparseable data).
 								body_source = body_source + "\tany __rd = load(null)\n"
-								body_source = body_source + "\tstring __d = _ui_normalize_load_return(__rd)\n"
+								body_source = body_source + "\tstring __d = json.encode(__rd)\n"
 								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", __d)\n"
 							else
 								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n"
