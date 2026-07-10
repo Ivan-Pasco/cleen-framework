@@ -464,8 +464,28 @@ functions:
 		// The `__plugin_<plugin_name>__/` naming convention is per §9
 		// recommendation. Injecting only when there is content avoids
 		// PLUGIN014 on empty-content injection.
-		if module_src.length() > 0
-			_inject_source_file(ctx, "__plugin_frame_ui__/companion_routes.cln", module_src)
+		//
+		// Force a fresh allocation for the injected content. Same pattern as
+		// v3.2.6 (`return __html + ""`) — routes the string through the
+		// string_concat codegen so we ship a fresh buffer whose contents can't
+		// be aliased by an earlier `file_content = extract_json_field(...)`
+		// read of a source file (e.g. the project's main.cln manifest).
+		// Guards fingerprint 6c6f3d61 (SYN001 Indent(1) — companion_routes.cln
+		// content byte-for-byte matched the manifest text).
+		string injected_src = module_src + ""
+		// Plugin-side self-check: if the injected content ever starts with
+		// `package:` we know we hit the aliasing regression again — surface a
+		// clear diagnostic instead of shipping a manifest-shaped module.
+		string first_line = injected_src
+		integer __nl = injected_src.indexOf("\n")
+		if __nl != -1
+			first_line = injected_src.substring(0, __nl)
+		if first_line.trim().startsWith("package:")
+			plugin_error(ctx, "PLUGIN_UI_ASSEMBLE_ALIASED", "assemble_typed injected content starts with `package:` — string aliasing regression, not manifest text")
+			_ctx_clear_error(ctx)
+			return 0
+		if injected_src.length() > 0
+			_inject_source_file(ctx, "__plugin_frame_ui__/companion_routes.cln", injected_src)
 
 		_ctx_clear_error(ctx)
 		return 0
