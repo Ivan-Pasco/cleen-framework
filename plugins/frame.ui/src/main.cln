@@ -391,11 +391,27 @@ functions:
 							if __routes_guard_roles.length() > 0
 								body_source = body_source + assemble_guard_body(__routes_guard_roles)
 							if has_guard
-								body_source = body_source + "\tany __g = " + module_name + "_guard(null)\n"
+								// See has_load block below for why we call `guard`
+								// by its raw name instead of `pages_<name>_guard`.
+								body_source = body_source + "\tany __g = guard(null)\n"
 								body_source = body_source + "\tif __g != null\n"
 								body_source = body_source + "\t\treturn __g\n"
 							if has_load
-								body_source = body_source + "\tstring __d = " + module_name + "_load(null)\n"
+								// Call the page's raw `load` function. In the current
+								// compiler ABI, `assemble_typed` only exposes
+								// `_inject_source_file` — no bridge to emit a
+								// `transformed_source` that would rename the page's
+								// `load` → `pages_<name>_load`. Since injected + page
+								// modules share a compilation-unit namespace, calling
+								// `load` here resolves to the page's function. Passes
+								// null as the Request arg (the load-helper normalizer
+								// tolerates any-typed returns). Limitation: multi-page
+								// projects will surface a duplicate-symbol error on the
+								// second page's `load`; that requires a compiler-side
+								// transform-source bridge (filed as follow-up to
+								// fingerprint 6c6f3d61).
+								body_source = body_source + "\tany __rd = load(null)\n"
+								body_source = body_source + "\tstring __d = _ui_normalize_load_return(__rd)\n"
 								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", __d)\n"
 							else
 								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n"
