@@ -557,30 +557,124 @@ functions:
 				return name + "es"
 		return name + "s"
 
+	// Strip leading whitespace-glued `:annotation` tokens from a modifier string.
+	// Converts `:pk :unique :notnull` into `pk, unique, notnull`.
+	// Leaves keyword-value modifiers like `default=now` untouched.
+	string canonicalize_annotations(string modifiers)
+		modifiers = modifiers.trim()
+		if modifiers.length() == 0
+			return ""
+		string result = ""
+		integer pos = 0
+		while pos < modifiers.length()
+			// Skip whitespace
+			while pos < modifiers.length()
+				string ch = modifiers.substring(pos, pos + 1)
+				if ch != " " and ch != "\t"
+					break
+				pos = pos + 1
+			if pos >= modifiers.length()
+				break
+			// Strip a single leading ':' if present (annotation form).
+			if modifiers.substring(pos, pos + 1) == ":"
+				pos = pos + 1
+			// Read token until next whitespace.
+			integer tok_start = pos
+			while pos < modifiers.length()
+				string ch2 = modifiers.substring(pos, pos + 1)
+				if ch2 == " " or ch2 == "\t"
+					break
+				pos = pos + 1
+			string tok = modifiers.substring(tok_start, pos).trim()
+			if tok.length() > 0
+				if result.length() > 0
+					result = result + ", "
+				result = result + tok
+		return result
+
 	// Normalize a field line to canonical "type name [= default] [: constraints]" form.
+	// Accepts both forms:
+	//   - space-form:  "string email :pk :unique"
+	//   - colon-form:  "email:string :pk :unique"
+	// In either case, trailing ":annotation" tokens (whitespace-glued) are moved
+	// into the constraint list.
 	string normalize_field_line(string line)
-		integer colon_pos = line.indexOf(":")
-		integer first_space = line.indexOf(" ")
-		if colon_pos == -1 or (first_space != -1 and first_space < colon_pos)
-			return line
-		string field_name = line.substring(0, colon_pos).trim()
-		string rest = line.substring(colon_pos + 1, line.length()).trim()
-		integer rest_space = rest.indexOf(" ")
+		line = line.trim()
+		if line.length() == 0
+			return ""
+
+		// Split off any trailing ' :' annotation block first (works for both forms).
+		// We look for the LAST run of whitespace-then-colon-then-non-whitespace tokens
+		// at the tail of the line and treat that entire tail as annotations.
+		string body_part = line
+		string tail_annotations = ""
+		integer scan = 0
+		while scan < line.length()
+			// Find next " :" occurrence starting at scan.
+			integer sp_colon = line.indexOf(" :", scan)
+			if sp_colon == -1
+				break
+			// Everything before the space is the "current" body_part; everything
+			// from sp_colon+1 (starting with ':') to end is tail annotations.
+			body_part = line.substring(0, sp_colon).trim()
+			tail_annotations = line.substring(sp_colon + 1, line.length()).trim()
+			scan = sp_colon + 2
+
+		// If we found annotation tail, canonicalize it.
+		string annotations = ""
+		if tail_annotations.length() > 0
+			annotations = canonicalize_annotations(tail_annotations)
+
+		// Now parse body_part as either colon-form ("name:type modifiers") or
+		// space-form ("type name modifiers"/"type name").
+		string field_name = ""
 		string field_type = ""
 		string modifiers = ""
-		if rest_space == -1
-			field_type = rest
+
+		integer bp_colon = body_part.indexOf(":")
+		integer bp_first_space = body_part.indexOf(" ")
+
+		if bp_colon != -1 and (bp_first_space == -1 or bp_colon < bp_first_space)
+			// colon-form: "name:type [modifiers]"
+			field_name = body_part.substring(0, bp_colon).trim()
+			string rest = body_part.substring(bp_colon + 1, body_part.length()).trim()
+			integer rest_space = rest.indexOf(" ")
+			if rest_space == -1
+				field_type = rest
+			else
+				field_type = rest.substring(0, rest_space).trim()
+				modifiers = rest.substring(rest_space + 1, rest.length()).trim()
 		else
-			field_type = rest.substring(0, rest_space).trim()
-			modifiers = rest.substring(rest_space + 1, rest.length()).trim()
-		if field_type.length() == 0
+			// space-form: "type name [modifiers]"
+			if bp_first_space == -1
+				return ""
+			field_type = body_part.substring(0, bp_first_space).trim()
+			string rest2 = body_part.substring(bp_first_space + 1, body_part.length()).trim()
+			integer rest2_space = rest2.indexOf(" ")
+			if rest2_space == -1
+				field_name = rest2
+			else
+				field_name = rest2.substring(0, rest2_space).trim()
+				modifiers = rest2.substring(rest2_space + 1, rest2.length()).trim()
+
+		if field_type.length() == 0 or field_name.length() == 0
 			return ""
+
+		// Extract `default <value>` from modifiers (v1 keyword-form).
 		string default_val = ""
 		string constraints = modifiers
 		integer def_pos = modifiers.indexOf("default ")
 		if def_pos != -1
 			constraints = modifiers.substring(0, def_pos).trim()
 			default_val = modifiers.substring(def_pos + 8, modifiers.length()).trim()
+
+		// Fold in the tail annotations (comma-joined).
+		if annotations.length() > 0
+			if constraints.length() > 0
+				constraints = constraints + ", " + annotations
+			else
+				constraints = annotations
+
 		string result = field_type + " " + field_name
 		if default_val.length() > 0
 			result = result + " = " + default_val
@@ -1699,8 +1793,40 @@ functions:
 	//
 	// Sticky-error idiom: one _ctx_set_error_context at top, one _ctx_had_error
 	// at the bottom. No per-call error checks inside.
+	// Return true iff any line of the body declares a field named `id`.
+	// Handles both space-form ("integer id") and colon-form ("id:integer").
+	boolean body_has_id_field(string body)
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string normalized = normalize_field_line(line)
+				// normalized shape: "<type> id [ = ...][ : ...]"
+				integer space_pos = normalized.indexOf(" ")
+				if space_pos != -1
+					string rest = normalized.substring(space_pos + 1, normalized.length()).trim()
+					integer next_space = rest.indexOf(" ")
+					string name = rest
+					if next_space != -1
+						name = rest.substring(0, next_space).trim()
+					if name == "id"
+						return true
+			line_start = line_end + 1
+		return false
+
 	integer expand_data_model(integer ctx, string model_name, string body)
 		_ctx_set_error_context(ctx, "PLUGIN-DATA-MODEL", "expand_data_model for " + model_name)
+
+		// Auto-inject implicit primary key when the schema does not declare one.
+		// Every ORM-emitted method (save/delete/first/findOrFail) references `id`,
+		// so a missing declaration surfaces as 4× SEM007 "Undefined variable 'id'"
+		// at compile time. Prepending the field is the ORM convention and matches
+		// what users expect from data model DSLs.
+		if not body_has_id_field(body)
+			body = "integer id\n" + body
 
 		string table_name = pluralize(to_snake_case(model_name))
 		string field_names = extract_field_names(body)
