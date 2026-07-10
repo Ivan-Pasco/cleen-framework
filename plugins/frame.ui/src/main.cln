@@ -106,6 +106,11 @@ external:
 	integer _emit_statement_inline(integer ctx, integer stmt_handle)
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
+	// assemble.md §6.1 — the ONLY typed-emission bridge legal inside
+	// assemble_typed. Registers one synthetic Clean source file with the
+	// compilation unit; the injected content flows through the same parser,
+	// resolver, type checker, and MIR lowering as user-authored files.
+	integer _inject_source_file(integer ctx, string virtual_path, string content)
 	// ---- AST type/expression constructors (§3.9, §3.10) — needed for module-scope
 	// state: block fields (Sub-cycle 1 minimal set; Sub-cycles 2/3 may add more) ----
 	integer _type_class_ref(integer ctx, string name)
@@ -301,28 +306,22 @@ functions:
 		return 0
 
 	// assemble: emit page companion route module + hydration manifest + load
-	// helpers + diagnostic module. Sub-cycle 3 (2026-07-05) — rewritten to
-	// split the pre-Sub-cycle-3 monolithic source string (which was routed
-	// through _emit_stmt_from_source — a top-level-declaration misuse of the
-	// statement-only §3.11 bridge, same bug class as pre-Sub-cycle-1
-	// expand_component_stub) into typed per-kind emissions:
+	// helpers + diagnostic module. Rewritten 2026-07-10 for assemble.md §11
+	// migration — the only typed-emission bridge legal inside assemble_typed
+	// is _inject_source_file (§6.1). Every prior call to _emit_stmt_from_source
+	// (Phase 3) and _emit_function (Phases 4-7 via ui_helper_function) was
+	// producing PLUGIN018 AssembleTypedIllegalBridge on compiler 0.33.39+.
 	//
-	//   Kind                     | Bridge
-	//   -------------------------|---------------------------------------
-	//   Route registrations      | _emit_stmt_from_source (statements)
-	//   Route render() functions | ui_helper_function (_emit_function)
-	//   Hydration manifest fn    | ui_helper_function
-	//   Load helper fns (×3)     | ui_helper_function
-	//   Diagnostic fn            | ui_helper_function
-	//
-	// v1 assemble_typed_source at line ~3995 is preserved as a reference
-	// (no longer on the lifecycle path).
+	// New shape: build one Clean source string containing start: (route
+	// registrations) + functions: (render fns, hydration manifest, load
+	// helpers, diagnostic fn), then inject once via _inject_source_file
+	// under __plugin_frame_ui__/companion_routes.cln.
 	integer assemble_typed(integer ctx, string ctx_json)
 		_ctx_set_error_context(ctx, "PLUGIN_UI_ASSEMBLE", "assemble")
 		boolean has_server = ctx_json.indexOf("\"has_frame_server\":true") != -1
 		list<string> source_files = parse_source_files(ctx_json)
 
-		// -------- Phase 1: build routes-guard table (unchanged from assemble()) --------
+		// -------- Phase 1: build routes-guard table --------
 		string __routes_guard_table = ""
 		integer __gsi = 0
 		while __gsi < source_files.length()
@@ -332,9 +331,12 @@ functions:
 			__gsi = __gsi + 1
 
 		// -------- Phase 2: walk pages, accumulate per-kind pieces --------
-		// route_registrations: source string of `_http_route(...)` statements
+		// route_registrations: source string of `_http_route(...)` statements,
+		//   with one leading tab per line (start:-block body indent).
 		// route_fn_names / route_fn_bodies: parallel lists of (name, body_source)
-		//   for each `{module}_render()` function to emit via ui_helper_function
+		//   for each `{module}_render()` function. Bodies use one leading tab
+		//   per line (function-body scope inside functions:); the composition
+		//   step wraps them into `\tstring name()\n\t\t<body...>` shape.
 		string route_registrations = ""
 		list<string> route_fn_names = []
 		list<string> route_fn_bodies = []
@@ -382,62 +384,88 @@ functions:
 						if has_server
 							string url = derive_url_path(file_path)
 							string html_path = derive_html_path(file_path)
-							// Build the render() body as Clean statements (no method-body
-							// indent — ui_helper_function emits at module scope).
+							// Build the render() body as Clean statements at
+							// function-body scope (one leading tab per line).
 							string body_source = ""
 							string __routes_guard_roles = lookup_routes_guard(url, __routes_guard_table)
 							if __routes_guard_roles.length() > 0
 								body_source = body_source + assemble_guard_body(__routes_guard_roles)
 							if has_guard
-								body_source = body_source + "any __g = " + module_name + "_guard(null)\n"
-								body_source = body_source + "if __g != null\n"
-								body_source = body_source + "\treturn __g\n"
+								body_source = body_source + "\tany __g = " + module_name + "_guard(null)\n"
+								body_source = body_source + "\tif __g != null\n"
+								body_source = body_source + "\t\treturn __g\n"
 							if has_load
-								body_source = body_source + "string __d = " + module_name + "_load(null)\n"
-								body_source = body_source + "return _ui_render_page(\"" + html_path + "\", __d)\n"
+								body_source = body_source + "\tstring __d = " + module_name + "_load(null)\n"
+								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", __d)\n"
 							else
-								body_source = body_source + "return _ui_render_page(\"" + html_path + "\", \"{}\")\n"
+								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n"
 							route_fn_names.push(module_name + "_render")
 							route_fn_bodies.push(body_source)
-							route_registrations = route_registrations + "_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
+							route_registrations = route_registrations + "\t_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
 							pages_emitted = pages_emitted + 1
 			fi = fi + 1
 
-		// -------- Phase 3: emit route registrations (statements) --------
-		if has_server and route_registrations.length() > 0
-			_emit_stmt_from_source(ctx, route_registrations, 0)
+		// -------- Phase 3: compose one Clean source string --------
+		// start: block (route registrations). Emitted only when we have
+		// server routes to register, else the start: block would be empty
+		// (parse error).
+		string module_src = ""
+		boolean has_routes = has_server and route_registrations.length() > 0
+		if has_routes
+			module_src = module_src + "start:\n"
+			module_src = module_src + route_registrations
+			module_src = module_src + "\n"
 
-		// -------- Phase 4: emit route render() functions --------
-		integer rfi = 0
-		while rfi < route_fn_names.length()
-			integer route_r_str = _type_string(ctx)
-			ui_helper_function(ctx, route_fn_names[rfi], "[]", route_r_str, route_fn_bodies[rfi], 1)
-			rfi = rfi + 1
+		// functions: block header — only emit if we have at least one
+		// function to define (empty functions: is a parse error).
+		boolean has_hydration = hydration_entries.length() > 0
+		boolean has_any_fn = has_routes or has_hydration or has_any_load
+		// Diagnostic function is always emitted, so has_any_fn is always
+		// true in practice, but keep the guard for correctness.
+		has_any_fn = true
 
-		// -------- Phase 5: hydration manifest function --------
-		if hydration_entries.length() > 0
-			string screens_json = entries_to_screens_json(hydration_entries)
-			string manifest_body = "return \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
-			integer manifest_r_str = _type_string(ctx)
-			ui_helper_function(ctx, "_ui_hydration_manifest", "[]", manifest_r_str, manifest_body, 1)
+		if has_any_fn
+			module_src = module_src + "functions:\n"
 
-		// -------- Phase 6: load helper functions --------
-		if has_any_load
-			emit_load_helpers_typed(ctx)
+			// Phase 4 → render functions
+			integer rfi = 0
+			while rfi < route_fn_names.length()
+				module_src = module_src + "\tstring " + route_fn_names[rfi] + "()\n"
+				module_src = module_src + route_fn_bodies[rfi]
+				module_src = module_src + "\n"
+				rfi = rfi + 1
 
-		// -------- Phase 7: diagnostic function --------
-		string total_files_str = source_files.length().toString()
-		string pc_str = page_candidates.toString()
-		string pm_str = pages_with_markers.toString()
-		string pe_str = pages_emitted.toString()
-		string hc_str = html_candidates.toString()
-		string hs_str = html_with_screen.toString()
-		string has_server_str = "false"
-		if has_server
-			has_server_str = "true"
-		string diag_body = "return \"frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
-		integer diag_r_str = _type_string(ctx)
-		ui_helper_function(ctx, "_frame_ui_assemble_diagnostics", "[]", diag_r_str, diag_body, 1)
+			// Phase 5 → hydration manifest function
+			if has_hydration
+				string screens_json = entries_to_screens_json(hydration_entries)
+				module_src = module_src + "\tstring _ui_hydration_manifest()\n"
+				module_src = module_src + "\t\treturn \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
+				module_src = module_src + "\n"
+
+			// Phase 6 → load helper functions
+			if has_any_load
+				module_src = module_src + emit_load_helpers_source()
+
+			// Phase 7 → diagnostic function
+			string total_files_str = source_files.length().toString()
+			string pc_str = page_candidates.toString()
+			string pm_str = pages_with_markers.toString()
+			string pe_str = pages_emitted.toString()
+			string hc_str = html_candidates.toString()
+			string hs_str = html_with_screen.toString()
+			string has_server_str = "false"
+			if has_server
+				has_server_str = "true"
+			module_src = module_src + "\tstring _frame_ui_assemble_diagnostics()\n"
+			module_src = module_src + "\t\treturn \"frame.ui assemble: files=" + total_files_str + " has_server=" + has_server_str + " page_candidates=" + pc_str + " pages_with_markers=" + pm_str + " pages_emitted=" + pe_str + " html_candidates=" + hc_str + " html_with_screen=" + hs_str + "\"\n"
+
+		// -------- Phase 8: inject as one synthetic source file --------
+		// assemble.md §6.1 — only bridge legal inside assemble_typed.
+		// The `__plugin_<plugin_name>__/` naming convention is per §9
+		// recommendation. Injecting only when there is content avoids
+		// PLUGIN014 on empty-content injection.
+		if module_src.length() > 0
+			_inject_source_file(ctx, "__plugin_frame_ui__/companion_routes.cln", module_src)
 
 		_ctx_clear_error(ctx)
 		return 0
@@ -466,12 +494,147 @@ functions:
 			result = result + line + "\n"
 		return result
 
-	// Emit the three _ui_normalize_load_return / _ui_unwrap_json_encoded_string /
-	// _ui_promote_string_fields helper functions inline via ui_helper_function.
-	// Sub-cycle 3 (2026-07-05) — replaces the source-string route through
-	// _emit_stmt_from_source that pre-Sub-cycle-3 assemble_typed emitted for
-	// the __ui_load_helpers.cln virtual module. v1 build_load_helpers_module
-	// at line ~3863 is preserved as a reference.
+	// Build the source string for the three load-helper functions
+	// (_ui_normalize_load_return, _ui_unwrap_json_encoded_string,
+	// _ui_promote_string_fields) as `functions:`-block content — one
+	// leading tab on the function signature, two leading tabs on body
+	// lines. Rewritten 2026-07-10 for assemble.md §11 migration: the
+	// caller (assemble_typed Phase 6) concatenates this into the module
+	// source that ships through _inject_source_file.
+	string emit_load_helpers_source()
+		string src = ""
+
+		// _ui_normalize_load_return(any __r) -> string
+		src = src + "\tstring _ui_normalize_load_return(any __r)\n"
+		src = src + "\t\tstring __s = json.encode(__r)\n"
+		src = src + "\t\tif __s.length() == 0\n"
+		src = src + "\t\t\treturn \"{}\"\n"
+		src = src + "\t\tstring __first = __s.substring(0, 1)\n"
+		src = src + "\t\tif __first == \"{\" or __first == \"[\"\n"
+		src = src + "\t\t\treturn _ui_promote_string_fields(__s)\n"
+		src = src + "\t\tif __s.length() >= 2 and __first == \"\\\"\"\n"
+		src = src + "\t\t\tstring __second = __s.substring(1, 2)\n"
+		src = src + "\t\t\tif __second == \"{\" or __second == \"[\"\n"
+		src = src + "\t\t\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
+		src = src + "\t\treturn __s\n"
+		src = src + "\n"
+
+		// _ui_unwrap_json_encoded_string(string __s) -> string
+		src = src + "\tstring _ui_unwrap_json_encoded_string(string __s)\n"
+		src = src + "\t\tif __s.length() < 2\n"
+		src = src + "\t\t\treturn __s\n"
+		src = src + "\t\tinteger __n = __s.length()\n"
+		src = src + "\t\tstring __body = __s.substring(1, __n - 1)\n"
+		src = src + "\t\tstring __result = \"\"\n"
+		src = src + "\t\tinteger __i = 0\n"
+		src = src + "\t\tinteger __m = __body.length()\n"
+		src = src + "\t\twhile __i < __m\n"
+		src = src + "\t\t\tstring __ch = __body.substring(__i, __i + 1)\n"
+		src = src + "\t\t\tif __ch == \"\\\\\" and __i + 1 < __m\n"
+		src = src + "\t\t\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
+		src = src + "\t\t\t\tif __nx == \"n\"\n"
+		src = src + "\t\t\t\t\t__result = __result + \"\\n\"\n"
+		src = src + "\t\t\t\telse if __nx == \"t\"\n"
+		src = src + "\t\t\t\t\t__result = __result + \"\\t\"\n"
+		src = src + "\t\t\t\telse if __nx == \"r\"\n"
+		src = src + "\t\t\t\t\t__result = __result + \"\\r\"\n"
+		src = src + "\t\t\t\telse if __nx == \"\\\"\"\n"
+		src = src + "\t\t\t\t\t__result = __result + \"\\\"\"\n"
+		src = src + "\t\t\t\telse if __nx == \"/\"\n"
+		src = src + "\t\t\t\t\t__result = __result + \"/\"\n"
+		src = src + "\t\t\t\telse if __nx == \"\\\\\"\n"
+		src = src + "\t\t\t\t\t__result = __result + \"\\\\\"\n"
+		src = src + "\t\t\t\telse\n"
+		src = src + "\t\t\t\t\t__result = __result + __ch + __nx\n"
+		src = src + "\t\t\t\t__i = __i + 2\n"
+		src = src + "\t\t\telse\n"
+		src = src + "\t\t\t\t__result = __result + __ch\n"
+		src = src + "\t\t\t\t__i = __i + 1\n"
+		src = src + "\t\treturn __result\n"
+		src = src + "\n"
+
+		// _ui_promote_string_fields(string __input) -> string
+		src = src + "\tstring _ui_promote_string_fields(string __input)\n"
+		src = src + "\t\tif __input.length() < 4\n"
+		src = src + "\t\t\treturn __input\n"
+		src = src + "\t\tstring __out = \"\"\n"
+		src = src + "\t\tinteger __i = 0\n"
+		src = src + "\t\tinteger __n = __input.length()\n"
+		src = src + "\t\tboolean __in_str = false\n"
+		src = src + "\t\tboolean __escape = false\n"
+		src = src + "\t\twhile __i < __n\n"
+		src = src + "\t\t\tstring __ch = __input.substring(__i, __i + 1)\n"
+		src = src + "\t\t\tif __in_str\n"
+		src = src + "\t\t\t\t__out = __out + __ch\n"
+		src = src + "\t\t\t\tif __escape\n"
+		src = src + "\t\t\t\t\t__escape = false\n"
+		src = src + "\t\t\t\telse if __ch == \"\\\\\"\n"
+		src = src + "\t\t\t\t\t__escape = true\n"
+		src = src + "\t\t\t\telse if __ch == \"\\\"\"\n"
+		src = src + "\t\t\t\t\t__in_str = false\n"
+		src = src + "\t\t\t\t__i = __i + 1\n"
+		src = src + "\t\t\telse\n"
+		src = src + "\t\t\t\tif __ch == \":\"\n"
+		src = src + "\t\t\t\t\tinteger __j = __i + 1\n"
+		src = src + "\t\t\t\t\tboolean __ws_keep = true\n"
+		src = src + "\t\t\t\t\twhile __ws_keep and __j < __n\n"
+		src = src + "\t\t\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
+		src = src + "\t\t\t\t\t\tif __ws_ch != \" \"\n"
+		src = src + "\t\t\t\t\t\t\t__ws_keep = false\n"
+		src = src + "\t\t\t\t\t\telse\n"
+		src = src + "\t\t\t\t\t\t\t__j = __j + 1\n"
+		src = src + "\t\t\t\t\tboolean __did = false\n"
+		src = src + "\t\t\t\t\tboolean __qt_match = false\n"
+		src = src + "\t\t\t\t\tif __j + 1 < __n\n"
+		src = src + "\t\t\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
+		src = src + "\t\t\t\t\t\tif __qt_ch == \"\\\"\"\n"
+		src = src + "\t\t\t\t\t\t\t__qt_match = true\n"
+		src = src + "\t\t\t\t\tif __qt_match\n"
+		src = src + "\t\t\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
+		src = src + "\t\t\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
+		src = src + "\t\t\t\t\t\t\tinteger __end = __j + 1\n"
+		src = src + "\t\t\t\t\t\t\tboolean __found = false\n"
+		src = src + "\t\t\t\t\t\t\twhile __end < __n and not __found\n"
+		src = src + "\t\t\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
+		src = src + "\t\t\t\t\t\t\t\tif __c == \"\\\\\"\n"
+		src = src + "\t\t\t\t\t\t\t\t\t__end = __end + 2\n"
+		src = src + "\t\t\t\t\t\t\t\telse if __c == \"\\\"\"\n"
+		src = src + "\t\t\t\t\t\t\t\t\t__found = true\n"
+		src = src + "\t\t\t\t\t\t\t\telse\n"
+		src = src + "\t\t\t\t\t\t\t\t\t__end = __end + 1\n"
+		src = src + "\t\t\t\t\t\t\tif __found\n"
+		src = src + "\t\t\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
+		src = src + "\t\t\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
+		src = src + "\t\t\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
+		src = src + "\t\t\t\t\t\t\t\tboolean __ok = false\n"
+		src = src + "\t\t\t\t\t\t\t\tif __ulen >= 2\n"
+		src = src + "\t\t\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
+		src = src + "\t\t\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
+		src = src + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
+		src = src + "\t\t\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
+		src = src + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
+		src = src + "\t\t\t\t\t\t\t\tif __ok\n"
+		src = src + "\t\t\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
+		src = src + "\t\t\t\t\t\t\t\t\t__i = __end + 1\n"
+		src = src + "\t\t\t\t\t\t\t\t\t__did = true\n"
+		src = src + "\t\t\t\t\tif not __did\n"
+		src = src + "\t\t\t\t\t\t__out = __out + __ch\n"
+		src = src + "\t\t\t\t\t\t__i = __i + 1\n"
+		src = src + "\t\t\t\telse if __ch == \"\\\"\"\n"
+		src = src + "\t\t\t\t\t__in_str = true\n"
+		src = src + "\t\t\t\t\t__out = __out + __ch\n"
+		src = src + "\t\t\t\t\t__i = __i + 1\n"
+		src = src + "\t\t\telse\n"
+		src = src + "\t\t\t\t__out = __out + __ch\n"
+		src = src + "\t\t\t\t__i = __i + 1\n"
+		src = src + "\t\treturn __out\n"
+		src = src + "\n"
+
+		return src
+
+	// PRE-MIGRATION emit_load_helpers_typed — kept as a reference. No
+	// longer on the assemble_typed path (assemble.md §6.2 forbids
+	// _emit_function inside assemble_typed). Do not call from assemble.
 	integer emit_load_helpers_typed(integer ctx)
 		// _ui_normalize_load_return(any __r) -> string
 		string norm_body = "string __s = json.encode(__r)\n"

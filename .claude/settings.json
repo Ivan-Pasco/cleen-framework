@@ -58,7 +58,9 @@
       "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show edda1c5 -- plugins/frame.server/src/main.cln)",
       "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show ddaba1b -- plugins/frame.server/plugin.toml)",
       "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show ddaba1b -- plugins/frame.server/src/main.cln)",
-      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" diff --stat)"
+      "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" diff --stat)",
+      "Skill(team-prompts-list)",
+      "Skill(team-prompts-list:*)"
     ],
     "additionalDirectories": [
       "/tmp"
