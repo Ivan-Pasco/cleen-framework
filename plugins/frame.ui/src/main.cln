@@ -665,9 +665,9 @@ functions:
 		src = src + "\t\t\t\t\t__in_str = true\n"
 		src = src + "\t\t\t\t\t__out = __out + __ch\n"
 		src = src + "\t\t\t\t\t__i = __i + 1\n"
-		src = src + "\t\t\telse\n"
-		src = src + "\t\t\t\t__out = __out + __ch\n"
-		src = src + "\t\t\t\t__i = __i + 1\n"
+		src = src + "\t\t\t\telse\n"
+		src = src + "\t\t\t\t\t__out = __out + __ch\n"
+		src = src + "\t\t\t\t\t__i = __i + 1\n"
 		src = src + "\t\treturn __out\n"
 		src = src + "\n"
 
