@@ -427,11 +427,32 @@ functions:
 		if has_any_fn
 			module_src = module_src + "functions:\n"
 
-			// Phase 4 → render functions
+			// Phase 4 → render functions. body_source is built with one leading
+			// tab per line (function-body-scope indent as designed at Phase 2),
+			// so we prefix each non-empty line with an extra "\t" here to reach
+			// the two-tab depth expected inside a functions: block body. Without
+			// this the parser sees the body as a sibling of the sig (SYN001
+			// LeftParen at the first `(` of the body) — see 6c6f3d61 follow-up.
 			integer rfi = 0
 			while rfi < route_fn_names.length()
 				module_src = module_src + "\tstring " + route_fn_names[rfi] + "()\n"
-				module_src = module_src + route_fn_bodies[rfi]
+				string __raw_body = route_fn_bodies[rfi]
+				string __indented_body = ""
+				string __rb_rem = __raw_body
+				while __rb_rem.length() > 0
+					integer __rb_nl = __rb_rem.indexOf("\n")
+					string __rb_line = ""
+					if __rb_nl == -1
+						__rb_line = __rb_rem
+						__rb_rem = ""
+					else
+						__rb_line = __rb_rem.substring(0, __rb_nl)
+						__rb_rem = __rb_rem.substring(__rb_nl + 1, __rb_rem.length())
+					if __rb_line.length() > 0
+						__indented_body = __indented_body + "\t" + __rb_line + "\n"
+					else
+						__indented_body = __indented_body + "\n"
+				module_src = module_src + __indented_body
 				module_src = module_src + "\n"
 				rfi = rfi + 1
 
