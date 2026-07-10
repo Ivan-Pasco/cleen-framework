@@ -33,8 +33,8 @@
 //     dispatcher), get_widget_html_tag / get_widget_base_style / prop_to_style
 //     / extract_button_text / get_prop_value (~120 v3 LOC utility ports),
 //     collect_screens_from_html / entries_to_screens_json /
-//     build_hydration_manifest_module (~190 v3 LOC), build_load_helpers_module
-//     (~340 v3 LOC — fixed-preamble accumulator), assemble (~1120 v3 LOC —
+//     build_hydration_manifest_module (~190 v3 LOC),
+//     assemble (~1120 v3 LOC —
 //     multi-branch template with route/component/diag wiring),
 //     parse_source_files / derive_module_name / derive_url_path /
 //     derive_html_path / scan_routes_guards / path_matches_pattern /
@@ -486,9 +486,12 @@ functions:
 				module_src = module_src + "\t\treturn \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
 				module_src = module_src + "\n"
 
-			// Phase 6 → load helper functions
-			if has_any_load
-				module_src = module_src + emit_load_helpers_source()
+			// Phase 6 (removed) — load helper functions used to be emitted here
+			// (_ui_normalize_load_return / _ui_unwrap_json_encoded_string /
+			// _ui_promote_string_fields). The render body now calls json.encode()
+			// directly so these helpers are unreferenced and their source is not
+			// injected. See fingerprint a2b84ca5 for the promote bug that motivated
+			// bypassing the helpers.
 
 			// Phase 7 → diagnostic function
 			string total_files_str = source_files.length().toString()
@@ -558,277 +561,6 @@ functions:
 			result = result + line + "\n"
 		return result
 
-	// Build the source string for the three load-helper functions
-	// (_ui_normalize_load_return, _ui_unwrap_json_encoded_string,
-	// _ui_promote_string_fields) as `functions:`-block content — one
-	// leading tab on the function signature, two leading tabs on body
-	// lines. Rewritten 2026-07-10 for assemble.md §11 migration: the
-	// caller (assemble_typed Phase 6) concatenates this into the module
-	// source that ships through _inject_source_file.
-	string emit_load_helpers_source()
-		string src = ""
-
-		// _ui_normalize_load_return(any __r) -> string
-		src = src + "\tstring _ui_normalize_load_return(any __r)\n"
-		src = src + "\t\tstring __s = json.encode(__r)\n"
-		src = src + "\t\tif __s.length() == 0\n"
-		src = src + "\t\t\treturn \"{}\"\n"
-		src = src + "\t\tstring __first = __s.substring(0, 1)\n"
-		src = src + "\t\tif __first == \"{\" or __first == \"[\"\n"
-		src = src + "\t\t\treturn _ui_promote_string_fields(__s)\n"
-		src = src + "\t\tif __s.length() >= 2 and __first == \"\\\"\"\n"
-		src = src + "\t\t\tstring __second = __s.substring(1, 2)\n"
-		src = src + "\t\t\tif __second == \"{\" or __second == \"[\"\n"
-		src = src + "\t\t\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
-		src = src + "\t\treturn __s\n"
-		src = src + "\n"
-
-		// _ui_unwrap_json_encoded_string(string __s) -> string
-		src = src + "\tstring _ui_unwrap_json_encoded_string(string __s)\n"
-		src = src + "\t\tif __s.length() < 2\n"
-		src = src + "\t\t\treturn __s\n"
-		src = src + "\t\tinteger __n = __s.length()\n"
-		src = src + "\t\tstring __body = __s.substring(1, __n - 1)\n"
-		src = src + "\t\tstring __result = \"\"\n"
-		src = src + "\t\tinteger __i = 0\n"
-		src = src + "\t\tinteger __m = __body.length()\n"
-		src = src + "\t\twhile __i < __m\n"
-		src = src + "\t\t\tstring __ch = __body.substring(__i, __i + 1)\n"
-		src = src + "\t\t\tif __ch == \"\\\\\" and __i + 1 < __m\n"
-		src = src + "\t\t\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
-		src = src + "\t\t\t\tif __nx == \"n\"\n"
-		src = src + "\t\t\t\t\t__result = __result + \"\\n\"\n"
-		src = src + "\t\t\t\telse if __nx == \"t\"\n"
-		src = src + "\t\t\t\t\t__result = __result + \"\\t\"\n"
-		src = src + "\t\t\t\telse if __nx == \"r\"\n"
-		src = src + "\t\t\t\t\t__result = __result + \"\\r\"\n"
-		src = src + "\t\t\t\telse if __nx == \"\\\"\"\n"
-		src = src + "\t\t\t\t\t__result = __result + \"\\\"\"\n"
-		src = src + "\t\t\t\telse if __nx == \"/\"\n"
-		src = src + "\t\t\t\t\t__result = __result + \"/\"\n"
-		src = src + "\t\t\t\telse if __nx == \"\\\\\"\n"
-		src = src + "\t\t\t\t\t__result = __result + \"\\\\\"\n"
-		src = src + "\t\t\t\telse\n"
-		src = src + "\t\t\t\t\t__result = __result + __ch + __nx\n"
-		src = src + "\t\t\t\t__i = __i + 2\n"
-		src = src + "\t\t\telse\n"
-		src = src + "\t\t\t\t__result = __result + __ch\n"
-		src = src + "\t\t\t\t__i = __i + 1\n"
-		src = src + "\t\treturn __result\n"
-		src = src + "\n"
-
-		// _ui_promote_string_fields(string __input) -> string
-		src = src + "\tstring _ui_promote_string_fields(string __input)\n"
-		src = src + "\t\tif __input.length() < 4\n"
-		src = src + "\t\t\treturn __input\n"
-		src = src + "\t\tstring __out = \"\"\n"
-		src = src + "\t\tinteger __i = 0\n"
-		src = src + "\t\tinteger __n = __input.length()\n"
-		src = src + "\t\tboolean __in_str = false\n"
-		src = src + "\t\tboolean __escape = false\n"
-		src = src + "\t\twhile __i < __n\n"
-		src = src + "\t\t\tstring __ch = __input.substring(__i, __i + 1)\n"
-		src = src + "\t\t\tif __in_str\n"
-		src = src + "\t\t\t\t__out = __out + __ch\n"
-		src = src + "\t\t\t\tif __escape\n"
-		src = src + "\t\t\t\t\t__escape = false\n"
-		src = src + "\t\t\t\telse if __ch == \"\\\\\"\n"
-		src = src + "\t\t\t\t\t__escape = true\n"
-		src = src + "\t\t\t\telse if __ch == \"\\\"\"\n"
-		src = src + "\t\t\t\t\t__in_str = false\n"
-		src = src + "\t\t\t\t__i = __i + 1\n"
-		src = src + "\t\t\telse\n"
-		src = src + "\t\t\t\tif __ch == \":\"\n"
-		src = src + "\t\t\t\t\tinteger __j = __i + 1\n"
-		src = src + "\t\t\t\t\tboolean __ws_keep = true\n"
-		src = src + "\t\t\t\t\twhile __ws_keep and __j < __n\n"
-		src = src + "\t\t\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
-		src = src + "\t\t\t\t\t\tif __ws_ch != \" \"\n"
-		src = src + "\t\t\t\t\t\t\t__ws_keep = false\n"
-		src = src + "\t\t\t\t\t\telse\n"
-		src = src + "\t\t\t\t\t\t\t__j = __j + 1\n"
-		src = src + "\t\t\t\t\tboolean __did = false\n"
-		src = src + "\t\t\t\t\tboolean __qt_match = false\n"
-		src = src + "\t\t\t\t\tif __j + 1 < __n\n"
-		src = src + "\t\t\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
-		src = src + "\t\t\t\t\t\tif __qt_ch == \"\\\"\"\n"
-		src = src + "\t\t\t\t\t\t\t__qt_match = true\n"
-		src = src + "\t\t\t\t\tif __qt_match\n"
-		src = src + "\t\t\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
-		src = src + "\t\t\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
-		src = src + "\t\t\t\t\t\t\tinteger __end = __j + 1\n"
-		src = src + "\t\t\t\t\t\t\tboolean __found = false\n"
-		src = src + "\t\t\t\t\t\t\twhile __end < __n and not __found\n"
-		src = src + "\t\t\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
-		src = src + "\t\t\t\t\t\t\t\tif __c == \"\\\\\"\n"
-		src = src + "\t\t\t\t\t\t\t\t\t__end = __end + 2\n"
-		src = src + "\t\t\t\t\t\t\t\telse if __c == \"\\\"\"\n"
-		src = src + "\t\t\t\t\t\t\t\t\t__found = true\n"
-		src = src + "\t\t\t\t\t\t\t\telse\n"
-		src = src + "\t\t\t\t\t\t\t\t\t__end = __end + 1\n"
-		src = src + "\t\t\t\t\t\t\tif __found\n"
-		src = src + "\t\t\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
-		src = src + "\t\t\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
-		src = src + "\t\t\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
-		src = src + "\t\t\t\t\t\t\t\tboolean __ok = false\n"
-		src = src + "\t\t\t\t\t\t\t\tif __ulen >= 2\n"
-		src = src + "\t\t\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
-		src = src + "\t\t\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
-		src = src + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
-		src = src + "\t\t\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
-		src = src + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
-		src = src + "\t\t\t\t\t\t\t\tif __ok\n"
-		src = src + "\t\t\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
-		src = src + "\t\t\t\t\t\t\t\t\t__i = __end + 1\n"
-		src = src + "\t\t\t\t\t\t\t\t\t__did = true\n"
-		src = src + "\t\t\t\t\tif not __did\n"
-		src = src + "\t\t\t\t\t\t__out = __out + __ch\n"
-		src = src + "\t\t\t\t\t\t__i = __i + 1\n"
-		src = src + "\t\t\t\telse if __ch == \"\\\"\"\n"
-		src = src + "\t\t\t\t\t__in_str = true\n"
-		src = src + "\t\t\t\t\t__out = __out + __ch\n"
-		src = src + "\t\t\t\t\t__i = __i + 1\n"
-		src = src + "\t\t\t\telse\n"
-		src = src + "\t\t\t\t\t__out = __out + __ch\n"
-		src = src + "\t\t\t\t\t__i = __i + 1\n"
-		src = src + "\t\treturn __out\n"
-		src = src + "\n"
-
-		return src
-
-	// PRE-MIGRATION emit_load_helpers_typed — kept as a reference. No
-	// longer on the assemble_typed path (assemble.md §6.2 forbids
-	// _emit_function inside assemble_typed). Do not call from assemble.
-	integer emit_load_helpers_typed(integer ctx)
-		// _ui_normalize_load_return(any __r) -> string
-		string norm_body = "string __s = json.encode(__r)\n"
-		norm_body = norm_body + "if __s.length() == 0\n"
-		norm_body = norm_body + "\treturn \"{}\"\n"
-		norm_body = norm_body + "string __first = __s.substring(0, 1)\n"
-		norm_body = norm_body + "if __first == \"{\" or __first == \"[\"\n"
-		norm_body = norm_body + "\treturn _ui_promote_string_fields(__s)\n"
-		norm_body = norm_body + "if __s.length() >= 2 and __first == \"\\\"\"\n"
-		norm_body = norm_body + "\tstring __second = __s.substring(1, 2)\n"
-		norm_body = norm_body + "\tif __second == \"{\" or __second == \"[\"\n"
-		norm_body = norm_body + "\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
-		norm_body = norm_body + "return __s\n"
-		integer norm_p_any = _type_class_ref(ctx, "any")
-		integer norm_r_str = _type_string(ctx)
-		ui_helper_function(ctx, "_ui_normalize_load_return", "[{\"name\":\"__r\",\"type_handle\":" + norm_p_any.toString() + "}]", norm_r_str, norm_body, 1)
-
-		// _ui_unwrap_json_encoded_string(string __s) -> string
-		string unwrap_body = "if __s.length() < 2\n"
-		unwrap_body = unwrap_body + "\treturn __s\n"
-		unwrap_body = unwrap_body + "integer __n = __s.length()\n"
-		unwrap_body = unwrap_body + "string __body = __s.substring(1, __n - 1)\n"
-		unwrap_body = unwrap_body + "string __result = \"\"\n"
-		unwrap_body = unwrap_body + "integer __i = 0\n"
-		unwrap_body = unwrap_body + "integer __m = __body.length()\n"
-		unwrap_body = unwrap_body + "while __i < __m\n"
-		unwrap_body = unwrap_body + "\tstring __ch = __body.substring(__i, __i + 1)\n"
-		unwrap_body = unwrap_body + "\tif __ch == \"\\\\\" and __i + 1 < __m\n"
-		unwrap_body = unwrap_body + "\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
-		unwrap_body = unwrap_body + "\t\tif __nx == \"n\"\n"
-		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\n\"\n"
-		unwrap_body = unwrap_body + "\t\telse if __nx == \"t\"\n"
-		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\t\"\n"
-		unwrap_body = unwrap_body + "\t\telse if __nx == \"r\"\n"
-		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\r\"\n"
-		unwrap_body = unwrap_body + "\t\telse if __nx == \"\\\"\"\n"
-		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\\"\"\n"
-		unwrap_body = unwrap_body + "\t\telse if __nx == \"/\"\n"
-		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"/\"\n"
-		unwrap_body = unwrap_body + "\t\telse if __nx == \"\\\\\"\n"
-		unwrap_body = unwrap_body + "\t\t\t__result = __result + \"\\\\\"\n"
-		unwrap_body = unwrap_body + "\t\telse\n"
-		unwrap_body = unwrap_body + "\t\t\t__result = __result + __ch + __nx\n"
-		unwrap_body = unwrap_body + "\t\t__i = __i + 2\n"
-		unwrap_body = unwrap_body + "\telse\n"
-		unwrap_body = unwrap_body + "\t\t__result = __result + __ch\n"
-		unwrap_body = unwrap_body + "\t\t__i = __i + 1\n"
-		unwrap_body = unwrap_body + "return __result\n"
-		integer unwrap_p_str = _type_string(ctx)
-		integer unwrap_r_str = _type_string(ctx)
-		ui_helper_function(ctx, "_ui_unwrap_json_encoded_string", "[{\"name\":\"__s\",\"type_handle\":" + unwrap_p_str.toString() + "}]", unwrap_r_str, unwrap_body, 1)
-
-		// _ui_promote_string_fields(string __input) -> string
-		string promote_body = "if __input.length() < 4\n"
-		promote_body = promote_body + "\treturn __input\n"
-		promote_body = promote_body + "string __out = \"\"\n"
-		promote_body = promote_body + "integer __i = 0\n"
-		promote_body = promote_body + "integer __n = __input.length()\n"
-		promote_body = promote_body + "boolean __in_str = false\n"
-		promote_body = promote_body + "boolean __escape = false\n"
-		promote_body = promote_body + "while __i < __n\n"
-		promote_body = promote_body + "\tstring __ch = __input.substring(__i, __i + 1)\n"
-		promote_body = promote_body + "\tif __in_str\n"
-		promote_body = promote_body + "\t\t__out = __out + __ch\n"
-		promote_body = promote_body + "\t\tif __escape\n"
-		promote_body = promote_body + "\t\t\t__escape = false\n"
-		promote_body = promote_body + "\t\telse if __ch == \"\\\\\"\n"
-		promote_body = promote_body + "\t\t\t__escape = true\n"
-		promote_body = promote_body + "\t\telse if __ch == \"\\\"\"\n"
-		promote_body = promote_body + "\t\t\t__in_str = false\n"
-		promote_body = promote_body + "\t\t__i = __i + 1\n"
-		promote_body = promote_body + "\telse\n"
-		promote_body = promote_body + "\t\tif __ch == \":\"\n"
-		promote_body = promote_body + "\t\t\tinteger __j = __i + 1\n"
-		promote_body = promote_body + "\t\t\tboolean __ws_keep = true\n"
-		promote_body = promote_body + "\t\t\twhile __ws_keep and __j < __n\n"
-		promote_body = promote_body + "\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
-		promote_body = promote_body + "\t\t\t\tif __ws_ch != \" \"\n"
-		promote_body = promote_body + "\t\t\t\t\t__ws_keep = false\n"
-		promote_body = promote_body + "\t\t\t\telse\n"
-		promote_body = promote_body + "\t\t\t\t\t__j = __j + 1\n"
-		promote_body = promote_body + "\t\t\tboolean __did = false\n"
-		promote_body = promote_body + "\t\t\tboolean __qt_match = false\n"
-		promote_body = promote_body + "\t\t\tif __j + 1 < __n\n"
-		promote_body = promote_body + "\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
-		promote_body = promote_body + "\t\t\t\tif __qt_ch == \"\\\"\"\n"
-		promote_body = promote_body + "\t\t\t\t\t__qt_match = true\n"
-		promote_body = promote_body + "\t\t\tif __qt_match\n"
-		promote_body = promote_body + "\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
-		promote_body = promote_body + "\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
-		promote_body = promote_body + "\t\t\t\t\tinteger __end = __j + 1\n"
-		promote_body = promote_body + "\t\t\t\t\tboolean __found = false\n"
-		promote_body = promote_body + "\t\t\t\t\twhile __end < __n and not __found\n"
-		promote_body = promote_body + "\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
-		promote_body = promote_body + "\t\t\t\t\t\tif __c == \"\\\\\"\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t__end = __end + 2\n"
-		promote_body = promote_body + "\t\t\t\t\t\telse if __c == \"\\\"\"\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t__found = true\n"
-		promote_body = promote_body + "\t\t\t\t\t\telse\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t__end = __end + 1\n"
-		promote_body = promote_body + "\t\t\t\t\tif __found\n"
-		promote_body = promote_body + "\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
-		promote_body = promote_body + "\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
-		promote_body = promote_body + "\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
-		promote_body = promote_body + "\t\t\t\t\t\tboolean __ok = false\n"
-		promote_body = promote_body + "\t\t\t\t\t\tif __ulen >= 2\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t\t__ok = true\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t\t__ok = true\n"
-		promote_body = promote_body + "\t\t\t\t\t\tif __ok\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t__i = __end + 1\n"
-		promote_body = promote_body + "\t\t\t\t\t\t\t__did = true\n"
-		promote_body = promote_body + "\t\t\tif not __did\n"
-		promote_body = promote_body + "\t\t\t\t__out = __out + __ch\n"
-		promote_body = promote_body + "\t\t\t\t__i = __i + 1\n"
-		promote_body = promote_body + "\t\telse if __ch == \"\\\"\"\n"
-		promote_body = promote_body + "\t\t\t__in_str = true\n"
-		promote_body = promote_body + "\t\t\t__out = __out + __ch\n"
-		promote_body = promote_body + "\t\t\t__i = __i + 1\n"
-		promote_body = promote_body + "\t\telse\n"
-		promote_body = promote_body + "\t\t\t__out = __out + __ch\n"
-		promote_body = promote_body + "\t\t\t__i = __i + 1\n"
-		promote_body = promote_body + "return __out\n"
-		integer promote_p_str = _type_string(ctx)
-		integer promote_r_str = _type_string(ctx)
-		ui_helper_function(ctx, "_ui_promote_string_fields", "[{\"name\":\"__input\",\"type_handle\":" + promote_p_str.toString() + "}]", promote_r_str, promote_body, 1)
-		return 0
 
 // ============================================================================
 // PRESERVED VALIDATION / KEYWORD SURFACE (VERBATIM PORTS FROM v1)
@@ -4429,129 +4161,6 @@ functions:
 		module = module + "\t\treturn \"{\\\"screens\\\":" + screens_json.replace("\"", "\\\"") + "}\"\n"
 		return module
 
-	string build_load_helpers_module()
-		string m = "// Auto-generated frame.ui load() return normalization\n"
-		m = m + "functions:\n"
-		m = m + "\tstring _ui_normalize_load_return(any __r)\n"
-		m = m + "\t\tstring __s = json.encode(__r)\n"
-		m = m + "\t\tif __s.length() == 0\n"
-		m = m + "\t\t\treturn \"{}\"\n"
-		m = m + "\t\tstring __first = __s.substring(0, 1)\n"
-		m = m + "\t\tif __first == \"{\" or __first == \"[\"\n"
-		m = m + "\t\t\treturn _ui_promote_string_fields(__s)\n"
-		m = m + "\t\tif __s.length() >= 2 and __first == \"\\\"\"\n"
-		m = m + "\t\t\tstring __second = __s.substring(1, 2)\n"
-		m = m + "\t\t\tif __second == \"{\" or __second == \"[\"\n"
-		m = m + "\t\t\t\treturn _ui_promote_string_fields(_ui_unwrap_json_encoded_string(__s))\n"
-		m = m + "\t\treturn __s\n"
-		m = m + "\n"
-		m = m + "\tstring _ui_unwrap_json_encoded_string(string __s)\n"
-		m = m + "\t\tif __s.length() < 2\n"
-		m = m + "\t\t\treturn __s\n"
-		m = m + "\t\tinteger __n = __s.length()\n"
-		m = m + "\t\tstring __body = __s.substring(1, __n - 1)\n"
-		m = m + "\t\tstring __result = \"\"\n"
-		m = m + "\t\tinteger __i = 0\n"
-		m = m + "\t\tinteger __m = __body.length()\n"
-		m = m + "\t\twhile __i < __m\n"
-		m = m + "\t\t\tstring __ch = __body.substring(__i, __i + 1)\n"
-		m = m + "\t\t\tif __ch == \"\\\\\" and __i + 1 < __m\n"
-		m = m + "\t\t\t\tstring __nx = __body.substring(__i + 1, __i + 2)\n"
-		m = m + "\t\t\t\tif __nx == \"n\"\n"
-		m = m + "\t\t\t\t\t__result = __result + \"\\n\"\n"
-		m = m + "\t\t\t\telse if __nx == \"t\"\n"
-		m = m + "\t\t\t\t\t__result = __result + \"\\t\"\n"
-		m = m + "\t\t\t\telse if __nx == \"r\"\n"
-		m = m + "\t\t\t\t\t__result = __result + \"\\r\"\n"
-		m = m + "\t\t\t\telse if __nx == \"\\\"\"\n"
-		m = m + "\t\t\t\t\t__result = __result + \"\\\"\"\n"
-		m = m + "\t\t\t\telse if __nx == \"/\"\n"
-		m = m + "\t\t\t\t\t__result = __result + \"/\"\n"
-		m = m + "\t\t\t\telse if __nx == \"\\\\\"\n"
-		m = m + "\t\t\t\t\t__result = __result + \"\\\\\"\n"
-		m = m + "\t\t\t\telse\n"
-		m = m + "\t\t\t\t\t__result = __result + __ch + __nx\n"
-		m = m + "\t\t\t\t__i = __i + 2\n"
-		m = m + "\t\t\telse\n"
-		m = m + "\t\t\t\t__result = __result + __ch\n"
-		m = m + "\t\t\t\t__i = __i + 1\n"
-		m = m + "\t\treturn __result\n"
-		m = m + "\n"
-		m = m + "\tstring _ui_promote_string_fields(string __input)\n"
-		m = m + "\t\tif __input.length() < 4\n"
-		m = m + "\t\t\treturn __input\n"
-		m = m + "\t\tstring __out = \"\"\n"
-		m = m + "\t\tinteger __i = 0\n"
-		m = m + "\t\tinteger __n = __input.length()\n"
-		m = m + "\t\tboolean __in_str = false\n"
-		m = m + "\t\tboolean __escape = false\n"
-		m = m + "\t\twhile __i < __n\n"
-		m = m + "\t\t\tstring __ch = __input.substring(__i, __i + 1)\n"
-		m = m + "\t\t\tif __in_str\n"
-		m = m + "\t\t\t\t__out = __out + __ch\n"
-		m = m + "\t\t\t\tif __escape\n"
-		m = m + "\t\t\t\t\t__escape = false\n"
-		m = m + "\t\t\t\telse if __ch == \"\\\\\"\n"
-		m = m + "\t\t\t\t\t__escape = true\n"
-		m = m + "\t\t\t\telse if __ch == \"\\\"\"\n"
-		m = m + "\t\t\t\t\t__in_str = false\n"
-		m = m + "\t\t\t\t__i = __i + 1\n"
-		m = m + "\t\t\telse\n"
-		m = m + "\t\t\t\tif __ch == \":\"\n"
-		m = m + "\t\t\t\t\tinteger __j = __i + 1\n"
-		m = m + "\t\t\t\t\tboolean __ws_keep = true\n"
-		m = m + "\t\t\t\t\twhile __ws_keep and __j < __n\n"
-		m = m + "\t\t\t\t\t\tstring __ws_ch = __input.substring(__j, __j + 1)\n"
-		m = m + "\t\t\t\t\t\tif __ws_ch != \" \"\n"
-		m = m + "\t\t\t\t\t\t\t__ws_keep = false\n"
-		m = m + "\t\t\t\t\t\telse\n"
-		m = m + "\t\t\t\t\t\t\t__j = __j + 1\n"
-		m = m + "\t\t\t\t\tboolean __did = false\n"
-		m = m + "\t\t\t\t\tboolean __qt_match = false\n"
-		m = m + "\t\t\t\t\tif __j + 1 < __n\n"
-		m = m + "\t\t\t\t\t\tstring __qt_ch = __input.substring(__j, __j + 1)\n"
-		m = m + "\t\t\t\t\t\tif __qt_ch == \"\\\"\"\n"
-		m = m + "\t\t\t\t\t\t\t__qt_match = true\n"
-		m = m + "\t\t\t\t\tif __qt_match\n"
-		m = m + "\t\t\t\t\t\tstring __ifirst = __input.substring(__j + 1, __j + 2)\n"
-		m = m + "\t\t\t\t\t\tif __ifirst == \"[\" or __ifirst == \"{\"\n"
-		m = m + "\t\t\t\t\t\t\tinteger __end = __j + 1\n"
-		m = m + "\t\t\t\t\t\t\tboolean __found = false\n"
-		m = m + "\t\t\t\t\t\t\twhile __end < __n and not __found\n"
-		m = m + "\t\t\t\t\t\t\t\tstring __c = __input.substring(__end, __end + 1)\n"
-		m = m + "\t\t\t\t\t\t\t\tif __c == \"\\\\\"\n"
-		m = m + "\t\t\t\t\t\t\t\t\t__end = __end + 2\n"
-		m = m + "\t\t\t\t\t\t\t\telse if __c == \"\\\"\"\n"
-		m = m + "\t\t\t\t\t\t\t\t\t__found = true\n"
-		m = m + "\t\t\t\t\t\t\t\telse\n"
-		m = m + "\t\t\t\t\t\t\t\t\t__end = __end + 1\n"
-		m = m + "\t\t\t\t\t\t\tif __found\n"
-		m = m + "\t\t\t\t\t\t\t\tstring __quoted = __input.substring(__j, __end + 1)\n"
-		m = m + "\t\t\t\t\t\t\t\tstring __unesc = _ui_unwrap_json_encoded_string(__quoted)\n"
-		m = m + "\t\t\t\t\t\t\t\tinteger __ulen = __unesc.length()\n"
-		m = m + "\t\t\t\t\t\t\t\tboolean __ok = false\n"
-		m = m + "\t\t\t\t\t\t\t\tif __ulen >= 2\n"
-		m = m + "\t\t\t\t\t\t\t\t\tstring __ulast = __unesc.substring(__ulen - 1, __ulen)\n"
-		m = m + "\t\t\t\t\t\t\t\t\tif __ifirst == \"[\" and __ulast == \"]\"\n"
-		m = m + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
-		m = m + "\t\t\t\t\t\t\t\t\telse if __ifirst == \"{\" and __ulast == \"}\"\n"
-		m = m + "\t\t\t\t\t\t\t\t\t\t__ok = true\n"
-		m = m + "\t\t\t\t\t\t\t\tif __ok\n"
-		m = m + "\t\t\t\t\t\t\t\t\t__out = __out + \":\" + __unesc\n"
-		m = m + "\t\t\t\t\t\t\t\t\t__i = __end + 1\n"
-		m = m + "\t\t\t\t\t\t\t\t\t__did = true\n"
-		m = m + "\t\t\t\t\tif not __did\n"
-		m = m + "\t\t\t\t\t\t__out = __out + __ch\n"
-		m = m + "\t\t\t\t\t\t__i = __i + 1\n"
-		m = m + "\t\t\t\telse if __ch == \"\\\"\"\n"
-		m = m + "\t\t\t\t\t__in_str = true\n"
-		m = m + "\t\t\t\t\t__out = __out + __ch\n"
-		m = m + "\t\t\t\t\t__i = __i + 1\n"
-		m = m + "\t\t\t\telse\n"
-		m = m + "\t\t\t\t\t__out = __out + __ch\n"
-		m = m + "\t\t\t\t\t__i = __i + 1\n"
-		m = m + "\t\treturn __out\n"
-		return m
 
 // ============================================================================
 // ASSEMBLE + SUPPORTING FUNCTIONS (verbatim from v1)
@@ -4637,7 +4246,7 @@ functions:
 							has_any_load = true
 							new_content = new_content.replace("any load(Request ", "any " + module_name + "_load_impl(any ")
 							new_content = new_content.replace("any load(", "any " + module_name + "_load_impl(")
-							new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn _ui_normalize_load_return(" + module_name + "_load_impl(__p))\n"
+							new_content = new_content + "\n\tstring " + module_name + "_load(any __p)\n\t\treturn json.encode(" + module_name + "_load_impl(__p))\n"
 						if has_guard
 							new_content = new_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
 							new_content = new_content.replace("any guard(", "any " + module_name + "_guard(")
@@ -4677,12 +4286,8 @@ functions:
 				injected_json = injected_json + ","
 			injected_json = injected_json + "{\"virtual_path\":\"__hydration_manifest.cln\",\"content\":\"" + escape_json_string(manifest_module) + "\"}"
 			first_injected = false
-		if has_any_load
-			string load_helpers_module = build_load_helpers_module()
-			if not first_injected
-				injected_json = injected_json + ","
-			injected_json = injected_json + "{\"virtual_path\":\"__ui_load_helpers.cln\",\"content\":\"" + escape_json_string(load_helpers_module) + "\"}"
-			first_injected = false
+		// Load-helpers module is no longer emitted — the render body now calls
+		// json.encode() directly. See fingerprint a2b84ca5 for why.
 		string total_files_str = source_files.length().toString()
 		string pc_str = page_candidates.toString()
 		string pm_str = pages_with_markers.toString()
