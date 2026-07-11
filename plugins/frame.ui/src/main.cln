@@ -405,7 +405,13 @@ functions:
 						// resolution — so all routes served the same context.
 						// The parameter type is broadened to `any` so the render
 						// body can pass `null` without a Request instance.
-						string transformed_content = file_content
+						//
+						// extract_json_field returns the raw quoted substring
+						// without decoding JSON escapes, so `\n` / `\t` arrive as
+						// two-char literals. _transform_source_file expects raw
+						// source (real newlines/tabs), so we decode first — else
+						// the lexer trips on the stray backslashes.
+						string transformed_content = decode_json_string(file_content)
 						if has_load
 							transformed_content = transformed_content.replace("any load(Request ", "any " + module_name + "_load(any ")
 							transformed_content = transformed_content.replace("any load(", "any " + module_name + "_load(")
@@ -2668,6 +2674,53 @@ functions:
 		result = result.replace("\\", "\\\\")
 		result = result.replace("\"", "\\\"")
 		result = result.replace("\n", "\\n")
+		return result
+
+	// Inverse of escape_json_string. extract_json_field returns the raw
+	// characters between the JSON quotes without decoding escape sequences, so
+	// `\n` / `\t` / `\"` / `\\` arrive as two-character literals. When the
+	// content flows back into a source-consuming bridge (e.g.
+	// _transform_source_file per assemble.md §6.1a, which expects raw Clean
+	// source), these escapes must be decoded first — otherwise the lexer sees
+	// a literal backslash and rejects it. Single-pass to avoid double-decoding
+	// `\\n` (escaped backslash followed by n) into a newline.
+	string decode_json_string(string txt)
+		string result = ""
+		integer i = 0
+		integer n = txt.length()
+		while i < n
+			string ch = txt.substring(i, i + 1)
+			if ch == "\\" and i + 1 < n
+				string nx = txt.substring(i + 1, i + 2)
+				if nx == "n"
+					result = result + "\n"
+					i = i + 2
+				else
+					if nx == "t"
+						result = result + "\t"
+						i = i + 2
+					else
+						if nx == "r"
+							result = result + "\r"
+							i = i + 2
+						else
+							if nx == "\""
+								result = result + "\""
+								i = i + 2
+							else
+								if nx == "\\"
+									result = result + "\\"
+									i = i + 2
+								else
+									if nx == "/"
+										result = result + "/"
+										i = i + 2
+									else
+										result = result + ch
+										i = i + 1
+			else
+				result = result + ch
+				i = i + 1
 		return result
 
 	string parse_component_body(string body)
