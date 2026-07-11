@@ -386,7 +386,12 @@ functions:
 				if is_html and raw_has_screen
 					html_with_screen = html_with_screen + 1
 				if (in_pages or is_html) and (raw_has_load or raw_has_guard or raw_has_screen)
-					string file_content = extract_json_field(file_obj, "content")
+					// Escape-aware extraction: the page source may contain
+					// `\"` (quoted strings inside load/guard bodies). The plain
+					// extract_json_field truncates at the first `"` regardless
+					// of escaping, which would strip everything after the
+					// first embedded quote and produce a malformed transform.
+					string file_content = extract_json_field_escaped(file_obj, "content")
 					boolean has_load = raw_has_load
 					boolean has_guard = raw_has_guard
 					if is_html and raw_has_screen
@@ -741,6 +746,40 @@ functions:
 	// Extract a JSON string field's value from a single-level JSON object.
 	// Handles both quoted-string values and simple numeric/boolean scalars.
 	// v1 provenance: main.v1.cln:3097-3131.
+	// Extract a JSON string field, scanning past escaped quotes and escaped
+	// backslashes so we get the FULL value even when the string contains `\"`
+	// or `\\`. Used when the content field will feed a bridge that expects the
+	// complete raw source (e.g. _transform_source_file). The result is still
+	// escape-encoded (2-char `\n` / `\t` / `\"`); pair with decode_json_string
+	// to recover raw source. The plain extract_json_field below truncates at
+	// the first `"` even when it's escaped — kept for backward compatibility
+	// with call sites that only look at short values (paths, flags).
+	string extract_json_field_escaped(string json, string field_name)
+		string search = "\"" + field_name + "\":"
+		integer field_pos = json.indexOf(search)
+		if field_pos == -1
+			return ""
+		integer value_start = field_pos + search.length()
+		while value_start < json.length() and json.substring(value_start, value_start + 1) == " "
+			value_start = value_start + 1
+		if value_start >= json.length()
+			return ""
+		if json.substring(value_start, value_start + 1) != "\""
+			return ""
+		integer content_start = value_start + 1
+		integer scan = content_start
+		integer json_len = json.length()
+		while scan < json_len
+			string ch = json.substring(scan, scan + 1)
+			if ch == "\\" and scan + 1 < json_len
+				scan = scan + 2
+			else
+				if ch == "\""
+					return json.substring(content_start, scan)
+				else
+					scan = scan + 1
+		return ""
+
 	string extract_json_field(string json, string field_name)
 		string search = "\"" + field_name + "\":"
 		integer field_pos = json.indexOf(search)
