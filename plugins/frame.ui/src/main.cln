@@ -338,8 +338,16 @@ functions:
 		//   per line (function-body scope inside functions:); the composition
 		//   step wraps them into `\tstring name()\n\t\t<body...>` shape.
 		string route_registrations = ""
-		list<string> route_fn_names = []
-		list<string> route_fn_bodies = []
+		// route_fn_defs: accumulated `\tstring name()\n\t\t<body>\n\n` fragments
+		// for each page's render function. Built inline during Phase 2 (below).
+		// Prior implementation used two parallel `list<string>` (names + bodies)
+		// and re-iterated them in Phase 4 to compose the module source. That
+		// pattern trapped inside assemble_typed at runtime on projects with 2+
+		// page companions (fingerprint d9f480ae) — the compiled WASM produced
+		// substring(start, end) calls with start > end after the second list
+		// read. Building the fragments inline sidesteps the parallel-list
+		// re-iteration entirely. Same emitted output.
+		string route_fn_defs = ""
 		string hydration_entries = ""
 		boolean has_any_load = false
 		integer page_candidates = 0
@@ -422,8 +430,29 @@ functions:
 								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", __d)\n"
 							else
 								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", \"{}\")\n"
-							route_fn_names.push(module_name + "_render")
-							route_fn_bodies.push(body_source)
+							// Compose this page's render() function definition inline
+							// (avoid the parallel-list pattern — see fingerprint
+							// d9f480ae). Each body_source line is at one leading tab
+							// (function-body scope); we add another tab so it lands at
+							// the two-tab depth required inside a functions: block.
+							string __indented_body = ""
+							string __rb_rem = body_source
+							while __rb_rem.length() > 0
+								integer __rb_nl = __rb_rem.indexOf("\n")
+								string __rb_line = ""
+								if __rb_nl == -1
+									__rb_line = __rb_rem
+									__rb_rem = ""
+								else
+									__rb_line = __rb_rem.substring(0, __rb_nl)
+									__rb_rem = __rb_rem.substring(__rb_nl + 1, __rb_rem.length())
+								if __rb_line.length() > 0
+									__indented_body = __indented_body + "\t" + __rb_line + "\n"
+								else
+									__indented_body = __indented_body + "\n"
+							route_fn_defs = route_fn_defs + "\tstring " + module_name + "_render()\n"
+							route_fn_defs = route_fn_defs + __indented_body
+							route_fn_defs = route_fn_defs + "\n"
 							route_registrations = route_registrations + "\t_http_route(\"GET\", \"" + url + "\", \"" + module_name + "_render\")\n"
 							pages_emitted = pages_emitted + 1
 			fi = fi + 1
@@ -450,34 +479,12 @@ functions:
 		if has_any_fn
 			module_src = module_src + "functions:\n"
 
-			// Phase 4 → render functions. body_source is built with one leading
-			// tab per line (function-body-scope indent as designed at Phase 2),
-			// so we prefix each non-empty line with an extra "\t" here to reach
-			// the two-tab depth expected inside a functions: block body. Without
-			// this the parser sees the body as a sibling of the sig (SYN001
-			// LeftParen at the first `(` of the body) — see 6c6f3d61 follow-up.
-			integer rfi = 0
-			while rfi < route_fn_names.length()
-				module_src = module_src + "\tstring " + route_fn_names[rfi] + "()\n"
-				string __raw_body = route_fn_bodies[rfi]
-				string __indented_body = ""
-				string __rb_rem = __raw_body
-				while __rb_rem.length() > 0
-					integer __rb_nl = __rb_rem.indexOf("\n")
-					string __rb_line = ""
-					if __rb_nl == -1
-						__rb_line = __rb_rem
-						__rb_rem = ""
-					else
-						__rb_line = __rb_rem.substring(0, __rb_nl)
-						__rb_rem = __rb_rem.substring(__rb_nl + 1, __rb_rem.length())
-					if __rb_line.length() > 0
-						__indented_body = __indented_body + "\t" + __rb_line + "\n"
-					else
-						__indented_body = __indented_body + "\n"
-				module_src = module_src + __indented_body
-				module_src = module_src + "\n"
-				rfi = rfi + 1
+			// Phase 4 → render functions. Fragments were composed inline in
+			// Phase 2 (see route_fn_defs) — this used to re-iterate two
+			// parallel `list<string>` here, but that trapped at runtime on
+			// projects with 2+ page companions (d9f480ae). Emit the
+			// accumulated block in one append.
+			module_src = module_src + route_fn_defs
 
 			// Phase 5 → hydration manifest function
 			if has_hydration
