@@ -111,6 +111,12 @@ external:
 	// compilation unit; the injected content flows through the same parser,
 	// resolver, type checker, and MIR lowering as user-authored files.
 	integer _inject_source_file(integer ctx, string virtual_path, string content)
+	// assemble.md §6.1a — records replacement content for an existing
+	// discovered source file (compiler 0.33.44+). Used by assemble_typed to
+	// rename companion page symbols (any load / any guard) to per-page names
+	// so multiple companions can coexist without a global-symbol collision.
+	// Closes fingerprint 1da1454 (FRAME-UI-COMPANION-ALL-ROUTES-SHARE-CONTEXT).
+	integer _transform_source_file(integer ctx, string path, string new_content)
 	// ---- AST type/expression constructors (§3.9, §3.10) — needed for module-scope
 	// state: block fields (Sub-cycle 1 minimal set; Sub-cycles 2/3 may add more) ----
 	integer _type_class_ref(integer ctx, string name)
@@ -389,6 +395,24 @@ functions:
 						string module_name = derive_module_name(file_path)
 						if has_load
 							has_any_load = true
+						// Rename the page's `any load(...)` / `any guard(...)` to
+						// per-page names via _transform_source_file (assemble.md
+						// §6.1a, compiler 0.33.44+). Without this rename, every
+						// companion page declares an unqualified `load` / `guard`,
+						// which either produces a duplicate-symbol error or (worse,
+						// as observed in fingerprint 1da1454) silently binds every
+						// injected render() to whichever declaration won symbol
+						// resolution — so all routes served the same context.
+						// The parameter type is broadened to `any` so the render
+						// body can pass `null` without a Request instance.
+						string transformed_content = file_content
+						if has_load
+							transformed_content = transformed_content.replace("any load(Request ", "any " + module_name + "_load(any ")
+							transformed_content = transformed_content.replace("any load(", "any " + module_name + "_load(")
+						if has_guard
+							transformed_content = transformed_content.replace("any guard(Request ", "any " + module_name + "_guard(any ")
+							transformed_content = transformed_content.replace("any guard(", "any " + module_name + "_guard(")
+						_transform_source_file(ctx, file_path, transformed_content)
 						if has_server
 							string url = derive_url_path(file_path)
 							string html_path = derive_html_path(file_path)
@@ -399,33 +423,17 @@ functions:
 							if __routes_guard_roles.length() > 0
 								body_source = body_source + assemble_guard_body(__routes_guard_roles)
 							if has_guard
-								// See has_load block below for why we call `guard`
-								// by its raw name instead of `pages_<name>_guard`.
-								body_source = body_source + "\tany __g = guard(null)\n"
+								body_source = body_source + "\tany __g = " + module_name + "_guard(null)\n"
 								body_source = body_source + "\tif __g != null\n"
 								body_source = body_source + "\t\treturn __g\n"
 							if has_load
-								// Call the page's raw `load` function. In the current
-								// compiler ABI, `assemble_typed` only exposes
-								// `_inject_source_file` — no bridge to emit a
-								// `transformed_source` that would rename the page's
-								// `load` → `pages_<name>_load`. Since injected + page
-								// modules share a compilation-unit namespace, calling
-								// `load` here resolves to the page's function. Passes
-								// null as the Request arg (the load-helper normalizer
-								// tolerates any-typed returns). Limitation: multi-page
-								// projects will surface a duplicate-symbol error on the
-								// second page's `load`; that requires a compiler-side
-								// transform-source bridge (filed as follow-up to
-								// fingerprint 6c6f3d61).
-								//
 								// Skip _ui_normalize_load_return / _ui_promote_string_fields
 								// and go straight to json.encode — the promote pass was
 								// designed for a legacy quoted-JSON-in-string workaround
 								// and produces invalid JSON (key must be a string at col 2)
 								// when the load result is a plain object (fingerprint
 								// a2b84ca5 — companion handler returned unparseable data).
-								body_source = body_source + "\tany __rd = load(null)\n"
+								body_source = body_source + "\tany __rd = " + module_name + "_load(null)\n"
 								body_source = body_source + "\tstring __d = json.encode(__rd)\n"
 								body_source = body_source + "\treturn _ui_render_page(\"" + html_path + "\", __d)\n"
 							else
