@@ -23,6 +23,9 @@ If it isn't in this doc, it isn't the strategy. Update this doc when the strateg
 4. **A failing test is fixed in code, not in the test.** If the test contradicts spec, fix the test *to match spec*, then note why in a comment.
 5. **Every test file is discoverable by the runner.** File extension `.cln`, in a folder the runner walks. No parallel test frameworks.
 6. **Placeholders are blocked at commit time.** The `scripts/check-test-placeholders.py` guard runs pre-commit, pre-push, and in CI. It exits non-zero on any placeholder pattern.
+7. **(Aspirational, currently blocked)** Every test SHOULD declare its plugin dependencies explicitly via a `plugins:` block. The MCP server, IDE extension, and external plugin authors all depend on this to operate correctly. Implicit plugin activation is a compiler bug (#73cfeba24d14). However — as of this writing, adding an explicit `plugins:` block to a test file that uses `frame.auth`, `frame.canvas`, `frame.client`, `frame.mcp`, `frame.server`, or `frame.data` triggers OTHER upstream bugs (#43ee45647d28, #7536dcc58643, #4c71acb99571, #3654d453ebda, plus additional per-plugin scaffolding gaps discovered during v2.12.160 remediation). Consequently, tests today use implicit activation and rely on the compiler to route block names to installed plugins. Once the upstream bugs land, this rule becomes MUST, and a mechanical grep-and-insert pass will add `plugins:` to every test file. That change is tracked in [PENDING.md](../../tests/PENDING.md).
+
+   In the interim, tests SHOULD add `plugins:` where it works today (currently: files that use only `jobs:`, `locale:`, or standalone `html:` blocks without a server layer). Doing so keeps them forward-compatible.
 
 ## 3. Test layers
 
