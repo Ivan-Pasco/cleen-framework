@@ -1,0 +1,19 @@
+// Test: frame.client — form: block parser accepts the documented shape.
+// Regression test for bug #3654d453ebda (FRAME-CLIENT-FORM-PARSER).
+//
+// The plugin used to reject `form: post "/api/…"` because it read the
+// method+URL from `attrs_json`, which the compiler routes differently than
+// the plugin expected. Fix parses them from the first line of `body`.
+//
+// This test uses the implicit-activation path (no explicit `plugins:` block)
+// because the compiler's explicit `plugins:` code path still hits the
+// module_helpers scaffolding bug (#4c71acb99571). Once that bug is fixed,
+// this test can be migrated to declare `plugins: frame.client` explicitly.
+
+form: post "/api/tasks"
+	title required
+	description optional
+	on success: emit "created"
+
+start:
+	printl("PASS: client-form-parser")

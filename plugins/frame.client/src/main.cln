@@ -59,7 +59,11 @@ external:
 	integer _expr_ident(integer ctx, string name)
 	integer _expr_call(integer ctx, string callee, string args_json)
 	integer _expr_field(integer ctx, integer receiver_handle, string field_name)
-	integer _expr_binop(integer ctx, integer op_code, integer lhs_handle, integer rhs_handle)
+	// _expr_binop is the LP-string variant in the compiler; _expr_binop_op is
+	// the numeric-op-code sibling. We use the numeric variant since callers
+	// already pass integer op codes (see foundation/spec/plugins/contracts/
+	// typed-emission-ops.toml §3.10).
+	integer _expr_binop_op(integer ctx, integer op_code, integer lhs_handle, integer rhs_handle)
 	integer _expr_bool_lit(integer ctx, integer value)
 	// Type constructors
 	integer _type_string(integer ctx)
@@ -408,7 +412,7 @@ functions:
 				result_expr = seg_expr
 			else
 				// op_code 0 = "+" (string concat)
-				result_expr = _expr_binop(ctx, 0, result_expr, seg_expr)
+				result_expr = _expr_binop_op(ctx, 0, result_expr, seg_expr)
 				if result_expr == 0
 					return 0
 
@@ -688,8 +692,43 @@ functions:
 
 functions:
 	integer expand_form_typed(integer ctx, string attributes, string body)
+		// Method + URL routing.
+		//
+		// Historical: the plugin expected `attributes` to carry space-separated
+		// `post "/api/tasks"` because that's what appeared after the colon in
+		// `form: post "/api/tasks"`. But the compiler's framework-block parser
+		// (blocks.rs) does NOT capture same-line content after `:` as
+		// attributes — that content is folded into the block's `body`. When the
+		// file uses implicit plugin activation, `attributes` happens to be empty
+		// `{}` but the block ALSO gets an empty body, so the whole thing bails
+		// silently (no error emission). Under explicit `plugins: frame.client`,
+		// the parser routes the same input differently and the mismatch surfaces
+		// as FRAME-CLIENT-E030.
+		//
+		// Fix: parse the first non-empty line of `body` as the method+URL header,
+		// falling back to `attributes` for backwards compatibility with any host
+		// that DOES route them there in the future.
 		string method = parse_form_method(attributes)
 		string url = parse_form_url(attributes)
+		string effective_body = body
+
+		if method.length() == 0 or url.length() == 0
+			integer first_nl = body.indexOf("\n")
+			string first_line = body
+			if first_nl != -1
+				first_line = body.substring(0, first_nl)
+			first_line = first_line.trim()
+			if first_line.length() > 0
+				string method_from_body = parse_form_method(first_line)
+				string url_from_body = parse_form_url(first_line)
+				if method_from_body.length() > 0 and url_from_body.length() > 0
+					method = method_from_body
+					url = url_from_body
+					// Strip the header line so field parsing below sees only fields.
+					if first_nl == -1
+						effective_body = ""
+					else
+						effective_body = body.substring(first_nl + 1, body.length())
 
 		if method.length() == 0 or url.length() == 0
 			_emit_error(ctx, 2, "FRAME-CLIENT-E030", "form: block requires method and url (e.g. form: post \"/api/endpoint\")", "{\"source\":\"plugin\"}")
@@ -702,11 +741,11 @@ functions:
 		string emit_on_success = ""
 
 		integer ls = 0
-		while ls < body.length()
-			integer nl = body.indexOf("\n", ls)
+		while ls < effective_body.length()
+			integer nl = effective_body.indexOf("\n", ls)
 			if nl == -1
-				nl = body.length()
-			string line = body.substring(ls, nl).trim()
+				nl = effective_body.length()
+			string line = effective_body.substring(ls, nl).trim()
 			if line.length() > 0
 				if line.substring(0, 3) == "on "
 					integer succ_pos = line.indexOf("on success:")
@@ -867,7 +906,7 @@ functions:
 					_emit_error(ctx, 2, "FRAME-CLIENT-E048", "failed to build empty cmp literal", "{\"source\":\"plugin\"}")
 					return 1
 				// cond = trim_call == "" (op_code 5 = "==")
-				integer req_cond = _expr_binop(ctx, 5, trim_call, empty_cmp_lit)
+				integer req_cond = _expr_binop_op(ctx, 5, trim_call, empty_cmp_lit)
 				if req_cond == 0
 					_emit_error(ctx, 2, "FRAME-CLIENT-E049", "failed to build == for " + fn_req, "{\"source\":\"plugin\"}")
 					return 1
@@ -1083,7 +1122,7 @@ functions:
 		if empty_fe_cmp == 0
 			_emit_error(ctx, 2, "FRAME-CLIENT-E080", "failed to build empty literal for fe cmp", "{\"source\":\"plugin\"}")
 			return 1
-		integer fe_empty_cond = _expr_binop(ctx, 5, fe_ident_cmp, empty_fe_cmp)
+		integer fe_empty_cond = _expr_binop_op(ctx, 5, fe_ident_cmp, empty_fe_cmp)
 		if fe_empty_cond == 0
 			_emit_error(ctx, 2, "FRAME-CLIENT-E081", "failed to build formError==\"\" cond", "{\"source\":\"plugin\"}")
 			return 1
@@ -1187,17 +1226,17 @@ functions:
 
 				// concat: prefix + field + suffix
 				// op_code 0 = "+"
-				integer part1 = _expr_binop(ctx, 0, prefix_lit, field_ident)
+				integer part1 = _expr_binop_op(ctx, 0, prefix_lit, field_ident)
 				if part1 == 0
 					return 0
-				integer part2 = _expr_binop(ctx, 0, part1, suffix_lit)
+				integer part2 = _expr_binop_op(ctx, 0, part1, suffix_lit)
 				if part2 == 0
 					return 0
 
 				if result_expr == 0
 					result_expr = part2
 				else
-					result_expr = _expr_binop(ctx, 0, result_expr, part2)
+					result_expr = _expr_binop_op(ctx, 0, result_expr, part2)
 					if result_expr == 0
 						return 0
 
@@ -1213,7 +1252,7 @@ functions:
 		integer close_lit = _expr_string_lit(ctx, "}")
 		if close_lit == 0
 			return 0
-		integer full_expr = _expr_binop(ctx, 0, result_expr, close_lit)
+		integer full_expr = _expr_binop_op(ctx, 0, result_expr, close_lit)
 		return full_expr
 
 // ============================================================================
@@ -1480,7 +1519,7 @@ functions:
 		if empty_ev_cmp == 0
 			_emit_error(ctx, 2, "FRAME-CLIENT-E135", "failed to build empty literal for ev cmp", "{\"source\":\"plugin\"}")
 			return 1
-		integer ev_empty_cond = _expr_binop(ctx, 5, ev_ident_cmp, empty_ev_cmp)
+		integer ev_empty_cond = _expr_binop_op(ctx, 5, ev_ident_cmp, empty_ev_cmp)
 		if ev_empty_cond == 0
 			_emit_error(ctx, 2, "FRAME-CLIENT-E136", "failed to build errorVar==\"\" cond", "{\"source\":\"plugin\"}")
 			return 1
