@@ -1,122 +1,238 @@
 # Frame Data (ORM) Specification (04)
 
-**Project:** Frame – Full-Stack Framework for Clean Language  
-**Version:** 1.2 (Unified Query Syntax + Many-to-Many)  
+**Project:** Frame — Full-Stack Framework for Clean Language
+**Version:** 2.0 (Entity/Data Pairing + `.data` Accessor + `Database` Service)
 **Location:** `/documents/specification/04_frame_data.md`
+**Committed spec:** `clean-framework/system-documents/SPEC_DATA_PERSISTENCE_MODEL.md`
+**Plugin spec:** `foundation/spec/plugins/frame-data.ebnf` v2.0.0, `foundation/spec/plugins/frame-data-semantics.md` v2.0.0
 
 ---
 
-> **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
+> **See also:**
+> - [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities.
+> - [SPEC_DATA_PERSISTENCE_MODEL.md](../../system-documents/SPEC_DATA_PERSISTENCE_MODEL.md) — the full committed design spec with rationales.
 
 ## 1. Purpose
 
-**Frame Data** is the integrated ORM of the Clean Language ecosystem.  
-It provides a **block-based, fully declarative syntax** for defining, querying, and manipulating data.  
-All ORM actions follow Clean’s indentation and minimalism principles — there is **only one way** to declare and query data.
+**Frame Data** is the integrated ORM of the Clean Language ecosystem.
+
+Frame Data separates persistence into three layers, each with a distinct home in the folder tree:
+
+- **Domain layer** — `app/entity/<name>.cln` — plain classes with fields, invariants, and business behavior. Persistence-ignorant.
+- **Data layer** — `app/data/models/<name>.cln` — `data:` blocks paired with domain classes by shared name. Declare table mapping, storage-side fields, indexes, relations, and query methods.
+- **Runtime layer** — `Database` — a top-level service provided by `frame.data`. Handles mutations (`save`, `delete`), transactions, connection routing, and lifecycle.
+
+Two persistence surfaces are exposed to application code:
+
+- **Reads** — via the entity's `.data` accessor: `User.data.findByEmail(email)`.
+- **Writes** — via the `Database` service: `Database.save(user)`, `Database.delete(user)`, `Database.deleteOrFail(user)`.
+- **Transactions** — via the top-level `transaction:` block.
+
+The rule: **reads scope to the entity; writes are cross-cutting.**
+
+> **v2 replaces v1.** No backwards compatibility. `Model.insert:`, `Model.update:`, `Model.delete:`, `Model.upsert:` block-form mutations from v1 are removed; use `Database.save` / `Database.delete` / `Database.deleteOrFail`. Bare-field `data:` declarations from v1 are removed; use the sub-block form. See §14 (Migration from v1) for the transition path.
 
 ---
 
-## 2. Model Definition
+## 2. Domain Class Definition (`app/entity/`)
 
-### 2.1 Declaring Models
-Use the `data` keyword to define persisted entities.
+### 2.1 Declaring an Entity
 
-```clean
-data User
-    integer id : pk, auto
-    string  name
-    string  email : unique
-    integer age
-    boolean active = true
-    datetime createdAt : default=now
-```
-
-### 2.2 Relations
-Relations are typed and automatically inferred.
+Entity classes live in `app/entity/<name>.cln`. Each file declares one class using core Clean class syntax. Entity-ness comes from folder location plus name-based pairing with a `data:` block — no new keyword is introduced.
 
 ```clean
-data Post
-    string title
-    string content
-    User   author
+class User
+    integer? id
+    string email
+    private string passwordHash
+    string status
+    datetime createdAt
+
+    always:
+        status in ["active", "pending", "suspended"]
+
+    functions:
+        public:
+            boolean canPost()
+                return status == "active"
+
+            boolean verifiesPassword(string password)
+                return password.verify(passwordHash)
+
+            void promote()
+                require status == "pending"
+                status = "active"
 ```
 
-This declaration generates:
-- A foreign key from `Post.author` → `User.id`.
-- Automatic reverse property `user.posts`.
+**Rules:**
+
+- File basename matches the class name in snake_case (`class User` in `user.cln`; `class UserProfile` in `user_profile.cln`).
+- One entity per file.
+- The `id` field is nullable (`integer?` or `string?`). It is `null` before persistence; `Database.save` mutates it in place to the DB-generated value after INSERT.
+- Domain classes are persistence-ignorant. They cannot import from `app/data/`, `app/logic/`, or `app/server/`.
+- `always:` invariants are enforced by `Database.save` before persisting. Invariant failure raises `RUN005` and does not persist.
+- Business methods live in the `functions:` block with a `public:` sub-section for methods callable from outside.
+
+### 2.2 Computed / Derived Properties
+
+Domain properties that are computed from other fields (not stored) are methods, not fields:
+
+```clean
+class User
+    string firstName
+    string lastName
+    string email
+
+    functions:
+        public:
+            string fullName()
+                return firstName + " " + lastName
+
+            string emailDomain()
+                return email.after("@")
+```
+
+Callers write `user.fullName()` with parentheses.
 
 ---
 
-## 3. CRUD Operations
+## 3. Data Block Definition (`app/data/models/`)
 
-### 3.1 Insert
+### 3.1 Declaring a Data Block
+
+Data blocks live in `app/data/models/<name>.cln` and pair with the entity of the same name via the `data <T>:` sub-block form. The `<T>` after `data` must exactly match a `class <T>` declaration in `app/entity/<basename>.cln`.
 
 ```clean
-User.insert:
-    name  = "Alice"
-    email = "alice@example.com"
-    age   = 30
-    active = true
+data User:
+    table "users"
+
+    fields:
+        id primary generated
+        email required unique
+        passwordHash as "password_hash" required
+        status required
+        createdAt as "created_at" required
+
+    indexes:
+        (status, createdAt)
+        email
+
+    relations:
+        orders: has_many Order on user_id
+        profile: has_one Profile on user_id
+
+    queries:
+        User findOrFailById(integer userId)
+            return User.findOrFail:
+                where:
+                    id == userId
+
+        User? findByEmail(string emailAddress)
+            return User.first:
+                where:
+                    email == emailAddress
+
+        list<User> findActive()
+            return User.find:
+                where:
+                    status == "active"
+
+        list<User> findRecentByStatus(string status, integer resultLimit)
+            return User.find:
+                where:
+                    status == status
+                order:
+                    createdAt desc
+                limit: resultLimit
 ```
 
-### 3.2 Select
+**Rules:**
 
-> **Return type — current implementation (frame.data 2.6.x):** the `Model.find:` block expansion produces a string containing the rows JSON array (the `data.rows` payload from the underlying `_db_query`). Callers that want typed `list<Model>` access should either (a) annotate the variable as `string` and read fields via `json.get(rows, "0.field")`, or (b) call the static class method form — `Model.find(whereSql, orderSql, limitSql)` — which is generated by the plugin to wrap the result with `__parse_as_<Model>` and returns a real `list<Model>`. The `list<Model> = Model.find:` examples below describe the intended ergonomics and are tracked as a typed-block emission gap; until that gap closes, the static method is the supported path for typed access.
+- File basename matches the paired entity's basename.
+- One data block per file.
+- The `fields:` sub-block is required; every persisted field is declared here.
+- Field types come from the paired entity (not restated).
+- Every field in `fields:` must exist on the paired entity (field alignment enforced at plugin-compile time).
+- Every non-optional entity field must appear in `fields:` (or be a method declared in the entity's `functions:` block, which is not a field).
 
-#### Simple Select
+### 3.2 Sub-blocks
+
+**`table "<name>"`** — SQL table name. Defaults to snake_case pluralization of the class name (`User` → `users`, `UserProfile` → `user_profiles`).
+
+**`fields:`** — required. Declares which entity fields are persisted with per-field constraints and column-name overrides.
+
+Field constraints:
+- `primary` — primary key.
+- `generated` — DB-generated (typical for `id`).
+- `required` — non-null.
+- `unique` — unique index (shorthand for single-column uniqueness).
+- `default: <expr>` — storage-side default when the field is absent on insert.
+- `as "<column_name>"` — override the SQL column name (used for snake_case ↔ camelCase mappings, historical naming, or renames).
+
+**`indexes:`** — declares indexes. Each entry is either a single field name (`email`) or a parenthesized tuple (`(status, createdAt)`). Suffix `unique` to mark a unique index.
+
+**`relations:`** — declares foreign-key relationships. Each entry has the form `<name>: <cardinality> <TargetClass> on <fk_column>`. Cardinalities: `has_many`, `has_one`, `belongs_to`. The `<name>` is used in `include:` (eager loading), in filter-scope references inside `where:` when included, and generates an auto-reverse property on the target.
+
+**`queries:`** — declares read-only methods that return the paired entity type. See §4 (Query DSL) for method body syntax.
+
+### 3.3 Restrictions
+
+A data block cannot contain:
+- A `functions:` block. Non-query methods belong on the entity or in `logic/`.
+- An `always:` block. Invariants live on the entity.
+- A `constructor`. Data blocks are not instantiable.
+
+---
+
+## 4. Query DSL
+
+The query DSL is invoked on the entity class name with a dot accessor and a verb, followed by a block body with sub-blocks. Used both inside `queries:` sub-blocks on data blocks (defining reusable queries) and inline in `logic/` for one-off queries.
+
+### 4.1 Query Verbs
+
+| Verb | Returns | Semantics |
+|---|---|---|
+| `find` | `list<T>` | Returns matching rows (possibly empty). |
+| `first` | `T?` | Returns first matching row or `null`. |
+| `findOrFail` | `T` | Returns first matching row; raises `NOT_FOUND` if none. |
+| `count` | `integer` | Returns count of matching rows. |
+| `exists` | `boolean` | Returns `true` if at least one row matches. |
+
+Verb-to-return-type correspondence is enforced by the compiler.
+
+### 4.2 Simple Select
+
 ```clean
 list<User> users = User.find:
     where:
-        active == true
+        status == "active"
 ```
 
-#### Filtered with Ordering and Limit
+### 4.3 Filtered with Ordering and Limit
+
 ```clean
 list<User> users = User.find:
     where:
-        active == true
+        status == "active"
         age >= 18
     order:
         createdAt desc
     limit: 20
 ```
 
-#### Retrieve One Record
+Field references inside `where:` and `order:` are unqualified — the field name refers to the current row's column on the queried entity.
+
+### 4.4 Retrieve One Record
+
 ```clean
 User? u = User.first:
     where:
         email == "alice@example.com"
 ```
 
-### 3.3 Update
+### 4.5 Find Or Fail
 
-Updates can target individual records or conditions.
-
-```clean
-User.update:
-    set:
-        active = false
-    where:
-        email == "alice@example.com"
-```
-
-### 3.4 Delete
-```clean
-User.delete:
-    where:
-        age < 18
-```
-
-### 3.5 Count
-```clean
-integer total = User.count:
-    where:
-        active == true
-```
-
-### 3.6 Find or Fail
-
-Throws `NOT_FOUND` if no record matches. Use when existence is required.
+Raises `NOT_FOUND` if no row matches.
 
 ```clean
 User u = User.findOrFail:
@@ -124,50 +240,72 @@ User u = User.findOrFail:
         id == userId
 ```
 
-### 3.7 Exists
-
-Returns `true` if at least one matching record exists.
+### 4.6 Count and Exists
 
 ```clean
+integer total = User.count:
+    where:
+        status == "active"
+
 boolean taken = User.exists:
     where:
-        email == newEmail
+        email == candidateEmail
 ```
 
-### 3.8 Select (Partial Fields)
+### 4.7 Column Projection
 
-Retrieve only specific fields using the `select:` sub-block.
+Retrieve only specific fields with `select:`. Return type remains the model; unselected columns receive zero values.
 
 ```clean
 list<User> users = User.find:
     select:
         id
-        name
         email
     where:
-        active == true
+        status == "active"
 ```
 
-### 3.9 Offset and Pagination
+### 4.8 Pagination
 
-Use `offset:` with `limit:` for page-based pagination.
+Offset-based with `limit:` and `offset:`:
 
 ```clean
 integer page = 3
-integer pageSize = 20
+integer perPage = 20
 
 list<User> users = User.find:
     where:
-        active == true
+        status == "active"
     order:
         createdAt desc
-    limit: pageSize
-    offset: (page - 1) * pageSize
+    limit: perPage
+    offset: (page - 1) * perPage
 ```
 
-### 3.10 Include (Eager Loading)
+Page-based with `paginate:`:
 
-Load related records in a single query using the `include:` sub-block.
+```clean
+PagedResult<User> result = User.paginate:
+    where:
+        status == "active"
+    page: 3
+    perPage: 20
+```
+
+Cursor-based (keyset) pagination:
+
+```clean
+CursorResult<User> result = User.cursor:
+    where:
+        status == "active"
+    after: previousCursor
+    perPage: 20
+    by: id
+```
+
+### 4.9 Eager Loading (`include:`)
+
+Load related records in a single query:
 
 ```clean
 list<Post> posts = Post.find:
@@ -181,591 +319,665 @@ list<Post> posts = Post.find:
     limit: 10
 ```
 
+`include:` triggers eager loading (JOIN or IN clause). Guaranteed N+1-free.
+
+### 4.10 Filtering on Included Relations
+
+When a relation is `include:`d, its columns become referenceable in `where:` via the relation name:
+
+```clean
+list<User> users = User.find:
+    include:
+        orders
+    where:
+        tenantId == currentTenantId
+        orders.status == "pending"
+```
+
+The join is explicit at the source level. Filtering on a relation that isn't `include:`d is a compile-time error.
+
+### 4.11 Many-to-Many via `link:`
+
+For many-to-many relationships, use `link:` with a junction model (see §9).
+
 ---
 
-## 4. Transactions
+## 5. Persistence Operations (`Database` Service)
 
-Use `transaction:` to perform atomic operations.
+The `Database` service is the top-level object providing mutation and bulk operations. Its methods are called statically as `Database.<method>(entity)`.
+
+### 5.1 Save
+
+`Database.save(entity)` inserts if the entity's `id` is `null`; updates otherwise. On INSERT, mutates `entity.id` in place to the DB-generated value.
+
+```clean
+User newUser = User(
+    email: emailInput,
+    passwordHash: passwordInput.hash(),
+    status: "pending",
+    createdAt: time.now()
+)
+
+Database.save(newUser)
+// newUser.id is now populated
+```
+
+Before persisting, `Database.save` evaluates the entity's `always:` invariants. Any invariant failure raises `RUN005 — Assertion Failure` and does not persist.
+
+### 5.2 Delete
+
+Two variants, mirroring the `first` vs `findOrFail` pattern on reads:
+
+```clean
+Database.delete(user)         // lenient — no-op if row missing
+Database.deleteOrFail(user)   // strict — raises NOT_FOUND if row missing
+```
+
+Use `Database.delete` for retry-safe / idempotent flows. Use `Database.deleteOrFail` when the caller needs an explicit signal that the row existed.
+
+### 5.3 Bulk Save and Delete
+
+```clean
+list<User> newUsers = [...]
+Database.saveAll(newUsers)
+
+list<User> toRemove = [...]
+Database.deleteAll(toRemove)
+```
+
+`Database.deleteAll` follows lenient semantics per element (no `Database.deleteAllOrFail` in v3.0).
+
+Inside a `transaction:` block, bulk operations commit atomically with the surrounding transaction.
+
+### 5.4 Update via Load-Mutate-Save
+
+There is no `update:` block form. Update by loading the entity, mutating it, and calling `Database.save`:
+
+```clean
+User user = User.data.findOrFailById(userId)
+user.promote()
+Database.save(user)
+```
+
+### 5.5 What `Database` does NOT expose
+
+- `Database.find` / `Database.query` — reads use the query DSL on the entity or via the `.data` accessor.
+- `Database.transaction` — the top-level `transaction:` block is the transaction primitive (§6).
+- `Database.readReplica` / `Database.primary` — reserved for v3.1+. v3.0 is single-connection.
+
+`Database` cannot be captured as a runtime value. It is a compile-time namespace whose methods dispatch to plugin-generated code.
+
+---
+
+## 6. The `.data` Accessor
+
+Query methods declared inside a data block's `queries:` sub-block are callable from `logic/` via the entity's `.data` accessor:
+
+```clean
+// app/data/models/user.cln
+data User:
+    ...
+    queries:
+        User? findByEmail(string emailAddress)
+            return User.first:
+                where:
+                    email == emailAddress
+
+// app/logic/auth.cln
+class Auth
+    functions:
+        public:
+            User? lookupByEmail(string emailInput)
+                return User.data.findByEmail(emailInput)
+```
+
+**Rules:**
+
+- `<Entity>.data.<method>` is a compile-time namespace, not a runtime value. `var x = User.data` is an error.
+- Only methods declared in the paired data block's `queries:` sub-block are dispatchable.
+- Query methods must return `T`, `T?`, or `list<T>` where `T` is the paired entity. Aggregate returns and cross-entity types belong in report classes (see §11).
+- Query method bodies are a single `return` statement invoking the query DSL. No local variables, arithmetic, or conditionals — the body is a direct DSL call.
+- Query methods have implicit `public` visibility; no `public:` sub-section required.
+
+---
+
+## 7. Transactions
+
+Multiple mutations can be grouped atomically using the top-level `transaction:` block.
 
 ```clean
 transaction:
-    User u = User.insert:
-        name = "Ana"
-        email = "ana@example.com"
+    User user = User(
+        email: "ana@example.com",
+        status: "pending",
+        createdAt: time.now()
+    )
+    Database.save(user)
 
-    Post p = Post.insert:
-        title   = "Welcome"
-        author  = u
+    Profile profile = Profile(
+        userId: user.id!,
+        displayName: "Ana"
+    )
+    Database.save(profile)
 ```
 
-If any step fails, all changes roll back automatically.
+**Semantics:**
+
+- Any error inside the block triggers automatic rollback of all writes.
+- Reads inside a `transaction:` block use the transaction's connection and see uncommitted writes made earlier in the same transaction.
+- Nested `transaction:` blocks are a compile-time error. Extract composed logic into a single flat block.
+- Long-running transactions may hit driver-configured timeouts (default 30 seconds).
 
 ---
 
-## 5. Raw Queries (Typed SQL)
+## 8. Raw Queries (Escape Hatch)
 
-Use `db.queryAs` for typed custom SQL:
+For queries the DSL doesn't express (aggregations, window functions, vendor-specific SQL, deep joins), use raw SQL. These typically live inside report classes (§11).
 
-```clean
-list<User> users = db.queryAs(User):
-    sql: "SELECT * FROM users WHERE age > ?"
-    params: [18]
-```
-
-Or untyped for ad-hoc operations:
+Typed:
 
 ```clean
-list<map<string, any>> result = db.query:
-    sql: "SELECT COUNT(*) FROM users"
+list<UserSummary> summaries = db.queryAs(UserSummary):
+    sql: "SELECT id, email, COUNT(*) AS post_count FROM users JOIN posts ON ..."
+    params: []
 ```
 
----
+Untyped:
 
-## 6. Migrations
-
-Frame generates migrations automatically based on model diffs.
-
-### CLI
-```bash
-cleen db:plan
-cleen db:migrate
-```
-
-### Per-model
 ```clean
-User.migrate()
-Post.migrate()
+list<map<string, any>> results = db.query:
+    sql: "SELECT COUNT(*) AS total FROM users"
 ```
 
-**Migration files** live under `app/data/migrations/`:
-```
-app/data/migrations/
-  001_init.sql
-  002_add_posts.sql
-```
-
-Each migration includes `up` and `down` SQL for rollback.
-
----
-
-## 7. Configuration
-
-`app/data/config.cln`
-```clean
-data:
-    engine = "postgres"
-    host = "localhost"
-    port = 5432
-    database = "frame_app"
-    user = "admin"
-    password = env.get("DB_PASSWORD")
-    pool:
-        max = 10
-        idleTimeout = 30000
-```
-
-Default engine: `sqlite` (local development).  
-Supported engines: `postgres`, `mysql`, `sqlite`.
-
----
-
-## 8. Validation
-
-All models and operations are validated at compile-time and runtime.
-
-| Type | Validation |
-|------|-------------|
-| string | `min`, `max`, regex, email |
-| integer | range |
-| boolean | truthy values only |
-| relation | existence & FK constraint |
-| all | respect default values and required fields |
-
-**Example error**
-```json
-{ "ok": false, "err": { "code": "VALIDATION_ERROR", "field": "email", "message": "must be unique" } }
-```
+Raw SQL bypasses ORM tenant scoping — include explicit `WHERE tenant_id = ?` when tenant scoping is required.
 
 ---
 
 ## 9. Many-to-Many Relationships
 
-In Frame Data, **many-to-many** relationships are defined explicitly through a **junction model**.  
-This keeps the system simple, predictable, and fully consistent with Clean Language principles — there is **only one clear way** to represent many-to-many data.
+Many-to-many uses an explicit junction model, not implicit `many<>` syntax.
 
 ### 9.1 Defining a Junction Model
 
 ```clean
-data User
-    integer id : pk, auto
-    string  name
-    string  email : unique
+// app/entity/role.cln
+class Role
+    integer? id
+    string name
+    string description
 
-data Role
-    integer id : pk, auto
-    string  name : unique
+// app/entity/user_role.cln
+class UserRole
+    integer? id
+    integer userId
+    integer roleId
+    datetime assignedAt
 
-data UserRole
-    User user  : onDelete=cascade
-    Role role  : onDelete=cascade
-    unique user, role
+// app/data/models/user_role.cln
+data UserRole:
+    table "user_roles"
+
+    fields:
+        id primary generated
+        userId as "user_id" required
+        roleId as "role_id" required
+        assignedAt as "assigned_at" required
+
+    indexes:
+        (userId, roleId) unique
+
+    relations:
+        user: belongs_to User on user_id
+        role: belongs_to Role on role_id
 ```
-
-- `UserRole` is the single source of truth for the relation.
-- Use `unique user, role` or `primary user, role` for duplicates protection.
-- Use `onDelete=cascade` to clean orphan links automatically.
 
 ### 9.2 Creating and Removing Links
 
 ```clean
-UserRole.insert:
-    user = someUser
-    role = someRole
+UserRole ur = UserRole(
+    userId: user.id!,
+    roleId: role.id!,
+    assignedAt: time.now()
+)
+Database.save(ur)
 
-UserRole.delete:
-    where:
-        user == someUser
-        role == someRole
+// Remove
+UserRole existing = UserRole.data.findOrFailByUserAndRole(user.id!, role.id!)
+Database.delete(existing)
 ```
 
-### 9.3 Link Syntax
+### 9.3 Link Syntax (Querying Many-to-Many)
 
-The `link:` block defines relationships in a simple, context-aware way.
-Inside a `find:` block, the unqualified field `id` refers to the current model, and fields written after the linked model name belong to that model.
+Use `link:` inside `find:` to traverse junction models:
 
-Example:
-```clean
-link:
-    UserRole role == id
-```
-means *link the UserRole model where its `role` field matches the current model’s `id`*.
+**Roles for a given user:**
 
-Multiple links can be listed on separate lines:
-```clean
-link:
-    UserRole user == id
-    Role     id == UserRole.role
-```
-
-### 9.4 Querying Many-to-Many Relations
-
-#### Roles for a given user
 ```clean
 list<Role> roles = Role.find:
     link:
         UserRole role == id
     where:
-        UserRole.user == someUser
-    order:
-        name asc
+        UserRole.userId == currentUserId
 ```
 
-#### Users with a given role
-```clean
-list<User> users = User.find:
-    link:
-        UserRole user == id
-        Role     id == UserRole.role
-    where:
-        Role.name == "admin"
-```
+**Users with a given role:**
 
-#### Users with at least one role
 ```clean
 list<User> users = User.find:
     link:
         UserRole user == id
     where:
-        UserRole.role != null
+        UserRole.roleId == adminRoleId
 ```
 
-### 9.5 Counting or Aggregating
+Inside `link:`, bare `id` refers to the outer (primary) model's key.
+
+---
+
+## 10. Report Classes (`app/data/reports/`)
+
+Queries that don't return a single entity type (aggregates, cross-entity structs, summary counts) live in report classes under `app/data/reports/`.
+
+**Naming:** capability-noun style — `SalesByRegion`, `MonthlyActivity`, `ActivityCohort`. Not entity-scoped.
+
+**Return types:** anything that is not a persistent entity — value types from `app/types/`, plain `map<string, any>`, custom struct types.
+
+**Example:**
 
 ```clean
-list<map<string, any>> counts = db.query:
-    sql: """
-        SELECT u.id, u.name, COUNT(ur.role) AS total
-        FROM users u
-        JOIN user_roles ur ON ur.user = u.id
-        GROUP BY u.id, u.name
-        ORDER BY total DESC
-    """
+// app/types/region_revenue.cln
+class RegionRevenue
+    string region
+    number revenue
+
+// app/data/reports/sales_by_region.cln
+class SalesByRegion
+    functions:
+        public:
+            list<RegionRevenue> forQuarter(integer year, integer quarter)
+                return db.queryAs(RegionRevenue):
+                    sql: "SELECT region, SUM(total) AS revenue FROM orders WHERE year = ? AND quarter = ? GROUP BY region"
+                    params: [year, quarter]
 ```
 
-### 9.5 Using Transactions
+Report classes may use `db.query` / `db.queryAs` for raw SQL. They are the natural home for queries that exceed the DSL's expressiveness.
+
+**Folder is lazy** — `app/data/reports/` is created only when the first report class appears.
+
+---
+
+## 11. Migrations
+
+### 11.1 CLI
+
+```
+cleen db:migrate                # Apply pending migrations
+cleen db:migrate:status         # Show which migrations have run
+cleen db:migrate:rollback       # Roll back the last migration
+```
+
+### 11.2 Per-Migration File
+
+Migration files live in `app/data/migrations/` with the naming convention `NNN_description.cln`.
 
 ```clean
-transaction:
-    User u = User.insert:
-        name  = "Alice"
-        email = "alice@x.com"
-
-    Role r = Role.first:
-        where:
-            name == "admin"
-
-    UserRole.insert:
-        user = u
-        role = r
+// app/data/migrations/003_add_user_status_index.cln
+migrate "003_add_user_status_index":
+    up:
+        "CREATE INDEX idx_users_status ON users (status)"
+    down:
+        "DROP INDEX idx_users_status"
 ```
 
-### 9.6 Naming and Conventions
+**Rules:**
 
-| Convention | Description |
-|-------------|--------------|
-| **Model name** | PascalCase combining entities (e.g., `UserRole`, `PostTag`) |
-| **Table name (DB)** | Auto-generated (e.g., `user_roles`, `post_tags`) |
-| **Composite keys** | Use `unique user, role` or `primary user, role` |
-| **Cascade deletes** | Recommended for data integrity |
+- Every `migrate:` block requires both `up:` and `down:` sub-blocks.
+- Migrations execute in filename order (ascending).
+- `Model.migrate()` uses `CREATE TABLE IF NOT EXISTS` — it does NOT alter columns on existing tables. Column changes require an explicit `migrate:` block.
 
-### 9.7 Why Explicit Junctions
-
-- **Transparent** — relationships are visible and controllable.  
-- **Consistent** — same syntax as all other `data` models.  
-- **Predictable** — clear structure for compilers and tools.  
-- **One obvious way** — no alternate `many<>` syntax.
+Schema helpers available in `up:` / `down:`:
+`createTable`, `dropTable`, `addColumn`, `dropColumn`, `renameColumn`, `createIndex`, `dropIndex`, `addForeignKey`, `dropForeignKey`, `execute`.
 
 ---
 
-## 10. Seeds
+## 12. Configuration
 
-`app/data/seed.cln`
-```clean
-functions:
-    seed()
-        User.insert:
-            name  = "Admin"
-            email = "admin@demo.com"
-```
-
-Run with:
-```bash
-cleen db:seed
-```
-
----
-
-## 11. CLI Summary
-
-| Command | Description |
-|----------|-------------|
-| `cleen db:plan` | Show migration SQL diff |
-| `cleen db:migrate` | Apply migrations |
-| `cleen db:seed` | Run database seeding |
-| `cleen db:reset` | Drop and recreate schema |
-| `cleen db:info` | Show connection metadata |
-
----
-
-## 12. Host Bridge Contracts
-
-| Bridge | Function | Description |
-|---------|-----------|-------------|
-| `host:db.query` | Executes SQL and returns rows | Primary query interface |
-| `host:db.tx` | Runs multiple queries transactionally | Used by `transaction:` |
-| `host:db.prepare` | Prepare SQL statement (optional) | Precompiled queries |
-| `host:env.get` | Read database URL or secrets | Configuration |
-| `host:log.info` | ORM operations log | Migration/debug logs |
-
----
-
-## 13. Guidelines
-
-- Always use **block syntax** for queries.
-- Keep **data model files small** (one per entity).
-- Prefer **atomic transactions** (`transaction:`) for multi-write logic.
-- Avoid embedding business logic in models — use services.
-- Migrations should be committed with related code.
-
----
-
-## 14. Example End-to-End Flow
+Database configuration lives in `main.cln` under the `frame.data:` block. (v1's `app/data/config.cln` is removed under v2.)
 
 ```clean
-User.migrate()
-Post.migrate()
+target:
+    plugins:
+        frame.server
+        frame.data
+        frame.ui
 
-User.insert:
-    name = "Alice"
-    email = "alice@x.com"
-
-list<User> admins = User.find:
-    where:
-        active == true
-        age >= 18
-    order:
-        createdAt desc
-
-transaction:
-    User u = User.first:
-        where:
-            email == "alice@x.com"
-
-    Post.insert:
-        title   = "Hello"
-        content = "Clean ORM is amazing"
-        author  = u
+frame.data:
+    default:
+        driver: postgres
+        url: env("DATABASE_URL")
+        pool:
+            max: 10
+            idleTimeout: 30000
+    dev:
+        driver: sqlite
+        url: ".frame/data.db"
+    test:
+        driver: examples
+        source: "app/data/examples/"
 ```
 
----
+**Rules:**
 
-## 15. Summary
+- `password` (or full URLs containing credentials) MUST use `env(...)` — literal credentials in `main.cln` are a compile-time error.
+- Environment-scoped blocks (`default:`, `dev:`, `test:`, `production:`, etc.) resolve at runtime per `CLEAN_ENV`.
+- CLI flags override environment (`frame-cli serve --examples` forces examples driver).
+- Supported drivers in v3.0: `postgres`, `sqlite`, `examples`.
 
-Frame Data uses **only block-based ORM syntax** to ensure consistency, clarity, and minimal mental load.  
-It turns database interaction into clean, declarative statements — readable for humans, predictable for compilers, and intuitive for AI tools.
-
----
-
-## 16. Edge Cases & Important Notes
-
-### 16.1 Migration Behavior
-
-- `Model.migrate()` uses `CREATE TABLE IF NOT EXISTS` — it will NOT alter an existing table
-- For schema changes on existing tables, use the `migrate` block with explicit `up:` and `down:` SQL
-- Auto-migration diff (`_db_migration_diff`) compares declared fields against the live database schema
-- Migrations are applied in alphabetical/numerical order by name
-
-### 16.2 Transaction Limits
-
-- Nested `transaction:` blocks are NOT supported — transactions are flat
-- If a transaction block throws, the entire transaction is rolled back automatically
-- Long-running transactions may time out depending on the database driver configuration
-
-> **Constraint — no nested transactions:** A `transaction:` block cannot be started inside another `transaction:` block. Attempting to nest transactions is a compile-time error. The outer transaction must complete (commit or roll back) before a new one can be started. Service functions that each use `transaction:` internally must not be composed inside a single outer `transaction:` — extract the composed logic into a single flat transaction block.
-
-### 16.3 Tenant Isolation
-
-- Models with a `tenantId` field or `: tenant` constraint are automatically tenant-scoped
-- All `find`, `first`, `count`, `update`, and `delete` queries include `WHERE tenant_id = <current_tenant>`
-- `insert` operations auto-inject the current tenant ID
-- Tenant ID is read from the session via `tenant_getId()` (requires frame.auth)
-- If no session exists (unauthenticated request), tenant-scoped queries will use an empty tenant ID
+Connection routing (`Database.readReplica.*` / `Database.primary.*`) is reserved for v3.1+ and not available in v3.0.
 
 ---
 
-## 17. Pagination — Offset-Based (`paginate:`)
+## 13. Example End-to-End Flow
 
-The `paginate:` sub-block replaces manual `LIMIT`/`OFFSET` arithmetic and eliminates the need for a separate `COUNT(*)` query. The plugin computes the total count and page metadata in a single database round-trip.
+A complete register/login flow using v2 patterns.
 
-Using `paginate:` and `limit:`/`offset:` in the same query is a compile-time error — they are mutually exclusive strategies.
-
-Queries that use `paginate:` return `PagedResult<T>` instead of `Array<T>`.
-
-### `PagedResult<T>` Fields
-
-| Field | Type | Description |
-|---|---|---|
-| `items` | `Array<T>` | The records for this page |
-| `totalCount` | `integer` | Total matching records across all pages |
-| `totalPages` | `integer` | `ceil(totalCount / perPage)` |
-| `currentPage` | `integer` | The page requested (1-based) |
-| `perPage` | `integer` | Records per page |
-| `hasNext` | `boolean` | `currentPage < totalPages` |
-| `hasPrev` | `boolean` | `currentPage > 1` |
-
-### Example
+### 13.1 Entity
 
 ```clean
+// app/entity/user.cln
+class User
+    integer? id
+    string email
+    private string passwordHash
+    string status
+    datetime createdAt
+
+    always:
+        status in ["active", "pending", "suspended"]
+
+    functions:
+        public:
+            boolean canPost()
+                return status == "active"
+
+            boolean verifiesPassword(string password)
+                return password.verify(passwordHash)
+
+            void promote()
+                require status == "pending"
+                status = "active"
+```
+
+### 13.2 Data Block
+
+```clean
+// app/data/models/user.cln
+data User:
+    table "users"
+
+    fields:
+        id primary generated
+        email required unique
+        passwordHash as "password_hash" required
+        status required
+        createdAt as "created_at" required
+
+    queries:
+        User? findByEmail(string emailAddress)
+            return User.first:
+                where:
+                    email == emailAddress
+
+        User findOrFailById(integer userId)
+            return User.findOrFail:
+                where:
+                    id == userId
+```
+
+### 13.3 Logic Layer
+
+```clean
+// app/logic/auth.cln
+class Auth
+    functions:
+        public:
+            integer register(string email, string password)
+                User? existing = User.data.findByEmail(email)
+                require existing == null
+
+                User newUser = User(
+                    email: email,
+                    passwordHash: password.hash(),
+                    status: "pending",
+                    createdAt: time.now()
+                )
+
+                Database.save(newUser)
+                return newUser.id!
+
+            User login(string email, string password)
+                User? user = User.data.findByEmail(email)
+
+                require user != null
+                require user.verifiesPassword(password)
+                require user.canPost()
+
+                return user
+
+            void deleteAccount(integer userId)
+                User user = User.data.findOrFailById(userId)
+                Database.delete(user)
+```
+
+### 13.4 Server Endpoints
+
+```clean
+// app/server/api/auth.cln
 endpoints:
-    GET "/api/posts":
-        integer page    = int(req.query("page") ?? "1")
-        integer perPage = 20
+    POST "/api/register":
+        integer userId = Auth.register(req.body.email, req.body.password)
+        return json({ id: userId })
 
-        PagedResult<Post> result = Post.find:
-            where:
-                published == true
-            order:
-                createdAt desc
-            paginate:
-                page:    page
-                perPage: perPage
+    POST "/api/login":
+        User user = Auth.login(req.body.email, req.body.password)
+        return json({ id: user.id!, email: user.email })
 
-        return json({
-            items:       result.items,
-            totalPages:  result.totalPages,
-            currentPage: result.currentPage,
-            hasNext:     result.hasNext
-        })
+    DELETE "/api/users/:id":
+        Auth.deleteAccount(parseInt(req.params.id))
+        return json({ ok: true })
 ```
 
 ---
 
-## 18. Pagination — Cursor-Based (`cursor:`)
+## 14. Migration from v1
 
-Cursor-based pagination is more efficient than offset pagination for large datasets because it does not issue a `COUNT(*)` query and does not scan skipped rows. Use it for infinite scroll and feeds where the absolute page number does not matter.
+**v2 replaces v1 with no backwards compatibility.** All Frame applications using v1 syntax must migrate before upgrading to `frame.data` v3.0.
 
-Queries that use `cursor:` return `CursorResult<T>` instead of `Array<T>`.
+**Migration mechanism:** AI-with-MCP. Point an AI instance (Claude Code or equivalent) at the app and request migration. The updated MCP responses (`get_specification`, `get_quick_reference`, `get_app_structure`) plus this document plus the plugin's rejection diagnostics for removed syntax are sufficient for AI-driven migration. No dedicated `cleen migrate` command is built.
 
-### `cursor:` Sub-Fields
+### 14.1 What is removed
 
-| Field | Description |
-|---|---|
-| `after:` | Cursor value from the previous page's `nextCursor`; pass `""` to start from the beginning |
-| `perPage:` | Maximum records to return |
-| `by:` | The field used as the cursor key — must be monotonically ordered (typically `id` or `createdAt`) |
+- Bare-field `data <T>` declarations (fields declared directly under `data <T>` without a `fields:` sub-block).
+- `Model.insert:`, `Model.update:`, `Model.delete:`, `Model.upsert:`, `Model.insert_id:` block-form mutations.
+- Business behavior in `data:` blocks (`functions:` block inside `data:` was already E-STRUCT-003 under v1; explicitly removed under v2).
+- `app/data/config.cln` file (config moves to `main.cln`).
 
-### `CursorResult<T>` Fields
+### 14.2 What is added
 
-| Field | Type | Description |
-|---|---|---|
-| `items` | `Array<T>` | The records for this page |
-| `nextCursor` | `string` | Opaque cursor to pass as `after:` for the next page; `""` if no more pages |
-| `hasPrev` | `boolean` | Whether a previous page exists |
-| `count` | `integer` | Number of items in this page (may be < `perPage` on the last page) |
+- `app/entity/` folder for domain classes paired with data blocks by name.
+- Sub-block `data <T>:` form with `table`, `fields:`, `indexes:`, `relations:`, `queries:`.
+- `.data` accessor for reads (`User.data.findByEmail(...)`).
+- `Database` service for writes (`Database.save(user)`, `Database.delete(user)`, `Database.deleteOrFail(user)`, `Database.saveAll(list)`, `Database.deleteAll(list)`).
+- Pairing verification at plugin-compile time (`E-STRUCT-012`).
+- `app/data/reports/` folder for aggregate and cross-entity queries.
 
-### Example
+### 14.3 What is retained
+
+- Query DSL verbs and sub-blocks (`find`, `first`, `findOrFail`, `count`, `exists` with `where:`, `order:`, `limit:`, `offset:`, `select:`, `include:`).
+- `transaction:` block form and semantics (nested transactions still a compile-time error).
+- Raw SQL escape hatches (`db.query`, `db.queryAs`).
+- Migration file format and CLI.
+
+### 14.4 Migration steps for each entity
+
+**Step 1 — Create the domain class.**
+
+Extract every field, invariant, and single-entity business method into `app/entity/<name>.cln`:
 
 ```clean
-endpoints:
-    GET "/api/feed":
-        string  cursor  = req.query("cursor") ?? ""
-        integer perPage = 25
+class User
+    integer? id
+    string email
+    private string passwordHash
+    string status
+    datetime createdAt
 
-        CursorResult<Post> result = Post.find:
-            where:
-                published == true
-            order:
-                id desc
-            cursor:
-                after:   cursor
-                perPage: perPage
-                by:      id
+    always:
+        status in ["active", "pending", "suspended"]
 
-        return json({
-            items:      result.items,
-            nextCursor: result.nextCursor
-        })
+    functions:
+        public:
+            boolean canPost()
+                return status == "active"
+            // ... other business methods extracted from logic/ classes
 ```
 
----
+Methods that were in `logic/` capability classes but operate only on a single entity's state move here. Methods that orchestrate across entities (e.g., `Auth.register`, which touches User and sends email) stay in `logic/`.
 
-## 19. Dynamic Sort Safety
-
-When an `order:` clause uses a runtime variable for the field name, the plugin validates the value against the model's declared fields before executing the query. An unknown field name produces a `ValidationError`, not a SQL error — this prevents SQL injection through sort parameters.
-
-```clean
-// Safe — field name is validated at query time even though it comes from user input
-string sortField = req.query("sort")
-string sortDir   = req.query("dir")
-
-Array<Post> posts = Post.find:
-    order: sortField sortDir   // ValidationError if sortField is not a Post field
-    limit: 20
-```
-
-The validation is performed at the ORM layer before any SQL is generated. The allowed values for `sortField` are exactly the field names declared on the model; any other value is rejected with `VALIDATION_ERROR`.
-
----
-
-## 20. Runtime Validation — `Model.validate(field, value)`
-
-Run validation rules at call sites that aren't a full `insert:` / `update:` (e.g. a "is this email available?" check before showing a form, or partial-update validation).
-
-```clean
-string error = User.validate("email", req.json("email"))
-if error.length > 0:
-    return badRequest(json({ field: "email", error: error }))
-```
-
-| Returns | Meaning |
-|---|---|
-| `""` (empty) | Value is valid for the field |
-| Non-empty string | Validation message (e.g. `"must be a valid email address"`) |
-
-The function checks the rules declared on the model field (`min`, `max`, `email`, `range`, custom validators). It does not write to the database.
-
----
-
-## 21. Common Patterns
-
-### 21.1 Soft delete
-
-Add a nullable `deletedAt` timestamp; never `DELETE FROM`, always filter on it:
+**Step 2 — Rewrite the data block in the sub-block form.**
 
 ```clean
 data User:
-    integer id            primary
-    string  email         unique
-    string  name
-    timestamp deletedAt?  // nullable — null means active
+    table "users"
+
+    fields:
+        id primary generated
+        email required unique
+        passwordHash as "password_hash" required
+        status required
+        createdAt as "created_at" required
+
+    queries:
+        User? findByEmail(string emailAddress)
+            return User.first:
+                where:
+                    email == emailAddress
 ```
 
-Standard query helper:
+Every reusable query becomes a named method in the `queries:` sub-block.
+
+**Step 3 — Rewrite call sites.**
+
+Reads (inline block form → named method):
 
 ```clean
-functions:
-    Array<User> activeUsers():
-        return User.find:
-            where:
-                deletedAt == null
+// Before
+User? u = User.first:
+    where:
+        email == inputEmail
+
+// After
+User? u = User.data.findByEmail(inputEmail)
 ```
 
-Soft-delete instead of physical:
+Writes (block form → Database service):
 
 ```clean
+// Before
+User.insert:
+    email = "ana@example.com"
+    status = "pending"
+    createdAt = time.now()
+
+// After
+User newUser = User(
+    email: "ana@example.com",
+    status: "pending",
+    createdAt: time.now()
+)
+Database.save(newUser)
+```
+
+Updates (block form → load-mutate-save):
+
+```clean
+// Before
 User.update:
+    set:
+        status = "active"
     where:
         id == userId
-    set:
-        deletedAt = time.now()
+
+// After
+User user = User.data.findOrFailById(userId)
+user.promote()
+Database.save(user)
 ```
 
-### 21.2 Multi-tenant scoping
-
-Every tenant-scoped model carries a `tenantId` foreign key. Every query in tenant context calls `tenant_getId()` (provided by frame.auth — requires session claims with a tenant id).
+Deletes (block form → Database.delete):
 
 ```clean
-data Project:
-    integer id           primary
-    integer tenantId     foreign User.tenantId
-    string  name
-    timestamp createdAt
-```
-
-Query:
-
-```clean
-Array<Project> projects = Project.find:
+// Before
+User.delete:
     where:
-        tenantId == tenant_getId()
-    order:
-        createdAt desc
+        id == userId
+
+// After
+User user = User.data.findOrFailById(userId)
+Database.delete(user)
 ```
 
-`tenant_getId()` returns 0 when called outside a session context (e.g. background jobs); guard accordingly. See [06_frame_auth.md §8](06_frame_auth.md#8-multi-tenant) for the underlying claims contract.
+**Step 4 — Confirm the migration is complete.**
 
-### 21.3 Audit log (append-only)
+Search the codebase for these patterns and confirm none remain:
 
-```clean
-data AuditEvent:
-    integer id           primary
-    integer actorId      foreign User.id
-    string  action       // "user.created", "post.deleted", ...
-    string  details      // JSON payload as string
-    timestamp at         default = time.now()
-```
-
-Never `update:` or `delete:` audit rows; only `insert:`. Add an index on `(actorId, at desc)` for actor-history queries.
-
-### 21.4 Tree (self-referential)
-
-```clean
-data Category:
-    integer id        primary
-    integer parentId? foreign Category.id   // null for roots
-    string  name
-    integer depth     // denormalized — keep in sync on insert/update
-```
-
-Self-reference requires `parentId?` to be nullable; the root has `parentId == null`.
+- `<Entity>.insert:` (block-form insert)
+- `<Entity>.update:` (block-form update)
+- `<Entity>.delete:` (block-form delete)
+- `<Entity>.upsert:` (block-form upsert)
+- `data <Entity>` without a colon (bare-field form)
+- `functions:` inside a `data:` block
 
 ---
 
-## 22. Plugin Contracts v2 Integration
+## 15. Host Bridge Contracts
 
-frame.data **2.1.x** opts into [lifecycle.md §3.1](../../../foundation/spec/plugins/contracts/lifecycle.md#31-module_helpers) with `module_helpers_are_roots = true`. Preamble-emitted ORM helpers (`PagedResult` / `CursorResult` constructors, query builders) are reachable only through plugin-generated CRUD code, so they must be tree-shake roots. Every `_db_*` bridge declares `hosts = ["server"]` ([bridge-host-classes.md §2](../../../foundation/spec/plugins/contracts/bridge-host-classes.md#2-the-hosts-field)); the database driver only loads on hosts that ship a runtime DB connection.
+Frame Data uses the standard host bridge contract (`host:db.*`) for driver-level operations.
+
+| Bridge | Purpose |
+|---|---|
+| `host:db.query` | Execute a parameterized SELECT and return rows |
+| `host:db.execute` | Execute a parameterized INSERT / UPDATE / DELETE |
+| `host:db.tx` | Wrap a sequence of statements in a transaction |
+| `host:db.migrate` | Apply DDL for schema migrations |
+
+The bridge details are documented in `documents/specification/frame_bridge_contracts.md`.
 
 ---
 
-**End of Document 04 — Frame Data (ORM) Specification (Unified Block Syntax)**
+## 16. Guidelines
 
+- **One entity per file, one data block per file, one report per file.** Keep files small and focused.
+- **Domain purity:** Business methods on the entity, orchestration in `logic/`, persistence in `data/` blocks and `Database`.
+- **Query naming:** Prefer entity-scoped names (`findActive`, `findByEmail`, `findOrFailById`) that describe what is fetched.
+- **Reserve `logic/` for verbs (`Auth`, `Checkout`, `Mailer`).** Nouns are entities or reports.
+- **Do not add methods to `data:` blocks other than `queries:`.**
+- **Use raw SQL only when the DSL doesn't cover a case — and prefer to put it inside a report class.**
+
+---
+
+## 17. Summary
+
+Frame Data v2:
+
+- **Entity in `app/entity/`** — nouns, business methods, `always:` invariants, persistence-ignorant.
+- **Data block in `app/data/models/`** — schema declaration + reusable queries. Paired to entity by name.
+- **`.data` accessor** — read queries from `logic/`.
+- **`Database` service** — writes from `logic/`. Mutates entity `id` in place on INSERT.
+- **`transaction:` block** — atomic multi-write.
+- **Report class in `app/data/reports/`** — aggregate or cross-entity queries.
+- **Raw SQL via `db.query` / `db.queryAs`** — escape hatch.
+
+The query DSL (`find`, `first`, `findOrFail`, `count`, `exists`) and `transaction:` block are retained from v1 unchanged. Block-form mutations (`Model.insert:`, etc.) and bare-field `data:` declarations are removed and replaced by the entity/data pairing plus `Database` service.
+
+For rationale, alternatives considered, and design decisions, see `clean-framework/system-documents/SPEC_DATA_PERSISTENCE_MODEL.md`.

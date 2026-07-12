@@ -333,9 +333,9 @@ endpoints:
         integer userId = auth.consumeResetToken(token)   // returns 0 if invalid/expired
         if userId == 0:
             return badRequest(json({ error: "Invalid or expired token" }))
-        User.update:
-            where: id == userId
-            set:   passwordHash = auth.hashPassword(newPass)
+        User user = User.data.findOrFailById(userId)
+        user.setPasswordHash(auth.hashPassword(newPass))
+        Database.save(user)
         return json({ reset: true })
 ```
 
@@ -406,11 +406,13 @@ endpoints:
 
     POST "/api/projects":
         string tid = auth.tenant.require()
-        Project p  = Project.insert:
-            tenantId  = tid                              // never trust req.json("tenantId")
-            name      = req.json("name")
-            createdAt = time.now()
-        return json({ id: p.id })
+        Project p = Project(
+            tenantId: tid,                               // never trust req.json("tenantId")
+            name: req.json("name"),
+            createdAt: time.now()
+        )
+        Database.save(p)
+        return json({ id: p.id! })
 ```
 
 `auth.tenant.matches` is for the rare case where the payload genuinely needs a tenant id (e.g. cross-tenant admin tools) — never use it to overwrite the session-derived id for normal endpoints.
@@ -436,10 +438,11 @@ GET "/api/reports" [admin, manager]:
 **Programmatic check inside a handler:**
 ```clean
 POST "/api/posts/:id/publish":
-    Post p = Post.findOrFail: where: id == req.params.id
+    Post p = Post.data.findOrFailById(req.params.id.toInteger())
     if not (auth.hasRole("editor") or auth.user.id == p.authorId):
         return status(403, json({ error: "Forbidden" }))
-    Post.update: where: id == p.id; set: published = true
+    p.publish()                     // domain method mutates state
+    Database.save(p)
 ```
 
 **Policy function (Pro pattern):**

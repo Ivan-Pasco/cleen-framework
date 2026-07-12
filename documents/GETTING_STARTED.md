@@ -140,27 +140,51 @@ Create `app/server/api/users.cln`:
 ```clean
 endpoints:
 	GET "/api/users":
-		list users = User.find:
-			where:
-				active == true
+		list<User> users = User.data.findActive()
 		return json(users)
 ```
 
 Access it at `/api/users`.
 
-## Add a Database Model
+## Add a Domain Entity and Data Model
 
-Create `app/data/models/User.cln`:
+Frame separates the domain object from its persistence view. Create both files:
+
+**Entity** — `app/entity/user.cln`:
 
 ```clean
-data User
-	integer id : pk, auto
+class User
+	integer? id
 	string name
-	string email : unique
-	boolean active = true
+	string email
+	string status
+	datetime createdAt
+
+	always:
+		status in ["active", "pending", "suspended"]
 ```
 
-Models are auto-discovered and available in your pages and API endpoints.
+**Data block** — `app/data/models/user.cln` (must have the same basename and match `class User` by name):
+
+```clean
+data User:
+	table "users"
+
+	fields:
+		id primary generated
+		name required
+		email required unique
+		status required
+		createdAt as "created_at" required
+
+	queries:
+		list<User> findActive()
+			return User.find:
+				where:
+					status == "active"
+```
+
+Entities and data blocks are paired by name — `class User` in `app/entity/user.cln` pairs with `data User:` in `app/data/models/user.cln`. Reads go through `.data` (`User.data.findActive()`); writes go through `Database.save(user)`.
 
 ## Next Steps
 
@@ -181,7 +205,9 @@ Models are auto-discovered and available in your pages and API endpoints.
 |--------|---------|--------|
 | `app/server/api/` | HTTP endpoints (.cln) | frame.server |
 | `app/logic/` | Business logic (.cln) | — (always compiled) |
-| `app/data/models/` | Data model definitions (.cln) | frame.data |
+| `app/entity/` | Domain classes (.cln) | frame.data (paired w/ data/models/) |
+| `app/data/models/` | Data block declarations (.cln) | frame.data |
+| `app/data/reports/` | Cross-entity report classes (.cln, lazy) | frame.data |
 | `app/data/migrations/` | Schema migrations (.cln) | frame.data |
 | `app/ui/web/pages/` | SSR pages (.html) + companion loaders (.cln) | frame.ui |
 | `app/ui/web/components/` | Reusable components (.cln) | frame.ui |

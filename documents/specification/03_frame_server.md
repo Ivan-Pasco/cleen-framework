@@ -68,17 +68,17 @@ endpoints:
 
     POST "/api/users" :
         CreateUser body = req.json(CreateUser)
-        User u = User.insert:
-            name  = body.name
-            email = body.email
-            active = true
+        User u = User(
+            name: body.name,
+            email: body.email,
+            active: true
+        )
+        Database.save(u)
         return json(u), status(201)
 
     GET "/api/users/:id" :
-        integer id = req.params.id
-        User? u = User.first:
-            where:
-                id == id
+        integer userId = req.params.id.toInteger()
+        User? u = User.data.findById(userId)
         if u == null
             return notFound()
         return json(u)
@@ -436,10 +436,12 @@ endpoints:
 
     POST "/api/posts" :
         CreatePost body = req.json(CreatePost)
-        Post p = Post.insert:
-            title   = body.title
-            content = body.content
-            author  = body.author
+        Post p = Post(
+            title: body.title,
+            content: body.content,
+            author: body.author
+        )
+        Database.save(p)
         return json(p), status(201)
 ```
 

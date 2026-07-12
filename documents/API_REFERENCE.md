@@ -370,8 +370,9 @@ string response = http.delete("https://api.example.com/users/1")
 ## Frame Data (ORM)
 
 **Plugin:** `frame.data`
-**Owned folders:** `app/data/`, `app/data/models/`, `app/data/`, `app/data/migrations/`, `app/data/`
+**Owned folders:** `app/entity/`, `app/data/models/`, `app/data/reports/`, `app/data/migrations/`, `app/data/seeds/`
 **Spec:** [04_frame_data.md](specification/04_frame_data.md)
+**Design doc:** [SPEC_DATA_PERSISTENCE_MODEL.md](../system-documents/SPEC_DATA_PERSISTENCE_MODEL.md)
 
 ### Plugin Registration
 
@@ -382,136 +383,260 @@ plugins:
     frame.data
 ```
 
-Files placed in `app/data/` are processed by `frame.data` automatically without any `import:` statement.
+Files placed in `app/entity/` and `app/data/` are processed by `frame.data` automatically without any `import:` statement.
 
-### Model Definition
+### Architecture — Three Layers
 
-**`data` keyword** - Define a model
+Frame Data separates persistence into three layers:
+
+- **Domain** (`app/entity/<name>.cln`) — plain classes with fields, invariants, methods. Persistence-ignorant.
+- **Data block** (`app/data/models/<name>.cln`) — paired with entity by name. Declares table, fields, indexes, relations, queries.
+- **Runtime** (`Database` service) — writes (`save`, `delete`, `deleteOrFail`) and bulk operations.
+
+Reads use the `.data` accessor. Writes use the `Database` service.
+
+### Entity Definition
+
+Entity classes in `app/entity/<name>.cln` are plain Clean classes with a nullable `id`, an optional `always:` block, and business methods:
+
 ```clean
-data User
-    integer id : pk, auto
-    string name : min=2, max=100
-    string email : unique
-    integer age : min=0, max=150
-    boolean active = true
-    datetime createdAt : default=now
+class User
+    integer? id
+    string email
+    private string passwordHash
+    string status
+    datetime createdAt
+
+    always:
+        status in ["active", "pending", "suspended"]
+
+    functions:
+        public:
+            boolean canPost()
+                return status == "active"
+
+            boolean verifiesPassword(string password)
+                return password.verify(passwordHash)
+
+            void promote()
+                require status == "pending"
+                status = "active"
 ```
 
-**Field Attributes**:
-- `pk` - Primary key
-- `auto` - Auto-increment
-- `unique` - Unique constraint
-- `index` - Create index
-- `default=<value>` - Default value
-- `min=<value>` - Minimum value / minimum length
-- `max=<value>` - Maximum value / maximum length
-- `onDelete=cascade` - Cascading delete for foreign keys
-- `nullable` - Allow null values
+**Rules:**
+- File basename matches class name in snake_case (`class User` in `user.cln`).
+- `id` is nullable (`integer?` or `string?`) — `null` before persistence, populated by `Database.save`.
+- Entities cannot import from `app/data/`, `app/logic/`, or `app/server/`.
+- Computed properties are methods, not fields.
 
-**Example model file** (`app/data/models/User.cln`):
+### Data Block Definition
+
+Data blocks in `app/data/models/<name>.cln` use the sub-block form. Same basename as the paired entity:
+
 ```clean
-data User
-    integer id : pk, auto
-    string name : min=2, max=100
-    string email : unique, index
-    string passwordHash
-    boolean active = true
-    datetime createdAt : default=now
-    datetime? updatedAt
+data User:
+    table "users"
+
+    fields:
+        id primary generated
+        email required unique
+        passwordHash as "password_hash" required
+        status required
+        createdAt as "created_at" required
+
+    indexes:
+        (status, createdAt)
+        email
+
+    relations:
+        orders: has_many Order on user_id
+        profile: has_one Profile on user_id
+
+    queries:
+        User? findByEmail(string emailAddress)
+            return User.first:
+                where:
+                    email == emailAddress
+
+        User findOrFailById(integer userId)
+            return User.findOrFail:
+                where:
+                    id == userId
 ```
 
-### Query Operations
+**Sub-blocks:**
+- `table "<name>"` — SQL table name (defaults to snake_case pluralization).
+- `fields:` — required. Each field references an entity field; declares constraints.
+- `indexes:` — optional. Single fields or tuples; suffix `unique`.
+- `relations:` — optional. `<name>: <has_many|has_one|belongs_to> <Target> on <fk_column>`.
+- `queries:` — optional. Named read-only methods callable via `.data`.
 
-**`.find:`** - Query multiple records
+**Field constraints:**
+- `primary` — primary key
+- `generated` — DB-generated (typical for `id`)
+- `required` — non-null in storage
+- `unique` — unique index (shorthand)
+- `default: <expr>` — storage-side default
+- `as "<column_name>"` — override SQL column name
+
+### Query DSL
+
+Verbs (invoked on the entity class name):
+
+| Verb | Returns | Behavior |
+|---|---|---|
+| `find` | `list<T>` | Matching rows, possibly empty |
+| `first` | `T?` | First match or `null` |
+| `findOrFail` | `T` | First match; raises `NOT_FOUND` if none |
+| `count` | `integer` | Count of matching rows |
+| `exists` | `boolean` | `true` if at least one matches |
+
+Sub-blocks inside a query:
+
+- `where:` — filter predicates (unqualified field names; multiple lines = implicit AND)
+- `order:` — `<field> [asc|desc]` per line
+- `limit: <expr>` — cap row count
+- `offset: <expr>` — skip N rows (use with `limit:`)
+- `select:` — column projection (limits fetched columns; return type unchanged)
+- `include:` — eager loading of declared relations; enables filter-scope references
+- `paginate:` — page-based pagination (`page:` + `perPage:`)
+- `cursor:` — keyset pagination (`after:` + `perPage:` + `by:`)
+- `link:` — many-to-many traversal via junction
+
+**Multi-record query:**
+
 ```clean
 list<User> users = User.find:
     where:
-        active == true
+        status == "active"
         age >= 18
     order:
-        name asc
+        createdAt desc
     limit: 20
-    offset: 0
 ```
 
-**`.first:`** - Get single record
+**Single record:**
+
 ```clean
-User? user = User.first:
+User? u = User.first:
     where:
         email == "alice@example.com"
 ```
 
-**`.insert:`** - Create record
-```clean
-User newUser = User.insert:
-    name = "Alice"
-    email = "alice@example.com"
-    age = 30
-```
+**Find or fail:**
 
-**`.update:`** - Update records
 ```clean
-User.update:
-    set:
-        active = false
-        lastLogin = now()
+User u = User.findOrFail:
     where:
         id == userId
 ```
 
-**`.delete:`** - Delete records
+**Count / exists:**
+
 ```clean
-User.delete:
+integer total = User.count:
     where:
-        active == false
-        createdAt < now().minusDays(365)
-```
+        status == "active"
 
-**`.count:`** - Count records
-```clean
-integer count = User.count:
+boolean taken = User.exists:
     where:
-        active == true
+        email == candidateEmail
 ```
 
-**Quick reference:**
+**Pagination (page-based):**
+
 ```clean
-// Query
-list<User> users = User.find:
-    where: active == true
-    order: name asc
-    limit: 20
-
-// Single record
-User? u = User.first: where: id == userId
-
-// Insert
-User u = User.insert: name = "Alice"  email = "alice@example.com"
-
-// Update
-User.update: set: active = false  where: id == userId
-
-// Delete
-User.delete: where: active == false
-
-// Count
-integer n = User.count: where: active == true
+PagedResult<User> result = User.paginate:
+    where:
+        status == "active"
+    page: 3
+    perPage: 20
 ```
+
+**Pagination (cursor-based):**
+
+```clean
+CursorResult<User> result = User.cursor:
+    where:
+        status == "active"
+    after: previousCursor
+    perPage: 20
+    by: id
+```
+
+### Reads via `.data` Accessor
+
+Query methods declared in a data block's `queries:` sub-block are callable from `logic/` via the entity's `.data` accessor:
+
+```clean
+User? user = User.data.findByEmail("alice@example.com")
+User u = User.data.findOrFailById(userId)
+list<User> active = User.data.findActive()
+```
+
+- `<Entity>.data.<method>` is compile-time — cannot be captured as a value.
+- Only methods declared in the paired data block's `queries:` sub-block are dispatchable.
+- Query methods must return `T`, `T?`, `list<T>`, `integer` (`count`), or `boolean` (`exists`).
+
+### Writes via `Database` Service
+
+**Save (insert or update):**
+
+```clean
+User newUser = User(
+    email: "alice@example.com",
+    passwordHash: "alice".hash(),
+    status: "pending",
+    createdAt: time.now()
+)
+Database.save(newUser)                 // INSERT; newUser.id now populated
+```
+
+If `entity.id` is `null`, `save` inserts and mutates `id` in place. Otherwise, it updates.
+
+**Delete (lenient — no-op if row missing):**
+
+```clean
+Database.delete(user)
+```
+
+**Delete (strict — raises `NOT_FOUND` if row missing):**
+
+```clean
+Database.deleteOrFail(user)
+```
+
+**Update via load-mutate-save:**
+
+```clean
+User u = User.data.findOrFailById(userId)
+u.promote()
+Database.save(u)
+```
+
+**Bulk operations:**
+
+```clean
+Database.saveAll([user1, user2, user3])
+Database.deleteAll([user1, user2])
+```
+
+Both `Database.save` and `Database.saveAll` enforce `always:` invariants on the entity before persisting. Invariant failure raises `RUN005`.
 
 ### Where Clause Operators
 
 ```clean
 // Equality
-where: name == "Alice"
+where: email == "alice@example.com"
 
 // Comparison
 where: age >= 18
 where: score < 100
 where: price != 0
 
-// Logical AND (multiple where conditions)
+// Logical AND (multiple lines)
 where:
-    active == true
+    status == "active"
     age >= 18
 
 // Null checks
@@ -520,6 +645,16 @@ where: email != null
 
 // String matching
 where: name like "Ali%"
+
+// Membership
+where: status in ["active", "pending"]
+
+// Filter on included relation
+include:
+    orders
+where:
+    tenantId == currentTenantId
+    orders.status == "pending"
 ```
 
 ### Order Clause
@@ -535,84 +670,217 @@ order:
 
 ### Transactions
 
-**`transaction:`** - Execute transaction
+**`transaction:`** — atomic multi-write:
+
 ```clean
 transaction:
-    User user = User.insert:
-        name = "Alice"
-        email = "alice@example.com"
+    User user = User(
+        email: "alice@example.com",
+        status: "pending",
+        createdAt: time.now()
+    )
+    Database.save(user)
 
-    Post.insert:
-        title = "Hello"
-        author = user
-        published = true
+    Post post = Post(
+        title: "Hello",
+        authorId: user.id!,
+        published: true
+    )
+    Database.save(post)
 ```
 
-All operations inside `transaction:` run atomically. If any operation fails, the entire transaction is rolled back.
+- Any error inside the block triggers automatic rollback.
+- Nested `transaction:` blocks are a compile-time error.
+- Reads inside a transaction see uncommitted writes made earlier in the same transaction.
 
 ### Relationships
 
-**One-to-Many**:
+**One-to-Many** — declare in the `relations:` sub-block of the child entity's data block:
+
 ```clean
-data User
-    integer id : pk, auto
-    string name
-
-data Post
-    integer id : pk, auto
+// app/entity/post.cln
+class Post
+    integer? id
     string title
-    User author  // Foreign key to User
+    integer authorId
+    datetime createdAt
 
-// Query posts by user
-list<Post> posts = Post.find:
-    where:
-        author.id == userId
+// app/data/models/post.cln
+data Post:
+    table "posts"
+    fields:
+        id primary generated
+        title required
+        authorId as "author_id" required
+        createdAt as "created_at" required
 
-// Query with author data
-list<Post> posts = Post.find:
-    where:
-        author.id == userId
-    order:
-        createdAt desc
+    relations:
+        author: belongs_to User on author_id
+
+    queries:
+        list<Post> byAuthor(integer userId)
+            return Post.find:
+                where:
+                    authorId == userId
+                order:
+                    createdAt desc
 ```
 
-**Many-to-Many** (via explicit junction table):
+**Many-to-Many** — explicit junction entity:
+
 ```clean
-data User
-    integer id : pk, auto
-    string name
+// app/entity/user_role.cln
+class UserRole
+    integer? id
+    integer userId
+    integer roleId
+    datetime assignedAt
 
-data Role
-    integer id : pk, auto
-    string name : unique
+// app/data/models/user_role.cln
+data UserRole:
+    table "user_roles"
 
-data UserRole
-    User user : onDelete=cascade
-    Role role : onDelete=cascade
-    unique user, role
+    fields:
+        id primary generated
+        userId as "user_id" required
+        roleId as "role_id" required
+        assignedAt as "assigned_at" required
 
-// Query users with a specific role
+    indexes:
+        (userId, roleId) unique
+
+    relations:
+        user: belongs_to User on user_id
+        role: belongs_to Role on role_id
+```
+
+Query many-to-many via `link:`:
+
+```clean
+// Users with a specific role
 list<User> admins = User.find:
     link:
         UserRole user == id
-        Role id == UserRole.role
     where:
-        Role.name == "admin"
+        UserRole.roleId == adminRoleId
 
 // Assign role to user
-UserRole.insert:
-    user = currentUser
-    role = adminRole
+UserRole ur = UserRole(
+    userId: user.id!,
+    roleId: role.id!,
+    assignedAt: time.now()
+)
+Database.save(ur)
 ```
+
+### Report Classes (`app/data/reports/`)
+
+Aggregate or cross-entity queries live in report classes with capability-noun names:
+
+```clean
+// app/types/region_revenue.cln
+class RegionRevenue
+    string region
+    number revenue
+
+// app/data/reports/sales_by_region.cln
+class SalesByRegion
+    functions:
+        public:
+            list<RegionRevenue> forQuarter(integer year, integer quarter)
+                return db.queryAs(RegionRevenue):
+                    sql: "SELECT region, SUM(total) AS revenue FROM orders WHERE year = ? AND quarter = ? GROUP BY region"
+                    params: [year, quarter]
+```
+
+Callers use `SalesByRegion.forQuarter(2026, 3)`. Folder is created lazily — only when the first cross-entity query appears.
+
+### Raw SQL (Escape Hatch)
+
+For queries the DSL doesn't cover (window functions, deep joins, vendor-specific SQL):
+
+```clean
+list<UserSummary> summaries = db.queryAs(UserSummary):
+    sql: "SELECT id, email, COUNT(*) AS post_count FROM users JOIN posts ..."
+    params: []
+
+list<map<string, any>> rows = db.query:
+    sql: "SELECT COUNT(*) AS total FROM users"
+```
+
+Raw SQL bypasses ORM tenant scoping — include explicit `WHERE tenant_id = ?` when needed.
+
+### Configuration
+
+Database configuration lives in `main.cln`'s `frame.data:` block (v1's `app/data/config.cln` is removed):
+
+```clean
+frame.data:
+    default:
+        driver: postgres
+        url: env("DATABASE_URL")
+        pool:
+            max: 10
+            idleTimeout: 30000
+    dev:
+        driver: sqlite
+        url: ".frame/data.db"
+    test:
+        driver: examples
+        source: "app/data/examples/"
+```
+
+Supported drivers in v3.0: `postgres`, `sqlite`, `examples`. Read-replica routing is reserved for v3.1+.
 
 ### Migrations
 
-Migrations are auto-generated from schema diffs. Use the CLI to manage them:
+Migration files live in `app/data/migrations/` as `NNN_description.cln`:
+
+```clean
+migrate "003_add_user_status_index":
+    up:
+        "CREATE INDEX idx_users_status ON users (status)"
+    down:
+        "DROP INDEX idx_users_status"
+```
+
+CLI:
 
 ```bash
 cleen db:plan      # Preview pending migrations
 cleen db:migrate   # Apply pending migrations
 cleen db:rollback  # Roll back last migration
+```
+
+### Quick Reference
+
+```clean
+// --- Read ---
+list<User> users = User.data.findActive()          // named query via .data
+User? u = User.data.findByEmail("a@b.com")         // named query via .data
+User u = User.data.findOrFailById(42)              // named query via .data
+
+// Inline query (one-off)
+User? u = User.first:
+    where:
+        email == "a@b.com"
+
+// --- Write ---
+User newUser = User(email: "a@b.com", status: "pending", createdAt: time.now())
+Database.save(newUser)                             // INSERT; mutates newUser.id
+newUser.promote()
+Database.save(newUser)                             // UPDATE
+
+Database.delete(newUser)                           // lenient
+Database.deleteOrFail(newUser)                     // strict
+
+// --- Transaction ---
+transaction:
+    Database.save(user)
+    Database.save(post)
+
+// --- Aggregate / cross-entity ---
+list<RegionRevenue> report = SalesByRegion.forQuarter(2026, 3)
 ```
 
 ---
@@ -650,11 +918,14 @@ endpoints:
         return json(user)
 
     PUT "/users/:id":
-        User u = User.update(req.params.id.toInteger(), req.json(User))
+        User u = User.data.findOrFailById(req.params.id.toInteger())
+        u.applyUpdate(req.json(UserUpdate))
+        Database.save(u)
         return json(u)
 
     DELETE "/users/:id":
-        User.delete: where: id == req.params.id.toInteger()
+        User u = User.data.findOrFailById(req.params.id.toInteger())
+        Database.delete(u)
         return json({ deleted: true })
 ```
 
@@ -1743,18 +2014,19 @@ All errors from the framework and Host Bridge use this standard envelope:
 ### Error Handling in Clean Language
 
 ```clean
-User? user = User.first:
-    where: id == userId
+User? user = User.data.findById(userId)
 
 if user == null
     return notFound("User {userId} not found")
 
 // onError syntax for propagating errors
-Data newUser = User.insert:
-    name = req.body.name
-    email = req.body.email
-onError err
-    return badRequest("Could not create user: {err.message}")
+User newUser = User(
+    name: req.body.name,
+    email: req.body.email
+)
+Database.save(newUser)
+    onError err
+        return badRequest("Could not create user: {err.message}")
 ```
 
 ### Common Error Codes

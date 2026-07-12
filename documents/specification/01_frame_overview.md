@@ -343,14 +343,31 @@ plugins:
 	frame.ui
 ```
 
-**`app/data/models/User.cln`** — data model (processed by `frame.data`, declared in main.cln):
+**`app/entity/user.cln`** — domain class (processed by `frame.data`, paired by name with data block):
 ```clean
-data User
-	integer id : pk, auto
-	string email : unique
-	string passwordHash
-	boolean admin = false
-	datetime createdAt : default=now
+class User
+	integer? id
+	string email
+	private string passwordHash
+	boolean admin
+	datetime createdAt
+```
+
+**`app/data/models/user.cln`** — data block (processed by `frame.data`, paired with `class User` by name):
+```clean
+data User:
+	fields:
+		id primary generated
+		email required unique
+		passwordHash as "password_hash" required
+		admin required default: false
+		createdAt as "created_at" required default: time.now()
+
+	queries:
+		User? findByEmail(string emailAddress)
+			return User.first:
+				where:
+					email == emailAddress
 ```
 
 **`app/auth/auth.cln`** — auth configuration (processed by `frame.auth`, declared in main.cln):
@@ -367,18 +384,16 @@ auth:
 **`app/server/api/users.cln`** — API endpoints (processed by `frame.server`, declared in main.cln):
 ```clean
 endpoints:
-	POST "/login" :
+	POST "/login":
 		LoginForm body = req.json(LoginForm)
-		User? user = User.first:
-			where: email == body.email
-		if user == null or not checkPassword(body.password, user.passwordHash)
+		User? user = User.data.findByEmail(body.email)
+		if user == null or not user.verifiesPassword(body.password)
 			return badRequest("Invalid credentials")
-		Session s = auth.session.create(user.id, claims: { email: user.email, role: user.role })
+		Session s = auth.session.create(user.id!, claims: { email: user.email, role: user.role })
 		return auth.session.setCookie(s, redirect("/dashboard"))
 
 	GET "/profile" [auth]:
-		User user = User.first:
-			where: id == req.context.claims.sub
+		User user = User.data.findOrFailById(req.context.claims.sub)
 		return json(user)
 ```
 

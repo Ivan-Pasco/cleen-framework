@@ -29,15 +29,30 @@
 
 **Example (Clean Language):**
 
-```clean
-data User
-    integer id : pk, auto
-    string email : unique
-    boolean active = true
+Entity in `app/entity/user.cln`:
 
-functions:
-    boolean canPublish(User u)
-        return u.role == "admin"
+```clean
+class User
+    integer? id
+    string email
+    string role
+    boolean active
+
+    functions:
+        public:
+            boolean canPublish()
+                return role == "admin"
+```
+
+Paired data block in `app/data/models/user.cln`:
+
+```clean
+data User:
+    fields:
+        id primary generated
+        email required unique
+        role required
+        active required
 ```
 
 ---

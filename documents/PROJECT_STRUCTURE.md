@@ -6,11 +6,14 @@
 
 ```
 my-app/
-├── main.cln                     # Package declaration + target configuration
+├── main.cln                     # Package declaration + target configuration + frame.data config
 │
 ├── app/
+│   ├── entity/                  # Domain classes (nouns)               → frame.data (paired w/ data/models/)
+│   │
 │   ├── data/                    # ORM / database layer              → frame.data
-│   │   ├── models/              # Data model definitions (.cln)
+│   │   ├── models/              # Data block declarations (.cln) paired with entities by name
+│   │   ├── reports/             # Cross-entity / aggregate query classes (created lazily)
 │   │   ├── migrations/          # Schema migration files (.cln)
 │   │   └── seeds/               # Seed data (.cln)
 │   │
@@ -77,7 +80,8 @@ Plugins must be declared in `main.cln` via the `target:` block. Once declared, f
 |---|---|
 | `app/server/`, `app/server/api/`, `app/server/middleware/` | `frame.server` |
 | `app/logic/` | — (core compiler, always compiled) |
-| `app/data/`, `app/data/models/`, `app/data/migrations/`, `app/data/seeds/` | `frame.data` |
+| `app/entity/` | `frame.data` (paired with `data/models/` by class name) |
+| `app/data/`, `app/data/models/`, `app/data/reports/`, `app/data/migrations/`, `app/data/seeds/` | `frame.data` |
 | `app/ui/`, `app/ui/shared/` | `frame.ui` (shared, multi-platform) |
 | `app/ui/web/pages/`, `app/ui/web/components/`, `app/ui/web/layouts/` | `frame.ui` (web target) |
 | `app/ui/web/client/` and `app/ui/web/pages/*.client.cln` | `frame.client` |
@@ -90,10 +94,11 @@ Each layer depends only on layers above it:
 
 | Folder | Plugin | Depends on |
 |--------|--------|------------|
-| `app/data/` | frame.data | nothing |
-| `app/logic/` | — | data/ |
-| `app/state/` | — | logic/, data/ |
-| `app/server/` | frame.server | logic/, data/ |
+| `app/entity/` | frame.data | nothing (persistence-ignorant) |
+| `app/data/` | frame.data | entity/ |
+| `app/logic/` | — | entity/, data/ |
+| `app/state/` | — | logic/, entity/, data/ |
+| `app/server/` | frame.server | logic/, entity/, data/ |
 | `app/ui/shared/` | frame.ui | nothing — only needed for multi-platform projects |
 | `app/ui/web/` | frame.ui | logic/, state/, ui/shared/ |
 | `app/canvas/` | frame.canvas | logic/, state/ |
@@ -109,45 +114,90 @@ HTTP endpoint handlers using the `endpoints:` block. Owned by `frame.server`.
 // app/server/api/users.cln
 endpoints:
 	GET "/api/users":
-		list<User> users = User.find:
-			where:
-				active == true
+		list<User> users = User.data.findActive()
 		return json(users)
 
 	POST "/api/users":
-		User u = User.insert:
-			name = req.body("name")
-			email = req.body("email")
-		return json(u)
+		User newUser = User(
+			name: req.body("name"),
+			email: req.body("email")
+		)
+		Database.save(newUser)
+		return json(newUser)
 
 	GET "/api/users/:id":
 		integer id = req.params.id.toInteger()
-		User user = User.first:
-			where:
-				id == id
+		User user = User.data.findOrFailById(id)
 		return json(user)
+```
+
+Endpoints stay thin — persistence goes through `.data` for reads and `Database` for writes. Reusable queries live in the paired data block's `queries:` sub-block (see below).
+
+### `app/entity/`
+
+Domain classes (nouns). Each file declares one `class` describing a business object with its fields, invariants, and methods. Paired by name with a `data:` block in `app/data/models/`. Persistence-ignorant.
+
+| File | Class |
+|------|-------|
+| `user.cln` | `User` |
+| `blog_post.cln` | `BlogPost` |
+
+**Example entity:**
+```clean
+// app/entity/user.cln
+class User
+	integer? id
+	string email
+	private string passwordHash
+	string status
+	datetime createdAt
+
+	always:
+		status in ["active", "pending", "suspended"]
+
+	functions:
+		public:
+			boolean canPost()
+				return status == "active"
 ```
 
 ### `app/data/models/`
 
-Data model definitions. PascalCase filename becomes a snake_case database table. Owned by `frame.data`.
+Data block declarations. Paired with an entity of the same name in `app/entity/`. Owned by `frame.data`.
 
-| File | Model | Table |
-|------|-------|-------|
-| `User.cln` | `User` | `users` |
-| `BlogPost.cln` | `BlogPost` | `blog_posts` |
+| File | Data Block | Entity | Table |
+|------|-----------|--------|-------|
+| `user.cln` | `data User:` | `class User` | `users` |
+| `blog_post.cln` | `data BlogPost:` | `class BlogPost` | `blog_posts` |
 
-**Example model:**
+**Example data block:**
 ```clean
-// app/data/models/User.cln
-data User
-	integer id : pk, auto
-	string name
-	string email : unique
-	string passwordHash
-	boolean active = true
-	datetime createdAt : default=now
+// app/data/models/user.cln
+data User:
+	table "users"
+
+	fields:
+		id primary generated
+		email required unique
+		passwordHash as "password_hash" required
+		status required
+		createdAt as "created_at" required
+
+	queries:
+		User? findByEmail(string emailAddress)
+			return User.first:
+				where:
+					email == emailAddress
+
+		User findOrFailById(integer userId)
+			return User.findOrFail:
+				where:
+					id == userId
 ```
+
+### `app/data/reports/`
+
+Cross-entity or aggregate queries. Report classes have capability-noun names (`SalesByRegion`, `MonthlyActivity`). Created lazily — only when the first cross-entity query appears. Owned by `frame.data`.
 
 ### `app/logic/`
 
