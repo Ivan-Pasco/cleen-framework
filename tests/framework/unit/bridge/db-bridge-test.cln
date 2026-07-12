@@ -1,0 +1,19 @@
+// Test: bridge/db — verifies the db bridge shape without persistent schema.
+// Uses SQLite :memory: (framework default for tests) — no fixtures required.
+// A raw SELECT of a literal is the minimum call that exercises the bridge
+// round-trip: it goes through the compiler, WASM host, clean-server db
+// bridge, SQLite driver, and back as a JSON envelope.
+
+start:
+	// SELECT of a literal — needs no table, no schema, no migrations.
+	string one_json = db.query("SELECT 1 as v", "")
+	boolean ok_shape = one_json.length() > 0
+
+	// Consecutive queries must not corrupt each other.
+	string two_json = db.query("SELECT 2 as v", "")
+	boolean ok_second = two_json.length() > 0
+
+	if ok_shape and ok_second
+		printl("PASS: bridge-db")
+	else
+		printl("FAIL: bridge-db")

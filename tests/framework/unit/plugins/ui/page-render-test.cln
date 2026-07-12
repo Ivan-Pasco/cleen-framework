@@ -1,0 +1,33 @@
+// Test: frame.ui — page render with interpolation.
+
+plugins:
+	frame.ui
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] ui-page-render server ready")
+
+endpoints:
+	GET "/test":
+		string title = "Home"
+		string userName = "Alice"
+		string body = renderPage(title, userName)
+		boolean ok_title = body.contains("Home")
+		boolean ok_user = body.contains("Alice")
+		if ok_title and ok_user
+			printl("PASS: ui-page-render")
+		else
+			printl("FAIL: ui-page-render")
+		return http.respond(200, "text/html", body)
+
+functions:
+	string renderPage(string title, string userName)
+		html:
+			<html>
+				<head><title>{title}</title></head>
+				<body>
+					<h1>Welcome, {userName}</h1>
+				</body>
+			</html>

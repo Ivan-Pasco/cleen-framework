@@ -1,0 +1,36 @@
+// Test: frame.auth — roles: block and hasRole / can permission checks.
+// Server-shaped: runner drives /test to enter request context.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+roles:
+	admin: ["users.create", "users.delete"]
+	user: ["profile.view"]
+
+endpoints:
+	GET "/test":
+		auth.setSession("{\"user_id\":1,\"role\":\"admin\"}")
+
+		boolean ok_role = auth.hasRole("admin")
+		boolean ok_not = not auth.hasRole("user")
+
+		// admin has users.create per roles: block above.
+		boolean ok_can = auth.can("users.create")
+
+		// admin does NOT have an unlisted permission.
+		boolean ok_cant = not auth.can("nonexistent.permission")
+
+		if ok_role and ok_not and ok_can and ok_cant
+			printl("PASS: auth-role-check")
+		else
+			printl("FAIL: auth-role-check")
+		return json({ok: true})
+
+start:
+	printl("[boot] auth-role-check server ready")

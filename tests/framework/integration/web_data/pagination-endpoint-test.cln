@@ -1,0 +1,29 @@
+// Integration: paginated model exposed via HTTP endpoint.
+
+server:
+	port: 3400
+
+data Item:
+	integer id
+	string name
+
+start:
+	printl("[boot] integration-pagination-endpoint server ready")
+
+endpoints:
+	GET "/test":
+		iterate i in 1 to 15
+			Item.insert:
+				name = "item-" + i.toString()
+
+		PagedResult<Item> page = Item.paginate:
+			paginate:
+				page 1
+				perPage 10
+
+		boolean ok = page.items.length() == 10 and page.totalCount == 15 and page.hasNext
+		if ok
+			printl("PASS: integration-pagination-endpoint")
+		else
+			printl("FAIL: integration-pagination-endpoint")
+		return json({ok: ok, total: page.totalCount})

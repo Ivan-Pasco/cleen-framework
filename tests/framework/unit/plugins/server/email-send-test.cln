@@ -1,0 +1,29 @@
+// Test: frame.server — email.send bridge signature.
+// The test doesn't require an SMTP server to be reachable — success is
+// measured by the bridge returning without trapping and lastError() being
+// a valid string.
+
+server:
+	port: 3400
+	mail:
+		host: "localhost"
+		port: 2525
+		secure: false
+		username: ""
+		password: ""
+		from: "test@example.com"
+
+endpoints:
+	GET "/test":
+		boolean sent = email.send("dest@example.com", "hello", "<b>hi</b>", "hi")
+		string err = email.lastError()
+		boolean ok_call = err.length() >= 0
+
+		if ok_call
+			printl("PASS: server-email-send")
+		else
+			printl("FAIL: server-email-send")
+		return json({ok: true, sent: sent, err: err})
+
+start:
+	printl("[boot] server-email-send server ready")

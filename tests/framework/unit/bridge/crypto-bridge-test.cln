@@ -1,0 +1,24 @@
+// Test: bridge/crypto — verifies portable Layer 2 crypto bridge functions.
+// Runs inside clean-server against the real bridge. See tests/CONVENTIONS.md.
+
+start:
+	// Password hashing: hash then verify with correct + wrong passwords.
+	string hash = crypto.hashPassword("correct-horse-battery-staple")
+	boolean ok_hash = hash.length() > 0
+
+	boolean ok_verify_right = crypto.verifyPassword("correct-horse-battery-staple", hash)
+	boolean ok_verify_wrong = not crypto.verifyPassword("wrong-password", hash)
+
+	// Random hex: deterministic length (2 * bytes) and non-empty.
+	string r16 = crypto.randomHex(16)
+	boolean ok_random = r16.length() == 32
+
+	// HMAC-SHA256: deterministic — same input, same output.
+	string h1 = crypto.hmac("message", "secret-key", "sha256")
+	string h2 = crypto.hmac("message", "secret-key", "sha256")
+	boolean ok_hmac = h1.length() > 0 and h1 == h2
+
+	if ok_hash and ok_verify_right and ok_verify_wrong and ok_random and ok_hmac
+		printl("PASS: bridge-crypto")
+	else
+		printl("FAIL: bridge-crypto")

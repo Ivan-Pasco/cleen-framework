@@ -1,0 +1,38 @@
+// Test: frame.auth — JWT refresh single-use rotation + replay rejection.
+// Requires server context (auth.jwt.refresh reads the configured secret).
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+	jwt:
+		secret: "test-secret-for-refresh-test-32bytes"
+		alg: "HS256"
+		ttlMinutes: 5
+		refreshTtlMinutes: 60
+
+endpoints:
+	GET "/test":
+		string payload = "{\"sub\":\"user1\"}"
+		string first = auth.jwt.sign(payload)
+		boolean ok_first = first.length() > 0
+
+		// Refresh once — must return a new token distinct from the input.
+		string second = auth.jwt.refresh(first)
+		boolean ok_second = second.length() > 0 and second != first
+
+		// Replay: same token cannot be refreshed twice (jti single-use).
+		string replay = auth.jwt.refresh(first)
+		boolean ok_replay_rejected = replay.length() == 0
+
+		if ok_first and ok_second and ok_replay_rejected
+			printl("PASS: auth-jwt-refresh")
+		else
+			printl("FAIL: auth-jwt-refresh")
+		return json({ok: true})
+
+start:
+	printl("[boot] auth-jwt-refresh server ready")

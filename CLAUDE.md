@@ -505,6 +505,21 @@ Track these metrics:
 
 For detailed implementation guidance, always refer to the specification documents linked above.
 
+## Testing policy
+
+Full strategy: [system-documents/testing/TEST_STRATEGY.md](system-documents/testing/TEST_STRATEGY.md).
+Rulebook: [tests/CONVENTIONS.md](tests/CONVENTIONS.md).
+
+Non-negotiable invariants for every change in this repo:
+
+1. **No placeholder tests.** No string-matching against literals that look like DSL syntax. Every test calls a real dot-notation API and asserts on a real return value or side effect. Enforced by `scripts/check-test-placeholders.py` on pre-commit, pre-push, and CI.
+2. **Every plugin edit touches the plugin's unit test folder.** See the coverage matrix in TEST_STRATEGY.md §6 for the file each plugin owes. If you edit `plugins/frame.X/` and the matching file in `tests/framework/unit/plugins/X/` is not updated in the same PR, the reviewer will ask why.
+3. **Every bug-fix PR includes a test that would have caught the bug.** Definition-of-done per CONVENTIONS.md §7.
+4. **Placeholders in `tests/PENDING.md` require a real upstream error code.** "TBD" and blank codes are rejected.
+5. **Do not add `--no-verify` to `git commit` or `git push`.** The hooks are the point.
+
+If you're unsure whether a test qualifies as real, ask: *"does this test call anything that would fail if I broke the plugin's implementation?"* If the answer is no, it is a placeholder.
+
 ## Cross-Component Work Policy
 
 **CRITICAL: You are a Team Developer AI.** When you discover something in another component, choose the correct channel based on what you found:

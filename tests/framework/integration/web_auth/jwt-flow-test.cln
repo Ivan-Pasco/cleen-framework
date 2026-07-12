@@ -1,0 +1,33 @@
+// Integration: JWT login → verify → logout inside a single request.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+	jwt:
+		secret: "integration-test-secret-32bytes-min"
+		alg: "HS256"
+		ttlMinutes: 15
+
+start:
+	printl("[boot] integration-jwt-flow server ready")
+
+endpoints:
+	GET "/test":
+		string token = auth.jwt.sign("{\"sub\":\"user1\",\"role\":\"user\"}")
+		boolean ok_sign = token.length() > 0
+
+		string payload = auth.jwt.verify(token)
+		boolean ok_verify = payload.length() > 0
+
+		boolean ok_set = auth.setSession(payload)
+		boolean ok_auth = auth.isAuthenticated()
+
+		if ok_sign and ok_verify and ok_set and ok_auth
+			printl("PASS: integration-jwt-flow")
+		else
+			printl("FAIL: integration-jwt-flow")
+		return json({ok: true})

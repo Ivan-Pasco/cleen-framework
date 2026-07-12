@@ -1,0 +1,23 @@
+// Test: frame.ui — html: block interpolation.
+// Uses the installed frame.ui plugin; MCP check cannot load plugin WASM.
+
+plugins:
+	frame.ui
+
+start:
+	string card = renderCard("Hello", "World")
+	boolean ok_interp = card.contains("Hello") and card.contains("World")
+	boolean ok_class = card.contains("card")
+
+	if ok_interp and ok_class
+		printl("PASS: ui-html-block-interpolation")
+	else
+		printl("FAIL: ui-html-block-interpolation")
+
+functions:
+	string renderCard(string title, string body)
+		html:
+			<div class="card">
+				<h3>{title}</h3>
+				<p>{body}</p>
+			</div>

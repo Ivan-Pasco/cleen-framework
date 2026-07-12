@@ -1,0 +1,46 @@
+// E2E: complete todo app boot + full CRUD lifecycle.
+
+server:
+	port: 3400
+
+data Todo:
+	integer id
+	string title
+	boolean done
+
+start:
+	printl("[boot] e2e-todo-app server ready")
+
+endpoints:
+	GET "/test":
+		integer id = Todo.insert_id:
+			title = "buy milk"
+			done = false
+
+		list<Todo> before = Todo.find:
+			where:
+				done == false
+		boolean ok_pending = before.length() == 1
+
+		Todo.update:
+			set:
+				done = true
+			where:
+				id == id
+
+		list<Todo> completed = Todo.find:
+			where:
+				done == true
+		boolean ok_completed = completed.length() == 1
+
+		Todo.delete:
+			where:
+				id == id
+		integer remaining = Todo.count
+		boolean ok_gone = remaining == 0
+
+		if ok_pending and ok_completed and ok_gone
+			printl("PASS: e2e-todo-app")
+		else
+			printl("FAIL: e2e-todo-app")
+		return json({ok: true})

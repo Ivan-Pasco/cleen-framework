@@ -1,0 +1,41 @@
+// Test: frame.data — Model.paginate: page-based pagination shape.
+
+server:
+	port: 3400
+
+data Item:
+	integer id
+	string name
+
+endpoints:
+	GET "/test":
+		iterate i in 1 to 25
+			Item.insert:
+				name = "item-" + i.toString()
+
+		PagedResult<Item> page1 = Item.paginate:
+			paginate:
+				page 1
+				perPage 10
+
+		boolean ok_len = page1.items.length() == 10
+		boolean ok_total = page1.totalCount == 25
+		boolean ok_pages = page1.totalPages == 3
+		boolean ok_hasNext = page1.hasNext
+		boolean ok_noPrev = not page1.hasPrev
+
+		PagedResult<Item> page3 = Item.paginate:
+			paginate:
+				page 3
+				perPage 10
+
+		boolean ok_last = page3.items.length() == 5 and not page3.hasNext and page3.hasPrev
+
+		if ok_len and ok_total and ok_pages and ok_hasNext and ok_noPrev and ok_last
+			printl("PASS: data-pagination-page")
+		else
+			printl("FAIL: data-pagination-page")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-pagination-page server ready")

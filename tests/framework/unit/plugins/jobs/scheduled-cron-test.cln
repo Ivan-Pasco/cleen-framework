@@ -1,0 +1,25 @@
+// Test: frame.jobs — schedule.cron registers a cron entry.
+
+plugins:
+	frame.jobs
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] jobs-scheduled-cron server ready")
+
+jobs:
+	NightlyReport:
+		job.succeed("{}")
+
+endpoints:
+	GET "/test":
+		string sid = schedule.cron("0 3 * * *", "NightlyReport", "{}")
+		boolean ok_sid = sid.length() > 0
+		boolean ok_cancel = schedule.cancel(sid)
+		if ok_sid and ok_cancel
+			printl("PASS: jobs-scheduled-cron")
+		else
+			printl("FAIL: jobs-scheduled-cron")
+		return json({ok: true})

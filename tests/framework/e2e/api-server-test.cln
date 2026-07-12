@@ -1,0 +1,44 @@
+// E2E: REST API server — JSON-only endpoints with error handling.
+
+server:
+	port: 3400
+	handle:
+		NotFound:
+			return json({error: "not_found"})
+		_:
+			return json({error: "internal"})
+
+data Widget:
+	integer id
+	string sku
+	integer qty
+
+start:
+	printl("[boot] e2e-api-server server ready")
+
+endpoints:
+	GET "/test":
+		integer id = Widget.insert_id:
+			sku = "W-001"
+			qty = 100
+
+		Widget w = Widget.first:
+			where:
+				id == id
+
+		Widget.update:
+			set:
+				qty = 90
+			where:
+				id == id
+
+		Widget updated = Widget.first:
+			where:
+				id == id
+
+		boolean ok = w.sku == "W-001" and updated.qty == 90
+		if ok
+			printl("PASS: e2e-api-server")
+		else
+			printl("FAIL: e2e-api-server")
+		return json({sku: w.sku, qty: updated.qty})

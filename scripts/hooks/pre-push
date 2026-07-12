@@ -1,0 +1,75 @@
+#!/bin/bash
+# Clean Framework pre-push hook.
+#
+# Time budget: <2min. This runs on every `git push`.
+# See system-documents/testing/TEST_STRATEGY.md §4 for the layer mapping.
+#
+# Layers fired:
+#   1. Full-tree placeholder guard
+#   2. Runtime smoke
+#   3. Bridge contract tests
+#   4. Fast plugin subset (auth + data, the two most-changed)
+#
+# The hook fails closed. Do not add `|| true`.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+fail() {
+    echo -e "${RED}[pre-push] $*${NC}" >&2
+    exit 1
+}
+info() { echo -e "${YELLOW}[pre-push]${NC} $*"; }
+ok()   { echo -e "${GREEN}[pre-push] $*${NC}"; }
+
+# --- Layer 1: full-tree placeholder guard ---
+info "Running placeholder guard on the full tree..."
+if ! python3 scripts/check-test-placeholders.py --quiet; then
+    fail "Placeholder patterns found. See system-documents/testing/TEST_STRATEGY.md §5."
+fi
+ok "Placeholder guard passed."
+
+# --- Layers 2–4: framework tests (best-effort) ---
+if ! command -v cln >/dev/null 2>&1; then
+    info "cln not found locally; skipping test runs (CI will cover them)."
+    ok "pre-push placeholder guard passed."
+    exit 0
+fi
+
+# runtime
+info "Running runtime smoke..."
+if ! ./scripts/run-framework-tests.sh runtime >/dev/null 2>&1; then
+    fail "Runtime smoke test failed."
+fi
+ok "Runtime smoke passed."
+
+# bridge contract
+if [ -d "tests/framework/unit/bridge" ]; then
+    info "Running bridge contract tests..."
+    if ! ./scripts/run-framework-tests.sh unit/bridge >/dev/null 2>&1; then
+        fail "Bridge contract tests failed."
+    fi
+    ok "Bridge contract tests passed."
+fi
+
+# fast plugin subset
+for plugin in auth data; do
+    dir="tests/framework/unit/plugins/$plugin"
+    if [ -d "$dir" ]; then
+        info "Running $plugin unit tests..."
+        if ! ./scripts/run-framework-tests.sh "unit/plugins/$plugin" >/dev/null 2>&1; then
+            fail "$plugin unit tests failed."
+        fi
+        ok "$plugin unit tests passed."
+    fi
+done
+
+ok "pre-push checks passed."
+exit 0

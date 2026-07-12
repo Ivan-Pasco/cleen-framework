@@ -1,0 +1,29 @@
+// Test: frame.locale — locale.formatNumber / formatCurrency / formatDate.
+
+plugins:
+	frame.locale
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] locale-format-helpers server ready")
+
+locale:
+	default: "en"
+	fallback: "en"
+
+endpoints:
+	GET "/test":
+		string n = locale.formatNumber(1234.5, "en", "{}")
+		string c = locale.formatCurrency(19.99, "USD", "en")
+		string d = locale.formatDate(1704067200, "short", "en")
+		boolean ok_n = n.length() > 0
+		boolean ok_c = c.length() > 0
+		boolean ok_d = d.length() > 0
+
+		if ok_n and ok_c and ok_d
+			printl("PASS: locale-format-helpers")
+		else
+			printl("FAIL: locale-format-helpers")
+		return json({n: n, c: c, d: d})

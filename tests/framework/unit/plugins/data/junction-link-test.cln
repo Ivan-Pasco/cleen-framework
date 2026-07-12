@@ -1,0 +1,45 @@
+// Test: frame.data — one-to-many junction via foreign key traversal.
+
+server:
+	port: 3400
+
+data Author:
+	integer id
+	string name
+
+data Book:
+	integer id
+	string title
+	integer authorId
+
+endpoints:
+	GET "/test":
+		Author.insert:
+			name = "Alice"
+		Author alice = Author.first:
+			where:
+				name == "Alice"
+
+		Book.insert:
+			title = "Book One"
+			authorId = alice.id
+		Book.insert:
+			title = "Book Two"
+			authorId = alice.id
+
+		list<Book> alicesBooks = Book.find:
+			where:
+				authorId == alice.id
+			order:
+				id asc
+		boolean ok_count = alicesBooks.length() == 2
+		boolean ok_titles = alicesBooks[0].title == "Book One" and alicesBooks[1].title == "Book Two"
+
+		if ok_count and ok_titles
+			printl("PASS: data-junction-link")
+		else
+			printl("FAIL: data-junction-link")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-junction-link server ready")

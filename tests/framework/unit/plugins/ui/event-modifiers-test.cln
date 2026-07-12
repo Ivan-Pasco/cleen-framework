@@ -1,0 +1,22 @@
+// Test: frame.ui — event modifier chains produce correct handler markup.
+// Verify that .prevent, .stop, .once appear in rendered attributes.
+
+plugins:
+	frame.ui
+
+start:
+	string form = renderForm()
+	boolean ok_prevent = form.contains("prevent")
+	boolean ok_click = form.contains("onclick") or form.contains("submit")
+
+	if ok_prevent and ok_click
+		printl("PASS: ui-event-modifiers")
+	else
+		printl("FAIL: ui-event-modifiers")
+
+functions:
+	string renderForm()
+		html:
+			<form onsubmit.prevent="save">
+				<button onclick.stop="cancel">Cancel</button>
+			</form>

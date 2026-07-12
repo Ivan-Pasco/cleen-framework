@@ -1,0 +1,41 @@
+// Test: frame.data — Model.cursor: cursor pagination shape.
+
+server:
+	port: 3400
+
+data Item:
+	integer id
+	string name
+
+endpoints:
+	GET "/test":
+		iterate i in 1 to 12
+			Item.insert:
+				name = "item-" + i.toString()
+
+		CursorResult<Item> first = Item.cursor:
+			cursor:
+				perPage 5
+				after ""
+				by "id"
+
+		boolean ok_first = first.items.length() == 5
+		boolean ok_next = first.nextCursor.length() > 0
+
+		CursorResult<Item> second = Item.cursor:
+			cursor:
+				perPage 5
+				after first.nextCursor
+				by "id"
+
+		boolean ok_second_len = second.items.length() == 5
+		boolean ok_hasPrev = second.hasPrev
+
+		if ok_first and ok_next and ok_second_len and ok_hasPrev
+			printl("PASS: data-pagination-cursor")
+		else
+			printl("FAIL: data-pagination-cursor")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-pagination-cursor server ready")

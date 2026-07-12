@@ -2,6 +2,13 @@
 
 Authoritative rules for every test file under `tests/`. Read before adding or modifying a test.
 
+The overall test architecture — layers, hook cadence, plugin coverage
+matrix, remediation plan — lives in
+[../system-documents/testing/TEST_STRATEGY.md](../system-documents/testing/TEST_STRATEGY.md).
+This document is the *rulebook*; the strategy doc is the *plan*. Both are
+enforced by `scripts/check-test-placeholders.py` and by the
+`test-policy` CI job.
+
 ## 1. Tests are `.cln` only
 
 No Rust tests, no JS tests, no shell-based assertions. The runner (`scripts/run-framework-tests.sh`) compiles `.cln` files and runs them inside `clean-server`. Any other test format is invisible to the harness.
@@ -51,6 +58,25 @@ A test passes when the runner sees a `PASS:` line and no `FAIL:` line in the sui
 - No `PASS:` line within the suite timeout
 
 A test that compiles but produces no output is **not** a pass — the runner used to flag it as "(executed)" success; this is no longer acceptable for new tests. Every suite must end with an explicit `PASS:` line.
+
+## 6a. Automated enforcement
+
+The `scripts/check-test-placeholders.py` guard blocks placeholder patterns
+before they land. It runs on:
+
+- `pre-commit` git hook — checks staged `.cln` test files.
+- `pre-push` git hook — checks the full test tree.
+- `test-policy.yml` CI job — on every push and PR.
+- `test.yml` CI job — as the fail-fast gate before compiling anything.
+
+Install the hooks with `./scripts/install-hooks.sh`. Do not skip them with
+`--no-verify`; that flag is reserved for genuine hook-infrastructure bugs
+and every use requires a commit-message note.
+
+If a test genuinely cannot be written until an upstream fix ships, add the
+file to [PENDING.md](./PENDING.md) with the upstream error code. See
+strategy doc §5 for the process. `PENDING.md` is not a substitute for
+writing the test; it is a licence to wait.
 
 ## 7. Bug discovery — report and stop
 

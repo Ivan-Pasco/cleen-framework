@@ -1,0 +1,41 @@
+// Integration: auth + data + server — full request lifecycle.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+roles:
+	user: ["notes.write"]
+
+data Note:
+	integer id
+	integer authorId
+	string title
+
+start:
+	printl("[boot] integration-full-stack server ready")
+
+endpoints:
+	GET "/test":
+		auth.setSession("{\"user_id\":1,\"role\":\"user\"}")
+		boolean ok_auth = auth.isAuthenticated() and auth.can("notes.write")
+
+		integer nid = Note.insert_id:
+			authorId = auth.userId()
+			title = "my note"
+		boolean ok_insert = nid > 0
+
+		Note n = Note.first:
+			where:
+				id == nid
+		boolean ok_read = n.title == "my note"
+
+		if ok_auth and ok_insert and ok_read
+			printl("PASS: integration-full-stack")
+		else
+			printl("FAIL: integration-full-stack")
+		return json({noteId: nid, title: n.title})

@@ -1,0 +1,21 @@
+// Test: bridge/http — verifies http bridge helpers.
+// Focuses on pure helpers (encodeUrl/decodeUrl/buildQuery) that don't
+// require network access. Roundtrip HTTP tests live in the integration
+// suite where a server is running.
+
+start:
+	// URL encoding roundtrip.
+	string encoded = http.encodeUrl("hello world & friends")
+	boolean ok_encode = encoded.length() > 0 and encoded.contains("%20")
+
+	string decoded = http.decodeUrl(encoded)
+	boolean ok_decode = decoded == "hello world & friends"
+
+	// Query string builder produces a non-empty string.
+	string query = http.buildQuery("{\"key\":\"value\",\"n\":\"1\"}")
+	boolean ok_query = query.length() > 0
+
+	if ok_encode and ok_decode and ok_query
+		printl("PASS: bridge-http")
+	else
+		printl("FAIL: bridge-http")

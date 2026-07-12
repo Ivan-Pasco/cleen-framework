@@ -139,10 +139,19 @@ compile_test() {
     fi
 }
 
-# Run a single compiled test using clean-server
+# Run a single compiled test using clean-server.
+#
+# Two shapes are supported (per system-documents/testing/TEST_STRATEGY.md §3):
+#   1. Boot-time test — emits PASS: from `start:` immediately. Runner just
+#      captures stdout.
+#   2. Server-shaped test — declares `endpoints:` and needs the runner to
+#      hit "/test" (canonical endpoint name) to drive request-context code.
+#      The runner detects this by grepping the source (passed as arg 3) for
+#      `GET "/test"` and, if found, curls it after boot.
 run_test() {
     local wasm_file="$1"
     local test_name="$2"
+    local source_file="${3:-}"
     local test_port=3334
 
     if [ "$VERBOSE" = true ]; then
@@ -172,6 +181,15 @@ run_test() {
 
     # Wait for server to initialize (it runs start() on load)
     sleep 1
+
+    # If the source declares an endpoint at "/test", drive it. This is how
+    # server-shaped tests (auth session, role guards, endpoint routing, ...)
+    # get their handler bodies executed.
+    if [ -n "$source_file" ] && [ -f "$source_file" ] && \
+       grep -qE '(GET|POST|PUT|PATCH|DELETE)[[:space:]]+"/test"' "$source_file"; then
+        curl -sS -o /dev/null "http://127.0.0.1:$test_port/test" 2>/dev/null || true
+        sleep 0.3
+    fi
 
     # Check if server is still running (it may have exited after start())
     local output=""
@@ -319,8 +337,8 @@ run_test_category() {
         # Compile the test
         local wasm_file
         if wasm_file=$(compile_test "$test_file"); then
-            # Run the test
-            if run_test "$wasm_file" "$test_name"; then
+            # Run the test — pass the source too so server-shaped tests get driven.
+            if run_test "$wasm_file" "$test_name" "$test_file"; then
                 PASSED_TESTS=$((PASSED_TESTS+1))
             else
                 FAILED_TESTS=$((FAILED_TESTS+1))

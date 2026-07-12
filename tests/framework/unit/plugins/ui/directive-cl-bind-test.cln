@@ -1,0 +1,18 @@
+// Test: frame.ui — cl-bind two-way binding directive.
+
+plugins:
+	frame.ui
+
+start:
+	string form = renderInput()
+	boolean ok_bind = form.contains("cl-bind") or form.contains("data-cl-bind")
+
+	if ok_bind
+		printl("PASS: ui-directive-cl-bind")
+	else
+		printl("FAIL: ui-directive-cl-bind")
+
+functions:
+	string renderInput()
+		html:
+			<input type="text" cl-bind="userName" />

@@ -1,0 +1,36 @@
+// Test: frame.data — raw db.query for cases the ORM cannot express.
+// Rule A (Quick Reference): raw SQL is justified for COUNT aliases,
+// aggregates, and multi-table joins. This test exercises COUNT.
+
+server:
+	port: 3400
+
+data Item:
+	integer id
+	string name
+	integer qty
+
+endpoints:
+	GET "/test":
+		Item.insert:
+			name = "apple"
+			qty = 10
+		Item.insert:
+			name = "banana"
+			qty = 5
+		Item.insert:
+			name = "cherry"
+			qty = 12
+
+		// Raw query — COUNT alias, ORM-inexpressible.
+		string result = db.query("SELECT COUNT(*) as cnt FROM items WHERE qty > 6", "")
+		boolean ok_shape = result.length() > 0
+
+		if ok_shape
+			printl("PASS: data-raw-query")
+		else
+			printl("FAIL: data-raw-query")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-raw-query server ready")

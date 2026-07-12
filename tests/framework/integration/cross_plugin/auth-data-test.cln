@@ -1,0 +1,39 @@
+// Integration: auth + data — protected endpoint reads model backed by DB.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+roles:
+	user: ["profile.view"]
+
+data Profile:
+	integer id
+	integer userId
+	string bio
+
+start:
+	printl("[boot] integration-auth-data server ready")
+
+endpoints:
+	GET "/test":
+		Profile.insert:
+			userId = 1
+			bio = "user 1 profile"
+		auth.setSession("{\"user_id\":1,\"role\":\"user\"}")
+		boolean ok_auth = auth.isAuthenticated() and auth.can("profile.view")
+
+		Profile p = Profile.first:
+			where:
+				userId == auth.userId()
+		boolean ok_read = p.bio == "user 1 profile"
+
+		if ok_auth and ok_read
+			printl("PASS: integration-auth-data")
+		else
+			printl("FAIL: integration-auth-data")
+		return json({bio: p.bio})

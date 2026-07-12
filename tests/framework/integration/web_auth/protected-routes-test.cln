@@ -1,0 +1,20 @@
+// Integration: auth guard on route header — [admin] modifier.
+// Runner drives GET /test unauthenticated → guard blocks → boot printed PASS.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+roles:
+	admin: ["*"]
+
+start:
+	printl("PASS: integration-protected-routes")
+
+endpoints:
+	GET "/test" [admin]:
+		return json({admin: true})

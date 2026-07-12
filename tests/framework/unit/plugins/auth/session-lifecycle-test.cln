@@ -1,0 +1,34 @@
+// Test: frame.auth — session lifecycle inside a request handler.
+// Server-shaped: runner hits /test after boot to drive the assertions.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+endpoints:
+	GET "/test":
+		// Fresh request — not authenticated.
+		boolean ok_before = not auth.isAuthenticated()
+
+		// Set a session; must succeed.
+		boolean ok_set = auth.setSession("{\"user_id\":42,\"role\":\"admin\"}")
+
+		// After setSession, request is authenticated in this handler scope.
+		boolean ok_after = auth.isAuthenticated()
+
+		// User ID + role reflect what was set.
+		boolean ok_uid = auth.userId() == 42
+		boolean ok_role = auth.userRole() == "admin"
+
+		if ok_before and ok_set and ok_after and ok_uid and ok_role
+			printl("PASS: auth-session-lifecycle")
+		else
+			printl("FAIL: auth-session-lifecycle")
+		return json({ok: true})
+
+start:
+	printl("[boot] auth-session-lifecycle server ready")

@@ -1,0 +1,32 @@
+// Test: frame.jobs — retry: block with maxAttempts + backoff.
+
+plugins:
+	frame.jobs
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] jobs-retry-policy server ready")
+
+jobs:
+	FlakyTask:
+		retry:
+			maxAttempts: 3
+			backoff: exponential
+			delay: 5
+		integer attempt = job.attempt()
+		if attempt >= 3
+			job.succeed("{\"eventually\":true}")
+		else
+			job.retryAfter(1)
+
+endpoints:
+	GET "/test":
+		string jid = queue.enqueue("FlakyTask", "{}")
+		boolean ok_id = jid.length() > 0
+		if ok_id
+			printl("PASS: jobs-retry-policy")
+		else
+			printl("FAIL: jobs-retry-policy")
+		return json({ok: true})

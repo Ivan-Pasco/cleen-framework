@@ -1,0 +1,30 @@
+// Test: frame.jobs — job.id, job.args, job.attempt available in handler.
+
+plugins:
+	frame.jobs
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] jobs-context server ready")
+
+jobs:
+	Ctx:
+		string jid = job.id()
+		string args = job.args()
+		integer attempt = job.attempt()
+		if jid.length() > 0 and args.length() >= 0 and attempt >= 1
+			job.succeed("{\"ok\":true}")
+		else
+			job.fail("context accessors returned invalid shape")
+
+endpoints:
+	GET "/test":
+		string enqueued = queue.enqueue("Ctx", "{\"data\":1}")
+		boolean ok_id = enqueued.length() > 0
+		if ok_id
+			printl("PASS: jobs-job-context")
+		else
+			printl("FAIL: jobs-job-context")
+		return json({ok: true})

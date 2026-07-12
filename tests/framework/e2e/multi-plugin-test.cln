@@ -1,0 +1,50 @@
+// E2E: multi-plugin composition — auth + data + jobs + server in one app.
+
+plugins:
+	frame.jobs
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+roles:
+	user: ["reminders.create"]
+
+data Reminder:
+	integer id
+	integer userId
+	string message
+	integer runAt
+
+start:
+	printl("[boot] e2e-multi-plugin server ready")
+
+jobs:
+	SendReminder:
+		string args = job.args()
+		if args.length() > 0
+			job.succeed("{\"sent\":true}")
+
+endpoints:
+	GET "/test":
+		auth.setSession("{\"user_id\":42,\"role\":\"user\"}")
+		boolean ok_auth = auth.isAuthenticated() and auth.can("reminders.create")
+
+		integer id = Reminder.insert_id:
+			userId = auth.userId()
+			message = "call mom"
+			runAt = time.now() + 3600
+		boolean ok_data = id > 0
+
+		string jid = queue.enqueue("SendReminder", "{\"id\":" + id.toString() + "}")
+		boolean ok_job = jid.length() > 0
+
+		if ok_auth and ok_data and ok_job
+			printl("PASS: e2e-multi-plugin")
+		else
+			printl("FAIL: e2e-multi-plugin")
+		return json({reminderId: id, jobId: jid})

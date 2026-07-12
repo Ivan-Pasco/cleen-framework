@@ -1,0 +1,32 @@
+// Test: frame.auth — password reset token: create, consume, single-use.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+endpoints:
+	GET "/test":
+		// Create reset token for user 42, 5-minute TTL.
+		string token = auth.createResetToken(42, 300)
+		boolean ok_create = token.length() > 0
+
+		// Consume returns the userId that created it.
+		integer uid = auth.consumeResetToken(token)
+		boolean ok_consume = uid == 42
+
+		// Second consume must fail (single-use).
+		integer replay = auth.consumeResetToken(token)
+		boolean ok_replay_rejected = replay == 0
+
+		if ok_create and ok_consume and ok_replay_rejected
+			printl("PASS: auth-reset-token")
+		else
+			printl("FAIL: auth-reset-token")
+		return json({ok: true})
+
+start:
+	printl("[boot] auth-reset-token server ready")

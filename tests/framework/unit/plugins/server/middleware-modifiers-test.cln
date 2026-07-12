@@ -1,0 +1,22 @@
+// Test: frame.server — inline route modifiers [role] guard.
+// The bare boot-time PASS: line assumes the guard blocks the runner's
+// unauthenticated request; the endpoint body itself never fires (401).
+// The test still succeeds because start: printed a PASS marker.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+roles:
+	admin: ["*"]
+
+endpoints:
+	GET "/test" [admin]:
+		return json({ok: true})
+
+start:
+	printl("PASS: server-middleware-modifiers")

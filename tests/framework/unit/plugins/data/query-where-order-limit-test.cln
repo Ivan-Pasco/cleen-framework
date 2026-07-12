@@ -1,0 +1,50 @@
+// Test: frame.data — find with where, order, limit clauses.
+
+server:
+	port: 3400
+
+data Post:
+	integer id
+	string title
+	integer views
+
+endpoints:
+	GET "/test":
+		Post.insert:
+			title = "A"
+			views = 5
+		Post.insert:
+			title = "B"
+			views = 100
+		Post.insert:
+			title = "C"
+			views = 50
+		Post.insert:
+			title = "D"
+			views = 3
+
+		// Top 2 hot posts (views > 10, ordered desc, limit 2).
+		list<Post> hot = Post.find:
+			where:
+				views > 10
+			order:
+				views desc
+			limit:
+				2
+		boolean ok_len = hot.length() == 2
+		boolean ok_order = hot[0].title == "B" and hot[1].title == "C"
+
+		// where alone: all posts with views >= 5.
+		list<Post> some = Post.find:
+			where:
+				views >= 5
+		boolean ok_some = some.length() == 3
+
+		if ok_len and ok_order and ok_some
+			printl("PASS: data-query-where-order-limit")
+		else
+			printl("FAIL: data-query-where-order-limit")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-query-where-order-limit server ready")

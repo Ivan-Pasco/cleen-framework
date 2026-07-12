@@ -1,13 +1,18 @@
 // Test: frame.ui/html_doctype_ssr
-// Verifies SSR001: <!DOCTYPE html> must not produce a spurious </!DOCTYPE> closing tag
-// Expected output:
-//   <!DOCTYPE html><html><head><title>Test</title></head><body><p>Hello</p></body></html>
+// Verifies SSR001: <!DOCTYPE html> must not produce a spurious </!DOCTYPE> tag.
 
 plugins:
 	frame.ui
 
 start:
-	print(buildPage())
+	string page = buildPage()
+	boolean ok_doctype = page.contains("<!DOCTYPE html>")
+	boolean ok_no_close = not page.contains("</!DOCTYPE>")
+	boolean ok_body = page.contains("Hello")
+	if ok_doctype and ok_no_close and ok_body
+		printl("PASS: ui-html-doctype-ssr")
+	else
+		printl("FAIL: ui-html-doctype-ssr")
 
 functions:
 	string buildPage()

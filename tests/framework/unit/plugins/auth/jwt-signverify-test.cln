@@ -1,0 +1,21 @@
+// Test: frame.auth — JWT sign / verify roundtrip.
+// Uses portable Layer 2 jwt.sign / jwt.verify (no request context needed).
+
+start:
+	string secret = "test-secret-for-jwt-signverify-32bytes"
+	string payload = "{\"sub\":\"user1\",\"role\":\"user\"}"
+
+	string token = jwt.sign(payload, secret, "HS256")
+	boolean ok_sign = token.length() > 0
+
+	string verified = jwt.verify(token, secret, "HS256")
+	boolean ok_verify = verified.length() > 0
+
+	// Tampered secret must yield empty payload.
+	string tampered = jwt.verify(token, "wrong-secret", "HS256")
+	boolean ok_reject = tampered.length() == 0
+
+	if ok_sign and ok_verify and ok_reject
+		printl("PASS: auth-jwt-signverify")
+	else
+		printl("FAIL: auth-jwt-signverify")

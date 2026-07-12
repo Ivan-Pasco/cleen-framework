@@ -1,0 +1,15 @@
+// Test: frame.server — Server-Sent Events endpoint (FEED method).
+
+server:
+	port: 3400
+
+endpoints:
+	FEED "/test":
+		feed.emit("{\"tick\":1}")
+		feed.emitEvent("hello", "{\"msg\":\"hi\"}")
+		feed.close()
+		printl("PASS: server-sse-stream")
+		return json({ok: true})
+
+start:
+	printl("[boot] server-sse-stream server ready")

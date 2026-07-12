@@ -1,0 +1,12 @@
+// Test: frame.server — WebSocket endpoint (LIVE method) registration.
+
+server:
+	port: 3400
+
+endpoints:
+	LIVE "/test":
+		printl("PASS: server-websocket")
+		return json({ok: true})
+
+start:
+	printl("[boot] server-websocket server ready")

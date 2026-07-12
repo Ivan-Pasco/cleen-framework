@@ -1,0 +1,31 @@
+// Test: frame.auth — CSRF token generate + validate + reject invalid.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+endpoints:
+	GET "/test":
+		auth.setSession("{\"user_id\":1,\"role\":\"user\"}")
+
+		string token = auth.csrf.generate()
+		boolean ok_generate = token.length() > 0
+
+		// Valid token returned by generate() must validate.
+		boolean ok_valid = auth.csrf.validate(token)
+
+		// Bogus token must not validate.
+		boolean ok_invalid = not auth.csrf.validate("obviously-not-a-real-csrf-token")
+
+		if ok_generate and ok_valid and ok_invalid
+			printl("PASS: auth-csrf-token")
+		else
+			printl("FAIL: auth-csrf-token")
+		return json({ok: true})
+
+start:
+	printl("[boot] auth-csrf-token server ready")

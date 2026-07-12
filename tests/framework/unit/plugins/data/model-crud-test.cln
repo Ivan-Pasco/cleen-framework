@@ -1,0 +1,52 @@
+// Test: frame.data — Model.insert / .first / .update / .delete roundtrip.
+// SQLite :memory: (test default). Server-shaped: runner drives /test.
+
+server:
+	port: 3400
+
+data User:
+	integer id
+	string email
+	string name
+
+endpoints:
+	GET "/test":
+		User.insert:
+			email = "alice@example.com"
+			name = "Alice"
+
+		integer count = User.count
+		boolean ok_count = count == 1
+
+		User user = User.first:
+			where:
+				email == "alice@example.com"
+		boolean ok_first = user.name == "Alice"
+
+		User.update:
+			set:
+				name = "Alicia"
+			where:
+				email == "alice@example.com"
+
+		User updated = User.first:
+			where:
+				email == "alice@example.com"
+		boolean ok_update = updated.name == "Alicia"
+
+		integer deleted = User.delete:
+			where:
+				email == "alice@example.com"
+		boolean ok_delete = deleted == 1
+
+		integer after = User.count
+		boolean ok_gone = after == 0
+
+		if ok_count and ok_first and ok_update and ok_delete and ok_gone
+			printl("PASS: data-model-crud")
+		else
+			printl("FAIL: data-model-crud")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-model-crud server ready")

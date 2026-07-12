@@ -1,0 +1,55 @@
+// E2E: blog app — auth roles, posts + comments with author linkage.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+
+roles:
+	author: ["posts.write"]
+	reader: ["posts.read"]
+
+data Post:
+	integer id
+	integer authorId
+	string title
+	string body
+
+data Comment:
+	integer id
+	integer postId
+	string author
+	string body
+
+start:
+	printl("[boot] e2e-blog-app server ready")
+
+endpoints:
+	GET "/test":
+		auth.setSession("{\"user_id\":1,\"role\":\"author\"}")
+		boolean ok_role = auth.can("posts.write")
+
+		integer pid = Post.insert_id:
+			authorId = auth.userId()
+			title = "hello world"
+			body = "first post"
+		boolean ok_post = pid > 0
+
+		Comment.insert:
+			postId = pid
+			author = "reader"
+			body = "great post!"
+
+		list<Comment> comments = Comment.find:
+			where:
+				postId == pid
+		boolean ok_comments = comments.length() == 1
+
+		if ok_role and ok_post and ok_comments
+			printl("PASS: e2e-blog-app")
+		else
+			printl("FAIL: e2e-blog-app")
+		return json({postId: pid, comments: comments.length()})

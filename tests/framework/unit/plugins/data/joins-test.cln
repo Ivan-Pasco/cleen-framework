@@ -1,0 +1,41 @@
+// Test: frame.data — multi-table joins (raw query — Rule A).
+
+server:
+	port: 3400
+
+data Category:
+	integer id
+	string name
+
+data Product:
+	integer id
+	string title
+	integer categoryId
+
+endpoints:
+	GET "/test":
+		Category.insert:
+			name = "electronics"
+		Category cat = Category.first:
+			where:
+				name == "electronics"
+
+		Product.insert:
+			title = "phone"
+			categoryId = cat.id
+		Product.insert:
+			title = "laptop"
+			categoryId = cat.id
+
+		// Multi-table INNER JOIN is ORM-inexpressible today — raw SQL is justified.
+		string joined = db.query("SELECT products.title, categories.name FROM products INNER JOIN categories ON products.category_id = categories.id", "")
+		boolean ok_shape = joined.length() > 0
+
+		if ok_shape
+			printl("PASS: data-joins")
+		else
+			printl("FAIL: data-joins")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-joins server ready")

@@ -1,0 +1,22 @@
+// Test: frame.ui — cl-stream directive emits SSE wiring.
+
+plugins:
+	frame.ui
+
+start:
+	string live_html = renderLiveFeed()
+	// The plugin rewrites cl-stream to data-cl-stream or keeps it — either
+	// is acceptable; both prove the directive was processed.
+	boolean ok_directive = live_html.contains("cl-stream") or live_html.contains("data-cl-stream")
+
+	if ok_directive
+		printl("PASS: ui-directive-cl-stream")
+	else
+		printl("FAIL: ui-directive-cl-stream")
+
+functions:
+	string renderLiveFeed()
+		html:
+			<div cl-stream="/events/updates">
+				<span>Loading...</span>
+			</div>

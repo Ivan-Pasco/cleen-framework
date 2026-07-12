@@ -1,0 +1,35 @@
+// Integration: jobs + email — enqueue a job that would send email on run.
+
+plugins:
+	frame.jobs
+
+server:
+	port: 3400
+	mail:
+		host: "localhost"
+		port: 2525
+		secure: false
+		username: ""
+		password: ""
+		from: "test@example.com"
+
+start:
+	printl("[boot] integration-jobs-email server ready")
+
+jobs:
+	SendWelcome:
+		string to = job.args()
+		if email.send(to, "Welcome", "<b>hi</b>", "hi")
+			job.succeed("{\"sent\":true}")
+		else
+			job.fail(email.lastError())
+
+endpoints:
+	GET "/test":
+		string jid = queue.enqueue("SendWelcome", "\"a@b.com\"")
+		boolean ok = jid.length() > 0
+		if ok
+			printl("PASS: integration-jobs-email")
+		else
+			printl("FAIL: integration-jobs-email")
+		return json({jobId: jid})

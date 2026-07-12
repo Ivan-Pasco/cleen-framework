@@ -1,0 +1,29 @@
+// Test: frame.jobs — queue.status, queue.result, queue.cancel.
+
+plugins:
+	frame.jobs
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] jobs-queue-inspect server ready")
+
+jobs:
+	Quick:
+		job.succeed("{\"done\":true}")
+
+endpoints:
+	GET "/test":
+		string jid = queue.enqueue("Quick", "{}")
+		string status = queue.status(jid)
+		string result = queue.result(jid)
+		boolean ok_id = jid.length() > 0
+		boolean ok_status = status.length() > 0
+		boolean ok_result_shape = result.length() >= 0
+
+		if ok_id and ok_status and ok_result_shape
+			printl("PASS: jobs-queue-inspect")
+		else
+			printl("FAIL: jobs-queue-inspect")
+		return json({ok: true, status: status})

@@ -1,0 +1,55 @@
+// Test: frame.data — Model.insert_id + Model.upsert.
+
+server:
+	port: 3400
+
+data User:
+	integer id
+	string email
+	string name
+
+endpoints:
+	GET "/test":
+		integer id1 = User.insert_id:
+			email = "alice@example.com"
+			name = "Alice"
+		boolean ok_id = id1 > 0
+
+		// Upsert on same email must UPDATE (not insert a new row).
+		User.upsert:
+			match:
+				email == "alice@example.com"
+			set:
+				name = "Alicia"
+			on_insert:
+				email = "alice@example.com"
+				name = "Alicia"
+
+		integer count = User.count
+		boolean ok_dedup = count == 1
+
+		User row = User.first:
+			where:
+				email == "alice@example.com"
+		boolean ok_updated = row.name == "Alicia"
+
+		// Upsert on new email must INSERT.
+		User.upsert:
+			match:
+				email == "bob@example.com"
+			set:
+				name = "Bob"
+			on_insert:
+				email = "bob@example.com"
+				name = "Bob"
+		integer countAfter = User.count
+		boolean ok_insert = countAfter == 2
+
+		if ok_id and ok_dedup and ok_updated and ok_insert
+			printl("PASS: data-upsert-insertid")
+		else
+			printl("FAIL: data-upsert-insertid")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-upsert-insertid server ready")

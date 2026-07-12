@@ -1,13 +1,16 @@
 // Test: frame.ui/html_class_attr
-// Verifies that html: blocks preserve class attribute names (FW001 regression)
-// Expected output:
-//   <div class="container"><h1 class="title">Hello</h1></div>
+// Verifies that html: blocks preserve class attribute names (FW001 regression).
 
 plugins:
 	frame.ui
 
 start:
-	print(renderCard("Hello"))
+	string out = renderCard("Hello")
+	boolean ok = out.contains("container") and out.contains("title") and out.contains("Hello")
+	if ok
+		printl("PASS: ui-html-class-attr")
+	else
+		printl("FAIL: ui-html-class-attr")
 
 functions:
 	string renderCard(string title)

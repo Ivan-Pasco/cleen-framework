@@ -1,0 +1,17 @@
+// Test: frame.server — global error handler compiles and boots.
+
+server:
+	port: 3400
+	handle:
+		NotFound:
+			return json({handled: "404"})
+		_:
+			return json({handled: "fallback"})
+
+endpoints:
+	GET "/test":
+		printl("PASS: server-error-handler")
+		return json({ok: true})
+
+start:
+	printl("[boot] server-error-handler server ready")

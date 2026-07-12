@@ -1,0 +1,19 @@
+// Test: frame.server — endpoint routing and req.* context.
+
+server:
+	port: 3400
+
+endpoints:
+	GET "/test":
+		string method = req.method()
+		string path = req.path()
+		boolean ok_method = method == "GET"
+		boolean ok_path = path == "/test"
+		if ok_method and ok_path
+			printl("PASS: server-endpoint-routing")
+		else
+			printl("FAIL: server-endpoint-routing")
+		return json({method: method, path: path})
+
+start:
+	printl("[boot] server-endpoint-routing server ready")

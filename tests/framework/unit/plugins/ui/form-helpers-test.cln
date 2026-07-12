@@ -1,0 +1,25 @@
+// Test: frame.ui — form rendering with html: block produces expected
+// form structure (input names, form action).
+
+plugins:
+	frame.ui
+
+start:
+	string login = renderLoginForm()
+	boolean ok_form = login.contains("form")
+	boolean ok_email = login.contains("email")
+	boolean ok_password = login.contains("password")
+
+	if ok_form and ok_email and ok_password
+		printl("PASS: ui-form-helpers")
+	else
+		printl("FAIL: ui-form-helpers")
+
+functions:
+	string renderLoginForm()
+		html:
+			<form action="/login" method="post">
+				<input name="email" type="email" />
+				<input name="password" type="password" />
+				<button type="submit">Sign in</button>
+			</form>

@@ -1,0 +1,19 @@
+// Test: bridge/time — verifies portable Layer 2 time bridge.
+// Runs inside clean-server against the real bridge.
+
+start:
+	// time.now() returns a positive Unix timestamp in seconds.
+	integer t1 = time.now()
+	boolean ok_positive = t1 > 0
+
+	// Monotonic: subsequent calls return the same value or later.
+	integer t2 = time.now()
+	boolean ok_monotonic = t2 >= t1
+
+	// Sanity: timestamps are in a plausible modern range (> 2020-01-01).
+	boolean ok_range = t1 > 1577836800
+
+	if ok_positive and ok_monotonic and ok_range
+		printl("PASS: bridge-time")
+	else
+		printl("FAIL: bridge-time")

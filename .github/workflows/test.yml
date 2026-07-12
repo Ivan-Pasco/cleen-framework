@@ -20,9 +20,27 @@ permissions:
   contents: read
 
 jobs:
+  # Fail-fast gate: block any PR/push containing placeholder tests before we
+  # spend runner minutes compiling anything. See
+  # system-documents/testing/TEST_STRATEGY.md §5.
+  placeholder-guard:
+    name: Test placeholder guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run placeholder guard
+        run: python3 scripts/check-test-placeholders.py
+
   runtime-tests:
     name: Runtime tests (real bridge)
     runs-on: ubuntu-latest
+    needs: placeholder-guard
 
     # Postgres service for frame.data integration tests (Phase 2+).
     # SQLite in-memory is the default for unit tests; Postgres covers parity.

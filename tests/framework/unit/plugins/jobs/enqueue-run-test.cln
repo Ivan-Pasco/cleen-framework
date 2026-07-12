@@ -1,0 +1,26 @@
+// Test: frame.jobs — queue.enqueue registers a job.
+
+plugins:
+	frame.jobs
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] jobs-enqueue-run server ready")
+
+jobs:
+	SendEmail:
+		string args = job.args()
+		if args.length() >= 0
+			job.succeed("{\"sent\":true}")
+
+endpoints:
+	GET "/test":
+		string jid = queue.enqueue("SendEmail", "{\"to\":\"a@b.com\"}")
+		boolean ok_id = jid.length() > 0
+		if ok_id
+			printl("PASS: jobs-enqueue-run")
+		else
+			printl("FAIL: jobs-enqueue-run")
+		return json({ok: true, jobId: jid})

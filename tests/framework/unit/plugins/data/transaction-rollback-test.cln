@@ -1,0 +1,53 @@
+// Test: frame.data — transaction: block commits atomically.
+// SQLite :memory: — no external DB required.
+
+server:
+	port: 3400
+
+data Account:
+	integer id
+	string owner
+	integer balance
+
+endpoints:
+	GET "/test":
+		Account.insert:
+			owner = "alice"
+			balance = 100
+		Account.insert:
+			owner = "bob"
+			balance = 50
+
+		// Commit path: transfer 30 from alice to bob within a transaction.
+		transaction:
+			Account.update:
+				set:
+					balance = 70
+				where:
+					owner == "alice"
+			Account.update:
+				set:
+					balance = 80
+				where:
+					owner == "bob"
+
+		Account alice = Account.first:
+			where:
+				owner == "alice"
+		Account bob = Account.first:
+			where:
+				owner == "bob"
+		boolean ok_alice = alice.balance == 70
+		boolean ok_bob = bob.balance == 80
+
+		// Invariant: total balance conserved by transaction.
+		boolean ok_total = alice.balance + bob.balance == 150
+
+		if ok_alice and ok_bob and ok_total
+			printl("PASS: data-transaction")
+		else
+			printl("FAIL: data-transaction")
+		return json({ok: true})
+
+start:
+	printl("[boot] data-transaction server ready")

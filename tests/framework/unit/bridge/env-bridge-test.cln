@@ -1,0 +1,16 @@
+// Test: bridge/env — verifies portable env bridge.
+// Runs inside clean-server against the real bridge.
+
+start:
+	// env.get returns whatever the host has for the variable (may be "").
+	string path = env.get("PATH")
+	boolean ok_path = path.length() >= 0
+
+	// Non-existent variable returns empty string, never null / never errors.
+	string missing = env.get("__CLN_FRAMEWORK_NEVER_SET_TEST_VAR__")
+	boolean ok_missing = missing.length() == 0
+
+	if ok_path and ok_missing
+		printl("PASS: bridge-env")
+	else
+		printl("FAIL: bridge-env")

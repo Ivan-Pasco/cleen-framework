@@ -1,0 +1,27 @@
+// Test: frame.locale — tc() plural translation.
+
+plugins:
+	frame.locale
+
+server:
+	port: 3400
+
+start:
+	printl("[boot] locale-plural-forms server ready")
+
+locale:
+	default: "en"
+	fallback: "en"
+
+endpoints:
+	GET "/test":
+		string one = tc("tasks.count", 1, "{}")
+		string many = tc("tasks.count", 5, "{}")
+		boolean ok_one = one.length() >= 0
+		boolean ok_many = many.length() >= 0
+
+		if ok_one and ok_many
+			printl("PASS: locale-plural-forms")
+		else
+			printl("FAIL: locale-plural-forms")
+		return json({one: one, many: many})

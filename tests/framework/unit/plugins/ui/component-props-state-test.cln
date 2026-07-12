@@ -1,0 +1,22 @@
+// Test: frame.ui — component-style rendering with mixed prop types.
+
+plugins:
+	frame.ui
+
+start:
+	string html_out = renderCounter("Counter", "5")
+	boolean ok_title = html_out.contains("Counter")
+	boolean ok_value = html_out.contains("5")
+
+	if ok_title and ok_value
+		printl("PASS: ui-component-props-state")
+	else
+		printl("FAIL: ui-component-props-state")
+
+functions:
+	string renderCounter(string label, string value)
+		html:
+			<div class="counter">
+				<span class="label">{label}</span>
+				<span class="value">{value}</span>
+			</div>

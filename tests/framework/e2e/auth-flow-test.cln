@@ -1,0 +1,53 @@
+// E2E: full auth flow — hash password, sign JWT, set session, log out.
+
+server:
+	port: 3400
+
+auth:
+	session:
+		cookie: "test.sid"
+		timeoutMinutes: 5
+	jwt:
+		secret: "e2e-test-jwt-secret-min-32-bytes-ok"
+		alg: "HS256"
+		ttlMinutes: 15
+
+data User:
+	integer id
+	string email
+	string passwordHash
+
+start:
+	printl("[boot] e2e-auth-flow server ready")
+
+endpoints:
+	GET "/test":
+		// Register
+		string hash = crypto.hashPassword("hunter2")
+		integer uid = User.insert_id:
+			email = "alice@example.com"
+			passwordHash = hash
+		boolean ok_register = uid > 0
+
+		// Login: fetch by email, verify password, set session.
+		User u = User.first:
+			where:
+				email == "alice@example.com"
+		boolean ok_verify = crypto.verifyPassword("hunter2", u.passwordHash)
+		auth.setSession("{\"user_id\":" + uid.toString() + ",\"role\":\"user\"}")
+		boolean ok_auth = auth.isAuthenticated() and auth.userId() == uid
+
+		// Sign a JWT for the same subject.
+		string token = auth.jwt.sign("{\"sub\":\"" + uid.toString() + "\"}")
+		string decoded = auth.jwt.verify(token)
+		boolean ok_jwt = token.length() > 0 and decoded.length() > 0
+
+		// Log out.
+		auth.clearSession()
+		boolean ok_logout = not auth.isAuthenticated()
+
+		if ok_register and ok_verify and ok_auth and ok_jwt and ok_logout
+			printl("PASS: e2e-auth-flow")
+		else
+			printl("FAIL: e2e-auth-flow")
+		return json({ok: true})

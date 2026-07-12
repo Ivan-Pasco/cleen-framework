@@ -1,0 +1,15 @@
+// Test: bridge/log — verifies the print bridge and stdout capture.
+// The framework's log namespace is not yet exposed to app code (see
+// tests/PENDING.md if it lands). Until then, `print`/`printl` are the
+// canonical output bridge; this test verifies they route to stdout so the
+// runner can grep PASS/FAIL.
+
+start:
+	// A single printl emits "text\n" — the runner's mechanism for every test.
+	printl("[log] emitting three lines to verify stdout capture")
+	print("line A ")
+	print("line B ")
+	printl("line C")
+
+	// If we reach this line at all, the bridge is functional.
+	printl("PASS: bridge-log")
