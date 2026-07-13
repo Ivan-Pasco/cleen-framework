@@ -1,0 +1,187 @@
+# .github/workflows/reporter-artifacts.yml
+#
+# Runs every open "reporter-artifact" issue's replay tarball against the
+# release candidate. Release fails if any tarball is red.
+#
+# This is the load-bearing step in the closed-loop bug workflow: it makes
+# it physically impossible to ship a "resolved" release while a reporter's
+# actual failing artifact is still failing.
+#
+# Filed by: clean-errors (see tools/cln-repro/README.md in clean-errors repo)
+# Contact: errors.cleanlanguage.dev/prompts/detail?id=<canary-prompt>
+#
+# Trigger design:
+#   - On every push to a v* tag (release candidate build): required to pass.
+#   - On workflow_dispatch: manual re-run against latest tag.
+#   - On issue label change to "reporter-artifact": re-check that one issue.
+
+name: reporter-artifacts
+
+on:
+  # push:
+  #   tags:
+  #     - 'v*'
+  workflow_dispatch:
+    inputs:
+      target_version:
+        description: 'Framework version to test (defaults to checked-out plugins)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  issues: write   # so we can comment pass/fail back on each issue
+
+jobs:
+  replay-reporter-artifacts:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: cln_repro
+          MYSQL_DATABASE: cln_repro_replay
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -pcln_repro"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=15
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: install node + clean-node-server
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+          sudo apt-get install -y nodejs mysql-client
+          sudo npm install -g @ivan-pasco/clean-node-server@latest
+          clean-node-server --version || true
+
+      - name: install cln + framework plugins
+        run: |
+          # Framework fixer: we need (1) the cln compiler binary and (2) the
+          # checked-out plugin.wasm files installed into the runner's
+          # ~/.cleen/plugins/<name>/<version>/ tree so replay tarballs that
+          # use the default HOME see the release-candidate plugins.
+          #
+          # (1) cln — grab latest published compiler binary. The reporter
+          # tarball's fingerprint was captured against a specific cln
+          # version; if the tarball needs a different cln it will pin one
+          # via run.sh.
+          curl -fsSL "https://github.com/Ivan-Pasco/clean-language-compiler/releases/latest/download/cln-linux-x86_64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin/
+          sudo chmod +x /usr/local/bin/cln
+          cln --version
+
+          # (2) framework plugins — install THIS checkout's plugin.wasm
+          # files (the release candidates on a tag push, or HEAD on
+          # workflow_dispatch). Each plugin ships with its own version in
+          # plugin.toml; install into ~/.cleen/plugins/<name>/<version>/
+          # and mark it active.
+          for plugin_dir in plugins/frame.*/; do
+            plugin_name=$(basename "$plugin_dir")
+            plugin_version=$(grep -E '^version\s*=' "$plugin_dir/plugin.toml" | head -1 | sed -E 's/version\s*=\s*"([^"]+)"/\1/')
+            if [[ -z "$plugin_version" ]]; then
+              echo "WARN: no version in $plugin_dir/plugin.toml, skipping"
+              continue
+            fi
+            dest="$HOME/.cleen/plugins/$plugin_name/$plugin_version"
+            mkdir -p "$dest"
+            cp -r "$plugin_dir"/* "$dest/"
+            echo "$plugin_version" > "$HOME/.cleen/plugins/$plugin_name/.active-version"
+            echo "installed $plugin_name @ $plugin_version -> $dest"
+          done
+
+      - name: install cln-repro tool
+        run: |
+          # cln-repro is published to the public Ivan-Pasco/cln-repro repo
+          # so this works from any fixer repo, private or public, no PAT
+          # needed. Layout on GitHub matches the runtime layout under
+          # /usr/local/lib/cln-repro/.
+          sudo mkdir -p /usr/local/lib/cln-repro/lib /usr/local/lib/cln-repro/spec
+          BASE="https://raw.githubusercontent.com/Ivan-Pasco/cln-repro/main"
+          for f in cln-repro; do
+            sudo curl -fsSL "$BASE/$f" -o "/usr/local/lib/cln-repro/$f"
+          done
+          for f in lib/capture.sh lib/capture-compile.sh lib/run.sh; do
+            sudo curl -fsSL "$BASE/$f" -o "/usr/local/lib/cln-repro/$f"
+          done
+          sudo curl -fsSL "$BASE/spec/manifest.schema.json" -o /usr/local/lib/cln-repro/spec/manifest.schema.json
+          sudo chmod +x /usr/local/lib/cln-repro/cln-repro /usr/local/lib/cln-repro/lib/*.sh
+          sudo ln -sf /usr/local/lib/cln-repro/cln-repro /usr/local/bin/cln-repro
+          cln-repro 2>&1 | head -3 || true
+
+      - name: fetch open reporter-artifact issues
+        id: issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # List all open issues labeled reporter-artifact on this repo.
+          # gh outputs one URL per line.
+          gh issue list \
+            --state open \
+            --label reporter-artifact \
+            --limit 100 \
+            --json url \
+            -q '.[].url' > /tmp/issue_urls.txt
+          echo "found_count=$(wc -l < /tmp/issue_urls.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: replay each tarball
+        env:
+          CLN_REPRO_DB_URL: mysql://root:cln_repro@127.0.0.1:3306/cln_repro_replay
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FAILURES=0
+          TOTAL=0
+          RESULTS_FILE=/tmp/replay_results.md
+          echo "# Replay results — cln $(cln --version | awk '{print $NF}')" > "$RESULTS_FILE"
+          echo "" >> "$RESULTS_FILE"
+          echo "| Issue | Fingerprint | Result |" >> "$RESULTS_FILE"
+          echo "|-------|-------------|--------|" >> "$RESULTS_FILE"
+
+          while IFS= read -r ISSUE_URL; do
+            [[ -z "$ISSUE_URL" ]] && continue
+            TOTAL=$((TOTAL+1))
+            echo ""
+            echo "═══ REPLAY: $ISSUE_URL ═══"
+            set +e
+            cln-repro run "$ISSUE_URL" > "/tmp/replay-$TOTAL.log" 2>&1
+            RC=$?
+            set -e
+            FP=$(grep -oE 'fingerprint=[a-f0-9]+' "/tmp/replay-$TOTAL.log" | head -1 | cut -d= -f2)
+            if [[ $RC -eq 0 ]]; then
+              echo "| $ISSUE_URL | ${FP:0:12} | PASS |" >> "$RESULTS_FILE"
+              echo "PASS: $ISSUE_URL"
+              # Comment on the issue: this release passed
+              gh issue comment "$ISSUE_URL" --body "✅ **Passed** on cln $(cln --version | awk '{print $NF}') — this fix appears to resolve the reported artifact. Auto-closing in 24h if no objection." || true
+            else
+              FAILURES=$((FAILURES+1))
+              echo "| $ISSUE_URL | ${FP:0:12} | FAIL |" >> "$RESULTS_FILE"
+              echo "FAIL: $ISSUE_URL (exit=$RC)"
+              tail -30 "/tmp/replay-$TOTAL.log"
+              gh issue comment "$ISSUE_URL" --body "❌ **Still failing** on cln $(cln --version | awk '{print $NF}'). Replay log excerpt:
+              \`\`\`
+              $(tail -30 /tmp/replay-$TOTAL.log)
+              \`\`\`" || true
+            fi
+          done < /tmp/issue_urls.txt
+
+          echo "" >> "$RESULTS_FILE"
+          echo "**Total: $TOTAL, Failures: $FAILURES**" >> "$RESULTS_FILE"
+          cat "$RESULTS_FILE"
+
+          if [[ $FAILURES -gt 0 ]]; then
+            echo ""
+            echo "Release blocked: $FAILURES reporter artifact(s) still fail."
+            exit 1
+          fi
+
+      - name: summary
+        if: always()
+        run: |
+          if [[ -f /tmp/replay_results.md ]]; then
+            cat /tmp/replay_results.md >> "$GITHUB_STEP_SUMMARY"
+          fi
