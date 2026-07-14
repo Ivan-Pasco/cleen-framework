@@ -227,6 +227,17 @@ functions = [
   # Response - File Download (server-only; sets Content-Disposition on the active response)
   { name = "_res_download", params = ["string"], returns = "void", description = "Set Content-Disposition: attachment header for file download; argument is the filename sent to the client", expand_strings = true, hosts = ["server"] },
 
+  # Filesystem - Binary Writes (server-only; requires disk access)
+  # Contract mirrors foundation/platform-architecture/function-registry.toml (_fs_write_bytes).
+  # Consumes bytes in the [4-byte LE length][bytes] layout produced by _req_body_bytes,
+  # so a tarball upload flows: _req_body_bytes → crypto.sha256 → _fs_write_bytes, no UTF-8 detour.
+  # Host implementations ship in clean-server and clean-node-server — this declaration only
+  # tells the compiler the symbol exists so Clean code can import it. First param is the path
+  # (expand_strings splits string → ptr,len); second param is the raw byte-buffer pointer.
+  # Returns 0 on success; non-zero error code (1=perm, 2=disk full, 3=invalid path, 4=parent
+  # not directory, 5=I/O error). Additive to file_write (UTF-8 string surface).
+  { name = "_fs_write_bytes", params = ["string", "ptr"], returns = "integer", description = "Write raw bytes ([4-byte LE length][bytes] layout, e.g. from _req_body_bytes) to path. Atomic (tmp+rename), overwrites existing, mkdir -p parent, path allowlist enforced by host. Returns 0 on success or a non-zero error code.", expand_strings = true, hosts = ["server"] },
+
   # Environment Variables (server-only; browser has no env). Declared here
   # because the env.get language function is owned by frame.server (see
   # [language] below) and frame.server/src/main.cln expands env.get(...)
