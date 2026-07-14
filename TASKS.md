@@ -16,42 +16,22 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 ## Pending — In Scope (clean-framework)
 
-### Cross-Component — Compiler v0.32.0 Release Coordination 🟡 MEDIUM-HIGH
-
-- ⬜ **Raise frame.mcp pin to "0.32.0" once compiler v0.32.0 ships** — `plugins/frame.mcp/plugin.toml` currently pins `min_compiler_version = "0.30.357"` as a temporary fix. The honest target is `0.32.0` per the version-track correction documented in `../foundation/management/cross-component-prompts/compiler-v0.32-version-track-correction.md`. Required steps once compiler ships v0.32.0:
-  1. Lift `min_compiler_version` in `frame.mcp/plugin.toml` from `"0.30.357"` to `"0.32.0"`.
-  2. Audit the other plugins (`frame.client`, `frame.ui`, `frame.canvas`) — at least 10 framework patterns use `events:` blocks (introduced post-v0.31.0). Consider declaring `min_compiler_version = "0.32.0"` on those plugins too so consumers get a clear error if they downgrade.
-  3. Rebuild all plugins against `cln 0.32.0` via the existing build loop.
-  4. Bump framework `Cargo.toml` from `2.12.69` to `2.13.0` (minor — new compiler-feature dependency).
-  5. Run COMITA. Tag should be `v2.13.0`, not a patch.
-
 ### Browser Host Bridge Parity 🟡 MEDIUM-HIGH
 
 - ✅ ~~**Layer 2 canary runner missing bridges: math_*, _time_*, http_*, _crypto_*, _json_***~~ — Fixed 2026-07-08: added pure-JS SHA-256/512 + HMAC helpers (adapted from frame.canvas loader), plus wired 17 `math_*` transcendentals, 3 `_time_*`, 5 `http_*` URL/response helpers, 7 `_crypto_*` functions, and 3 `_json_*` bridges directly in `plugins/frame.ui/runtime/loader.js`. Verified locally against the compiler canary corpus at v0.33.22: `console`, `crypto`, `math`, `storage`, `ui` all pass; `http_client` passes when the compiler-side setUserAgent registration lands (currently blocks it with COD000 in the compiler tree).
 
 - ✅ ~~**api.cln canary red — frame.client bridge integration broken**~~ — Fixed 2026-07-08: `frame.client/runtime/bridge.js` expected `__cleanRuntime.registerEnv()` / `writeString()` / `readString()` / `getInstance()` which frame.ui's loader never provided (silent no-op). Added a pre-instantiate `__cleanRuntime` skeleton in `plugins/frame.ui/runtime/loader.js` (v2.4.0) that exposes those methods and merges companion-registered env imports before `WebAssembly.instantiate`. Canary runner now loads `client-bridge.js` alongside `loader.js` for `api.*` canaries.
 
-- ⬜ **Layer 2 canary runner is still red for 2 canaries — both blocked upstream compiler bugs** —
-  - `time.cln` — blocked by compiler bug **#97d07985b422** (i64 → string OOM at values ≥ 10^9; `_time_now` returns wall-clock unix seconds which triggers it).
-  - `json.cln` — blocked by compiler bug **#a89cf930e6e3** (numeric field in `json.get(...)` traps; string fields work).
-
 - ⬜ **canvas.cln canary skipped in runner — frame.canvas loader has two independent gaps** — (1) `frame.canvas/runtime/loader.js` parses the compiler's `clean:memory` custom section as ULEB128 ints, but the compiler now emits JSON (`{"initial_pages":256,"max_pages":1024,"tier":"canvas"}`). Parser reads `123` / `34` from the first two bytes → invalid Memory limits. (2) frame.canvas's loader doesn't declare a `memory_runtime` imports module, so canary WASMs that import `mem_alloc` etc fail at instantiate. Fixing both would let canvas.cln land through frame.canvas's own loader. Currently the runner filters it out via `SKIP_WITH_REASON` in `plugins/frame.ui/scripts/run_canaries.mjs`.
 
-- ⬜ **60 missing stdlib bridge functions in browser host JS** — `check_host_parity.py --host browser --strict` reports 60 functions declared `hosts = ["all"]` in `foundation/platform-architecture/function-registry.toml` that no browser-side JS runtime implements. Three runtime files share the gap: `plugins/frame.canvas/runtime/loader.js`, `plugins/frame.ui/runtime/loader.js`, `plugins/frame.client/runtime/bridge.js`. Families:
-  - `array_*` (13): push, pop, get, set, slice, map, filter, find, reduce, sort, reverse, concat, contains
-  - `list.*` (10): add, allocate, clear, contains, get, isEmpty, push, remove, set
-  - `math_*` (16): abs_i32, max_i32, min_i32, fmod, hypot, expm1, log1p, is_finite, is_infinite, is_nan, ln10, ln2, log10e, log2e, sqrt1_2, sqrt2, log
-  - `string_*` (17): length, contains, equals, equals_ignore_case, starts_with, ends_with, char_at, char_code_at, from_char_code, index_of, last_index_of, join, pad_start, pad_end, replace_first, reverse, is_empty, is_blank
-  - Misc (4): float_to_string_fixed, http_get_response_header, print_debug, print_error
-
-  Pragmatic fix: add all 60 to `frame.canvas/runtime/loader.js` in `createStdlibImports()`. Most are one-liners (`array_push: (h, v) => …`, `math_log: Math.log`).
+- ✅ ~~**60 missing stdlib bridge functions in browser host JS**~~ — Fixed 2026-07-14: `check_host_parity.py --host browser --strict` now reports 0 missing across all three browser runtimes.
 
 - ⬜ **(Follow-up)** Extract a shared `clean-stdlib.js` consumed by all three browser runtimes — eliminates the 3-way duplication of the existing 87 stdlib functions in `frame.canvas/runtime/loader.js`. Larger refactor; do only when one of the three runtimes diverges in a way that bites.
 
 ### Test Infrastructure 🟡 MEDIUM-HIGH
 
 - ✅ ~~**Plugin tests cannot resolve plugin functions**~~ — Fixed 2026-06-04: `scripts/test-plugins.sh` now concatenates `src/main.cln` + a generated `assert()` helper + the test's `functions:` block before invoking `cln check`. Compilation-pass parity is the guard; 3/4 plugin test suites (auth, data, server) compile cleanly.
-- ⬜ **`cln test` runtime stub missing** — `cln test` fails at load time with `unknown import: env::_state_reset_all`. The runner doesn't provide host stubs for plugin-emitted imports. Until this is resolved upstream, `test-plugins.sh` uses `cln check` (compilation only, not execution). Cross-component: clean-language-compiler or clean-server needs to ship a runner with these stubs.
+- 🔀 **`cln test` runtime stub missing** — moved to "Out of Scope Here" (compiler/clean-server owns the runner + host stubs).
 - ✅ ~~**frame.ui missing `validate_block`**~~ — Fixed 2026-06-04. `plugins/frame.ui/src/main.cln` now exports `validate_block` covering `component` (name + client mode + render()), `page` (path), and `layout` (name) per `05_frame_ui.md`. Declared in `plugins/frame.ui/plugin.toml` under `[exports]` as `validate = "validate_block"`.
 
 ### Plugin DSL Gaps
@@ -74,7 +54,7 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 ### Frame UI — Code Quality 🟢 LOW
 
-- ⬜ **Re-enable trim on screen block names** — `plugins/frame.ui/src/main.cln:62-64` assigns `screen_name = temp_name` instead of `temp_name.trim()` because of a historical compiler issue. Verify whether compiler 0.30.229+ handles `.trim()` correctly on the substring result, then remove the workaround. Needs a runnable test before changing.
+- ✅ ~~**Re-enable trim on screen block names**~~ — Fixed by frame.ui rewrite: `screen_name = temp_name` workaround no longer exists in `plugins/frame.ui/src/main.cln`. Current code uses `.trim()` freely across 10+ call sites; the compiler has long since handled it correctly.
 - ⬜ **Long functions in `src/main.cln`** — four functions exceed 380 lines and should be split into named helpers without behavior change. Approx start lines: 676 (~437 lines), 1230 (~463), 3164 (~617), 3319 (384, `render_ui_widget`). Blocked on runnable plugin tests so behavior parity can be verified.
 
 ### Frame Auth — Patterns 🟢 LOW
@@ -94,25 +74,21 @@ This file tracks **pending** work for the Frame Framework. Completed work is sum
 
 ### Phase 9.3: Testing Infrastructure 🟡 MEDIUM-HIGH
 
-- ⬜ Implement `tests:` block parser in Clean Language *(cross-component: compiler)*
-- ⬜ Implement `cleen test` command *(cross-component: clean-manager)*
 - ⬜ Code coverage reporting
 - ⬜ Coverage thresholds enforcement
+- 🔀 `tests:` block parser, `cleen test` command — see "Out of Scope Here" (compiler / clean-manager).
 
 ### Phase 11: Performance & Optimization 🟢 LOW
 
-- ⬜ Incremental compilation *(cross-component: compiler)*
-- ⬜ Dead code elimination *(cross-component: compiler)*
-- ⬜ WASM SIMD support *(cross-component: compiler)*
-- ⬜ Connection pooling optimizations *[runtime]*
-- ⬜ Response compression *[runtime]*
 - ⬜ Code splitting
 - ⬜ Lazy loading for components
+- 🔀 Incremental compilation, dead code elimination, WASM SIMD — see "Out of Scope Here" (compiler).
+- 🔀 Connection pooling, response compression — see "Out of Scope Here" (clean-server runtime).
 
 ### Phase 12: Developer Experience 🟡 MEDIUM-HIGH
 
-- ⬜ Implement REPL *(cross-component: clean-manager or compiler)*
 - ⬜ Hot module replacement (HMR) *[runtime + plugin]*
+- 🔀 REPL — see "Out of Scope Here" (clean-manager or compiler).
 
 ---
 
@@ -188,15 +164,20 @@ These items affect Frame but are owned by other repos. Listed for awareness only
 
 ### 🔀 clean-manager / cleen
 - `cleen new`, `serve`, `build`, `db:*`, `api:*` commands
-- `cleen test` command
+- `cleen test` command (blocked on `cln test` runtime stub in compiler/clean-server)
 - REPL
 
 ### 🔀 clean-language-compiler
 - `tests:` block parser
+- `cln test` runtime stub (`env::_state_reset_all` and other plugin-emitted imports)
 - Incremental compilation, dead-code elimination, WASM SIMD
+- Raise `frame.mcp` min_compiler_version to `0.32.0` once compiler v0.32.0 ships (currently pinned at `0.30.357`). See `../foundation/management/cross-component-prompts/compiler-v0.32-version-track-correction.md`.
+- Framework-side follow-up when v0.32.0 lands: audit `frame.client`/`frame.ui`/`frame.canvas` for `events:` block usage, rebuild all plugins, bump framework to `2.13.0` (minor).
 - **Compiler bug**: nested if-else generates `unreachable` (workaround: invert + separate `if`)
 - **Compiler bug**: `!=` operator in plugin output (workaround: `if not (a == b)` — frame.server:406)
-- **Compiler bug**: `trim()` reliability (workaround: `strip_spaces()` in frame.ui:108-128)
+- **Compiler bug**: `trim()` reliability (historical — workaround removed in frame.ui rewrite; `.trim()` used freely today)
+- **Compiler open bug (dashboard `c16de1e0e844`, SEM007)** — `param()` unqualified in `endpoints server:` handler bodies raises "Function not found" instead of suggesting `req.param`. Framework triage concluded the fix lives in the compiler's SEM007 diagnostic builder (learn to suggest closest match from loaded plugin exports). Framework-side entry `3125b186008c` closed pointing at this.
+- **Compiler blocked canaries** — `time.cln` and `json.cln` canaries in `plugins/frame.ui/scripts/run_canaries.mjs` are red on upstream compiler behavior (i64→string OOM; numeric field in `json.get` traps). Historical local fingerprint labels: `#97d07985b422`, `#a89cf930e6e3`. Not currently on the compiler dashboard — needs a fresh reproduction against `cln 0.33.65` before filing.
 
 ---
 
@@ -222,6 +203,7 @@ These items affect Frame but are owned by other repos. Listed for awareness only
 - **Method call as statement** — fixed in compiler v0.30.98 (parser cursor restore in `statements.rs`)
 - **HTML attribute quoting in frame.ui** — fixed 2026-04-03 (single-quoted HTML attrs, `&quot;` for JSON, runtime `string.fromCharCode(34)` for double quotes)
 - **Plugin test file syntax** — fixed 2026-06-04 (functions wrapped in `functions:` block, `string`/`void` type declarations added per spec)
+- **MISSING-BRIDGE-FS-WRITE (dashboard `b5d65e655faa`)** — fixed in frame.server 2.8.6 / framework v2.12.164 (2026-07-14). Declares `_req_body_bytes` (`returns = "ptr"`) and `_fs_write_bytes` (`returns = "i32"`) in `[bridge].functions`, adds `req.body_bytes` and `fs.write_bytes` to `[language].functions` per `foundation/spec/type-system.md §9b` (opaque handle convention). v2.8.5 shipped with the wrong return types (`integer` instead of `ptr`/`i32`) and failed PLUGIN-REGISTRY-DRIFT at plugin-load — 2.8.6 corrects the signatures. Bridge implementations already shipped in clean-server + clean-node-server; framework release closes the loop for `cleen frame install latest`.
 
 ---
 
@@ -239,8 +221,8 @@ These items affect Frame but are owned by other repos. Listed for awareness only
 | frame.mcp     | ✅ Complete | MCP tool/resource handler generation |
 | frame.client  | ✅ Complete | client-side api / live / feed |
 
-All 9 plugins build cleanly with compiler 0.30.229.
+All 9 plugins build cleanly with compiler 0.33.65+.
 
 ---
 
-**Last Updated**: 2026-06-04
+**Last Updated**: 2026-07-14

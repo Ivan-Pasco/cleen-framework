@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.server"
-version = "2.8.5"
-description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.5: opaque-byte-handle bridges — declares _req_body_bytes ([bridge]) and adds req.body_bytes / fs.write_bytes to [language].functions per foundation/spec/type-system.md §9b. Enables binary tarball upload flow (req.body_bytes → crypto.sha256 → fs.write_bytes) with no UTF-8 detour. Bridge implementations already shipped in clean-server (bridge.rs, host-bridge/wasm_linker/file_io.rs) and clean-node-server. Framework release closes the loop so downstream `cleen frame install latest` picks up the declarations. v2.8.4: _json_get flipped to any-in/any-out (params = [\"any\", \"string\"], returns = \"any\", expand_strings = false) so it accepts already-boxed values (e.g. SQL results) without double-boxing. Requires compiler 0.33.54+ (any-bridge handling + resolver guard). Coordinates with compiler prompt 172cec6f / 4de6f0df. v2.8.3: plugin.wasm rebuild against 2.8.2 i64 signatures using cln 0.33.27 — pairs with WS-SEND-I32-VS-I64-001 (e6e66d65) fix. Compiler team baselines registry edit against this artifact. v2.8.2: WS-SEND-I32-VS-I64-001 coordination (e6e66d65) — five _ws_* bridge entries and their live.* language aliases changed client_id from `integer` to `i64` to match clean-server's i64 end-to-end handling. Coordinated with compiler prompt cceb276d and server prompt fa7765e2. Compiler registry edit lands after this plugin ships. Do not touch _ws_broadcast / _ws_room_broadcast — they take room name (string), not client_id. — v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
+version = "2.8.6"
+description = "Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards. v2.8.6: byte-handle bridge signature parity — _req_body_bytes returns=\"ptr\" (was incorrectly declared as \"integer\" in 2.8.5) and _fs_write_bytes returns=\"i32\" (was incorrectly declared as \"integer\" in 2.8.5). Both now match foundation/platform-architecture/function-registry.toml exactly. v2.8.5 shipped with these signature mismatches and failed at plugin-load with PLUGIN-REGISTRY-DRIFT — any user program calling req.body_bytes/fs.write_bytes would have errored. This release repairs that. Language surfaces (req.body_bytes, fs.write_bytes) remain \"integer\" at the user layer per spec/type-system.md §9b — the compiler applies the ptr/i32→integer coercion at the alias site. v2.8.5: opaque-byte-handle bridges — declares _req_body_bytes ([bridge]) and adds req.body_bytes / fs.write_bytes to [language].functions per foundation/spec/type-system.md §9b. Enables binary tarball upload flow (req.body_bytes → crypto.sha256 → fs.write_bytes) with no UTF-8 detour. Bridge implementations already shipped in clean-server (bridge.rs, host-bridge/wasm_linker/file_io.rs) and clean-node-server. Framework release closes the loop so downstream `cleen frame install latest` picks up the declarations. v2.8.4: _json_get flipped to any-in/any-out (params = [\"any\", \"string\"], returns = \"any\", expand_strings = false) so it accepts already-boxed values (e.g. SQL results) without double-boxing. Requires compiler 0.33.54+ (any-bridge handling + resolver guard). Coordinates with compiler prompt 172cec6f / 4de6f0df. v2.8.3: plugin.wasm rebuild against 2.8.2 i64 signatures using cln 0.33.27 — pairs with WS-SEND-I32-VS-I64-001 (e6e66d65) fix. Compiler team baselines registry edit against this artifact. v2.8.2: WS-SEND-I32-VS-I64-001 coordination (e6e66d65) — five _ws_* bridge entries and their live.* language aliases changed client_id from `integer` to `i64` to match clean-server's i64 end-to-end handling. Coordinated with compiler prompt cceb276d and server prompt fa7765e2. Compiler registry edit lands after this plugin ships. Do not touch _ws_broadcast / _ws_room_broadcast — they take room name (string), not client_id. — v2.8.0: Plugin Contracts v3 typed-emission migration — atomic switch from v1 string emission to v3 typed AST emission. Closes 5e144689da64, 835d361c9515, cdb735a9453a, 7f8d244b7a46. See foundation/spec/plugins/contracts/typed-emission.md."
 author = "Clean Language Team"
 license = "MIT"
 
@@ -127,12 +127,13 @@ functions = [
 
   # Request Context - Body (server-only)
   { name = "_req_body", params = [], returns = "string", description = "Get request body as string", hosts = ["server"] },
-  # Opaque byte handle per spec/type-system.md §9b. Returns integer (pointer
-  # to [4-byte LE length][bytes] buffer) — user code treats it as opaque and
-  # forwards it to a byte-consuming bridge (e.g. _fs_write_bytes). Additive
-  # to _req_body (UTF-8 string surface). Both clean-server (bridge.rs) and
-  # clean-node-server (src/bridge/) ship implementations.
-  { name = "_req_body_bytes", params = [], returns = "integer", description = "Get raw request body as opaque byte handle. Returns pointer to length-prefixed byte buffer ([4-byte LE length][bytes]); pass verbatim to bridges that accept a ptr/integer handle. Used for binary uploads (gzip tarballs, octet-stream) that must not be UTF-8 decoded.", hosts = ["server"] },
+  # Opaque byte handle per spec/type-system.md §9b. Bridge returns raw `ptr`
+  # (matches foundation/platform-architecture/function-registry.toml — required for
+  # PLUGIN-REGISTRY-DRIFT parity). The req.body_bytes language surface below presents
+  # it as `integer` at the user layer; the compiler applies the ptr→integer coercion
+  # at the alias site. Additive to _req_body (UTF-8 string surface). Both clean-server
+  # (bridge.rs) and clean-node-server (src/bridge/) ship implementations.
+  { name = "_req_body_bytes", params = [], returns = "ptr", description = "Get raw request body as opaque byte handle. Returns pointer to length-prefixed byte buffer ([4-byte LE length][bytes]); pass verbatim to bridges that accept a ptr handle. Used for binary uploads (gzip tarballs, octet-stream) that must not be UTF-8 decoded.", hosts = ["server"] },
   { name = "_req_body_field", params = ["string"], returns = "string", description = "Get form field by name from request body", expand_strings = true, hosts = ["server"] },
   { name = "_req_form", params = [], returns = "string", description = "Get form data as JSON object", hosts = ["server"] },
 
@@ -242,7 +243,12 @@ functions = [
   # (expand_strings splits string → ptr,len); second param is the raw byte-buffer pointer.
   # Returns 0 on success; non-zero error code (1=perm, 2=disk full, 3=invalid path, 4=parent
   # not directory, 5=I/O error). Additive to file_write (UTF-8 string surface).
-  { name = "_fs_write_bytes", params = ["string", "ptr"], returns = "integer", description = "Write raw bytes ([4-byte LE length][bytes] layout, e.g. from _req_body_bytes) to path. Atomic (tmp+rename), overwrites existing, mkdir -p parent, path allowlist enforced by host. Returns 0 on success or a non-zero error code.", expand_strings = true, hosts = ["server"] },
+  # Bridge returns i32 (matches foundation/platform-architecture/function-registry.toml —
+  # required for PLUGIN-REGISTRY-DRIFT parity, and matches the spec/host_conformance
+  # correction shipped in compiler v0.33.66). The fs.write_bytes language surface below
+  # presents it as `integer` at the user layer; the compiler applies the i32→integer
+  # coercion at the alias site.
+  { name = "_fs_write_bytes", params = ["string", "ptr"], returns = "i32", description = "Write raw bytes ([4-byte LE length][bytes] layout, e.g. from _req_body_bytes) to path. Atomic (tmp+rename), overwrites existing, mkdir -p parent, path allowlist enforced by host. Returns 0 on success or a non-zero error code.", expand_strings = true, hosts = ["server"] },
 
   # Environment Variables (server-only; browser has no env). Declared here
   # because the env.get language function is owned by frame.server (see
@@ -492,4 +498,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.33.64"
+built_with_compiler = "0.33.66"
