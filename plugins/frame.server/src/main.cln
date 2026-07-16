@@ -906,14 +906,21 @@ functions:
 			if eh_err != 0
 				return 1
 
-		// Dev-mode capture — auto-inject GET /_debug/capture. Emits the
-		// selector helpers, the handler function, and the route registration.
-		// Both the framework endpoint and the underlying _dev_snapshot() bridge
-		// gate on CLEAN_DEV=1 (belt-and-braces per SERVER_EXTENSIONS.md).
-		// Canonical source: plugins/frame.server/dev/{pass_criteria,capture}.cln
-		integer dc_err = emit_dev_capture(ctx)
-		if dc_err != 0
-			return dc_err
+		// Dev-mode capture — auto-inject GET /_debug/capture is DEFERRED.
+		// The emitted handler calls _dev_snapshot(), which is defined in
+		// foundation/platform-architecture/function-registry.toml but is NOT
+		// yet in the embedded registry of shipped cln 0.33.70. Emitting the
+		// handler produces user-app codegen error "function _dev_snapshot not
+		// found in function_map". Once a compiler release ships that includes
+		// _dev_snapshot in the embedded registry (0.33.71+), re-enable the
+		// call below and bump plugin.toml [compatibility].min_compiler_version.
+		// The emit_dev_capture function, its dc_body_* helpers, and the
+		// canonical dev/pass_criteria.cln + dev/capture.cln sources are kept
+		// in-tree — only this call site is commented out.
+		//
+		// integer dc_err = emit_dev_capture(ctx)
+		// if dc_err != 0
+		// 	return dc_err
 
 		// _http_serve_static when static: present
 		if static_dir.length() > 0
