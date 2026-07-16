@@ -1,0 +1,89 @@
+// frame.server / dev / pass_criteria.cln
+//
+// Canonical source of the pass_criteria selector helpers used by the
+// GET /_debug/capture handler. Mirrored inside plugins/frame.server/src/main.cln
+// (expand_server_typed emits this text via _emit_stmt_from_source when the
+// dev-capture route is auto-injected). Any edit here MUST be reflected in
+// main.cln's embedded copy.
+//
+// The rules encode SERVER_EXTENSIONS.md §pass_criteria selection rules:
+//   1. wrong_output_hint wins (authoritative caller signal)
+//   2. trap marker in logs → runtime_crash
+//   3. most recent request_log entry with status >= 500 → runtime_crash
+//   4. otherwise omit (return empty string)
+//
+// Unit tests: tests/framework/unit/plugins/server/dev/pass_criteria_test.cln
+// (that file keeps its own copy of these helpers today; when the framework
+// grows a runtime module import system the test will import from this file
+// and the duplication goes away.)
+
+functions:
+	string computePassCriteria(string request_log, string logs, string wrong_output_hint, string entry)
+		if wrong_output_hint.length() > 0
+			return buildWrongOutput(entry, wrong_output_hint)
+		if logsContainWasmTrap(logs)
+			return buildRuntimeCrash(entry)
+		integer failing_status = findMostRecentFailingStatus(request_log)
+		if failing_status >= 500
+			return buildRuntimeCrash(entry)
+		return ""
+
+	boolean logsContainWasmTrap(string logs)
+		if logs.contains("wasm trap")
+			return true
+		if logs.contains("Handler ") and logs.contains(" failed:")
+			return true
+		return false
+
+	integer findMostRecentFailingStatus(string request_log)
+		if request_log.length() == 0
+			return 0
+		integer count = countJsonArrayEntries(request_log)
+		if count == 0
+			return 0
+		integer i = count - 1
+		while i >= 0
+			string idx = i.toString()
+			string status_str = json.get(request_log, idx + ".status")
+			integer status = status_str.toInteger() onError 0
+			if status >= 500
+				return status
+			i = i - 1
+		return 0
+
+	integer countJsonArrayEntries(string arr)
+		integer i = 0
+		while i < 200
+			string idx = i.toString()
+			string probe = json.get(arr, idx + ".status")
+			if probe.length() == 0
+				return i
+			i = i + 1
+		return 200
+
+	string buildRuntimeCrash(string entry)
+		return "{\"kind\":\"runtime_crash\",\"entry\":\"" + entry + "\",\"expected_status\":200}"
+
+	string buildWrongOutput(string entry, string regex)
+		return "{\"kind\":\"wrong_output\",\"entry\":\"" + entry + "\",\"expected_stdout_regex\":" + jsonEscapeString(regex) + "}"
+
+	string jsonEscapeString(string s)
+		string result = "\""
+		integer i = 0
+		integer n = s.length()
+		while i < n
+			string ch = s.substring(i, i + 1)
+			if ch == "\\"
+				result = result + "\\\\"
+			else if ch == "\""
+				result = result + "\\\""
+			else if ch == "\n"
+				result = result + "\\n"
+			else if ch == "\r"
+				result = result + "\\r"
+			else if ch == "\t"
+				result = result + "\\t"
+			else
+				result = result + ch
+			i = i + 1
+		return result + "\""

@@ -906,6 +906,15 @@ functions:
 			if eh_err != 0
 				return 1
 
+		// Dev-mode capture — auto-inject GET /_debug/capture. Emits the
+		// selector helpers, the handler function, and the route registration.
+		// Both the framework endpoint and the underlying _dev_snapshot() bridge
+		// gate on CLEAN_DEV=1 (belt-and-braces per SERVER_EXTENSIONS.md).
+		// Canonical source: plugins/frame.server/dev/{pass_criteria,capture}.cln
+		integer dc_err = emit_dev_capture(ctx)
+		if dc_err != 0
+			return dc_err
+
 		// _http_serve_static when static: present
 		if static_dir.length() > 0
 			integer st_prefix = _expr_string_lit(ctx, "/")
@@ -1522,6 +1531,287 @@ functions:
 		if raw.startsWith("\"") and raw.endsWith("\"")
 			return raw
 		return "\"" + raw + "\""
+
+	// ────────────────────────────────────────────────────────────────────────
+	// DEV-MODE CAPTURE EMISSION (auto-injected by expand_server_typed)
+	// ────────────────────────────────────────────────────────────────────────
+	// Emits the pass_criteria selector helpers, the __debug_capture_handler
+	// function, and the GET /_debug/capture route registration.
+	//
+	// Each helper is emitted using the same "user-authored fragment" pattern
+	// that expand_server_typed uses for `handle:` (the global error handler):
+	//   1. Build a Clean source fragment as a string.
+	//   2. Parse it via _emit_stmt_from_source(ctx, body, 0) → stmt handle.
+	//   3. Wrap in _stmt_block, emit via _emit_function with typed signature.
+	// This is required because the current typed-emission surface can only
+	// emit helpers that call `_http_respond` directly — any helper that must
+	// call `_dev_snapshot`, `_env_get`, `_req_param`, `_json_get`, etc. has
+	// to go through the parse-fragment path (see the DEFERRED comment inside
+	// emit_module_helpers_typed for the specific codegen gap).
+	//
+	// Canonical source of the emitted text: plugins/frame.server/dev/*.cln.
+	// The strings below MUST match those files verbatim.
+	integer emit_dev_capture(integer ctx)
+		// ── jsonEscapeString(s: string) -> string ────────────────────────
+		integer je_err = emit_dc_helper_1param(ctx, "jsonEscapeString", "s", dc_body_jsonEscapeString())
+		if je_err != 0
+			return je_err
+
+		// ── buildRuntimeCrash(entry: string) -> string ───────────────────
+		integer brc_err = emit_dc_helper_1param(ctx, "buildRuntimeCrash", "entry", dc_body_buildRuntimeCrash())
+		if brc_err != 0
+			return brc_err
+
+		// ── buildWrongOutput(entry: string, regex: string) -> string ─────
+		integer bwo_err = emit_dc_helper_2param(ctx, "buildWrongOutput", "entry", "regex", dc_body_buildWrongOutput())
+		if bwo_err != 0
+			return bwo_err
+
+		// ── countJsonArrayEntries(arr: string) -> integer ────────────────
+		integer cje_err = emit_dc_helper_1param_intret(ctx, "countJsonArrayEntries", "arr", dc_body_countJsonArrayEntries())
+		if cje_err != 0
+			return cje_err
+
+		// ── findMostRecentFailingStatus(request_log: string) -> integer ──
+		integer fmrfs_err = emit_dc_helper_1param_intret(ctx, "findMostRecentFailingStatus", "request_log", dc_body_findMostRecentFailingStatus())
+		if fmrfs_err != 0
+			return fmrfs_err
+
+		// ── logsContainWasmTrap(logs: string) -> boolean ─────────────────
+		integer lcwt_err = emit_dc_helper_1param_boolret(ctx, "logsContainWasmTrap", "logs", dc_body_logsContainWasmTrap())
+		if lcwt_err != 0
+			return lcwt_err
+
+		// ── computePassCriteria(request_log, logs, hint, entry) -> string ─
+		integer cpc_err = emit_dc_helper_4param(ctx, "computePassCriteria", "request_log", "logs", "wrong_output_hint", "entry", dc_body_computePassCriteria())
+		if cpc_err != 0
+			return cpc_err
+
+		// ── mergePassCriteriaIntoSnapshot(snapshot, pc_json) -> string ────
+		integer mpc_err = emit_dc_helper_2param(ctx, "mergePassCriteriaIntoSnapshot", "snapshot", "pass_criteria_json", dc_body_mergePassCriteriaIntoSnapshot())
+		if mpc_err != 0
+			return mpc_err
+
+		// ── __debug_capture_handler() -> string ──────────────────────────
+		integer dch_err = emit_dc_handler(ctx)
+		if dch_err != 0
+			return dch_err
+
+		// ── Register the route: _http_route("GET", "/_debug/capture", "__debug_capture_handler")
+		integer rt_m = _expr_string_lit(ctx, "GET")
+		integer rt_p = _expr_string_lit(ctx, "/_debug/capture")
+		integer rt_h = _expr_string_lit(ctx, "__debug_capture_handler")
+		integer rt_stmt = _stmt_call(ctx, "_http_route", "[" + rt_m.toString() + "," + rt_p.toString() + "," + rt_h.toString() + "]")
+		integer rt_err = _emit_statement_into_start(ctx, rt_stmt)
+		if rt_err != 0
+			return 1
+
+		return 0
+
+	// ── Helper-emission shims ────────────────────────────────────────────
+	// One-param string helper returning string.
+	integer emit_dc_helper_1param(integer ctx, string name, string p1, string body_src)
+		integer body_stmt = _emit_stmt_from_source(ctx, body_src, 0)
+		if body_stmt == 0
+			_emit_error(ctx, 2, "FRAME-SERVER-E010", "dev-capture: syntax error in helper " + name, "{\"start\":0,\"end\":0,\"source\":\"dev_capture\"}")
+			return 1
+		integer fn_body = _stmt_block(ctx, "[" + body_stmt.toString() + "]")
+		integer p_str = _type_string(ctx)
+		integer r_str = _type_string(ctx)
+		integer fn_err = _emit_function(ctx, name, "[{\"name\":\"" + p1 + "\",\"type_handle\":" + p_str.toString() + "}]", r_str, fn_body, 2)
+		if fn_err != 0
+			return 1
+		return 0
+
+	// One-param string helper returning integer.
+	integer emit_dc_helper_1param_intret(integer ctx, string name, string p1, string body_src)
+		integer body_stmt = _emit_stmt_from_source(ctx, body_src, 0)
+		if body_stmt == 0
+			_emit_error(ctx, 2, "FRAME-SERVER-E011", "dev-capture: syntax error in helper " + name, "{\"start\":0,\"end\":0,\"source\":\"dev_capture\"}")
+			return 1
+		integer fn_body = _stmt_block(ctx, "[" + body_stmt.toString() + "]")
+		integer p_str = _type_string(ctx)
+		integer r_int = _type_integer(ctx)
+		integer fn_err = _emit_function(ctx, name, "[{\"name\":\"" + p1 + "\",\"type_handle\":" + p_str.toString() + "}]", r_int, fn_body, 2)
+		if fn_err != 0
+			return 1
+		return 0
+
+	// One-param string helper returning boolean.
+	integer emit_dc_helper_1param_boolret(integer ctx, string name, string p1, string body_src)
+		integer body_stmt = _emit_stmt_from_source(ctx, body_src, 0)
+		if body_stmt == 0
+			_emit_error(ctx, 2, "FRAME-SERVER-E012", "dev-capture: syntax error in helper " + name, "{\"start\":0,\"end\":0,\"source\":\"dev_capture\"}")
+			return 1
+		integer fn_body = _stmt_block(ctx, "[" + body_stmt.toString() + "]")
+		integer p_str = _type_string(ctx)
+		integer r_bool = _type_boolean(ctx)
+		integer fn_err = _emit_function(ctx, name, "[{\"name\":\"" + p1 + "\",\"type_handle\":" + p_str.toString() + "}]", r_bool, fn_body, 2)
+		if fn_err != 0
+			return 1
+		return 0
+
+	// Two-param string,string helper returning string.
+	integer emit_dc_helper_2param(integer ctx, string name, string p1, string p2, string body_src)
+		integer body_stmt = _emit_stmt_from_source(ctx, body_src, 0)
+		if body_stmt == 0
+			_emit_error(ctx, 2, "FRAME-SERVER-E013", "dev-capture: syntax error in helper " + name, "{\"start\":0,\"end\":0,\"source\":\"dev_capture\"}")
+			return 1
+		integer fn_body = _stmt_block(ctx, "[" + body_stmt.toString() + "]")
+		integer p1_t = _type_string(ctx)
+		integer p2_t = _type_string(ctx)
+		integer r_str = _type_string(ctx)
+		integer fn_err = _emit_function(ctx, name, "[{\"name\":\"" + p1 + "\",\"type_handle\":" + p1_t.toString() + "},{\"name\":\"" + p2 + "\",\"type_handle\":" + p2_t.toString() + "}]", r_str, fn_body, 2)
+		if fn_err != 0
+			return 1
+		return 0
+
+	// Four-param string,string,string,string helper returning string.
+	integer emit_dc_helper_4param(integer ctx, string name, string p1, string p2, string p3, string p4, string body_src)
+		integer body_stmt = _emit_stmt_from_source(ctx, body_src, 0)
+		if body_stmt == 0
+			_emit_error(ctx, 2, "FRAME-SERVER-E014", "dev-capture: syntax error in helper " + name, "{\"start\":0,\"end\":0,\"source\":\"dev_capture\"}")
+			return 1
+		integer fn_body = _stmt_block(ctx, "[" + body_stmt.toString() + "]")
+		integer p1_t = _type_string(ctx)
+		integer p2_t = _type_string(ctx)
+		integer p3_t = _type_string(ctx)
+		integer p4_t = _type_string(ctx)
+		integer r_str = _type_string(ctx)
+		string params_json = "[{\"name\":\"" + p1 + "\",\"type_handle\":" + p1_t.toString() + "},{\"name\":\"" + p2 + "\",\"type_handle\":" + p2_t.toString() + "},{\"name\":\"" + p3 + "\",\"type_handle\":" + p3_t.toString() + "},{\"name\":\"" + p4 + "\",\"type_handle\":" + p4_t.toString() + "}]"
+		integer fn_err = _emit_function(ctx, name, params_json, r_str, fn_body, 2)
+		if fn_err != 0
+			return 1
+		return 0
+
+	// Zero-param __debug_capture_handler returning string.
+	integer emit_dc_handler(integer ctx)
+		integer body_stmt = _emit_stmt_from_source(ctx, dc_body_handler(), 0)
+		if body_stmt == 0
+			_emit_error(ctx, 2, "FRAME-SERVER-E015", "dev-capture: syntax error in __debug_capture_handler", "{\"start\":0,\"end\":0,\"source\":\"dev_capture\"}")
+			return 1
+		integer fn_body = _stmt_block(ctx, "[" + body_stmt.toString() + "]")
+		integer r_str = _type_string(ctx)
+		integer fn_err = _emit_function(ctx, "__debug_capture_handler", "[]", r_str, fn_body, 2)
+		if fn_err != 0
+			return 1
+		return 0
+
+	// ── Embedded source bodies (mirror of plugins/frame.server/dev/*.cln) ─
+	// Any edit here MUST be mirrored in the canonical dev/*.cln files. The
+	// helper bodies below are what _emit_stmt_from_source parses, so they
+	// are function *bodies* only — the parameter list is declared separately
+	// via _emit_function.
+
+	string dc_body_jsonEscapeString()
+		string s = ""
+		s = s + "string result = \"\\\"\"\n"
+		s = s + "integer i = 0\n"
+		s = s + "integer n = s.length()\n"
+		s = s + "while i < n\n"
+		s = s + "\tstring ch = s.substring(i, i + 1)\n"
+		s = s + "\tif ch == \"\\\\\"\n"
+		s = s + "\t\tresult = result + \"\\\\\\\\\"\n"
+		s = s + "\telse if ch == \"\\\"\"\n"
+		s = s + "\t\tresult = result + \"\\\\\\\"\"\n"
+		s = s + "\telse if ch == \"\\n\"\n"
+		s = s + "\t\tresult = result + \"\\\\n\"\n"
+		s = s + "\telse if ch == \"\\r\"\n"
+		s = s + "\t\tresult = result + \"\\\\r\"\n"
+		s = s + "\telse if ch == \"\\t\"\n"
+		s = s + "\t\tresult = result + \"\\\\t\"\n"
+		s = s + "\telse\n"
+		s = s + "\t\tresult = result + ch\n"
+		s = s + "\ti = i + 1\n"
+		s = s + "return result + \"\\\"\"\n"
+		return s
+
+	string dc_body_buildRuntimeCrash()
+		return "return \"{\\\"kind\\\":\\\"runtime_crash\\\",\\\"entry\\\":\\\"\" + entry + \"\\\",\\\"expected_status\\\":200}\"\n"
+
+	string dc_body_buildWrongOutput()
+		return "return \"{\\\"kind\\\":\\\"wrong_output\\\",\\\"entry\\\":\\\"\" + entry + \"\\\",\\\"expected_stdout_regex\\\":\" + jsonEscapeString(regex) + \"}\"\n"
+
+	string dc_body_countJsonArrayEntries()
+		string s = ""
+		s = s + "integer i = 0\n"
+		s = s + "while i < 200\n"
+		s = s + "\tstring idx = i.toString()\n"
+		s = s + "\tstring probe = json.get(arr, idx + \".status\")\n"
+		s = s + "\tif probe.length() == 0\n"
+		s = s + "\t\treturn i\n"
+		s = s + "\ti = i + 1\n"
+		s = s + "return 200\n"
+		return s
+
+	string dc_body_findMostRecentFailingStatus()
+		string s = ""
+		s = s + "if request_log.length() == 0\n"
+		s = s + "\treturn 0\n"
+		s = s + "integer count = countJsonArrayEntries(request_log)\n"
+		s = s + "if count == 0\n"
+		s = s + "\treturn 0\n"
+		s = s + "integer i = count - 1\n"
+		s = s + "while i >= 0\n"
+		s = s + "\tstring idx = i.toString()\n"
+		s = s + "\tstring status_str = json.get(request_log, idx + \".status\")\n"
+		s = s + "\tinteger status = status_str.toInteger() onError 0\n"
+		s = s + "\tif status >= 500\n"
+		s = s + "\t\treturn status\n"
+		s = s + "\ti = i - 1\n"
+		s = s + "return 0\n"
+		return s
+
+	string dc_body_logsContainWasmTrap()
+		string s = ""
+		s = s + "if logs.contains(\"wasm trap\")\n"
+		s = s + "\treturn true\n"
+		s = s + "if logs.contains(\"Handler \") and logs.contains(\" failed:\")\n"
+		s = s + "\treturn true\n"
+		s = s + "return false\n"
+		return s
+
+	string dc_body_computePassCriteria()
+		string s = ""
+		s = s + "if wrong_output_hint.length() > 0\n"
+		s = s + "\treturn buildWrongOutput(entry, wrong_output_hint)\n"
+		s = s + "if logsContainWasmTrap(logs)\n"
+		s = s + "\treturn buildRuntimeCrash(entry)\n"
+		s = s + "integer failing_status = findMostRecentFailingStatus(request_log)\n"
+		s = s + "if failing_status >= 500\n"
+		s = s + "\treturn buildRuntimeCrash(entry)\n"
+		s = s + "return \"\"\n"
+		return s
+
+	string dc_body_mergePassCriteriaIntoSnapshot()
+		string s = ""
+		s = s + "if snapshot.length() < 2\n"
+		s = s + "\treturn snapshot\n"
+		s = s + "string first = snapshot.substring(0, 1)\n"
+		s = s + "if first != \"{\"\n"
+		s = s + "\treturn snapshot\n"
+		s = s + "string rest = snapshot.substring(1, snapshot.length())\n"
+		s = s + "return \"{\\\"pass_criteria\\\":\" + pass_criteria_json + \",\" + rest\n"
+		return s
+
+	string dc_body_handler()
+		string s = ""
+		s = s + "string dev_flag = env.get(\"CLEAN_DEV\")\n"
+		s = s + "if dev_flag != \"1\"\n"
+		s = s + "\treturn http.respond(404, \"text/plain\", \"\")\n"
+		s = s + "string snapshot = _dev_snapshot()\n"
+		s = s + "if snapshot.length() == 0\n"
+		s = s + "\treturn http.respond(404, \"text/plain\", \"\")\n"
+		s = s + "string hint = req.param(\"wrong_output_hint\")\n"
+		s = s + "string request_log = json.get(snapshot, \"request_log\")\n"
+		s = s + "string logs = json.get(snapshot, \"last_log_lines\")\n"
+		s = s + "string entry = \"app/server/main.cln\"\n"
+		s = s + "string pc = computePassCriteria(request_log, logs, hint, entry)\n"
+		s = s + "string body = snapshot\n"
+		s = s + "if pc.length() > 0\n"
+		s = s + "\tbody = mergePassCriteriaIntoSnapshot(snapshot, pc)\n"
+		s = s + "return http.respond(200, \"application/json\", body)\n"
+		return s
 
 // ============================================================================
 // VALIDATION (unchanged from v1 — not a lifecycle slot)

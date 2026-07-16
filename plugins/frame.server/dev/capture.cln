@@ -1,0 +1,54 @@
+// frame.server / dev / capture.cln
+//
+// Canonical source of the GET /_debug/capture handler. Mirrored inside
+// plugins/frame.server/src/main.cln (expand_server_typed injects the route
+// and emits this text via _emit_stmt_from_source). Any edit here MUST be
+// mirrored in main.cln's embedded copy.
+//
+// Contract (SERVER_EXTENSIONS.md §_dev_snapshot bridge):
+//   - Gated on CLEAN_DEV=1. If unset → return 404 with empty body.
+//   - Calls _dev_snapshot() → raw JSON snapshot from clean-server.
+//     Bridge itself returns "" when CLEAN_DEV != "1"; framework 404s on "".
+//   - Optional ?wrong_output_hint=... query param feeds computePassCriteria.
+//   - Merges the computed pass_criteria (when non-empty) into the snapshot's
+//     top-level JSON via string splice — inserted immediately after the
+//     opening `{`. No re-parse. Matches SERVER_EXTENSIONS.md §pass_criteria.
+//   - Response: 200 application/json with the merged snapshot, or 404 empty.
+//   - No caching. Each capture is live.
+//
+// Depends on: dev/pass_criteria.cln (helpers).
+
+functions:
+	string __debug_capture_handler()
+		string dev_flag = env.get("CLEAN_DEV")
+		if dev_flag != "1"
+			return http.respond(404, "text/plain", "")
+
+		string snapshot = _dev_snapshot()
+		if snapshot.length() == 0
+			return http.respond(404, "text/plain", "")
+
+		string hint = req.param("wrong_output_hint")
+		string request_log = json.get(snapshot, "request_log")
+		string logs = json.get(snapshot, "last_log_lines")
+		string entry = "app/server/main.cln"
+
+		string pc = computePassCriteria(request_log, logs, hint, entry)
+
+		string body = snapshot
+		if pc.length() > 0
+			body = mergePassCriteriaIntoSnapshot(snapshot, pc)
+
+		return http.respond(200, "application/json", body)
+
+	// Splice `"pass_criteria":<json>,` immediately after the top-level `{`.
+	// The snapshot is produced by clean-server's snapshot_json() and starts
+	// with `{"source_tree":...}` — a well-formed object. We do not re-parse.
+	string mergePassCriteriaIntoSnapshot(string snapshot, string pass_criteria_json)
+		if snapshot.length() < 2
+			return snapshot
+		string first = snapshot.substring(0, 1)
+		if first != "{"
+			return snapshot
+		string rest = snapshot.substring(1, snapshot.length())
+		return "{\"pass_criteria\":" + pass_criteria_json + "," + rest
