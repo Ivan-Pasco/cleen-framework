@@ -22,11 +22,12 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRAMEWORK_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 WORK_DIR="$(mktemp -d)"
-trap "rm -rf $WORK_DIR; [ -n \"${SERVER_PID:-}\" ] && kill $SERVER_PID 2>/dev/null" EXIT
+SERVER_PID=""
+trap 'rm -rf "$WORK_DIR"; [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null' EXIT
 
 CLEAN_SERVER="${CLEAN_SERVER:-$HOME/Documents/Dev/Clean Language/clean-server/target/release/clean-server}"
 CLN="${CLN:-$HOME/.cleen/bin/cln}"
-PORT=3987
+PORT=3000
 TIMEOUT=5
 
 PASS_COUNT=0
@@ -44,11 +45,11 @@ if [ ! -x "$CLN" ]; then echo "SKIP: cln compiler not found at $CLN"; exit 0; fi
 
 # ── Test app ────────────────────────────────────────────────────────────
 cat > "$WORK_DIR/main.cln" <<'EOF'
-target:
+plugins:
 	frame.server
 
 server:
-	port: 3987
+	port: 3000
 
 start:
 	printl("[boot] dev-capture-test server ready")
@@ -60,7 +61,7 @@ endpoints:
 		return http.respond(500, "text/plain", "boom")
 EOF
 
-if ! "$CLN" compile "$WORK_DIR/main.cln" -o "$WORK_DIR/main.wasm" > "$WORK_DIR/compile.log" 2>&1; then
+if ! "$CLN" compile --plugins "$WORK_DIR/main.cln" -o "$WORK_DIR/main.wasm" > "$WORK_DIR/compile.log" 2>&1; then
     echo "FAIL: dev-capture-endpoint-test (compile failed — see $WORK_DIR/compile.log)"
     cat "$WORK_DIR/compile.log"
     exit 1
