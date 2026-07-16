@@ -374,6 +374,8 @@ string response = http.delete("https://api.example.com/users/1")
 **Spec:** [04_frame_data.md](specification/04_frame_data.md)
 **Design doc:** [SPEC_DATA_PERSISTENCE_MODEL.md](../system-documents/SPEC_DATA_PERSISTENCE_MODEL.md)
 
+> ⚠️ **ASPIRATIONAL — NOT YET SHIPPED.** This section describes the v2 data model (paired with plugin spec `frame-data.ebnf` v2.0.0, committed 2026-07-10) targeting `frame.data` v4+. **The currently shipped plugin is `frame.data` v3.x**, which continues to implement the v1.2 block-form DSL. Writing `Database.save(entity)`, `Entity.data.method()`, or sub-block `data <T>:` against a v3.x plugin will fail to compile. For code you write today, use the v1.2 syntax (`Model.insert:`, `Model.update:`, `Model.delete:`, `Model.upsert:`, bare-field `data:` declarations). See [04_frame_data.md](specification/04_frame_data.md) header for full context.
+
 ### Plugin Registration
 
 Plugins are loaded automatically by folder location. For explicit registration in `main.cln`:

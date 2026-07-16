@@ -343,6 +343,8 @@ plugins:
 	frame.ui
 ```
 
+> ⚠️ The `app/entity/` folder, `class User` + `data User:` pairing, `User.data.findByEmail(...)`, and `Database.save(entity)` shown below target `frame.data` v2, which is not yet shipped. **Currently shipped `frame.data` v3.x** uses bare-field `data User` and block-form mutations (`User.insert:`, `User.update:`, `User.delete:`) — see the plugin's `patterns/` folder for shipping examples. This section is retained as the v2 design target.
+
 **`app/entity/user.cln`** — domain class (processed by `frame.data`, paired by name with data block):
 ```clean
 class User

@@ -148,6 +148,8 @@ Access it at `/api/users`.
 
 ## Add a Domain Entity and Data Model
 
+> ⚠️ **ASPIRATIONAL — NOT YET SHIPPED.** This section (and the API endpoint example above using `User.data.findActive()`) describes the v2 data model targeting `frame.data` v4+. **The currently shipped `frame.data` v3.x** uses the v1.2 block-form DSL: `data User` with fields declared inline (no colon after `User`), `User.insert:`, `User.find:`, `User.update:`, `User.delete:` block forms. Writing the v2 syntax below against v3.x will fail to compile. For code you write today, use v1.2 patterns from the plugin's `patterns/` folder or from `documents/specification/04_frame_data.md` (which is retained as the v2 design target, not shipping documentation). This getting-started example is retained as the eventual v2 target.
+
 Frame separates the domain object from its persistence view. Create both files:
 
 **Entity** — `app/entity/user.cln`:

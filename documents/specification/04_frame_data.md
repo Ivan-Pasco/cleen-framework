@@ -8,6 +8,14 @@
 
 ---
 
+> ⚠️ **ASPIRATIONAL — NOT YET SHIPPED.** The syntax described in this document targets `frame.data` v4+ (the eventual release paired with plugin spec `frame-data.ebnf` v2.0.0, committed 2026-07-10). **The currently shipped plugin is `frame.data` v3.x**, which continues to implement the v1.2 block-form DSL (`Model.insert:`, `Model.update:`, `Model.delete:`, `Model.upsert:`, bare-field `data:` declarations). Writing the v2 syntax shown here (`Database.save(entity)`, `Entity.data.findByEmail(x)`, sub-block `data <T>:` form) against a v3.x plugin will produce compile errors.
+>
+> **For code you write today against `frame.data` v3.x**, use the v1.2 syntax: `Model.insert:`, `Model.first:`, `Model.find:`, `Model.update:` with `where:` and `set:` sub-blocks, `Model.delete:` with `where:`. See the plugin's `patterns/` folder (`plugins/frame.data/patterns/`) for shipping code examples.
+>
+> This document is retained as the committed design target for the eventual v2 migration. See `system-documents/SPEC_DATA_PERSISTENCE_MODEL.md` §15 for migration status.
+
+---
+
 > **See also:**
 > - [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities.
 > - [SPEC_DATA_PERSISTENCE_MODEL.md](../../system-documents/SPEC_DATA_PERSISTENCE_MODEL.md) — the full committed design spec with rationales.

@@ -4,6 +4,8 @@
 **Version:** 1.0  
 **Location:** `/documents/specification/06_frame_auth.md`
 
+> ⚠️ Several code examples in this document reference `frame.data` **v2 patterns** (`Database.save(entity)`, `User.data.findOrFailById(...)`, `Post.data.findOrFailById(...)`) — specifically the password-reset flow, tenant-scoped project creation, and post-publish endpoint. These patterns target `frame.data` v4+ and are not yet shipped. **Currently shipped `frame.data` v3.x** uses v1.2 block-form mutations (`User.update:`, `Project.insert:`, `Post.update:` with `where:` / `set:` sub-blocks). If you copy these examples verbatim against v3.x, they will fail to compile. See [04_frame_data.md](04_frame_data.md) header for full v2 status. The `frame.auth` API surface itself (sessions, JWT, roles, CSRF) is v3.x-shipping as documented; only the data-persistence code inside the auth examples uses v2 patterns.
+
 ---
 
 > **See also:** [Architecture Boundaries](../../../foundation/management/ARCHITECTURE_BOUNDARIES.md) — component responsibilities and cross-component work policy.
