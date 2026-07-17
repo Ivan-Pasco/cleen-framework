@@ -60,7 +60,11 @@
       "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" show ddaba1b -- plugins/frame.server/src/main.cln)",
       "Bash(git -C \"/Users/earcandy/Documents/Dev/Clean Language/clean-framework\" diff --stat)",
       "Skill(team-prompts-list)",
-      "Skill(team-prompts-list:*)"
+      "Skill(team-prompts-list:*)",
+      "Skill(team-prompt)",
+      "Skill(team-prompt:*)",
+      "mcp__clean-language__list_component_bugs",
+      "Bash(sort -t: -k2 -nr)"
     ],
     "additionalDirectories": [
       "/tmp"
