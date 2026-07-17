@@ -1730,18 +1730,25 @@ functions:
 		return "return \"{\\\"kind\\\":\\\"wrong_output\\\",\\\"entry\\\":\\\"\" + entry + \"\\\",\\\"expected_stdout_regex\\\":\" + jsonEscapeString(regex) + \"}\"\n"
 
 	string dc_body_countJsonArrayEntries()
+		// The fragment parser used by _emit_stmt_from_source folds a statement
+		// following an `if X return Y` inside a while body into the then-branch,
+		// producing an infinite loop. Explicit else-branch avoids the fold.
 		string s = ""
 		s = s + "integer i = 0\n"
 		s = s + "while i < 200\n"
 		s = s + "\tstring idx = i.toString()\n"
-		s = s + "\tstring probe = json.get(arr, idx + \".status\")\n"
+		s = s + "\tstring probe = _json_get(arr, idx + \".status\")\n"
 		s = s + "\tif probe.length() == 0\n"
 		s = s + "\t\treturn i\n"
-		s = s + "\ti = i + 1\n"
+		s = s + "\telse\n"
+		s = s + "\t\ti = i + 1\n"
 		s = s + "return 200\n"
 		return s
 
 	string dc_body_findMostRecentFailingStatus()
+		// See dc_body_countJsonArrayEntries: `if return / fall-through` inside a
+		// while body must be rewritten with an explicit else to avoid the
+		// fragment-parser fold that produces infinite loops.
 		string s = ""
 		s = s + "if request_log.length() == 0\n"
 		s = s + "\treturn 0\n"
@@ -1751,11 +1758,12 @@ functions:
 		s = s + "integer i = count - 1\n"
 		s = s + "while i >= 0\n"
 		s = s + "\tstring idx = i.toString()\n"
-		s = s + "\tstring status_str = json.get(request_log, idx + \".status\")\n"
+		s = s + "\tstring status_str = _json_get(request_log, idx + \".status\")\n"
 		s = s + "\tinteger status = status_str.toInteger() onError 0\n"
 		s = s + "\tif status >= 500\n"
 		s = s + "\t\treturn status\n"
-		s = s + "\ti = i - 1\n"
+		s = s + "\telse\n"
+		s = s + "\t\ti = i - 1\n"
 		s = s + "return 0\n"
 		return s
 
@@ -1799,9 +1807,9 @@ functions:
 		s = s + "string snapshot = _dev_snapshot()\n"
 		s = s + "if snapshot.length() == 0\n"
 		s = s + "\treturn http.respond(404, \"text/plain\", \"\")\n"
-		s = s + "string hint = req.param(\"wrong_output_hint\")\n"
-		s = s + "string request_log = json.get(snapshot, \"request_log\")\n"
-		s = s + "string logs = json.get(snapshot, \"last_log_lines\")\n"
+		s = s + "string hint = req.query(\"wrong_output_hint\")\n"
+		s = s + "string request_log = _json_get(snapshot, \"request_log\")\n"
+		s = s + "string logs = _json_get(snapshot, \"last_log_lines\")\n"
 		s = s + "string entry = \"app/server/main.cln\"\n"
 		s = s + "string pc = computePassCriteria(request_log, logs, hint, entry)\n"
 		s = s + "string body = snapshot\n"
