@@ -951,36 +951,45 @@ For traceability, the key decisions in this spec came out of the framework desig
 
 ## 15. Status
 
-**Committed spec, effective 2026-07-10. Retargeted 2026-07-16 to `frame.data` v4+ following ecosystem divergence.**
+**Committed spec, effective 2026-07-10. Retargeted 2026-07-16 to aspirational. Reactivated 2026-07-17 as Option A execution target following plugin owner decision.**
 
-Phase 1 of the data-persistence migration completed 2026-07-10. This spec is committed as the design target for **`frame.data` v4+ (a future release)**. It pairs with:
+Phase 1 of the data-persistence migration completed 2026-07-10. This spec is now the **active execution target** for the next `frame.data` release.
+
+Paired artifacts:
 
 - **`foundation/spec/plugins/frame-data.ebnf` v2.0.0** — the formal grammar for the plugin's DSL. Committed 2026-07-10.
 - **`foundation/spec/plugins/frame-data-semantics.md` v2.0.0** — the semantic rules governing plugin behavior. Committed 2026-07-10.
 - **`clean-framework/system-documents/DRAFT_MIGRATION_PLAN_DATA_PERSISTENCE_MODEL.md`** — the detailed migration plan.
+- **`foundation/management/reports/2026-07-10-frame-data-v2-spec-subcycle-rebaking.md`** — the per-sub-cycle LOC re-projection for Option A execution.
 
-### Ecosystem divergence — Option B was chosen implicitly
+### Version history
 
-The Phase 2 scope-collision handoff (`foundation/management/cross-component-prompts/framework-data-persistence-migration-phase-2-scope-collision.md`) offered two paths: **Option A** (adopt v2 in the in-flight sub-cycles) or **Option B** (finish v1 semantics on typed emission first, then a separate v2 migration later).
+| Date | Event |
+|---|---|
+| 2026-07-10 | Phase 1 complete. Spec committed. Cross-component prompts placed. Two collision options offered: A (adopt v2 in sub-cycles) or B (finish v1.2 on typed emission first). |
+| 2026-07-10 → 2026-07-16 | Plugin team shipped `frame.data` v3.0.4 → v3.0.10 implementing v1.2 on typed emission (Option B trajectory), no response to collision handoff. |
+| 2026-07-16 | Aspirational-warning banners added to user-facing docs and book chapters (commits `a4e0fe2`, `643a042`). Migration status recorded as Option B implicit. |
+| 2026-07-17 | **Plugin owner decision: adopt Option A. Sub-cycle v3.x plan retired. This spec becomes the active execution target.** Aspirational warnings scheduled for removal as Phase 2 progresses. |
 
-Between 2026-07-10 and 2026-07-16, the plugin team **implicitly chose Option B**. Evidence:
+### Option A adoption — what changes
 
-- `frame.data` shipped versions 3.0.4 → 3.0.5 → 3.0.6 → 3.0.7 → 3.0.8 → 3.0.9 → 3.0.10 in that window.
-- All these releases implement **v1.2 block-form semantics on typed-emission infrastructure**: `Model.exists:` returns boolean per spec, `__find_sql/__first_sql/__where_json_*/__paged_json/__cursor_json` SEM007 fixes, `_emit_function` typed-emission contract compliance, `Model.insert_id:` typed-expression binding preservation.
-- The changelog explicitly names the sub-cycle plan (`v3/frame.data` branch, "Amendment 1 atomic per plugin").
-- Studio (a downstream consumer) is actively migrating **to v1.2 patterns** (`framework-frame-data-two-residual-v1-2-gaps.md`, `studio-frame-data-residual-gaps-status.md`), reinforcing v1's continued life.
-- No response from the plugin team to the Phase 2 collision handoff. No sub-cycle plan revision. No Option A adoption signal.
+- **Sub-cycle v3.x plan retired.** The pre-baked design in `reports/2026-07-03-session-4-frame-data-deferred-v4.md` §2 (v1.2-on-typed-emission) is no longer the target. `frame.data` v3.0.10 stands as the last v1.2 release; no v3.0.11 is planned.
+- **Sub-cycle re-baking proposal activated.** The per-sub-cycle LOC targets in `foundation/management/reports/2026-07-10-frame-data-v2-spec-subcycle-rebaking.md` §3 are the execution plan:
+  - Sub-cycle 1 (v2): ~1400 LOC — data-model expansion + `.data` accessor + preamble + dispatcher + Am 10 spec construction.
+  - Sub-cycle 2 (v2): ~1050 LOC — read verbs (query DSL retained unchanged from v1.2) + DAT-Q020 include-relation path resolution.
+  - Sub-cycle 3 (v2): ~1050 LOC — `Database` service class generation + pairing verification + invariant enforcement + rejection diagnostics for removed v1.2 syntax.
+  - Sub-cycle 4 (v2): ~1200 LOC — DSL parsers + migrate + integration + smoke test.
+- **Total v2-adapted projection:** ~4700 v3 LOC across four sub-cycles.
+- **Phase 2 execution prompt** (`foundation/management/cross-component-prompts/framework-data-persistence-migration-phase-2-plugin.md`) is now unblocked. The scope-collision handoff (`...-phase-2-scope-collision.md`) is resolved by Option A adoption.
+- **Phase 4 (MCP updates + AI-driven verification)** is unblocked as Phase 2 progresses. MCP responses should now teach v2 syntax again — the same v2 that Phase 2 will implement.
 
-The plugin team's direction is a legitimate engineering choice — finish the typed-emission migration with a known-shipping semantics (v1.2), then reconsider the v2 semantic redesign later against real production experience. It does not invalidate the v2 design but does defer it.
+### What continues to require care
 
-### What this means for the v2 spec
+- **Aspirational warning banners in user-facing docs and book chapters** remain in place until Phase 2 delivers a working v2 plugin. Removing them prematurely (before the plugin ships) would produce documentation that describes syntax the shipped plugin still rejects. As each sub-cycle completes and the plugin surface catches up to the spec, the corresponding warnings can be removed. Full banner removal happens when Sub-cycle 4 ships.
+- **Existing Frame apps using v1.2 syntax** will break when v2 ships. The AI-with-MCP migration mechanism (Phase 4 §7) is the intended migration path — no dedicated `cleen migrate` tool is built. Users need to be informed of the breaking change with sufficient lead time before v2 ships.
+- **Studio and other downstream consumers** currently migrating to v1.2 patterns (`framework-frame-data-two-residual-v1-2-gaps.md`, `studio-frame-data-residual-gaps-status.md`) will need a separate migration path from v1.2 to v2. Not blocked by Phase 2 — can happen in parallel once v2 ships.
 
-- **The v2 spec is now aspirational**, not the target for the next release. The next release (`frame.data` v3.x → 3.y) will ship v1.2 semantics on typed emission.
-- **User-facing documentation** (`documents/specification/04_frame_data.md`, `documents/API_REFERENCE.md`, `documents/GETTING_STARTED.md`, `documents/PROJECT_STRUCTURE.md`, related specs, book chapters ch12/ch13/ch14) has been updated with aspirational-warning banners as of 2026-07-16 telling readers the described v2 syntax is not yet shipped.
-- **Plugin spec files** (`frame-data.ebnf` v2.0.0, `frame-data-semantics.md` v2.0.0) remain committed as the design record. They are documented as v2 in their headers; the plugin binary they describe does not yet exist.
-- **The `.data` accessor and `Database` service** are not implemented in `frame.data` v3.x and will not be until a hypothetical v4. Writing v2 syntax against v3.x produces compile errors.
-
-### Phase 1 completion record (unchanged from 2026-07-10)
+### Phase 1 completion record (unchanged)
 
 - All eight design decisions in §11 resolved with rationale, alternatives, and ecosystem precedent recorded.
 - `foundation/spec/plugins/frame-data.ebnf` rewritten from v1.2.0 to v2.0.0.
@@ -988,15 +997,9 @@ The plugin team's direction is a legitimate engineering choice — finish the ty
 - Two earlier overlapping proposals reconciled with supersession headers.
 - Developer approval per Principle 25 recorded for all spec-file modifications.
 
-### Migration phase status (updated 2026-07-16)
+### Migration phase status (updated 2026-07-17)
 
 - **Phase 1 (Plugin spec finalization):** ✅ Complete 2026-07-10.
-- **Phase 2 (frame.data plugin rewrite):** ⏸️ **Effectively deferred by ecosystem choice.** The plugin team is executing the pre-collision sub-cycle plan (v1.2 semantics on typed emission). A future v4 migration to v2 semantics would be a separate effort against real v3.x production feedback.
-- **Phase 3 (docs and books rewrite):** ⏸️ **Reversed direction.** Docs are updated with aspirational warnings rather than presented as current documentation. Book chapters 12/13/14 have banners flagging v2 status. Remaining ~25 book files retain v1 content (correct against the shipping plugin) and do not need rewriting for v2 aspirational purposes.
-- **Phase 4 (MCP updates + AI-driven verification):** ⏸️ **Superseded by ecosystem reality.** Updating MCP responses to teach v2 syntax to AI instances would produce broken code against the shipping v3.x plugin. MCP responses should describe what the shipping plugin actually accepts (v1.2), not the aspirational v2. The MCP updates I did in-session were reverted by the compiler-repo reset process; redoing them for v2 is now actively harmful. The Phase 4 cross-component prompt should be marked superseded.
-
-### Recommended follow-up (not blocking anything)
-
-1. Mark the Phase 2, Phase 3, Phase 4 cross-component prompts as superseded/deferred with supersession headers pointing at this §15 update.
-2. When `frame.data` v3.x stabilizes and the sub-cycle plan completes, revisit this spec against production feedback. Some v2 design decisions may need revision based on what worked and what didn't in v3.x typed-emission.
-3. If a future v4 migration is undertaken, this document remains the starting design target — the reasoning in §11 (nullable id, `.data` accessor, `Database` service, `deleteOrFail`, hybrid cross-entity queries) is still valid.
+- **Phase 2 (frame.data plugin rewrite):** ▶️ **Active execution target.** Sub-cycle re-baking proposal is the plan; per-sub-cycle LOC targets sum to ~4700. Requires substantial plugin engineering (~weeks of focused work). Handoff prompt is `framework-data-persistence-migration-phase-2-plugin.md`.
+- **Phase 3 (docs and books rewrite):** ⏸️ **Warnings in place until Phase 2 ships.** Banners in 11 files (8 clean-framework docs + 3 book chapters) will be removed as Phase 2 sub-cycles land. Book chapters beyond ch12/ch13/ch14 (~230 v1 references across ~25 files) can be rewritten in parallel with Phase 2 or deferred to the AI-with-MCP migration mechanism.
+- **Phase 4 (MCP updates + AI-driven verification):** ▶️ **Unblocked.** MCP responses can be updated to describe v2 syntax again. Compiler-repo session risk (my earlier attempt was reverted by a `git reset --hard origin/main`) still applies — Phase 4 execution should verify commit stability before assuming survival. The AI-driven verification step still blocks on a working v2 plugin from Phase 2.

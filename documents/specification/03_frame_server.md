@@ -54,7 +54,7 @@ The Frame Server runs the backend WASM, routes HTTP requests, bridges Clean code
 ## 4. Declaring HTTP APIs with `endpoints:`
 Each API module exposes a single `endpoints:` block. Endpoints are declared by **METHOD + PATH** and the block body handles the request.
 
-> ⚠️ The `POST` and `GET :id` examples below use v2 patterns (`Database.save(entity)`, `User.data.findById(...)`) targeting `frame.data` v4+, which is not yet shipped. **Currently shipped `frame.data` v3.x** uses v1.2 block-form mutations: `POST` becomes `User.insert: name = ...` and single-record lookup uses `User.first: where: id == userId`. The `GET /api/users` query DSL below (`User.find:` with `where:` / `order:` / `limit:`) is unchanged between v1 and v2 and works today. See [04_frame_data.md](04_frame_data.md) header for full v2 status.
+> 🚧 The `POST` and `GET :id` examples below use v2 patterns (`Database.save(entity)`, `User.data.findById(...)`), the target for the next `frame.data` release. **Currently shipped `frame.data` v3.0.10** uses v1.2 block-form mutations: `POST` becomes `User.insert: name = ...` and single-record lookup uses `User.first: where: id == userId`. The `GET /api/users` query DSL below (`User.find:` with `where:` / `order:` / `limit:`) is unchanged between v1 and v2 and works today. Phase 2 sub-cycles are underway; the write examples are the plugin's migration target. See [04_frame_data.md](04_frame_data.md) header for full v2 status.
 
 ```clean
 // /app/server/api/users.cln

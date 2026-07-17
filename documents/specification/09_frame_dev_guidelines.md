@@ -29,7 +29,7 @@
 
 **Example (Clean Language):**
 
-> ⚠️ The example below targets `frame.data` v2 (spec `frame-data.ebnf` v2.0.0), which is not yet shipped. **Currently shipped `frame.data` v3.x** uses v1.2 bare-field `data User` declarations and does not implement the `class User` + paired `data User:` pattern. This example is retained as the v2 design target.
+> 🚧 The example below targets `frame.data` v2 (spec `frame-data.ebnf` v2.0.0), the target for the next release. **Currently shipped `frame.data` v3.0.10** uses v1.2 bare-field `data User` declarations and does not yet implement the `class User` + paired `data User:` pattern. Phase 2 sub-cycles are underway; this example is the plugin's migration target.
 
 Entity in `app/entity/user.cln`:
 
