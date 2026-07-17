@@ -1,24 +1,43 @@
 // frame.data plugin — ORM / database DSL
-// Version: 3.0.0-alpha.1 (Sub-cycle 1 of ~5 — skeleton only, not shippable)
+// Version: 3.0.10 (last v1.2-semantics release; v2 sub-cycles pending)
 // ABI: Plugin Contracts v3 — typed AST emission (typed-emission.md)
 //
-// STATUS: Sub-cycle 1 of ~5 complete on branch v3/frame.data.
-//   - Sub-cycle 1 (this commit): branch setup, plugin.toml v3 stub, main.cln
-//     skeleton — typed bridges declared, plugin_error / tiny factories /
-//     data-specific factories / empty dispatcher. Verbs unimplemented.
-//   - Sub-cycle 2: expand_data_model + _emit_class_full orchestration + Am 10
-//     template JSON builders + generate_* helpers (~1500–1800 LOC).
-//   - Sub-cycle 3: read verbs via Am 9 + Am 6 for user where/join fragments
-//     (expand_find/first/count/exists/paginate/cursor/delete + build_where_expr
-//     + build_condition_expr).
-//   - Sub-cycle 4: write verbs (expand_insert/insert_id/upsert/update) + build_set_expr
-//     via batch-builder statements + Am 8 argument lists.
-//   - Sub-cycle 5: DSL parsers + validators + migrate + integration + comita.
+// ============================================================================
+// STATUS (2026-07-17) — Option A adopted: v3.x sub-cycle plan retired;
+// migration proceeds against v2 spec directly.
+// ============================================================================
+// Between 2026-07-03 and 2026-07-16 this plugin shipped v3.0.4 → v3.0.10
+// implementing v1.2 block-form semantics on typed-emission infrastructure.
+// On 2026-07-17 the plugin owner decided to adopt Option A from the scope-
+// collision handoff: retire the v3.x-continuation sub-cycle plan (v1.2-on-
+// typed-emission) and execute the v2 spec directly (entity/data pairing,
+// .data accessor, Database service, sub-block data <T>: form).
 //
-// Design source: reports/2026-07-03-session-4-frame-data-deferred-v4.md §2
-//   (per-source-section LOC projection with amendment mapping — the pre-baked
-//   design document for all data sub-cycles). Do NOT re-project LOC in
-//   subsequent sub-cycles.
+// Active execution plan:
+//   - foundation/spec/plugins/frame-data.ebnf v2.0.0 — grammar target.
+//   - foundation/spec/plugins/frame-data-semantics.md v2.0.0 — semantics target.
+//   - foundation/management/reports/2026-07-10-frame-data-v2-spec-subcycle-
+//     rebaking.md §3 — per-sub-cycle LOC re-projection:
+//       * v2 Sub-cycle 1: ~1400 LOC — data-model expansion + .data accessor
+//         + preamble + dispatcher + Am 10 spec construction.
+//       * v2 Sub-cycle 2: ~1050 LOC — read verbs (query DSL retained) +
+//         DAT-Q020 include-relation path resolution.
+//       * v2 Sub-cycle 3: ~1050 LOC — Database service class generation +
+//         pairing verification + invariant enforcement + rejection diagnostics
+//         for removed v1.2 syntax.
+//       * v2 Sub-cycle 4: ~1200 LOC — DSL parsers + migrate + integration +
+//         smoke test.
+//   - clean-framework/system-documents/SPEC_DATA_PERSISTENCE_MODEL.md §15 —
+//     full status and remaining phase status.
+//
+// Historical context (retained for future readers):
+//   The original v3.x sub-cycle plan (2026-07-03) targeted v1.2 semantics on
+//   typed emission across 5 sub-cycles per reports/2026-07-03-session-4-
+//   frame-data-deferred-v4.md §2. Sub-cycles 1-4 of that plan shipped as
+//   v3.0.4 → v3.0.10. Sub-cycle 5 (DSL parsers + integration + comita) was
+//   not executed because Option A adoption retargeted the plan to v2 semantics.
+//   The pre-baked design in v4 §2 is preserved as a historical LOC-projection
+//   reference; do not use it as the design target under Option A.
 //
 // Structural precedent: plugins/frame.canvas/src/main.cln (Sub-cycle 1 shape
 //   mirrored here — same tiny-factory pattern, same sticky-error idiom, same
