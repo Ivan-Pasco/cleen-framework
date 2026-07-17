@@ -194,19 +194,46 @@ functions:
 			if verb == "exists"
 				return expand_exists(ctx, vmodel, body)
 			if verb == "delete"
-				return expand_delete(ctx, vmodel, body)
+				// V2 (2026-07-17): Model.delete: block form is removed by
+				// frame-data.ebnf v2.0.0 §2 (retired DAT-C001). Emit an
+				// AI-actionable diagnostic pointing at Database.delete /
+				// Database.deleteOrFail. Bulk-delete-by-predicate should
+				// use db.query with an explicit DELETE ... WHERE statement.
+				return plugin_error(ctx, "FRAME-DATA-E021",
+					vmodel + ".delete: block form is removed under v2. " +
+					"For a single row, call Database.delete(entity) (lenient) " +
+					"or Database.deleteOrFail(entity) (strict). For bulk delete-by-predicate, " +
+					"use db.query with an explicit DELETE ... WHERE statement. See spec DAT-S003/DAT-S004.")
 			if verb == "paginate"
 				return expand_paginate(ctx, vmodel, body)
 			if verb == "cursor"
 				return expand_cursor(ctx, vmodel, body)
+			// V2 (2026-07-17): block-form mutation verbs removed by
+			// frame-data.ebnf v2.0.0 §2 and DAT-Q014/DAT-Q015. Emit an
+			// AI-actionable diagnostic pointing at Database.save /
+			// Database.delete rather than dispatching to the retired v1
+			// expanders. See SPEC_DATA_PERSISTENCE_MODEL.md §11 for the
+			// migration rationale.
 			if verb == "insert"
-				return expand_insert(ctx, vmodel, body)
+				return plugin_error(ctx, "FRAME-DATA-E021",
+					vmodel + ".insert: block form is removed under v2. " +
+					"Construct " + vmodel + " and call Database.save(entity). " +
+					"See spec DAT-S001.")
 			if verb == "insert_id"
-				return expand_insert_id(ctx, vmodel, body)
+				return plugin_error(ctx, "FRAME-DATA-E021",
+					vmodel + ".insert_id: block form is removed under v2. " +
+					"Call Database.save(entity) then read entity.id (mutated in place). " +
+					"See spec DAT-Q014.")
 			if verb == "update"
-				return expand_update(ctx, vmodel, body)
+				return plugin_error(ctx, "FRAME-DATA-E021",
+					vmodel + ".update: block form is removed under v2. " +
+					"Load with " + vmodel + ".data.<method> (or first:/findOrFail:), mutate fields, " +
+					"and call Database.save(entity). See spec DAT-S001.")
 			if verb == "upsert"
-				return expand_upsert(ctx, vmodel, body)
+				return plugin_error(ctx, "FRAME-DATA-E021",
+					vmodel + ".upsert: block form is removed under v2. " +
+					"Use first: to look up, then construct-or-mutate and Database.save(entity). " +
+					"See spec DAT-Q015.")
 			return 0
 
 		return 0
@@ -839,6 +866,156 @@ functions:
 				count = count + 1
 			pos = pos + 1
 		return count
+
+// ============================================================================
+// V2 SUB-BLOCK PARSER (Sub-cycle 1 partial — 2026-07-17)
+// ============================================================================
+// Spec: foundation/spec/plugins/frame-data.ebnf v2.0.0 §2 (data_sub_block).
+// Semantic rules: DAT-M014..M020 (frame-data-semantics.md v2.0.0).
+//
+// The v2 `data <T>:` block body is a sequence of ordered sub-blocks:
+//   table "users"                        -- optional, DAT-M018
+//   fields:                              -- required, DAT-M015
+//       email required unique
+//       status default: "pending"
+//   indexes:                             -- optional, DAT-M019
+//       email unique
+//       (status, createdAt)
+//   relations:                           -- optional, DAT-M020
+//       orders: has_many Order on userId
+//   queries:                             -- optional
+//       list<User> byStatus(string status)
+//           return User.find: where: status == status
+//
+// The parser here recognizes the sub-block form and extracts each sub-block
+// body as a string. Sub-cycle 3 will consume these extracts for entity/data
+// pairing and generation. Sub-cycle 1 partial only ships:
+//   - is_v2_sub_block_form(body): form detection
+//   - extract_v2_sub_block(body, name): extract one sub-block's content
+//   - extract_v2_table_line(body): read the `table "..."` declaration
+//   - v2 fields:/indexes:/relations:/queries: recognized as reserved
+//     sub-block boundaries by extract_subblock (patched separately)
+
+functions:
+	// Return true if `body` uses the v2 sub-block form. Detection rule:
+	// any line trimmed starts with one of `table `, `table\t`, `fields:`,
+	// `indexes:`, `relations:`, `queries:`. Bare-field bodies (v1) never
+	// contain those keywords at line start, so the check is unambiguous.
+	boolean is_v2_sub_block_form(string body)
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				if line.startsWith("fields:")
+					return true
+				if line.startsWith("indexes:")
+					return true
+				if line.startsWith("relations:")
+					return true
+				if line.startsWith("queries:")
+					return true
+				if line.startsWith("table ")
+					return true
+				if line.startsWith("table\t")
+					return true
+			line_start = line_end + 1
+		return false
+
+	// Return true if a trimmed line begins a v2 sub-block header
+	// (used as extract boundary detection).
+	boolean is_v2_sub_block_header(string trimmed_line)
+		if trimmed_line.startsWith("fields:")
+			return true
+		if trimmed_line.startsWith("indexes:")
+			return true
+		if trimmed_line.startsWith("relations:")
+			return true
+		if trimmed_line.startsWith("queries:")
+			return true
+		if trimmed_line.startsWith("table ")
+			return true
+		if trimmed_line.startsWith("table\t")
+			return true
+		return false
+
+	// Extract the content of a named v2 sub-block (`fields`, `indexes`,
+	// `relations`, `queries`). Returns the raw sub-block body (lines below
+	// the header up to the next sub-block header or end-of-body). Returns
+	// "" if the sub-block is not present. Preserves original indentation
+	// so downstream consumers (Sub-cycle 3) can distinguish nested queries:
+	// method bodies from top-level field/relation lines.
+	string extract_v2_sub_block(string body, string sub_block_name)
+		string target_header = sub_block_name + ":"
+		integer line_start = 0
+		integer content_start = -1
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if content_start == -1
+				if line == target_header
+					content_start = line_end + 1
+			else
+				if line.length() > 0 and is_v2_sub_block_header(line)
+					return body.substring(content_start, line_start)
+			line_start = line_end + 1
+		if content_start == -1
+			return ""
+		return body.substring(content_start, body.length())
+
+	// Extract the `table "..."` declaration value. Returns the unquoted
+	// table name, or "" if no `table` line is present. Only the first
+	// occurrence is honored; duplicate `table` lines are a Sub-cycle 3
+	// diagnostic (not enforced here).
+	string extract_v2_table_line(string body)
+		integer line_start = 0
+		while line_start < body.length()
+			integer line_end = body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body.length()
+			string line = body.substring(line_start, line_end).trim()
+			if line.startsWith("table ") or line.startsWith("table\t")
+				string rest = line.substring(6, line.length()).trim()
+				if rest.startsWith("\"") and rest.endsWith("\"") and rest.length() >= 2
+					return rest.substring(1, rest.length() - 1)
+				return rest
+			line_start = line_end + 1
+		return ""
+
+	// Enumerate the field names declared inside a `fields:` sub-block body.
+	// Each non-empty trimmed line is treated as a field declaration; the
+	// leading identifier (before any constraint keyword or `:` or `as`)
+	// is the field name. Returns a comma-separated list, or "" when the
+	// sub-block is empty. Types come from the paired entity per DAT-M016
+	// and are resolved in Sub-cycle 3; this helper is name-only.
+	string extract_v2_field_names(string fields_body)
+		string result = ""
+		integer line_start = 0
+		while line_start < fields_body.length()
+			integer line_end = fields_body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = fields_body.length()
+			string line = fields_body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				// The first whitespace-separated token is the field name.
+				integer sp_pos = line.indexOf(" ")
+				integer tab_pos = line.indexOf("\t")
+				integer name_end = line.length()
+				if sp_pos != -1 and sp_pos < name_end
+					name_end = sp_pos
+				if tab_pos != -1 and tab_pos < name_end
+					name_end = tab_pos
+				string field_name = line.substring(0, name_end).trim()
+				if field_name.length() > 0
+					if result.length() > 0
+						result = result + ","
+					result = result + field_name
+			line_start = line_end + 1
+		return result
 
 	// Determine whether a Clean type name is a primitive scalar.
 	boolean is_primitive_type(string type_name)
@@ -1838,6 +2015,44 @@ functions:
 
 	integer expand_data_model(integer ctx, string model_name, string body)
 		_ctx_set_error_context(ctx, "PLUGIN-DATA-MODEL", "expand_data_model for " + model_name)
+
+		// V2 sub-block form detection (Sub-cycle 1 partial — 2026-07-17).
+		// Spec: foundation/spec/plugins/frame-data.ebnf v2.0.0 §2.
+		// If the body uses the v2 sub-block form (contains `fields:`,
+		// `indexes:`, `relations:`, `queries:`, or `table "..."`), convert
+		// the `fields:` sub-block field names into a v1-shaped body so the
+		// rest of the (still-v1) generator can proceed. Types are stubbed
+		// as `string` until Sub-cycle 3 wires entity/data pairing per
+		// DAT-P003/DAT-M016. Constraint parsing is deferred; the compiled
+		// output for a v2 data block in this partial is a class shell that
+		// compiles cleanly but is not yet functionally complete.
+		if is_v2_sub_block_form(body)
+			string fields_body = extract_v2_sub_block(body, "fields")
+			if fields_body.length() == 0
+				return plugin_error(ctx, "FRAME-DATA-E020", "data " + model_name + ": v2 sub-block form requires a `fields:` sub-block (spec DAT-M015)")
+			string v2_field_names = extract_v2_field_names(fields_body)
+			if v2_field_names.length() == 0
+				return plugin_error(ctx, "FRAME-DATA-E020", "data " + model_name + ": `fields:` sub-block is empty (spec DAT-M015)")
+			// Synthesize a v1-shape body from the v2 field names.
+			// Types default to `string` pending entity/data pairing
+			// (Sub-cycle 3, DAT-P003 + DAT-M016). This produces a class
+			// shell that type-checks; runtime behaviour requires the
+			// paired entity read.
+			string synth_body = ""
+			integer name_start = 0
+			while name_start < v2_field_names.length()
+				integer comma_pos = v2_field_names.indexOf(",", name_start)
+				integer name_end = v2_field_names.length()
+				if comma_pos != -1
+					name_end = comma_pos
+				string fname = v2_field_names.substring(name_start, name_end).trim()
+				if fname.length() > 0
+					synth_body = synth_body + "string " + fname + "\n"
+				if comma_pos == -1
+					name_start = v2_field_names.length()
+				else
+					name_start = comma_pos + 1
+			body = synth_body
 
 		// Auto-inject implicit primary key when the schema does not declare one.
 		// Every ORM-emitted method (save/delete/first/findOrFail) references `id`,
@@ -3550,11 +3765,23 @@ functions:
 functions:
 	// Validate a data ModelName block before expansion. Returns error string
 	// on failure, empty string when valid.
+	//
+	// Under v2 (2026-07-17): if the body uses the v2 sub-block form, DAT-M015
+	// requires a `fields:` sub-block. Bare-field v1 bodies remain accepted
+	// as a transitional convenience; Sub-cycle 3 will add a rejection
+	// diagnostic ("bare-field data: declarations removed under v2 — use
+	// fields: sub-block") once the pairing/entity read is in place.
 	string validate_data_model(string model_name, string body)
 		if model_name.length() == 0
 			return "data: model name is required"
 		if body.trim().length() == 0
 			return "data " + model_name + ": at least one field is required"
+		if is_v2_sub_block_form(body)
+			string fields_body = extract_v2_sub_block(body, "fields")
+			if fields_body.trim().length() == 0
+				return "data " + model_name + ": `fields:` sub-block is required under v2 (spec DAT-M015)"
+			if extract_v2_field_names(fields_body).length() == 0
+				return "data " + model_name + ": `fields:` sub-block must declare at least one field (spec DAT-M015)"
 		return ""
 
 	// Validate a migrate: block before expansion.
