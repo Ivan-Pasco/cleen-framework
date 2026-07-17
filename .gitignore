@@ -50,3 +50,6 @@ Desktop.ini
 plugins/frame.ui/scripts/node_modules/
 plugins/frame.ui/scripts/package-lock.json
 plugins/frame.ui/.canary-run/
+
+# Claude Code per-session state (auto-generated, not repo state)
+.claude/scheduled_tasks.lock
