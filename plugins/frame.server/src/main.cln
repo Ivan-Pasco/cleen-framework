@@ -241,6 +241,20 @@ functions:
 functions:
 	integer expand_block_typed(integer ctx, string block_name, string attrs_json, string body)
 		if block_name == "endpoints"
+			// Compound form `endpoints server:` parses as block_name="endpoints"
+			// with a "model_name":"server" attribute (parser boundary lumps the
+			// second identifier under model_name — see clean-language-compiler
+			// src/parser/token_parser/blocks.rs parse_framework_block). This form
+			// stands in for the bare `server:` block in single-block apps like
+			// clean-errors: routes are declared inline and the app expects the
+			// same dev-capture emission the bare-server path provides. Without
+			// this branch, `endpoints server:` apps silently miss the auto-
+			// injected GET /_debug/capture route — dashboard #e4c3538d8242.
+			if attrs_json.indexOf("\"model_name\":\"server\"") >= 0
+				integer ep_err = expand_endpoints_typed(ctx, body)
+				if ep_err != 0
+					return ep_err
+				return emit_dev_capture(ctx)
 			return expand_endpoints_typed(ctx, body)
 		if block_name == "server"
 			return expand_server_typed(ctx, body)
