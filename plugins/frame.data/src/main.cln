@@ -1017,6 +1017,158 @@ functions:
 			line_start = line_end + 1
 		return result
 
+	// Map a v2 bare constraint token to its v1-pipeline equivalent.
+	// v2 keywords (spec DAT-M015..M017): primary, generated, required, unique.
+	// v1 constraint tokens the SQL generator understands: pk, auto, unique.
+	// `required` has no v1 constraint (NOT NULL is not modelled yet — DAT-M016
+	// will make types nullable-aware once entity pairing lands). We preserve
+	// the token untouched so it's visible for future consumers and doesn't get
+	// silently dropped.
+	string map_v2_constraint_token(string token)
+		if token == "primary"
+			return "pk"
+		if token == "generated"
+			return "auto"
+		if token == "required"
+			return "required"
+		if token == "unique"
+			return "unique"
+		return token
+
+	// Synthesize a v1-shape field declaration from one v2 fields-body line.
+	// v2 form: `<name> [constraint ...]` — no type per DAT-M016.
+	// v1 form the downstream pipeline consumes: `<type> <name> [= <default>] [: <constraints>]`
+	// where <constraints> is a comma-separated list of v1 tokens.
+	//
+	// Types stub to `string` in this partial (Sub-cycle 1 pre-pairing). The
+	// pairing decision (team-prompt filed 2026-07-17) resolves DAT-M016 and
+	// swaps the stub for the real entity type.
+	//
+	// Constraint parsing:
+	//   - Bare tokens (`primary`, `generated`, `required`, `unique`) are mapped
+	//     via map_v2_constraint_token and appended to the constraint list.
+	//   - `default: <value>` — the value token is captured and emitted as
+	//     `= <value>` on the synthesized line (matches v1 default-value form).
+	//   - `as "<column_name>"` — captured as `col="<column_name>"` constraint;
+	//     the v1 SQL generator does not consume it yet (Sub-cycle 3 will).
+	//     Preserved so lookahead tools and future codegen see it.
+	//   - Unknown tokens are dropped with no error — future spec tokens should
+	//     add explicit handling here rather than fall through silently.
+	// Returns "" for empty or malformed lines (caller filters those out).
+	string synthesize_v1_line_from_v2_field(string line)
+		line = line.trim()
+		if line.length() == 0
+			return ""
+		string field_name = ""
+		string constraints = ""
+		string default_val = ""
+		integer pos = 0
+		integer len = line.length()
+
+		// Skip leading whitespace (defensive; caller already trims).
+		while pos < len
+			string ch = line.substring(pos, pos + 1)
+			if ch != " " and ch != "\t"
+				break
+			pos = pos + 1
+
+		// Extract the field name (first whitespace-delimited token).
+		integer name_start = pos
+		while pos < len
+			string ch = line.substring(pos, pos + 1)
+			if ch == " " or ch == "\t"
+				break
+			pos = pos + 1
+		field_name = line.substring(name_start, pos).trim()
+		if field_name.length() == 0
+			return ""
+
+		// Walk the remaining tokens.
+		while pos < len
+			// Skip whitespace between tokens.
+			while pos < len
+				string ch = line.substring(pos, pos + 1)
+				if ch != " " and ch != "\t"
+					break
+				pos = pos + 1
+			if pos >= len
+				break
+
+			// Read one token (up to next whitespace).
+			integer tok_start = pos
+			while pos < len
+				string ch = line.substring(pos, pos + 1)
+				if ch == " " or ch == "\t"
+					break
+				pos = pos + 1
+			string tok = line.substring(tok_start, pos).trim()
+			if tok.length() == 0
+				continue
+
+			if tok == "default:"
+				// The next non-whitespace token is the default value.
+				while pos < len
+					string ch = line.substring(pos, pos + 1)
+					if ch != " " and ch != "\t"
+						break
+					pos = pos + 1
+				integer val_start = pos
+				while pos < len
+					string ch = line.substring(pos, pos + 1)
+					if ch == " " or ch == "\t"
+						break
+					pos = pos + 1
+				default_val = line.substring(val_start, pos).trim()
+			else if tok == "as"
+				// The next token is the quoted column-name literal.
+				while pos < len
+					string ch = line.substring(pos, pos + 1)
+					if ch != " " and ch != "\t"
+						break
+					pos = pos + 1
+				integer col_start = pos
+				while pos < len
+					string ch = line.substring(pos, pos + 1)
+					if ch == " " or ch == "\t"
+						break
+					pos = pos + 1
+				string col_lit = line.substring(col_start, pos).trim()
+				if col_lit.length() > 0
+					if constraints.length() > 0
+						constraints = constraints + ", "
+					constraints = constraints + "col=" + col_lit
+			else
+				string v1_tok = map_v2_constraint_token(tok)
+				if v1_tok.length() > 0
+					if constraints.length() > 0
+						constraints = constraints + ", "
+					constraints = constraints + v1_tok
+
+		string result = "string " + field_name
+		if default_val.length() > 0
+			result = result + " = " + default_val
+		if constraints.length() > 0
+			result = result + " : " + constraints
+		return result
+
+	// Convert a v2 `fields:` sub-block body into a v1-shape body. Iterates
+	// lines, calls synthesize_v1_line_from_v2_field per line, and joins the
+	// results with newlines. Empty and malformed lines are skipped.
+	string synthesize_v1_body_from_v2_fields(string fields_body)
+		string result = ""
+		integer line_start = 0
+		while line_start < fields_body.length()
+			integer line_end = fields_body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = fields_body.length()
+			string line = fields_body.substring(line_start, line_end).trim()
+			if line.length() > 0
+				string v1_line = synthesize_v1_line_from_v2_field(line)
+				if v1_line.length() > 0
+					result = result + v1_line + "\n"
+			line_start = line_end + 1
+		return result
+
 	// Determine whether a Clean type name is a primitive scalar.
 	boolean is_primitive_type(string type_name)
 		if type_name == "integer"
@@ -2033,26 +2185,15 @@ functions:
 			string v2_field_names = extract_v2_field_names(fields_body)
 			if v2_field_names.length() == 0
 				return plugin_error(ctx, "FRAME-DATA-E020", "data " + model_name + ": `fields:` sub-block is empty (spec DAT-M015)")
-			// Synthesize a v1-shape body from the v2 field names.
-			// Types default to `string` pending entity/data pairing
-			// (Sub-cycle 3, DAT-P003 + DAT-M016). This produces a class
-			// shell that type-checks; runtime behaviour requires the
-			// paired entity read.
-			string synth_body = ""
-			integer name_start = 0
-			while name_start < v2_field_names.length()
-				integer comma_pos = v2_field_names.indexOf(",", name_start)
-				integer name_end = v2_field_names.length()
-				if comma_pos != -1
-					name_end = comma_pos
-				string fname = v2_field_names.substring(name_start, name_end).trim()
-				if fname.length() > 0
-					synth_body = synth_body + "string " + fname + "\n"
-				if comma_pos == -1
-					name_start = v2_field_names.length()
-				else
-					name_start = comma_pos + 1
-			body = synth_body
+			// Synthesize a v1-shape body from the v2 `fields:` sub-block.
+			// Preserves per-field constraints (primary, generated, required,
+			// unique, default: <value>, as "<column>") via
+			// synthesize_v1_body_from_v2_fields (Piece #1, this session).
+			// Types are still stubbed as `string` pending the entity/data
+			// pairing decision (team-prompt filed 2026-07-17 —
+			// DAT-P003 + DAT-M016 resolve once the plugin owner picks a
+			// pairing mechanism from Options A-F).
+			body = synthesize_v1_body_from_v2_fields(fields_body)
 
 		// Auto-inject implicit primary key when the schema does not declare one.
 		// Every ORM-emitted method (save/delete/first/findOrFail) references `id`,
