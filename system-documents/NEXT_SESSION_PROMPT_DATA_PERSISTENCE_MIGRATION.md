@@ -1,9 +1,11 @@
 # Next Session Prompt — Data Persistence Migration Continuation
 
-**Date written:** 2026-07-17 (updated a second time)
-**Written by:** Session that landed Piece #1 (v2 constraint parser) + filed pairing team-prompt
+**Date written:** 2026-07-18 (spec v2.1.0 landed)
+**Written by:** Session that landed Option F spec adoption + Piece #1 (v2 constraint parser)
 **Purpose:** Give a fresh session enough context to continue the migration without repeating discovery work
-**Supersedes:** the prior version of this same file (see git log for the original 2026-07-17 handoff and the first mid-day update)
+**Supersedes:** the prior 2026-07-17 versions (see git log for the original handoff and interim updates)
+
+**Doc paths note:** The workspace `foundation/` tree was reorganized: `foundation/management/*` moved to `foundation/archive/*` for retired/frozen items; active management stays in `foundation/management/`. Files referenced below use their **current** paths. Content did not change.
 
 ---
 
@@ -20,20 +22,58 @@ The frame.data v2 migration is mid-execution. **Option A was formally adopted on
 - Migration plan and status doc (`SPEC_DATA_PERSISTENCE_MODEL.md` §15) fully current.
 - Sub-cycle 1 partial (`ccd5c2d` in `clean-framework`) — sub-block parser + dispatcher rejections.
 - Phase 4 MCP updates (`c53e6ec2` in `clean-language-compiler`) — `tool_get_app_structure`, `tool_get_quick_reference` §Rule A.
-- **New (2026-07-17, this session):** Piece #1 constraint parser landed (`9999ce0` in `clean-framework`) — per-field constraints (`primary`, `generated`, `required`, `unique`, `default: <value>`, `as "<column>"`) are now preserved through v2→v1 body synthesis instead of dropped. `cln check`: 136 functions, 0 errors.
-- **New (2026-07-17, this session):** Cross-component team-prompt filed on the errors dashboard (id `35d68559-8243-11f1-9d55-da25a95a496b`, task #1279, priority `high`) proposing **Option F — explicit `data: TypeName` link in entity class** as the pairing mechanism. Six options laid out with tradeoffs. Awaits plugin owner decision before Sub-cycle 1 remainder can proceed.
+- Piece #1 constraint parser (`9999ce0` in `clean-framework`, 2026-07-17) — per-field constraints (`primary`, `generated`, `required`, `unique`, `default: <value>`, `as "<column>"`) preserved through v2→v1 body synthesis. `cln check`: 136 functions, 0 errors.
+- **New (2026-07-18):** Option F pairing mechanism formally adopted by plugin owner. Spec bumped to **v2.1.0** in `d09c8c4` at workspace root — entity/data pairing is now via explicit `data: <TypeRef>` field in the entity class, not by shared basename. `frame-data.ebnf` and `frame-data-semantics.md` updated. Team-prompt decision recorded on dashboard as reply prompt `aa5e2c84-8244-11f1-9d55` under task #1279.
 
 **What's NOT done and open:**
 
-- **Sub-cycle 1 (v2) remainder — BLOCKED on pairing decision.** `.data` accessor generation (DAT-A001..A005), entity/data pairing verification (DAT-P001..P005), type resolution from paired entity (DAT-M016, currently stubbed as `string`), and rejection diagnostic for bare-field `data:` (v1). All three require *some* mechanism for the plugin to know about the paired entity — either a file-read bridge (Option A), a class-merge (Option B), the explicit-link approach (Option F, proposed to plugin owner this session), or another compiler-side change. **The plugin owner's decision on team-prompt `35d68559-8243-11f1-9d55` gates these.** Estimated ~500-700 LOC remaining once unblocked.
-- **`indexes:`/`relations:`/`queries:` sub-block semantic consumers** — parser recognizes them as boundaries but nothing consumes their contents yet. Not blocked on pairing (except `queries:` return types, which need entity name). Can proceed independently: ~200-300 LOC.
-- **Sub-cycles 2 (v2), 3 (v2), and 4 (v2)** — read verbs with DAT-Q020, Database service + pairing + invariants, DSL parsers + migrate + smoke test. Per-sub-cycle LOC targets sum to ~3300 additional LOC.
-- **~230 v1 references across ~25 book chapters** — mechanical rewrites (not pedagogical). Skipped in the prior two sessions due to parallel-session activity on 5/7 target chapters. Same state as of this handoff.
+- **Sub-cycle 1 (v2) plugin implementation of Option F — UNBLOCKED, needs code.** Spec is now v2.1.0 (workspace root commit `d09c8c4`). The plugin needs to:
+  1. Parse the `data: <TypeRef>` field declaration inside entity classes (grammar §1, `data_link_field`).
+  2. Emit `class <D>` for each `data <D>:` block (D is a normal class, not merged with any entity).
+  3. Route `<Entity>.data.<method>` and `<var>.data.<method>` calls to `<D>.queries:` methods per DAT-A006. Reject `var d = e.data` with `FRAME-DATA-E028`.
+  4. Emit `FRAME-DATA-E025` when `Database.save(e)` is called on an entity without a `data:` field.
+  5. Emit `FRAME-DATA-E026` when a `fields:` entry has no matching field name on any entity that links to the data class.
+  6. Emit `FRAME-DATA-W030` (warning) when paired entity and data class have same-named fields with different types.
+  7. Emit `FRAME-DATA-I002` (info) when a `data D:` block is declared but no entity references it.
+  Estimated ~500-700 LOC. Doable in 2-3 focused sessions.
+- **`indexes:`/`relations:`/`queries:` sub-block semantic consumers** — parser recognizes them as boundaries but nothing consumes their contents yet. Not blocked on pairing (except `queries:` return types, which need the linking entity's name). Can proceed independently: ~200-300 LOC. Good candidate for a session that runs in parallel with Sub-cycle 1 implementation.
+- **Sub-cycles 2 (v2), 3 (v2), and 4 (v2)** — read verbs with DAT-Q020, Database service + pairing + invariants, DSL parsers + migrate + smoke test. Per-sub-cycle LOC targets sum to ~3300 additional LOC. See rebaking report at `foundation/archive/reports/2026-07-10-frame-data-v2-spec-subcycle-rebaking.md` for the LOC breakdown (path is post-reorg).
+- **~230 v1 references across ~25 book chapters** — mechanical rewrites (not pedagogical). Still blocked by parallel-session activity on 5/7 target chapters. Same state as prior sessions.
 - **AI-driven verification of migrated apps** — still blocks on a working v2 plugin (needs Sub-cycles 2-4).
 
 ---
 
-## What was done this session (2026-07-17, second update)
+## What was done this session (2026-07-18) — Option F formally adopted
+
+### Spec bump to v2.1.0 — commit `d09c8c4` at workspace root
+
+Plugin owner made the call. **Option F is the pairing mechanism.** Both v2 spec files updated in one commit at the workspace root:
+
+- `foundation/spec/plugins/frame-data.ebnf` — version 2.0.0 → 2.1.0.
+  - Header changelog for v2.1.0.
+  - Section 1 (entity class) adds the `data_link_field = "data" ":" type_ref;` production and a worked example.
+  - Section 2 opening reframes `data D:` as a distinct class, not "the persistence view of a paired entity."
+  - Section 2.1 (table): default table name now strips a `Data` suffix from the data class name (`UserData` → `users`, `AccessTokenData` → `access_tokens`) so v2.0.0 default tables don't rename.
+  - Section 2.2 (fields): `field_declaration` accepts both v2.1.0 base form (`type_ref identifier {constraints}`) and v2.0.0 transitional form (identifier alone, type stubbed as `string` for compat).
+
+- `foundation/spec/plugins/frame-data-semantics.md` — version 2.0.0 → 2.1.0.
+  - DAT-M014 rewritten: pairing is explicit via `data: D` field, not by basename convention. Added DAT-M014-migration explaining the mechanical rewrite.
+  - DAT-M016 rewritten: types live on the data class directly. Type mismatch between paired entity and data becomes `FRAME-DATA-W030` warning (not error). Future v2.2+ can add an opt-in inheritance helper.
+  - DAT-A001..A003 rewritten: `.data` accessor resolves via the entity's `data:` field. DAT-A003 broadens return types to "any entity that declares `data: D`" — supports the (rare) multi-entity-shared-storage case.
+  - DAT-A006 added: `data: <Type>` field-declaration semantics — linking directive, not runtime value; exposes D's queries as `<var>.data.<method>`. Introduces `FRAME-DATA-E028` for `var d = e.data` attempts.
+  - DAT-P001..P005 rewritten: pairing verification falls out of normal class resolution. **No file-read bridge required.** Introduces `FRAME-DATA-E025` (class has no `data:` field), `FRAME-DATA-E026` (fields entry with no corresponding entity field), `FRAME-DATA-I002` (info: data class declared but never linked).
+
+**Dashboard artifacts:** Original blocker was prompt `35d68559-8243-11f1-9d55` (task #1279) filed 2026-07-17. Plugin owner decision recorded as reply prompt `aa5e2c84-8244-11f1-9d55` on 2026-07-17. Executed on 2026-07-18.
+
+**Note on the commit:** `d09c8c4` also incidentally includes ~268 file renames from the workspace `foundation/management/*` → `foundation/archive/*` reorganization done by a parallel session. Content-preserving (all `R100`), no semantic impact on this migration work. Paths in this doc use the post-reorg locations.
+
+### What's next
+
+**Sub-cycle 1 (v2) plugin implementation is now unblocked.** See the "What's NOT done and open" list above for the 7-step plugin scope. First slice recommendation: parse the `data: <TypeRef>` field declaration + emit `class <D>` from `data <D>:` blocks (steps 1-2). That's the foundation the accessor routing (step 3) and diagnostics (steps 4-7) build on.
+
+---
+
+## What was done previously (2026-07-17, second update)
 
 ### Piece #1 — v2 constraint parser — commit `9999ce0` in `clean-framework`
 
@@ -151,13 +191,31 @@ Do not skip these — the prior sessions' context is dense and repeating it wast
 
 You do not need to pick all three. Each is independently valuable.
 
-### Track A1 — Sub-cycle 1 pairing-dependent remainder (BLOCKED)
+### Track A1 — Sub-cycle 1 Option F plugin implementation (UNBLOCKED as of 2026-07-18)
 
-**What:** `.data` accessor generation (DAT-A001..A005), pairing verification (DAT-P001..P005), type resolution (DAT-M016 — replace the `string` stub landed in `9999ce0`), and rejection diagnostic for bare-field v1 bodies.
+**What:** Implement the plugin side of the v2.1.0 Option F spec. Seven concrete pieces (repeated from "What's NOT done" above so this section stands alone):
 
-**Blocker:** The plugin can't peek at sibling `app/entity/<basename>.cln` files today — no read bridge on the plugin contract. **Awaiting plugin owner decision on team-prompt `35d68559-8243-11f1-9d55` (task #1279)** — six options laid out (A: file-read bridge, B: class merge, C: dup types, D: extension methods, E: two-pass compile + symbol table, F: explicit `data: TypeName` link).
+1. Parse the `data: <TypeRef>` field declaration inside entity classes (grammar §1, `data_link_field`).
+2. Emit `class <D>` for each `data <D>:` block. D is a normal class — not merged with any entity.
+3. Route `<Entity>.data.<method>` and `<var>.data.<method>` calls to `<D>.queries:` methods per DAT-A006. Reject `var d = e.data` with `FRAME-DATA-E028`.
+4. Emit `FRAME-DATA-E025` when `Database.save(e)` is called on an entity without a `data:` field.
+5. Emit `FRAME-DATA-E026` when a `fields:` entry has no matching field name on any entity that links to the data class.
+6. Emit `FRAME-DATA-W030` (warning) when paired entity and data class have same-named fields with different types.
+7. Emit `FRAME-DATA-I002` (info) when a `data D:` block is declared but no entity references it.
 
-**Before starting this track:** check the errors dashboard for a response. If none yet, skip this track and do A2, B, or C instead.
+**Where:** `clean-framework/plugins/frame.data/src/main.cln`. Build on top of the constraint parser landed in `9999ce0`. The synthesized v1-shape body already carries per-field constraints; step 2 (emit `class <D>`) is a matter of teaching `expand_data_model` to emit a class named `<D>` (not the entity's name) that carries the query methods and metadata.
+
+**Recommended first slice:** steps 1 + 2 in one commit. That's the foundation. Steps 3-7 layer on afterward.
+
+**Reference material:**
+- Spec: `foundation/spec/plugins/frame-data-semantics.md` v2.1.0 (specifically DAT-M014, DAT-M014-migration, DAT-M016, DAT-A006, DAT-P001..P005).
+- Spec: `foundation/spec/plugins/frame-data.ebnf` v2.1.0 (specifically §1 `data_link_field` and §2 `data_block`).
+- Existing plugin source: `plugins/frame.data/src/main.cln` — `expand_data_model` (~line 2016), `synthesize_v1_body_from_v2_fields` (~line 1120), and the sub-block extraction helpers around line 900-1020.
+- Plugin owner decision reply: dashboard prompt `aa5e2c84-8244-11f1-9d55` (thread parent: task #1279).
+
+**Honest risks:**
+- Under v2.0.0 the plugin emitted a class named after the entity (e.g. `class User`). Under Option F it must emit a class named `<D>` (e.g. `class UserData`). Downstream code that looks up "the persistence class for `User`" now has to look at `User.data`'s type — check for callers.
+- Sub-cycle 2 (read verbs) will need to know which entity a data class is linked from (for `E.find:` typing). Under Option F, this reverses direction: the entity opts in via `data: D`, so lookups run entity → data. Verify the codegen paths handle this direction cleanly before starting Sub-cycle 2.
 
 ### Track A2 — `indexes:`/`relations:` sub-block consumers (NOT blocked)
 
@@ -270,8 +328,10 @@ Reference points if you need to verify nothing has been lost:
 | `0627157` | workspace root | 2026-07-17 book banners + prompt collision-resolved markers |
 | `ccd5c2d` | clean-framework | 2026-07-17 Sub-cycle 1 (v2) partial — sub-block parser + expand_data_model routing + v2 dispatcher rejections |
 | `c53e6ec2` | clean-language-compiler | 2026-07-17 Phase 4 MCP updates — tool_get_app_structure and tool_get_quick_reference §Rule A rewritten for v2 |
-| `9999ce0` | clean-framework | **2026-07-17 Piece #1 — v2 constraint parser (map_v2_constraint_token + synthesize_v1_line_from_v2_field + synthesize_v1_body_from_v2_fields); expand_data_model now preserves `primary`/`generated`/`required`/`unique`/`default: <val>`/`as "<col>"` constraints (this session)** |
-| dashboard `35d68559-8243-11f1-9d55` | errors dashboard task #1279 | **2026-07-17 team-prompt to `framework` — six options for the pairing/type-inheritance blocker; awaits plugin owner decision (this session)** |
+| `9999ce0` | clean-framework | 2026-07-17 Piece #1 — v2 constraint parser (map_v2_constraint_token + synthesize_v1_line_from_v2_field + synthesize_v1_body_from_v2_fields); expand_data_model preserves `primary`/`generated`/`required`/`unique`/`default: <val>`/`as "<col>"` constraints |
+| dashboard `35d68559-8243-11f1-9d55` | errors dashboard task #1279 | 2026-07-17 team-prompt to `framework` — six options for the pairing/type-inheritance blocker |
+| dashboard `aa5e2c84-8244-11f1-9d55` | errors dashboard task #1279 reply | 2026-07-17 plugin owner decision — Option F formally adopted |
+| `d09c8c4` | workspace root | **2026-07-18 Spec bump to v2.1.0 — Option F adopted in `frame-data.ebnf` + `frame-data-semantics.md`. DAT-M014, DAT-M016, DAT-A006 new/rewritten; DAT-P001..P005 use normal type resolution instead of file-read (this session)** |
 
 If any of these commits are missing from `git log` in their respective repo, something significant happened — investigate before proceeding.
 
