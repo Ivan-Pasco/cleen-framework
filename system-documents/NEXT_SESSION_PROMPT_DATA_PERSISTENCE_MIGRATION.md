@@ -1,9 +1,9 @@
 # Next Session Prompt — Data Persistence Migration Continuation
 
-**Date written:** 2026-07-17 (updated)
-**Written by:** Session that landed Sub-cycle 1 partial + Phase 4 MCP updates
+**Date written:** 2026-07-17 (updated a second time)
+**Written by:** Session that landed Piece #1 (v2 constraint parser) + filed pairing team-prompt
 **Purpose:** Give a fresh session enough context to continue the migration without repeating discovery work
-**Supersedes:** the prior version of this same file (see git log for the original 2026-07-17 handoff)
+**Supersedes:** the prior version of this same file (see git log for the original 2026-07-17 handoff and the first mid-day update)
 
 ---
 
@@ -18,19 +18,65 @@ The frame.data v2 migration is mid-execution. **Option A was formally adopted on
 - Cross-component prompts marked with Option A adoption.
 - Plugin source header (`plugins/frame.data/src/main.cln` lines 1-38) updated to retire the v3.x sub-cycle plan.
 - Migration plan and status doc (`SPEC_DATA_PERSISTENCE_MODEL.md` §15) fully current.
-- **New (2026-07-17, this session):** Sub-cycle 1 partial landed (`ccd5c2d` in `clean-framework`) — see "What was done this session" below.
-- **New (2026-07-17, this session):** Phase 4 MCP updates landed (`c53e6ec2` in `clean-language-compiler`) — see "What was done this session" below.
+- Sub-cycle 1 partial (`ccd5c2d` in `clean-framework`) — sub-block parser + dispatcher rejections.
+- Phase 4 MCP updates (`c53e6ec2` in `clean-language-compiler`) — `tool_get_app_structure`, `tool_get_quick_reference` §Rule A.
+- **New (2026-07-17, this session):** Piece #1 constraint parser landed (`9999ce0` in `clean-framework`) — per-field constraints (`primary`, `generated`, `required`, `unique`, `default: <value>`, `as "<column>"`) are now preserved through v2→v1 body synthesis instead of dropped. `cln check`: 136 functions, 0 errors.
+- **New (2026-07-17, this session):** Cross-component team-prompt filed on the errors dashboard (id `35d68559-8243-11f1-9d55-da25a95a496b`, task #1279, priority `high`) proposing **Option F — explicit `data: TypeName` link in entity class** as the pairing mechanism. Six options laid out with tradeoffs. Awaits plugin owner decision before Sub-cycle 1 remainder can proceed.
 
 **What's NOT done and open:**
 
-- **Sub-cycle 1 (v2) remainder** — `.data` accessor generation, entity/data pairing verification (DAT-P001..P005), type resolution from the paired entity (currently stubbed as `string`), `indexes:`/`relations:`/`queries:` sub-block semantic consumers, Am 10 spec construction changes, and rejection diagnostic for bare-field `data:` (v1). Estimated ~700-900 LOC remaining out of the ~1400 LOC Sub-cycle 1 target.
+- **Sub-cycle 1 (v2) remainder — BLOCKED on pairing decision.** `.data` accessor generation (DAT-A001..A005), entity/data pairing verification (DAT-P001..P005), type resolution from paired entity (DAT-M016, currently stubbed as `string`), and rejection diagnostic for bare-field `data:` (v1). All three require *some* mechanism for the plugin to know about the paired entity — either a file-read bridge (Option A), a class-merge (Option B), the explicit-link approach (Option F, proposed to plugin owner this session), or another compiler-side change. **The plugin owner's decision on team-prompt `35d68559-8243-11f1-9d55` gates these.** Estimated ~500-700 LOC remaining once unblocked.
+- **`indexes:`/`relations:`/`queries:` sub-block semantic consumers** — parser recognizes them as boundaries but nothing consumes their contents yet. Not blocked on pairing (except `queries:` return types, which need entity name). Can proceed independently: ~200-300 LOC.
 - **Sub-cycles 2 (v2), 3 (v2), and 4 (v2)** — read verbs with DAT-Q020, Database service + pairing + invariants, DSL parsers + migrate + smoke test. Per-sub-cycle LOC targets sum to ~3300 additional LOC.
-- **~230 v1 references across ~25 book chapters** — mechanical rewrites (not pedagogical). Attempted this session but skipped due to parallel-session activity on 5/7 target chapters (see "What was NOT done and why").
+- **~230 v1 references across ~25 book chapters** — mechanical rewrites (not pedagogical). Skipped in the prior two sessions due to parallel-session activity on 5/7 target chapters. Same state as of this handoff.
 - **AI-driven verification of migrated apps** — still blocks on a working v2 plugin (needs Sub-cycles 2-4).
 
 ---
 
-## What was done this session (2026-07-17)
+## What was done this session (2026-07-17, second update)
+
+### Piece #1 — v2 constraint parser — commit `9999ce0` in `clean-framework`
+
+Source-only step. `plugin.wasm` unchanged; awaits plugin owner's `comita`. `cln check src/main.cln` reports 136 functions, 0 errors on the modified source (previous state: 133 functions).
+
+Added to `plugins/frame.data/src/main.cln` after `extract_v2_field_names` (~line 1019):
+
+- **`map_v2_constraint_token(token)`** — Maps v2 bare tokens to v1 SQL-generator equivalents: `primary`→`pk`, `generated`→`auto`, `required`→`required`, `unique`→`unique`. Unknown tokens pass through unchanged (so future spec additions don't silently drop).
+
+- **`synthesize_v1_line_from_v2_field(line)`** — Per-line parser. Extracts the leading identifier as the field name, walks remaining tokens, and produces a v1-shape declaration `string <name> [= <default>] [: <constraints>]`. Special handling:
+  - `default: <value>` → captures the next token as the default, emitted as `= <value>` after the field name.
+  - `as "<column_name>"` → captured as `col="<column_name>"` constraint. The current v1 SQL generator does not consume this; Sub-cycle 3 will emit it once entity/data pairing is resolved. Preserving it keeps lookahead tools and future codegen able to see it.
+  - Bare tokens (`primary`, `generated`, `required`, `unique`) → routed through `map_v2_constraint_token` and comma-joined into the constraint list.
+  - Types stub to `string` per DAT-M016. Real type inheritance from the paired entity resolves once the pairing mechanism is chosen (team-prompt decision pending).
+
+- **`synthesize_v1_body_from_v2_fields(fields_body)`** — Line-iterator wrapper. Walks the fields sub-block body, calls `synthesize_v1_line_from_v2_field` per line, joins with newlines, skips empty/malformed lines.
+
+**Rewrote `expand_data_model`'s v2 branch (main.cln ~line 2029):** replaced the name-only synth loop (which threw away every constraint token) with a single call to `synthesize_v1_body_from_v2_fields(fields_body)`. Downstream pipeline (`parse_field_line`, `generate_field_definitions`, etc.) consumes the synthesized body unchanged.
+
+### Cross-component team-prompt filed — dashboard task #1279
+
+Filed a team-prompt to component `framework` proposing **six options** for the pairing/type-inheritance mechanism (DAT-P001..P005 + DAT-M016) blocker discovered during Sub-cycle 1:
+
+- **Option A** — File-read bridge (host function returns `app/entity/<basename>.cln` text)
+- **Option B** — Class merge on same name (compiler auto-merges plugin-generated `class T` with entity `class T`)
+- **Option C** — Types duplicated in data block (zero compiler change, but breaks v2's DRY promise)
+- **Option D** — Extension methods (`extend User:` — real language feature, big lift)
+- **Option E** — Two-pass compile + symbol table (cleanest, biggest pipeline restructure)
+- **Option F (proposed by user)** — Explicit `data: TypeName` link in the entity class, with a distinct `data TypeName:` block on the storage side
+
+Prompt id: `35d68559-8243-11f1-9d55-da25a95a496b`. Task id: `1279`. Priority: `high`. URL: https://errors.cleanlanguage.dev/prompts/detail?id=35d68559-8243-11f1-9d55-da25a95a496b
+
+**Next session:** check for the plugin owner's response before starting Sub-cycle 1 remainder. If no response yet and time is short, work `indexes:`/`relations:` sub-block consumers (not blocked on pairing).
+
+### What was NOT done and why
+
+- **Track B — book chapter mechanical rewrites — still skipped.** Same state as prior session: 5 of 7 target chapters (`ch25.md`, `ch29.md`, `ch32.md`, `ch33.md`, `ch34.md`) still have uncommitted edits from a parallel session. `ch26.md` and `app-b.md` are clean.
+- **Track C — MCP audit — not run this session.** No signal from any grep to suggest stale v1 content; deferred.
+- **Sub-cycle 1 remainder** — blocked on pairing decision (see above).
+
+---
+
+## What was done previously this day (2026-07-17, first update)
 
 ### Sub-cycle 1 (v2) partial — commit `ccd5c2d` in `clean-framework`
 
@@ -105,22 +151,27 @@ Do not skip these — the prior sessions' context is dense and repeating it wast
 
 You do not need to pick all three. Each is independently valuable.
 
-### Track A — Sub-cycle 1 (v2) completion
+### Track A1 — Sub-cycle 1 pairing-dependent remainder (BLOCKED)
 
-**What:** Land the remaining ~700-900 LOC of Sub-cycle 1: `.data` accessor generation on the entity class, entity/data-block pairing verification (DAT-P001..P005 — reads the paired `app/entity/<basename>.cln`), field type resolution from the paired entity (replaces the current `string` stub), `indexes:`/`relations:`/`queries:` sub-block consumers, Am 10 spec construction, and rejection diagnostic for bare-field `data:` (v1 form).
+**What:** `.data` accessor generation (DAT-A001..A005), pairing verification (DAT-P001..P005), type resolution (DAT-M016 — replace the `string` stub landed in `9999ce0`), and rejection diagnostic for bare-field v1 bodies.
 
-**Where:** `clean-framework/plugins/frame.data/src/main.cln`. Build on top of the helpers landed in commit `ccd5c2d`.
+**Blocker:** The plugin can't peek at sibling `app/entity/<basename>.cln` files today — no read bridge on the plugin contract. **Awaiting plugin owner decision on team-prompt `35d68559-8243-11f1-9d55` (task #1279)** — six options laid out (A: file-read bridge, B: class merge, C: dup types, D: extension methods, E: two-pass compile + symbol table, F: explicit `data: TypeName` link).
 
-**Reference material:**
-- `foundation/spec/plugins/frame-data-semantics.md` DAT-A001..A005 (accessor), DAT-P001..P005 (pairing), DAT-M016 (type inheritance), DAT-M019 (indexes semantics), DAT-M020 (relations).
-- `foundation/spec/plugins/plugin-contract.md` — plugin contract v3 (`expand_block_typed`, typed emission, entity file reads via compiler-provided read bridges).
-- Recent commit `ccd5c2d` — the sub-block parser + partial dispatcher rewrite that this track builds on.
+**Before starting this track:** check the errors dashboard for a response. If none yet, skip this track and do A2, B, or C instead.
+
+### Track A2 — `indexes:`/`relations:` sub-block consumers (NOT blocked)
+
+**What:** Consume the `indexes:` and `relations:` sub-block bodies that `extract_v2_sub_block` already extracts but nothing reads.
+- **`indexes:`** — parse single-field entries (`email`), parenthesized composites (`(status, createdAt)`), and `unique` suffixes. Feed into `CREATE INDEX` SQL emission alongside the existing `generate_field_definitions` output. Reference: DAT-M019.
+- **`relations:`** — parse `<name>: <cardinality> <TargetClass> on <fk_column>` entries. Cardinalities: `has_many`, `has_one`, `belongs_to`. Emit as class fields with the appropriate types + FK metadata. Reference: DAT-M020.
+
+**Where:** `clean-framework/plugins/frame.data/src/main.cln`. Build after the helpers landed in `9999ce0`. Add new helpers (`parse_indexes_body`, `generate_index_sql`, `parse_relations_body`, `generate_relation_fields`) and thread them into `expand_data_model`.
+
+**Est. size:** ~200-300 LOC. Doable in one focused session.
 
 **Honest risks:**
-
-- **Pairing verification requires the compiler to expose an entity-file-read bridge.** Check whether this exists in the current typed-emission surface. If not, this track blocks on a compiler-side prerequisite that must be reported via `report_error` (`component=compiler`) before Sub-cycle 1 can complete.
-- **Committed sub-block parser handles boundary detection but does not yet parse field constraints inside `fields:` sub-block.** Full Sub-cycle 1 needs a constraint parser (`primary`, `generated`, `required`, `unique`, `default:`, `as`) to feed the class spec correctly.
-- **Sub-cycle 1 completion may still require multiple sessions.** Keep commits small — every logical piece its own commit — as this session did.
+- **`relations:` needs the target class name to type the field.** For `has_many User on userId`, the resulting field is `list<User>`. That's a normal type reference — no cross-file read needed. Should be fine.
+- **`queries:` is deliberately excluded** — its return types reference the paired entity, which needs the pairing decision to resolve. Handle only `indexes:` and `relations:` in this track.
 
 ### Track B — Book chapter mechanical rewrites (~230 v1 references, ~25 files)
 
@@ -217,8 +268,10 @@ Reference points if you need to verify nothing has been lost:
 | `8fe2ac7` | clean-framework | 2026-07-17 plugin header retirement (Option A adopted) |
 | `2f78640` | clean-framework | 2026-07-17 framework doc banners + §15 update |
 | `0627157` | workspace root | 2026-07-17 book banners + prompt collision-resolved markers |
-| `ccd5c2d` | clean-framework | **2026-07-17 Sub-cycle 1 (v2) partial — sub-block parser + expand_data_model routing + v2 dispatcher rejections (this session)** |
-| `c53e6ec2` | clean-language-compiler | **2026-07-17 Phase 4 MCP updates — tool_get_app_structure and tool_get_quick_reference §Rule A rewritten for v2 (this session)** |
+| `ccd5c2d` | clean-framework | 2026-07-17 Sub-cycle 1 (v2) partial — sub-block parser + expand_data_model routing + v2 dispatcher rejections |
+| `c53e6ec2` | clean-language-compiler | 2026-07-17 Phase 4 MCP updates — tool_get_app_structure and tool_get_quick_reference §Rule A rewritten for v2 |
+| `9999ce0` | clean-framework | **2026-07-17 Piece #1 — v2 constraint parser (map_v2_constraint_token + synthesize_v1_line_from_v2_field + synthesize_v1_body_from_v2_fields); expand_data_model now preserves `primary`/`generated`/`required`/`unique`/`default: <val>`/`as "<col>"` constraints (this session)** |
+| dashboard `35d68559-8243-11f1-9d55` | errors dashboard task #1279 | **2026-07-17 team-prompt to `framework` — six options for the pairing/type-inheritance blocker; awaits plugin owner decision (this session)** |
 
 If any of these commits are missing from `git log` in their respective repo, something significant happened — investigate before proceeding.
 
