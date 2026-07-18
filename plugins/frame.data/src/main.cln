@@ -1335,6 +1335,105 @@ functions:
 			line_start = line_end + 1
 		return result
 
+	// Parse a single v2 `indexes:` entry line into a CREATE INDEX SQL
+	// statement. Per DAT-M019: single-field entries (`email`) create
+	// single-column indexes; parenthesized tuples (`(status, createdAt)`)
+	// create composite indexes; suffix `unique` (`email unique` or
+	// `(tenantId, email) unique`) creates a UNIQUE index. Returns "" for
+	// empty or malformed lines. Naming convention: `idx_<table>_<c1>_<c2>_...`
+	// for regular, `uniq_<table>_<c1>_<c2>_...` for unique. Matches SQL
+	// convention seen in most ORMs.
+	string generate_index_sql_line(string line, string table_name)
+		string trimmed = line.trim()
+		if trimmed.length() == 0
+			return ""
+		// Detect trailing `unique` suffix.
+		boolean is_unique = false
+		if trimmed.endsWith(" unique") or trimmed.endsWith("\tunique")
+			is_unique = true
+			trimmed = trimmed.substring(0, trimmed.length() - 6).trim()
+		else if trimmed == "unique"
+			// Bare `unique` line is malformed — no columns.
+			return ""
+		// Extract column list. Composite form: `(c1, c2, ...)`. Single form:
+		// bare identifier.
+		string columns = ""
+		string cols_for_name = ""
+		if trimmed.startsWith("(")
+			integer close = trimmed.indexOf(")")
+			if close == -1
+				return ""
+			string inner = trimmed.substring(1, close).trim()
+			if inner.length() == 0
+				return ""
+			// Normalize commas to `, ` in the emitted SQL; underscore-join
+			// the same tokens for the index-name suffix.
+			integer pos = 0
+			boolean first_col = true
+			while pos < inner.length()
+				integer comma = inner.indexOf(",", pos)
+				integer end_pos = inner.length()
+				if comma != -1
+					end_pos = comma
+				string col = inner.substring(pos, end_pos).trim()
+				if col.length() > 0
+					if not first_col
+						columns = columns + ", "
+						cols_for_name = cols_for_name + "_"
+					columns = columns + col
+					cols_for_name = cols_for_name + col
+					first_col = false
+				if comma == -1
+					pos = inner.length()
+				else
+					pos = comma + 1
+		else
+			// Single-column form. Take the first whitespace-delimited token.
+			integer sp = trimmed.indexOf(" ")
+			integer tb = trimmed.indexOf("\t")
+			integer end_pos = trimmed.length()
+			if sp != -1 and sp < end_pos
+				end_pos = sp
+			if tb != -1 and tb < end_pos
+				end_pos = tb
+			string col = trimmed.substring(0, end_pos).trim()
+			if col.length() == 0
+				return ""
+			columns = col
+			cols_for_name = col
+		if columns.length() == 0
+			return ""
+		string index_prefix = "idx_"
+		string keyword = "INDEX"
+		if is_unique
+			index_prefix = "uniq_"
+			keyword = "UNIQUE INDEX"
+		string index_name = index_prefix + table_name + "_" + cols_for_name
+		return "CREATE " + keyword + " IF NOT EXISTS " + index_name + " ON " + table_name + " (" + columns + ")"
+
+	// Walk the `indexes:` sub-block body and produce a newline-separated
+	// list of individual CREATE INDEX SQL statements. Each statement is
+	// intended to be executed as its own `_db_execute` call (multi-statement
+	// strings are not portable across drivers — SQLite and some Postgres
+	// pooled clients reject them). Returns "" when the body is empty or
+	// contains no valid entries.
+	string generate_indexes_sql_list(string indexes_body, string table_name)
+		string result = ""
+		integer line_start = 0
+		integer body_len = indexes_body.length()
+		while line_start < body_len
+			integer line_end = indexes_body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body_len
+			string line = indexes_body.substring(line_start, line_end)
+			string sql = generate_index_sql_line(line, table_name)
+			if sql.length() > 0
+				if result.length() > 0
+					result = result + "\n"
+				result = result + sql
+			line_start = line_end + 1
+		return result
+
 	// Determine whether a Clean type name is a primitive scalar.
 	boolean is_primitive_type(string type_name)
 		if type_name == "integer"
@@ -1745,7 +1844,9 @@ functions:
 		return body_h
 
 	// Build body for: boolean migrate()
-	integer build_migrate_body(integer ctx, string table_name, boolean has_tenant)
+	// indexes_sql: newline-separated list of CREATE INDEX statements to
+	// execute after CREATE TABLE. Pass "" to skip the index phase.
+	integer build_migrate_body(integer ctx, string table_name, boolean has_tenant, string indexes_sql)
 		string src = ""
 		if has_tenant
 			src = src + "string __field_defs = __field_definitions()\n"
@@ -1755,6 +1856,26 @@ functions:
 		else
 			src = src + "string sql = \"CREATE TABLE IF NOT EXISTS " + table_name + " (id SERIAL PRIMARY KEY, \" + __field_definitions() + \")\"\n"
 		src = src + "integer affected = _db_execute(sql, \"[]\")\n"
+		// V2 indexes: sub-block consumer (Sub-cycle 1, 2026-07-18).
+		// Emit one _db_execute call per CREATE INDEX statement. Executed
+		// after CREATE TABLE so column references resolve.
+		if indexes_sql.length() > 0
+			integer line_start = 0
+			integer body_len = indexes_sql.length()
+			while line_start < body_len
+				integer line_end = indexes_sql.indexOf("\n", line_start)
+				if line_end == -1
+					line_end = body_len
+				string idx_stmt = indexes_sql.substring(line_start, line_end).trim()
+				if idx_stmt.length() > 0
+					// Escape any literal double-quote in the SQL for embedding
+					// in the source string. Our generate_index_sql_line
+					// output uses unquoted identifiers so no escaping needed
+					// today; the replace is defensive against future SQL
+					// containing quoted table/column names.
+					string escaped = idx_stmt.replace("\"", "\\\"")
+					src = src + "_db_execute(\"" + escaped + "\", \"[]\")\n"
+				line_start = line_end + 1
 		src = src + "return affected >= 0\n"
 		integer body_h = _emit_stmt_from_source(ctx, src, 0)
 		if _ctx_had_error(ctx) != 0
@@ -1884,7 +2005,9 @@ functions:
 	// Assemble the complete methods JSON array for _emit_class_full.
 	// Returns a JSON string: [{"kind":"inline","name":"...","body_handle":N,...}, ...]
 	// On any builder failure returns "" (sticky-error already set on ctx).
-	string build_methods_json(integer ctx, string model_name, string table_name, string field_names, string field_types, string field_defs, boolean has_tenant)
+	// indexes_sql: newline-separated CREATE INDEX statements to emit inside
+	// the migrate() body after CREATE TABLE. Pass "" to skip the index phase.
+	string build_methods_json(integer ctx, string model_name, string table_name, string field_names, string field_types, string field_defs, boolean has_tenant, string indexes_sql)
 
 		string methods = "["
 		boolean first = true
@@ -2007,7 +2130,7 @@ functions:
 		methods = methods + ",{\"kind\":\"inline\",\"name\":\"findOrFail\",\"params\":[{\"name\":\"where_clause\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + fof_bh.toString() + "}"
 
 		// --- migrate() ---
-		integer mig_bh = build_migrate_body(ctx, table_name, has_tenant)
+		integer mig_bh = build_migrate_body(ctx, table_name, has_tenant, indexes_sql)
 		if _ctx_had_error(ctx) != 0
 			return ""
 		methods = methods + ",{\"kind\":\"inline\",\"name\":\"migrate\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + mig_bh.toString() + "}"
@@ -2380,9 +2503,20 @@ functions:
 		string field_defs = generate_field_definitions(body)
 		string fields_json = build_fields_json(field_names, field_types)
 
+		// V2 indexes: sub-block consumer (Sub-cycle 1, 2026-07-18).
+		// If the body used v2 form and declares an indexes: sub-block, generate
+		// CREATE INDEX SQL statements to be embedded into the migrate() method.
+		// Per DAT-M019: single-field entries, parenthesized tuples for composite,
+		// suffix `unique` promotes to UNIQUE INDEX.
+		string indexes_sql = ""
+		if is_v2_sub_block_form(orig_v2_body)
+			string indexes_body = extract_v2_sub_block(orig_v2_body, "indexes")
+			if indexes_body.length() > 0
+				indexes_sql = generate_indexes_sql_list(indexes_body, table_name)
+
 		// Build the methods JSON (inline body_handle entries).
 		string methods_json = build_methods_json(ctx, model_name, table_name,
-			field_names, field_types, field_defs, has_tenant)
+			field_names, field_types, field_defs, has_tenant, indexes_sql)
 		if _ctx_had_error(ctx) != 0
 			return 1
 
