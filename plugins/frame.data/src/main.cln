@@ -1434,6 +1434,108 @@ functions:
 			line_start = line_end + 1
 		return result
 
+	// Parse a single v2 `relations:` entry line into a pipe-separated tuple
+	// `<name>|<cardinality>|<target_class>|<fk_column>`. Per DAT-M020 grammar:
+	// `<name>: <cardinality> <TargetClass> on <fk_column>`.
+	// Cardinality: `has_many`, `has_one`, `belongs_to`.
+	// Returns "" for empty or malformed lines. Callers filter on the empty
+	// return; there is no diagnostic emitted here (Sub-cycle 3 will add
+	// FRAME-DATA-E029 for malformed relations).
+	string parse_v2_relation_line(string line)
+		string trimmed = line.trim()
+		if trimmed.length() == 0
+			return ""
+		// Split on the first ':' — everything before is the relation name.
+		integer colon = trimmed.indexOf(":")
+		if colon == -1
+			return ""
+		string name = trimmed.substring(0, colon).trim()
+		if name.length() == 0
+			return ""
+		string rest = trimmed.substring(colon + 1, trimmed.length()).trim()
+		// Cardinality is the first whitespace-delimited token in `rest`.
+		integer sp1 = rest.indexOf(" ")
+		integer tb1 = rest.indexOf("\t")
+		integer end1 = rest.length()
+		if sp1 != -1 and sp1 < end1
+			end1 = sp1
+		if tb1 != -1 and tb1 < end1
+			end1 = tb1
+		string cardinality = rest.substring(0, end1).trim()
+		if cardinality != "has_many" and cardinality != "has_one" and cardinality != "belongs_to"
+			return ""
+		string after_card = rest.substring(end1, rest.length()).trim()
+		// Target class is the next token before `on`.
+		integer on_pos = after_card.indexOf(" on ")
+		integer on_pos_tab = after_card.indexOf("\ton ")
+		integer on_at = on_pos
+		if on_pos_tab != -1 and (on_pos == -1 or on_pos_tab < on_pos)
+			on_at = on_pos_tab
+		if on_at == -1
+			return ""
+		string target = after_card.substring(0, on_at).trim()
+		string fk = after_card.substring(on_at + 4, after_card.length()).trim()
+		if target.length() == 0 or fk.length() == 0
+			return ""
+		return name + "|" + cardinality + "|" + target + "|" + fk
+
+	// Walk the `relations:` sub-block body and produce a newline-separated
+	// list of parsed relation tuples (see parse_v2_relation_line). Empty and
+	// malformed lines are skipped. Returns "" when the body has no valid
+	// entries. Callers iterate the returned list line-by-line.
+	string parse_v2_relations_body(string relations_body)
+		string result = ""
+		integer line_start = 0
+		integer body_len = relations_body.length()
+		while line_start < body_len
+			integer line_end = relations_body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body_len
+			string line = relations_body.substring(line_start, line_end)
+			string tuple = parse_v2_relation_line(line)
+			if tuple.length() > 0
+				if result.length() > 0
+					result = result + "\n"
+				result = result + tuple
+			line_start = line_end + 1
+		return result
+
+	// For each `belongs_to` relation in the parsed relations list, generate a
+	// CREATE INDEX statement on the FK column. Foreign keys should always be
+	// indexed for JOIN performance — this is the minimal `relations:`-driven
+	// schema mutation the plugin can produce today without cross-class or
+	// cross-call state. `has_many` and `has_one` relations do NOT generate
+	// indexes on the *current* table because their FK column lives on the
+	// target class's table, which the plugin cannot mutate from here.
+	//
+	// Returns a newline-separated list of CREATE INDEX statements suitable
+	// for splicing into build_migrate_body's per-line _db_execute emission.
+	// Returns "" when no belongs_to relations exist.
+	string generate_relation_fk_indexes_sql(string relations_tuples, string table_name)
+		string result = ""
+		integer line_start = 0
+		integer body_len = relations_tuples.length()
+		while line_start < body_len
+			integer line_end = relations_tuples.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body_len
+			string tuple = relations_tuples.substring(line_start, line_end)
+			// Tuple: <name>|<cardinality>|<target>|<fk>
+			integer sep1 = tuple.indexOf("|")
+			integer sep2 = tuple.indexOf("|", sep1 + 1)
+			integer sep3 = tuple.indexOf("|", sep2 + 1)
+			if sep1 != -1 and sep2 != -1 and sep3 != -1
+				string cardinality = tuple.substring(sep1 + 1, sep2)
+				string fk = tuple.substring(sep3 + 1, tuple.length())
+				if cardinality == "belongs_to" and fk.length() > 0
+					string index_name = "idx_" + table_name + "_" + fk + "_fk"
+					string stmt = "CREATE INDEX IF NOT EXISTS " + index_name + " ON " + table_name + " (" + fk + ")"
+					if result.length() > 0
+						result = result + "\n"
+					result = result + stmt
+			line_start = line_end + 1
+		return result
+
 	// Determine whether a Clean type name is a primitive scalar.
 	boolean is_primitive_type(string type_name)
 		if type_name == "integer"
@@ -2513,6 +2615,26 @@ functions:
 			string indexes_body = extract_v2_sub_block(orig_v2_body, "indexes")
 			if indexes_body.length() > 0
 				indexes_sql = generate_indexes_sql_list(indexes_body, table_name)
+
+		// V2 relations: sub-block consumer (Sub-cycle 1, 2026-07-18).
+		// For each belongs_to relation, emit a CREATE INDEX on the FK column.
+		// Foreign keys should be indexed for JOIN performance; this is the
+		// minimal schema mutation the plugin can produce from relations:
+		// today without cross-class/cross-call state. has_many and has_one
+		// relations do NOT trigger indexes here (the FK column lives on the
+		// target class's table). include: / where: consumption and auto-reverse
+		// property generation remain Sub-cycle 2/3 work per DAT-M020.
+		if is_v2_sub_block_form(orig_v2_body)
+			string relations_body = extract_v2_sub_block(orig_v2_body, "relations")
+			if relations_body.length() > 0
+				string relations_tuples = parse_v2_relations_body(relations_body)
+				if relations_tuples.length() > 0
+					string fk_indexes_sql = generate_relation_fk_indexes_sql(relations_tuples, table_name)
+					if fk_indexes_sql.length() > 0
+						if indexes_sql.length() > 0
+							indexes_sql = indexes_sql + "\n" + fk_indexes_sql
+						else
+							indexes_sql = fk_indexes_sql
 
 		// Build the methods JSON (inline body_handle entries).
 		string methods_json = build_methods_json(ctx, model_name, table_name,
