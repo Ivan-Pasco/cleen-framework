@@ -1169,6 +1169,172 @@ functions:
 			line_start = line_end + 1
 		return result
 
+	// Parse a v2 `queries:` method parameter list into a JSON array suitable
+	// for the class-spec methods entry. Input: text between `(` and `)` of
+	// a method declaration, e.g. `string status, integer limit`. Output: JSON
+	// array `[{"name":"status","type":"string"},{"name":"limit","type":"integer"}]`
+	// or `[]` when the parameter list is empty. Each parameter is split by
+	// whitespace as `<type> <name>` per core grammar §6.4 parameter form.
+	// Malformed parameters (single-token, no space) are skipped silently;
+	// the compiler will surface an arity/type error at the call site if the
+	// method is ever called with mismatched args.
+	string parse_v2_query_params(string params_str)
+		string trimmed = params_str.trim()
+		if trimmed.length() == 0
+			return "[]"
+		string result = "["
+		boolean first = true
+		integer pos = 0
+		integer len = trimmed.length()
+		while pos < len
+			// Find the next comma (parameter separator).
+			integer comma_pos = trimmed.indexOf(",", pos)
+			integer end_pos = trimmed.length()
+			if comma_pos != -1
+				end_pos = comma_pos
+			string param = trimmed.substring(pos, end_pos).trim()
+			if param.length() > 0
+				// Split on the first whitespace: `<type> <name>`.
+				integer sp = param.indexOf(" ")
+				integer tb = param.indexOf("\t")
+				integer split_at = param.length()
+				if sp != -1 and sp < split_at
+					split_at = sp
+				if tb != -1 and tb < split_at
+					split_at = tb
+				if split_at < param.length()
+					string ptype = param.substring(0, split_at).trim()
+					string pname = param.substring(split_at + 1, param.length()).trim()
+					if ptype.length() > 0 and pname.length() > 0
+						if not first
+							result = result + ","
+						result = result + "{\"name\":\"" + pname + "\",\"type\":\"" + ptype + "\"}"
+						first = false
+			if comma_pos == -1
+				pos = trimmed.length()
+			else
+				pos = comma_pos + 1
+		result = result + "]"
+		return result
+
+	// Detect a v2 `queries:` method declaration line. A declaration line is a
+	// non-empty trimmed line that contains a parenthesized parameter list at
+	// its end, i.e. matches `<return_type> <name>(<params>)`. Body lines
+	// (indented `return <expr>` continuations) never contain a top-level `(`
+	// followed by `)` in that shape, so this heuristic is sufficient.
+	boolean is_v2_query_method_decl(string trimmed_line)
+		integer paren_open = trimmed_line.indexOf("(")
+		integer paren_close = trimmed_line.lastIndexOf(")")
+		if paren_open == -1
+			return false
+		if paren_close == -1
+			return false
+		if paren_close < paren_open
+			return false
+		// A declaration line must have at least one word before the `(`
+		// (the method name), and something before the name (the return type).
+		if paren_open < 3
+			return false
+		integer first_space = trimmed_line.indexOf(" ")
+		if first_space == -1
+			return false
+		if first_space >= paren_open
+			return false
+		return true
+
+	// Split a v2 query method declaration line into (return_type, name, params).
+	// Input: trimmed line like `list<User> byStatus(string status)`.
+	// Output: comma-separated `<return_type>|<name>|<params>` triple string.
+	// The `|` separator keeps this parseable by callers without introducing
+	// a struct return type. Returns "" for malformed input.
+	string split_v2_query_decl(string line)
+		integer paren_open = line.indexOf("(")
+		integer paren_close = line.lastIndexOf(")")
+		if paren_open == -1 or paren_close == -1 or paren_close < paren_open
+			return ""
+		string params = line.substring(paren_open + 1, paren_close).trim()
+		string before_paren = line.substring(0, paren_open).trim()
+		// Split before_paren at the LAST whitespace: everything before is the
+		// return type (may contain `<`, `>`, `?`), everything after is the
+		// method name.
+		integer name_start = -1
+		integer scan = before_paren.length() - 1
+		while scan >= 0
+			string ch = before_paren.substring(scan, scan + 1)
+			if ch == " " or ch == "\t"
+				name_start = scan + 1
+				scan = -1
+			else
+				scan = scan - 1
+		if name_start == -1 or name_start >= before_paren.length()
+			return ""
+		string return_type = before_paren.substring(0, name_start).trim()
+		string method_name = before_paren.substring(name_start, before_paren.length()).trim()
+		if return_type.length() == 0 or method_name.length() == 0
+			return ""
+		return return_type + "|" + method_name + "|" + params
+
+	// Walk the `queries:` sub-block body and emit one method-JSON entry per
+	// declaration. Each declaration line is followed by one or more indented
+	// body lines (the `return <expr>` per DAT-A004). The body text is passed
+	// verbatim to _emit_stmt_from_source to produce a body_handle, which is
+	// inlined into the class-spec method entry.
+	//
+	// Returns a string like `,{"kind":"inline",...},{"kind":"inline",...}` —
+	// leading comma included so callers can append it directly onto a
+	// non-empty methods_json array before the closing `]`. Returns "" when
+	// the queries body is empty or contains no valid declarations. Sets sticky
+	// error context on parse/emit failure; caller should check _ctx_had_error
+	// after this call.
+	string emit_queries_methods_json(integer ctx, string queries_body)
+		string result = ""
+		integer line_start = 0
+		integer body_len = queries_body.length()
+		while line_start < body_len
+			integer line_end = queries_body.indexOf("\n", line_start)
+			if line_end == -1
+				line_end = body_len
+			string raw_line = queries_body.substring(line_start, line_end)
+			string trimmed = raw_line.trim()
+			if trimmed.length() > 0 and is_v2_query_method_decl(trimmed)
+				// Parse the declaration line.
+				string decl = split_v2_query_decl(trimmed)
+				if decl.length() > 0
+					integer sep1 = decl.indexOf("|")
+					integer sep2 = decl.indexOf("|", sep1 + 1)
+					if sep1 != -1 and sep2 != -1
+						string return_type = decl.substring(0, sep1)
+						string method_name = decl.substring(sep1 + 1, sep2)
+						string params_raw = decl.substring(sep2 + 1, decl.length())
+						string params_json = parse_v2_query_params(params_raw)
+
+						// Accumulate body lines: everything after the
+						// declaration until the next declaration or EOB.
+						string body_src = ""
+						integer body_scan = line_end + 1
+						while body_scan < body_len
+							integer body_end = queries_body.indexOf("\n", body_scan)
+							if body_end == -1
+								body_end = body_len
+							string body_line_raw = queries_body.substring(body_scan, body_end)
+							string body_line_trim = body_line_raw.trim()
+							if body_line_trim.length() > 0 and is_v2_query_method_decl(body_line_trim)
+								// Next declaration reached — stop.
+								body_scan = body_len
+							else
+								if body_line_trim.length() > 0
+									body_src = body_src + body_line_trim + "\n"
+								body_scan = body_end + 1
+
+						if body_src.length() > 0
+							integer body_h = _emit_stmt_from_source(ctx, body_src, 0)
+							if _ctx_had_error(ctx) != 0
+								return ""
+							if body_h != 0
+								result = result + ",{\"kind\":\"inline\",\"name\":\"" + method_name + "\",\"params\":" + params_json + ",\"return_type\":\"" + return_type + "\",\"body_handle\":" + body_h.toString() + "}"
+			line_start = line_end + 1
+		return result
+
 	// Determine whether a Clean type name is a primitive scalar.
 	boolean is_primitive_type(string type_name)
 		if type_name == "integer"
@@ -2178,6 +2344,10 @@ functions:
 		// DAT-P003/DAT-M016. Constraint parsing is deferred; the compiled
 		// output for a v2 data block in this partial is a class shell that
 		// compiles cleanly but is not yet functionally complete.
+		// Preserve the original v2 body so downstream consumers (queries:,
+		// indexes:, relations: sub-block extraction) can read from it after
+		// `body` is rewritten to the v1 shape below.
+		string orig_v2_body = body
 		if is_v2_sub_block_form(body)
 			string fields_body = extract_v2_sub_block(body, "fields")
 			if fields_body.length() == 0
@@ -2215,6 +2385,31 @@ functions:
 			field_names, field_types, field_defs, has_tenant)
 		if _ctx_had_error(ctx) != 0
 			return 1
+
+		// V2 queries: sub-block consumer (Sub-cycle 1, 2026-07-18).
+		// If the body uses the v2 sub-block form AND declares a `queries:`
+		// sub-block, parse each method declaration and append to methods_json.
+		// Per DAT-A006, these methods become callable via `<Entity>.data.<method>`
+		// through the compiler's normal method-resolution on the paired data class.
+		// Per DAT-A004, each method body is a single `return <expr>` statement.
+		// Body text is passed verbatim to _emit_stmt_from_source; the compiler's
+		// existing plugin-dispatch on the query DSL (E.find:, E.first:, etc.)
+		// handles re-entrant expansion at parse time.
+		if is_v2_sub_block_form(orig_v2_body)
+			string queries_body = extract_v2_sub_block(orig_v2_body, "queries")
+			if queries_body.length() > 0
+				string queries_entries = emit_queries_methods_json(ctx, queries_body)
+				if _ctx_had_error(ctx) != 0
+					return 1
+				if queries_entries.length() > 0
+					// Splice queries entries into methods_json before the closing `]`.
+					// build_methods_json always emits at least one entry, so
+					// methods_json is `[{...},{...}]` — strip the final `]`,
+					// append the (leading-comma-prefixed) entries, re-close.
+					integer close_bracket = methods_json.lastIndexOf("]")
+					if close_bracket != -1
+						string prefix = methods_json.substring(0, close_bracket)
+						methods_json = prefix + queries_entries + "]"
 
 		// Assemble the complete class spec JSON.
 		string class_spec = "{\"name\":\"" + model_name + "\""
