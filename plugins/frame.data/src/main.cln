@@ -4355,6 +4355,77 @@ functions:
 // ============================================================================
 
 functions:
+	// Extract the column identifiers referenced by a single v2 `indexes:`
+	// entry line. Returns a comma-separated list. Handles single-column
+	// (`email`), composite (`(status, createdAt)`), and unique-suffixed
+	// (`email unique`, `(a, b) unique`) forms. Returns "" for empty or
+	// malformed lines; validators treat that as a skip.
+	string extract_index_columns(string line)
+		string trimmed = line.trim()
+		if trimmed.length() == 0
+			return ""
+		// Strip trailing `unique` if present.
+		if trimmed.endsWith(" unique") or trimmed.endsWith("\tunique")
+			trimmed = trimmed.substring(0, trimmed.length() - 6).trim()
+		else if trimmed == "unique"
+			return ""
+		// Composite form: `(c1, c2, ...)`.
+		if trimmed.startsWith("(")
+			integer close = trimmed.indexOf(")")
+			if close == -1
+				return ""
+			string inner = trimmed.substring(1, close).trim()
+			if inner.length() == 0
+				return ""
+			// Normalize whitespace around commas.
+			string result = ""
+			integer pos = 0
+			while pos < inner.length()
+				integer comma = inner.indexOf(",", pos)
+				integer end_pos = inner.length()
+				if comma != -1
+					end_pos = comma
+				string col = inner.substring(pos, end_pos).trim()
+				if col.length() > 0
+					if result.length() > 0
+						result = result + ","
+					result = result + col
+				if comma == -1
+					pos = inner.length()
+				else
+					pos = comma + 1
+			return result
+		// Single-column form: first whitespace-delimited token.
+		integer sp = trimmed.indexOf(" ")
+		integer tb = trimmed.indexOf("\t")
+		integer end_pos = trimmed.length()
+		if sp != -1 and sp < end_pos
+			end_pos = sp
+		if tb != -1 and tb < end_pos
+			end_pos = tb
+		return trimmed.substring(0, end_pos).trim()
+
+	// Return true if `needle` appears as a whole-token entry in the
+	// comma-separated `haystack`. Used by validate_data_model to check
+	// index-column-name membership in the fields: names list.
+	boolean csv_contains(string haystack, string needle)
+		if needle.length() == 0
+			return false
+		integer pos = 0
+		while pos < haystack.length()
+			integer comma = haystack.indexOf(",", pos)
+			integer end_pos = haystack.length()
+			if comma != -1
+				end_pos = comma
+			string entry = haystack.substring(pos, end_pos).trim()
+			if entry == needle
+				return true
+			if comma == -1
+				pos = haystack.length()
+			else
+				pos = comma + 1
+		return false
+
 	// Validate a data ModelName block before expansion. Returns error string
 	// on failure, empty string when valid.
 	//
@@ -4363,6 +4434,14 @@ functions:
 	// as a transitional convenience; Sub-cycle 3 will add a rejection
 	// diagnostic ("bare-field data: declarations removed under v2 — use
 	// fields: sub-block") once the pairing/entity read is in place.
+	//
+	// Local sub-block checks (v2, 2026-07-18):
+	// - queries: each declaration line parses as `<return_type> <name>(<params>)`.
+	// - relations: each entry has valid cardinality (has_many/has_one/belongs_to).
+	// - indexes: every referenced column name appears in fields:.
+	// These are intra-block checks — no cross-class visibility required.
+	// The six F1a diagnostics (E025..E028, W030, I002) live at cln lint time
+	// per spec v2.1.2, not here.
 	string validate_data_model(string model_name, string body)
 		if model_name.length() == 0
 			return "data: model name is required"
@@ -4372,8 +4451,95 @@ functions:
 			string fields_body = extract_v2_sub_block(body, "fields")
 			if fields_body.trim().length() == 0
 				return "data " + model_name + ": `fields:` sub-block is required under v2 (spec DAT-M015)"
-			if extract_v2_field_names(fields_body).length() == 0
+			string field_names_csv = extract_v2_field_names(fields_body)
+			if field_names_csv.length() == 0
 				return "data " + model_name + ": `fields:` sub-block must declare at least one field (spec DAT-M015)"
+
+			// Local queries: check — malformed method declarations.
+			// A non-empty trimmed line is either a method declaration (matches
+			// the is_v2_query_method_decl heuristic) or a body line (indented
+			// continuation). A line that contains `(` but not `)` — or a line
+			// with `)` before `(` — is malformed.
+			string queries_body = extract_v2_sub_block(body, "queries")
+			if queries_body.length() > 0
+				integer q_ls = 0
+				while q_ls < queries_body.length()
+					integer q_le = queries_body.indexOf("\n", q_ls)
+					if q_le == -1
+						q_le = queries_body.length()
+					string q_raw = queries_body.substring(q_ls, q_le)
+					string q_line = q_raw.trim()
+					if q_line.length() > 0
+						integer po = q_line.indexOf("(")
+						integer pc = q_line.lastIndexOf(")")
+						if po != -1 and pc == -1
+							return "data " + model_name + ": queries: line has `(` without matching `)`: `" + q_line + "`"
+						if po != -1 and pc != -1 and pc < po
+							return "data " + model_name + ": queries: line has `)` before `(`: `" + q_line + "`"
+					q_ls = q_le + 1
+
+			// Local relations: check — invalid cardinality or malformed shape.
+			string relations_body = extract_v2_sub_block(body, "relations")
+			if relations_body.length() > 0
+				integer r_ls = 0
+				while r_ls < relations_body.length()
+					integer r_le = relations_body.indexOf("\n", r_ls)
+					if r_le == -1
+						r_le = relations_body.length()
+					string r_raw = relations_body.substring(r_ls, r_le)
+					string r_line = r_raw.trim()
+					if r_line.length() > 0
+						// Rebuild the cardinality-detection path locally so
+						// the error message can name the offending token.
+						integer colon = r_line.indexOf(":")
+						if colon == -1
+							return "data " + model_name + ": relations: entry missing `:` (expected `<name>: <cardinality> <TargetClass> on <fk>`): `" + r_line + "`"
+						string rest = r_line.substring(colon + 1, r_line.length()).trim()
+						integer sp = rest.indexOf(" ")
+						integer tb = rest.indexOf("\t")
+						integer end_c = rest.length()
+						if sp != -1 and sp < end_c
+							end_c = sp
+						if tb != -1 and tb < end_c
+							end_c = tb
+						string card = rest.substring(0, end_c).trim()
+						if card != "has_many" and card != "has_one" and card != "belongs_to"
+							return "data " + model_name + ": relations: invalid cardinality `" + card + "` (must be `has_many`, `has_one`, or `belongs_to`) in `" + r_line + "`"
+						string after_card = rest.substring(end_c, rest.length()).trim()
+						integer on_at = after_card.indexOf(" on ")
+						if on_at == -1
+							on_at = after_card.indexOf("\ton ")
+						if on_at == -1
+							return "data " + model_name + ": relations: entry missing `on <fk_column>` clause: `" + r_line + "`"
+					r_ls = r_le + 1
+
+			// Local indexes: check — column references must exist in fields:.
+			string indexes_body = extract_v2_sub_block(body, "indexes")
+			if indexes_body.length() > 0
+				integer i_ls = 0
+				while i_ls < indexes_body.length()
+					integer i_le = indexes_body.indexOf("\n", i_ls)
+					if i_le == -1
+						i_le = indexes_body.length()
+					string i_raw = indexes_body.substring(i_ls, i_le)
+					string i_line = i_raw.trim()
+					if i_line.length() > 0
+						string cols_csv = extract_index_columns(i_line)
+						if cols_csv.length() > 0
+							integer c_ls = 0
+							while c_ls < cols_csv.length()
+								integer c_comma = cols_csv.indexOf(",", c_ls)
+								integer c_end = cols_csv.length()
+								if c_comma != -1
+									c_end = c_comma
+								string col = cols_csv.substring(c_ls, c_end).trim()
+								if col.length() > 0 and not csv_contains(field_names_csv, col)
+									return "data " + model_name + ": indexes: references column `" + col + "` that is not declared in fields: (in `" + i_line + "`)"
+								if c_comma == -1
+									c_ls = cols_csv.length()
+								else
+									c_ls = c_comma + 1
+					i_ls = i_le + 1
 		return ""
 
 	// Validate a migrate: block before expansion.
