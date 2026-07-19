@@ -79,6 +79,8 @@ external:
 	integer _emit_statement_into_start(integer ctx, integer stmt_handle)
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
+	// Amendment 13 (§3.18) — capability declaration emitter. Compiler 0.33.100+.
+	integer _emit_capability(integer ctx, integer capability_spec_lp)
 	// ---- AST type constructors (§3.9) — for typed-emission return types
 	// and params_json type_handle fields per compiler contract at
 	// bridges.rs:1116. ----
@@ -125,24 +127,44 @@ external:
 // the v3 migration per the plugin.toml [lifecycle].server_init comment.
 
 functions:
-	// emit_module_helpers_typed (v2.1.3, 2026-07-19)
-	// Emits `class Database` with capability-typed methods per spec DAT-S011:
-	//   save(Persist target) -> boolean         — per-entity save (DAT-S001)
-	//   delete(Persist target) -> boolean       — per-entity lenient delete (DAT-S003)
-	//   deleteOrFail(Persist target) -> boolean — strict delete, raises when
-	//                                             no row matched (DAT-S004)
-	//   saveAll(list<Persist> targets) -> integer   — bulk save (DAT-S005)
-	//   deleteAll(list<Persist> targets) -> integer — bulk delete (DAT-S006)
+	// emit_module_helpers_typed (v2.1.5, 2026-07-19)
+	// Emits the write-path contract for frame.data:
+	//   can Persist:                            — write-path capability (DAT-S000)
+	//       boolean save()
+	//       boolean delete()
+	//   class Database
+	//     save(Persist target) -> boolean         — per-entity save (DAT-S001)
+	//     delete(Persist target) -> boolean       — per-entity lenient delete (DAT-S003)
+	//     deleteOrFail(Persist target) -> boolean — strict delete, raises when
+	//                                               no row matched (DAT-S004)
+	//     saveAll(list<Persist> targets) -> integer   — bulk save (DAT-S005)
+	//     deleteAll(list<Persist> targets) -> integer — bulk delete (DAT-S006)
 	//
-	// The `can Persist:` declaration itself must live in the user's source
-	// today — the typed-emission bridge surface has no capability-emission
-	// bridge. Team-prompt filed 2026-07-18 for `_emit_capability`; when it
-	// lands this function will also emit `can Persist:`.
+	// v2.1.5 (2026-07-19): compiler 0.33.100 shipped Amendment 13
+	// (_emit_capability, typed-emission.md §3.18); the plugin now owns
+	// can Persist: emission directly. Previously (v2.1.3) the declaration
+	// lived in a project template (templates/foundation.cln); that template
+	// is retired in this commit and users can delete their local
+	// app/foundation.cln (or leave it — dedup rule per plugin-contract.md
+	// §3.1 silently merges identical declarations).
 	//
-	// Deduplication (per plugin-contract.md §3.1): identical class emitted
-	// from every source file that loads frame.data is silently dedup'd into
-	// one top-level declaration.
+	// Deduplication: identical capability and class emitted from every
+	// source file that loads frame.data are silently dedup'd into one
+	// top-level declaration each.
 	integer emit_module_helpers_typed(integer ctx, string ctx_json)
+		// Emit `can Persist:` capability contract (Amendment 13, §3.18).
+		// Contract-only in v1 of the bridge — no default bodies. Every
+		// class that declares `can Persist` must implement save() and delete()
+		// (SEM011 fires otherwise).
+		string persist_spec = "{\"name\":\"Persist\",\"methods\":["
+		persist_spec = persist_spec + "{\"name\":\"save\",\"params\":[],\"return_type\":\"boolean\"}"
+		persist_spec = persist_spec + ",{\"name\":\"delete\",\"params\":[],\"return_type\":\"boolean\"}"
+		persist_spec = persist_spec + "]}"
+		integer persist_spec_ptr = _batch_stringLit(ctx, persist_spec)
+		_emit_capability(ctx, persist_spec_ptr)
+		if _ctx_had_error(ctx) != 0
+			return 1
+
 		// Method body for Database.save(Persist target): return target.save()
 		string save_src = "return target.save()\n"
 		integer save_body_h = _emit_stmt_from_source(ctx, save_src, 0)

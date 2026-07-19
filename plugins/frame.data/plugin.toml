@@ -6,10 +6,12 @@ author = "Clean Language Team"
 license = "MIT"
 
 [compatibility]
-# Amendment 10 (§3.18 `_emit_class_methods_from_spec`) required — Sub-cycle 2
-# uses it for template-generator method emission. 0.30.423 is the compiler
-# cycle in which Am 10 landed.
-min_compiler_version = "0.30.423"
+# Amendment 13 (§3.18 `_emit_capability`) required — the plugin emits
+# `can Persist:` from emit_module_helpers_typed as of v2.1.5 (2026-07-19).
+# 0.33.100 is the compiler cycle in which Amendment 13 landed. Am 10
+# (`_emit_class_methods_from_spec`, needed for template-generator method
+# emission) is transitively covered by 0.33.100 ≥ 0.30.423.
+min_compiler_version = "0.33.100"
 # Plugin Contracts v2 — runtime-abi.md §4. ABI version stamped into WASM at
 # compile time; loader verifies it when present.
 abi_version = "1.0.0"
@@ -267,17 +269,6 @@ patterns = ["*.cln", "*.sql"]
 # Files in owned folders automatically import this plugin
 implicit_import = true
 
-[templates]
-# Starter files created when frame.data is added to a project.
-# `can Persist:` is the capability contract Database.save/delete/etc. dispatch on
-# (spec DAT-S000). The plugin can't emit `can` declarations itself yet — the
-# typed-emission bridge surface has no capability-emission bridge (tracked as
-# team-prompt task #1300). Until _emit_capability lands, this template file
-# provides the declaration in every new project automatically.
-files = [
-  { path = "app/foundation.cln", template = "foundation.cln" },
-]
-
 [enforcement]
 severity = "warn"
 
@@ -366,4 +357,4 @@ anti_pattern = "re-implementing the validation rules in application code — the
 example = "patterns/field-validation.cln"
 
 [build]
-built_with_compiler = "0.33.96"
+built_with_compiler = "0.33.100"
