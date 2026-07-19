@@ -131,8 +131,8 @@ functions = [
   # (matches foundation/platform-architecture/function-registry.toml — required for
   # PLUGIN-REGISTRY-DRIFT parity). The req.body_bytes language surface below presents
   # it as `integer` at the user layer; the compiler applies the ptr→integer coercion
-  # at the alias site. Additive to _req_body (UTF-8 string surface). Both clean-server
-  # (bridge.rs) and clean-node-server (src/bridge/) ship implementations.
+  # at the alias site. Additive to _req_body (UTF-8 string surface). Host
+  # implementation ships in clean-server (bridge.rs).
   { name = "_req_body_bytes", params = [], returns = "ptr", description = "Get raw request body as opaque byte handle. Returns pointer to length-prefixed byte buffer ([4-byte LE length][bytes]); pass verbatim to bridges that accept a ptr handle. Used for binary uploads (gzip tarballs, octet-stream) that must not be UTF-8 decoded.", hosts = ["server"] },
   { name = "_req_body_field", params = ["string"], returns = "string", description = "Get form field by name from request body", expand_strings = true, hosts = ["server"] },
   { name = "_req_form", params = [], returns = "string", description = "Get form data as JSON object", hosts = ["server"] },
@@ -171,10 +171,9 @@ functions = [
   { name = "_http_no_cache", params = [], returns = "boolean", description = "Set no-cache headers", hosts = ["server"] },
 
   # Async — Sleep (server-only; cooperative scheduling lives on the server runtime).
-  # Matches function-registry.toml: params = ["integer"] -> WASM i64. Both
-  # clean-server (|ms: i64|) and clean-node-server (ms: bigint) expect i64.
-  # The `server.sleep` language function (below) already declares integer;
-  # this bridge entry now matches.
+  # Matches function-registry.toml: params = ["integer"] -> WASM i64.
+  # clean-server (|ms: i64|) expects i64. The `server.sleep` language function
+  # (below) already declares integer; this bridge entry now matches.
   { name = "_server_sleep", params = ["integer"], returns = "void", description = "Sleep for the given number of milliseconds (yields to the server scheduler)", hosts = ["server"] },
 
   # HTML Page Rendering (SSR) — declaration MOVED to frame.ui plugin.toml.
@@ -238,7 +237,7 @@ functions = [
   # Contract mirrors foundation/platform-architecture/function-registry.toml (_fs_write_bytes).
   # Consumes bytes in the [4-byte LE length][bytes] layout produced by _req_body_bytes,
   # so a tarball upload flows: _req_body_bytes → crypto.sha256 → _fs_write_bytes, no UTF-8 detour.
-  # Host implementations ship in clean-server and clean-node-server — this declaration only
+  # Host implementation ships in clean-server — this declaration only
   # tells the compiler the symbol exists so Clean code can import it. First param is the path
   # (expand_strings splits string → ptr,len); second param is the raw byte-buffer pointer.
   # Returns 0 on success; non-zero error code (1=perm, 2=disk full, 3=invalid path, 4=parent

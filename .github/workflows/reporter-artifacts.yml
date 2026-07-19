@@ -53,12 +53,14 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
 
-      - name: install node + clean-node-server
+      - name: install mysql client
+        # clean-node-server was retired 2026-07-19 (dashboard prompt
+        # faee4e8a-83c7-11f1-9d55-da25a95a496b). This step previously also
+        # installed nodejs + @ivan-pasco/clean-node-server@latest, but
+        # nothing downstream in this workflow calls either. Only mysql-client
+        # remains (used by the mysql service for replay tarballs).
         run: |
-          curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-          sudo apt-get install -y nodejs mysql-client
-          sudo npm install -g @ivan-pasco/clean-node-server@latest
-          clean-node-server --version || true
+          sudo apt-get install -y mysql-client
 
       - name: install cln + framework plugins
         run: |
