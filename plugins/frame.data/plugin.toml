@@ -267,6 +267,17 @@ patterns = ["*.cln", "*.sql"]
 # Files in owned folders automatically import this plugin
 implicit_import = true
 
+[templates]
+# Starter files created when frame.data is added to a project.
+# `can Persist:` is the capability contract Database.save/delete/etc. dispatch on
+# (spec DAT-S000). The plugin can't emit `can` declarations itself yet — the
+# typed-emission bridge surface has no capability-emission bridge (tracked as
+# team-prompt task #1300). Until _emit_capability lands, this template file
+# provides the declaration in every new project automatically.
+files = [
+  { path = "app/foundation.cln", template = "foundation.cln" },
+]
+
 [enforcement]
 severity = "warn"
 
@@ -355,4 +366,4 @@ anti_pattern = "re-implementing the validation rules in application code — the
 example = "patterns/field-validation.cln"
 
 [build]
-built_with_compiler = "0.33.79"
+built_with_compiler = "0.33.96"
