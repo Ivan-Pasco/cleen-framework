@@ -10,7 +10,7 @@ Frame 2.0 introduces a **plugin-based architecture** where framework functionali
 
 | Component | v1 (Rust Crates) | v2 (Clean Plugins) |
 |-----------|------------------|-------------------|
-| Web Server | `frame-server` | `frame.web` plugin |
+| Web Server | `frame-server` | `frame.server` |
 | ORM/Database | `frame-data` | `frame.data` plugin |
 | Authentication | `frame-auth` | `frame.auth` plugin |
 | UI Components | `frame-ui` | `frame.ui` plugin |
@@ -30,7 +30,7 @@ This enables:
 │                      (with import: block)                                │
 │                                                                          │
 │   import:                                                                │
-│       frame.web                                                          │
+│       frame.server                                                          │
 │       frame.data                                                         │
 │                                                                          │
 │   server: port=3000                                                      │
@@ -69,7 +69,7 @@ curl -sSL https://cleanlanguage.org/install.sh | bash
 cleen install cln
 
 # Install Frame plugins
-cleen plugin install frame.web frame.data frame.auth frame.ui
+cleen plugin install frame.server frame.data frame.auth frame.ui
 ```
 
 ### Create a Simple Server
@@ -77,7 +77,7 @@ cleen plugin install frame.web frame.data frame.auth frame.ui
 ```clean
 // main.cln
 import:
-    frame.web
+    frame.server
     frame.data
 
 model: name="User" table="users"
@@ -113,7 +113,7 @@ clean-framework/
 ├── host-bridge/              # Runtime imports (Rust crate)
 │   └── src/
 ├── plugins/                  # Clean Language plugins
-│   ├── frame.web/
+│   ├── frame.server/
 │   │   ├── plugin.toml
 │   │   ├── src/main.cln
 │   │   ├── build.sh
@@ -134,7 +134,7 @@ clean-framework/
 
 ## Official Plugins
 
-### frame.web
+### frame.server
 
 Web server DSL with routing and middleware.
 
@@ -142,7 +142,7 @@ Web server DSL with routing and middleware.
 
 ```clean
 import:
-    frame.web
+    frame.server
 
 server: port=3000
     middleware:

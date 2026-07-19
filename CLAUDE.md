@@ -1,575 +1,105 @@
-# CLAUDE.md - Frame Framework Development Guide
+# CLAUDE.md — clean-framework
 
-This file provides guidance when working with the Frame Framework codebase. The Frame Framework is the official full-stack framework for Clean Language, compiling entirely to WebAssembly (WASM).
+This file guides work on the Clean Language Frame framework. Frame provides the plugin ecosystem (frame.server, frame.data, frame.ui, etc.) that turns Clean Language into a full-stack platform.
 
-**Read [KNOWLEDGE.md](./KNOWLEDGE.md) before modifying any framework code** — it documents known fragile areas, plugin expand function behavior, and plugin.toml contract rules.
+**Read [KNOWLEDGE.md](./KNOWLEDGE.md) before modifying plugin code** — it documents known fragile areas and plugin.toml contract rules.
 
-## Project Overview
+## What lives here
 
-Frame is a modern, full-stack web framework that unifies frontend, backend, and data layers into a single, type-safe programming model. It embodies the Clean Language philosophy: simple, declarative, and transparent code.
+- `plugins/frame.*/` — the 9 Clean Language plugins (see catalog below)
+- `examples/` — example Frame apps
+- `tests/` — test suites (see `tests/CONVENTIONS.md`)
+- `scripts/` — build tooling
 
-### Core Principles
+## The 9 plugins
 
-- **Type-Safe Full Stack**: End-to-end type safety from database to UI
-- **WebAssembly Native**: Compiles to WASM for predictable performance
-- **Secure by Default**: Sandboxed execution with clear Host Bridge boundaries
-- **Universal Runtime**: One codebase runs on web, mobile, desktop, and server
-- **Zero Boilerplate**: Minimal, declarative syntax
-- **SSR + Islands**: Server-side rendering with selective client hydration
+| Plugin | What it adds | Prose spec | Formal spec |
+|---|---|---|---|
+| `frame.server` | HTTP endpoints, routing, middleware | `foundation/docs/framework/plugins/server.md` | `foundation/spec/framework/frame-server-semantics.md` + `foundation/spec/framework/grammar/frame-server.ebnf` |
+| `frame.data` | ORM models, queries, migrations | `foundation/docs/framework/plugins/data.md` | `foundation/spec/framework/frame-data-semantics.md` + `foundation/spec/framework/grammar/frame-data.ebnf` |
+| `frame.ui` | Components, HTML directives, styles | `foundation/docs/framework/plugins/ui.md` | `foundation/spec/framework/frame-ui-semantics.md` + `foundation/spec/framework/grammar/frame-ui.ebnf` |
+| `frame.auth` | Sessions, JWT, roles, CSRF | `foundation/docs/framework/plugins/auth.md` | `foundation/spec/framework/frame-auth-semantics.md` + `foundation/spec/framework/grammar/frame-auth.ebnf` |
+| `frame.canvas` | Canvas scenes, drawing, audio, input | `foundation/docs/framework/plugins/canvas.md` | `foundation/spec/framework/frame-canvas-semantics.md` + `foundation/spec/framework/grammar/frame-canvas.ebnf` |
+| `frame.mcp` | MCP server tools, resources, prompts | `foundation/docs/framework/plugins/mcp.md` | `foundation/spec/framework/frame-mcp-semantics.md` + `foundation/spec/framework/grammar/frame-mcp.ebnf` |
+| `frame.client` | Client-side `load:` / `form:` / `send:` | `foundation/docs/framework/plugins/client.md` | `foundation/spec/framework/grammar/frame-client.ebnf` |
+| `frame.jobs` | Background jobs, scheduled tasks | `foundation/docs/framework/plugins/jobs.md` | `foundation/spec/framework/grammar/frame-jobs.ebnf` |
+| `frame.locale` | Internationalization, translations | `foundation/docs/framework/plugins/locale.md` | `foundation/spec/framework/grammar/frame-locale.ebnf` |
 
-## Documentation Structure
+Framework-level docs (overview, getting started, project structure, CLI, platforms, dev guidelines, database plugins, plugin authoring) live under `foundation/docs/framework/`.
 
-### Core Specifications
+## Authority
 
-All specifications are located in `/documents/specification/`:
+For anything about the language or the platform, defer to the authoritative sources — do NOT restate them here:
 
-1. **[01_frame_overview.md](documents/specification/01_frame_overview.md)** - High-level architecture, philosophy, and core concepts
-2. **[02_frame_cli.md](documents/specification/02_frame_cli.md)** - CLI commands (v1 deprecated, v2 migration guide)
-3. **[03_frame_server.md](documents/specification/03_frame_server.md)** - Server runtime, HTTP APIs using `endpoints:` blocks, and Host Bridge
-4. **[04_frame_data.md](documents/specification/04_frame_data.md)** - ORM system with block-based queries, migrations, and many-to-many relationships
-5. **[05_frame_ui.md](documents/specification/05_frame_ui.md)** - UI components, SSR/CSR, hydration strategies, and theming
-6. **[06_frame_auth.md](documents/specification/06_frame_auth.md)** - Authentication (sessions, JWT), authorization (roles, permissions)
-7. **[07_frame_plugins.md](documents/specification/07_frame_plugins.md)** - Plugin system, lifecycle hooks, and extensibility
-8. **[08_frame_platforms.md](documents/specification/08_frame_platforms.md)** - Multi-platform deployment (Web, PWA, Mobile, Desktop, Server, CLI)
-9. **[09_frame_dev_guidelines.md](documents/specification/09_frame_dev_guidelines.md)** - Coding standards, naming conventions, and best practices
-10. **[10_compiler_plugins.md](documents/specification/10_compiler_plugins.md)** - Compiler plugin architecture (Clean Language plugins)
-11. **[11_database_plugins.md](documents/specification/11_database_plugins.md)** - Database plugin architecture, C-ABI interface, runtime drivers
-12. **[12_frame_canvas.md](documents/specification/12_frame_canvas.md)** - Canvas rendering, animation, drawing primitives, bridge functions
-13. **[13_frame_future_evolution.md](documents/specification/13_frame_future_evolution.md)** - Roadmap, research directions, versioning policy
-14. **[15_frame_jobs.md](documents/specification/15_frame_jobs.md)** - Background job queue, scheduled tasks, retry policies
-15. **[16_frame_locale.md](documents/specification/16_frame_locale.md)** - Internationalization — translations, plurals, locale-aware formatting
-16. **[17_frame_mcp.md](documents/specification/17_frame_mcp.md)** - MCP server plugin — tools, resources, prompts over stdio and HTTP+SSE
-17. **[18_frame_client.md](documents/specification/18_frame_client.md)** - Client-side communication: frame.client plugin (api.*, live.*, feed.*, `load:`/`form:`/`send:` blocks)
+- **Language spec:** `foundation/docs/specification/` (prose). Formal companion: `foundation/spec/` (grammar.ebnf, semantic-rules.md, type-system.md, stdlib-reference.md).
+- **Plugin contract (ABI):** `foundation/spec/framework/plugin-contract.md`. Covers `plugin.toml` schema, the `expand` function signature, and the `[bridge]`, `[handles]`, and `[language]` sections.
+- **Platform contracts:** `foundation/spec/platform/` — `HOST_BRIDGE.md`, `EXECUTION_LAYERS.md`, `MEMORY_MODEL.md`, `SERVER_EXTENSIONS.md`, `IDE_EXTENSION_ARCHITECTURE.md`, `ERROR_REPORTING_SPECIFICATION.md`, `function-registry.toml`.
+- **Governance and cross-component work policy:** `foundation/docs/governance/` — `ARCHITECTURE_BOUNDARIES.md`, `ERROR_REPORTING_WORKFLOW.md`, `PROJECT_MANAGEMENT_PRINCIPLES.md`, `USER_TYPES_AND_ERROR_REPORTING.md`.
 
-### Reference Documents
+**Every plugin must comply with `foundation/spec/framework/plugin-contract.md`.** Every framework doc you write must match the specification, not restate it.
 
-- **[frame_bridge_contracts.md](documents/specification/frame_bridge_contracts.md)** - Host Bridge JSON contracts for system integration
-- **[frame_internal_map.md](documents/specification/frame_internal_map.md)** - Document index and module relationship map
+## Plugin ABI (short summary; contract is authoritative)
 
-### Guides
+Plugins are WASM modules that export a function named `expand`. It receives a JSON string describing a framework block (`{"name": "...", "content": "...", "attributes": {...}}`) and returns a JSON string containing the emitted Clean Language statements (or an error record). Expansion is recursive: emitted code may contain further framework blocks; the compiler keeps expanding until none remain.
 
-- **[GETTING_STARTED.md](documents/GETTING_STARTED.md)** - Quick start tutorial for new users
-- **[PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md)** - Folder conventions and file discovery
-- **[API_REFERENCE.md](documents/API_REFERENCE.md)** - API quick reference cheat sheet
-- **[PLUGIN_GUIDE.md](documents/PLUGIN_GUIDE.md)** - Plugin system from the user's perspective
+**Do NOT describe the Host Bridge as a JSON envelope layer.** That was a v1 design that was never implemented. The actual Host Bridge is raw WASM imports using `(ptr, len)` string pairs and length-prefixed returns. See `foundation/spec/platform/HOST_BRIDGE.md` and `foundation/spec/platform/function-registry.toml`.
 
-### Parent-Level Documentation
+## Development rules
 
-For project-wide docs (architecture, contributing, platform), see the parent folder:
-- **[platform-architecture/](../foundation/platform-architecture/)** - Execution layers, Host Bridge, memory model
-- **[README.md](../README.md)** - Project overview
-- **[CLAUDE.md](../CLAUDE.md)** - Cross-component work policy
+### No placeholder implementations
+No functions that return dummy values (`return 0`, `return false`, `todo!()`). All plugin code must be fully functional.
 
-## Language Specification
+### JavaScript is never acceptable in Clean projects
+Never write `<script>` tags, `.js` files, or inline DOM API calls in examples or plugin templates. If a UI interaction isn't expressible via `_ui_*` bridge functions in `frame.ui`, call `report_error` with component `frame.ui` and stop. JavaScript simulations lie about framework capabilities and diverge from real behavior. Static HTML/CSS only; dynamic behavior comes from compiled Clean.
 
-**CRITICAL**: All Frame code MUST comply with the [Clean Language Specification](/Users/earcandy/Documents/Dev/Clean Language/clean-language-compiler/documentation/Clean_Language_Specification.md).
+### Folder ownership
+Plugins claim folders via `plugin.toml [owned_folders]`. Files inside owned folders get the plugin's DSL applied automatically (`implicit_import = true`). See `foundation/docs/framework/PROJECT_STRUCTURE.md` for the ownership table.
 
-Key Clean Language rules for Frame:
-
-- **Functions blocks required**: All functions except `start()` must be in `functions:` blocks
-- **Method calls require parentheses**: `value.toString()` not `value.toString`
-- **Use lowercase namespaces**: `math.sqrt()` not `Math.sqrt()`
-- **Generic type is `any`**: No explicit type parameters, use `any` for generics
-- **Indentation uses tabs only**: No spaces for indentation
-- **Block-based syntax**: `endpoints:`, `data:`, `functions:`, `where:`, `order:`
-
-## Development Rules
-
-### Code Quality Standards
-
-1. **NO PLACEHOLDER IMPLEMENTATIONS**: Never create functions that return dummy values. All code must be fully functional.
-2. **NO FALLBACK IMPLEMENTATIONS**: Avoid temporary simplified implementations.
-3. **WORKING CODE ONLY**: All code must be production-ready and functional.
-4. **REFERENCE SPECIFICATIONS**: Always consult the relevant specification document before implementing.
-
-### Folder Conventions (CRITICAL)
-
-**Files are ONLY recognized and processed by plugins based on their folder location.**
-
-A file outside its expected folder will NOT be compiled by the appropriate plugin. This is the core architectural principle.
-
-#### Standard Project Structure
-
-See **[PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md)** — canonical reference for folder layout, plugin ownership, and file extension conventions.
-
-#### Key Rules
-
-1. **Standard HTML for pages** — Use `.html` in `app/ui/web/pages/`. Full editor support (Emmet, Prettier, syntax highlighting).
-
-2. **Standard CSS for styles** — Use `.css` in `public/css/`. No inline `<style>` tags. No CSS in HTML files.
-
-3. **Clean templating in HTML** — Use `{{ variable }}` for interpolation and `cl-*` attributes for directives:
-   ```html
-   <h1>Welcome, {{ user.name }}</h1>
-   <ul cl-iterate="post in posts"><li>{{ post.title }}</li></ul>
-   <div cl-if="user.isAdmin">Admin Panel</div>
-   ```
-
-4. **Folder Ownership** — Plugins must be declared in `main.cln` via the `target:` block. Files in plugin-owned folders are processed automatically (`implicit_import = true`) — no per-file imports needed. See [PROJECT_STRUCTURE.md](documents/PROJECT_STRUCTURE.md) for the ownership table.
-
-5. **No CSS in HTML** — Inline styles are prohibited. All CSS in `public/css/`, linked via `<link>` tags.
-
-### Examples and Demos Policy
-
-## ABSOLUTE PROHIBITION - READ CAREFULLY
-
-**NEVER, UNDER ANY CIRCUMSTANCES, CREATE JAVASCRIPT CODE TO SIMULATE CLEAN LANGUAGE BEHAVIOR.**
-
-This is a HARD RULE with NO EXCEPTIONS. Violations include:
-
-- Writing `<script>` tags in HTML files that simulate what Clean would do
-- Creating "demo" or "preview" JavaScript that mimics plugin functionality
-- Adding JavaScript "for now" or "temporarily" until the compiler works
-- Using localStorage, fetch simulations, or any JS to fake database/auth/canvas behavior
-- Creating "working mockups" or "visual previews" with JavaScript logic
-
-### What To Do Instead
-
-1. **If the compiler/server can't run the code yet**:
-   - Create ONLY the `.cln` source files with correct syntax
-   - Create ONLY static `.html` templates WITHOUT any `<script>` tags
-   - Document what the example WILL do when compiled, don't simulate it
-
-2. **If asked to create a "working demo"**:
-   - REFUSE if it requires JavaScript simulation
-   - Explain that demos must compile and run on actual Clean infrastructure
-   - Offer to implement the missing compiler/server functionality instead
-
-3. **If asked to "make it work in the browser"**:
-   - REFUSE if it means adding JavaScript
-   - Static HTML/CSS only - no dynamic behavior without Clean compilation
-
-### Valid Example Structure
-
-```
-example/
-├── main.cln                # Clean config (NO JS)
-├── app/
-│   ├── web/
-│   │   └── pages/
-│   │       └── index.html  # Static HTML, NO <script> tags
-│   ├── data/
-│   │   └── models/
-│   │       └── User.cln    # Clean model (NO JS)
-│   └── server/
-│       └── api/
-│           └── users.cln   # Clean endpoints (NO JS)
-└── public/
-    └── css/
-        └── style.css       # CSS only (NO JS)
-```
-
-### Invalid - NEVER DO THIS
-
-```html
-<!-- WRONG - This violates the directive -->
-<script>
-  // Simulating Clean behavior with JavaScript
-  const users = JSON.parse(localStorage.getItem('users'));
-  function loadUsers() { ... }
-</script>
-```
-
-### Why This Rule Exists
-
-1. JavaScript simulations LIE about framework capabilities
-2. They create FALSE CONFIDENCE in untested code
-3. They DIVERGE from actual behavior over time
-4. They WASTE TIME building throwaway code
-5. They DELAY actual compiler/server implementation
-6. They CONFUSE users about what Clean Language actually does
-
-### Enforcement
-
-Before creating ANY file, ask yourself:
-- Does this file contain `<script>` tags? → **STOP, DON'T CREATE IT**
-- Does this file contain JavaScript logic? → **STOP, DON'T CREATE IT**
-- Am I "simulating" or "mocking" Clean behavior? → **STOP, DON'T CREATE IT**
-- Could this be misunderstood as "working" when it's not? → **STOP, DON'T CREATE IT**
-
-**If in doubt, create .cln files only and leave HTML as pure static templates.**
-
-### Module-Specific Rules
-
-#### Frame CLI (`frame-cli/`)
-Reference: [02_frame_cli.md](documents/specification/02_frame_cli.md)
-- Implement all commands as specified (`new`, `serve`, `build`, `db:*`, `api:*`, `mobile:init`, etc.)
-- Use JSON output format for machine-readable results
-- Provide clear error messages with error codes
-- Support `--verbose`, `--target`, and other global flags
-
-#### Frame Server (`frame-server/`)
-Reference: [03_frame_server.md](documents/specification/03_frame_server.md)
-- Use `endpoints:` blocks for all HTTP APIs
-- Inline route modifiers in fixed order: `[roles]` guard, `cache()`, `middleware()`
-- Global error handling: `server: handle:` block in the server config (catches errors from all endpoints)
-- Per-statement error handling: `onError:` (core Clean Language syntax)
-- `guard:`, `returns:`, `cache:`, `handle:` as sub-blocks are removed — parse error if used
-- Implement standard response helpers: `json()`, `html()`, `redirect()`, `notFound()`, etc.
-- Use Host Bridge for all I/O operations
-
-#### Frame Data (`frame-data/`)
-Reference: [04_frame_data.md](documents/specification/04_frame_data.md)
-- Use `data` keyword for model definitions
-- Support block-based queries: `find:`, `where:`, `order:`, `limit:`
-- Implement many-to-many via explicit junction tables
-- Auto-generate migrations from schema diffs
-- Support transactions with `transaction:` blocks
-
-#### Frame UI (`frame-ui/`)
-Reference: [05_frame_ui.md](documents/specification/05_frame_ui.md)
-- Use `component` keyword for UI components
-- Default to SSR, opt-in to client hydration
-- Support hydration strategies: `client="off|on|visible|idle|only"`
-- Escape HTML by default, only use `rawHtml()` for trusted content
-
-#### Frame Auth (`frame-auth/`)
-Reference: [06_frame_auth.md](documents/specification/06_frame_auth.md)
-- Support both session-based and JWT authentication
-- Use HTTP-only, SameSite cookies for sessions
-- Implement role-based access control
-- Provide CSRF protection by default
-
-#### Frame Canvas (`frame.canvas/`)
-Reference: [12_frame_canvas.md](documents/specification/12_frame_canvas.md)
-- `canvasScene:` is the root block; all sub-blocks (`assets:`, `tween`, `timeline`, `animState`, `particles`, `draw:`, event handlers, etc.) live inside it
-- Canvas files go in `app/canvas/` (auto-imported when `frame.canvas` is declared in `main.cln`)
-- All drawing, audio, animation, and input calls go through the Host Bridge — never write raw JS
-- `draw:` is immediate-mode per-frame rendering; `onFrame:` is per-frame update logic; state lives in `state:`
-
-#### Host Bridge (`host-bridge/`)
-Reference: [frame_bridge_contracts.md](documents/specification/frame_bridge_contracts.md)
-- Use standard envelope: `{"fn": "bridge:namespace.function", "args": {...}}`
-- Return `{"ok": true, "data": {...}}` or `{"ok": false, "err": {...}}`
-- Implement all namespaces: `http`, `db`, `env`, `time`, `crypto`, `log`, `fs`, `sys`
-- Use standard error codes: `DB_ERROR`, `AUTH_ERROR`, `NETWORK_FAIL`, etc.
-
-### Testing Strategy
-
-Reference: [09_frame_dev_guidelines.md](documents/specification/09_frame_dev_guidelines.md)
-
-1. **Unit Tests**: Test individual components in isolation
-2. **Integration Tests**: Test module interactions
-3. **E2E Tests**: Test full application flows
-
-Test location: `/tests/<module>/`
-
-**Testing Philosophy** (see [tests/CONVENTIONS.md](tests/CONVENTIONS.md) for the authoritative rules):
+### Testing
 - Real bridge only — every test runs inside `clean-server`; no mocks.
-- Test both success and error cases.
-- Coverage is measured, not asserted. Current measured coverage lives in CI artifacts; there is no historical "100%" claim — that was aspirational and has been removed. See `tests/CONVENTIONS.md` and the testing remediation plan for what's actually tested today.
-- When a test reveals a bug in the compiler/server/plugins, call `report_error` and stop — do not patch around it in the test.
+- Every plugin edit updates the matching unit test folder at `tests/framework/unit/plugins/<name>/`.
+- Every bug-fix PR includes a failing-first test.
+- Do NOT add `--no-verify` to `git commit` or `git push`. The hooks are the point.
+- Full rules: `tests/CONVENTIONS.md`.
 
-### Error Handling
+## Cross-component work
 
-All errors must follow the standard envelope format:
+You are a Team Developer AI. When you discover something in another component, use the correct channel:
 
-```json
-{
-  "ok": false,
-  "err": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable description",
-    "details": {}
-  }
-}
-```
+| What you found | Channel |
+|---|---|
+| A bug (crash, wrong output, spec violation, regression) | `report_error` MCP tool (MANDATORY) |
+| A design proposal, schema request, architectural ask, or handoff | `/team-prompt` skill (publishes to https://errors.cleanlanguage.dev/prompts) |
 
-Standard error codes:
-- `BUILD_FAIL` - Compilation errors
-- `DB_ERROR` - Database operations
-- `AUTH_ERROR` - Authentication failures
-- `NETWORK_FAIL` - Network/HTTP errors
-- `VALIDATION_ERROR` - Data validation
-- `NOT_FOUND` - Resource not found
-- `PERMISSION_DENIED` - Authorization failures
+Do NOT edit code in other components directly. Do NOT write bug reports as markdown files — they are invisible to the dashboard, don't notify users on fix, and can't be queried via `list_component_bugs`.
 
-### Naming Conventions
+Full policy: `foundation/docs/governance/USER_TYPES_AND_ERROR_REPORTING.md`.
 
-**Clean Language**:
-- Classes/Components: `PascalCase` (e.g., `UserProfile`, `BlogPost`)
-- Functions/Variables: `camelCase` (e.g., `getUserById`, `userCount`)
-- Constants: `SCREAMING_SNAKE_CASE` (e.g., `MAX_RETRIES`)
-- Files: `PascalCase.cln` for components, `kebab-case` for others
+## Documentation sync
 
-**Rust**:
-- Types: `PascalCase` (e.g., `UserProfile`)
-- Functions: `snake_case` (e.g., `get_user_count`)
-- Constants: `SCREAMING_SNAKE_CASE` (e.g., `MAX_RETRIES`)
+When you change a plugin's contract or behavior, update BOTH in the same commit:
+- Formal spec: `foundation/spec/framework/frame-<plugin>-semantics.md` (and the grammar under `foundation/spec/framework/grammar/frame-<plugin>.ebnf` if syntax changed).
+- Prose companion: `foundation/docs/framework/plugins/<plugin>.md`.
 
-### Commit Standards
+When you change bridge signatures, update:
+- `foundation/spec/platform/function-registry.toml` (machine-readable registry).
+- `foundation/spec/platform/HOST_BRIDGE.md` (Layer 2) or `foundation/spec/platform/SERVER_EXTENSIONS.md` (Layer 3).
 
-Follow Conventional Commits:
-
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-
-**Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`
-
-**Examples**:
-- `feat(orm): add many-to-many relationship support`
-- `fix(compiler): resolve type inference for nested generics`
-- `docs(api): update endpoint documentation`
-
-## Project Structure
-
-```
-clean-framework/
-├── plugins/                 # Core framework plugins (Clean Language)
-│   ├── frame.auth/          # Authentication & authorization plugin
-│   ├── frame.canvas/        # Canvas rendering & game dev plugin
-│   ├── frame.client/        # Client-side communication (api, live, feed)
-│   ├── frame.data/          # ORM & database plugin
-│   ├── frame.server/        # HTTP server & routing plugin
-│   └── frame.ui/            # UI components & SSR plugin
-├── documents/
-│   ├── specification/       # All specification files (01-14)
-│   ├── API_REFERENCE.md     # Quick API reference
-│   ├── GETTING_STARTED.md   # Quick start tutorial
-│   ├── PLUGIN_GUIDE.md      # Plugin system guide
-│   └── PROJECT_STRUCTURE.md # Folder conventions
-├── examples/                # Example Frame applications
-├── tests/                   # Test suites
-├── scripts/                 # Build and test scripts
-├── foundation/management/        # Internal development docs
-├── CLAUDE.md                # This file
-├── README.md                # Project overview
-└── TASKS.md                 # Development task tracker
-```
-
-## Development Workflow
-
-1. **Read relevant specification**: Always start by reading the spec document
-2. **Create tasks**: Add tasks to TASKS.md before implementation
-3. **Write tests first**: TDD approach for new features
-4. **Implement**: Follow specifications exactly
-5. **Test**: Run all tests and verify
-6. **Document**: Update docs if needed
-7. **Commit**: Use conventional commit format
-
-## Host Bridge Development
-
-The Host Bridge is the ONLY interface between WASM and system resources.
-
-**Key principles**:
-- All bridge calls use JSON envelopes
-- Responses use standard `ok`/`err` format
-- Bridge functions are stateless
-- Security enforced through allowlists
-
-**Namespaces to implement**:
-1. `bridge:http` - HTTP requests and responses
-2. `bridge:db` - Database operations
-3. `bridge:env` - Environment variables
-4. `bridge:time` - Time operations
-5. `bridge:crypto` - Cryptographic operations
-6. `bridge:log` - Structured logging
-7. `bridge:fs` - Filesystem (desktop/CLI only)
-8. `bridge:sys` - System information
-
-## WAT Spec Compliance (Host Function Signatures)
-
-**IMPORTANT: Host function signatures are enforced by a machine-checkable WAT contract.**
-
-The clean-server enforces all host function signatures via `clean-server/host-bridge/tests/spec_compliance.wat`. This file declares every host function import with its exact WASM signature. Any WASM module the framework generates or interacts with must match these signatures exactly.
-
-### Key Conventions
-
-1. **ALL string input parameters** use raw `(ptr: i32, len: i32)` pairs (NOT length-prefixed single pointers)
-2. **Return strings** use length-prefixed format: `[4-byte LE length][UTF-8 data]`
-3. **Integer values** use `i64` (not `i32`) for: `print_integer`, `int_to_string`, `string_to_int`
-4. When the framework generates or references host function calls, signatures must match the WAT spec
-
-### Authoritative References
-
-- WAT spec guard: `clean-server/host-bridge/tests/spec_compliance.wat`
-- Host Bridge documentation: `foundation/platform-architecture/HOST_BRIDGE.md`
-
-## Security Requirements
-
-1. **WASM Sandboxing**: All application code runs in isolated WASM context
-2. **Host Bridge Allowlisting**: Explicit permissions for system access
-3. **HTTPS Only**: Enforce HTTPS in production
-4. **Secure Cookies**: HTTP-only, SameSite, Secure flags
-5. **CSRF Protection**: Built-in for POST/PUT/PATCH/DELETE
-6. **SQL Injection Prevention**: Parameterized queries only
-7. **XSS Prevention**: Automatic HTML escaping
-8. **Input Validation**: Both compile-time and runtime
-
-## Performance Targets
-
-**Compilation**:
-- < 1s per 1000 LOC
-- < 100ms incremental rebuild
-- < 500MB memory usage
-
-**Runtime**:
-- < 50ms first request (SSR page)
-- < 10ms p95 API latency (simple endpoint)
-- < 100ms p95 API latency (with database)
-- > 10k req/sec throughput (simple endpoints)
-
-## AI Development Notes
-
-This framework is designed for AI-assisted development:
-
-- **Deterministic compilation**: Same input → same output
-- **Typed interfaces**: All contracts are explicitly typed
-- **Clear module boundaries**: Each module has single responsibility
-- **JSON-based communication**: Machine-readable formats
-- **Comprehensive specs**: Every feature is documented
-
-When prompting AI assistants:
-1. Always include relevant specification document(s)
-2. Reference the Clean Language Specification
-3. Use `--json` flags for machine-readable output
-4. Provide full context from multiple spec files if needed
-
-## Common Commands
+## Common commands
 
 ```bash
-# Build the compiler and CLI
-cargo build --release
-
 # Run tests
 cargo test
 
-# Format code
+# Format
 cargo fmt
 
 # Lint
 cargo clippy -- -D warnings
-
-# Create a new Frame project
-./target/release/frame-cli new myapp
-
-# Start development server
-./target/release/frame-cli serve
-
-# Build for production
-./target/release/frame-cli build --target=server
-
-# Run database migrations
-./target/release/frame-cli db:migrate
 ```
 
-## Getting Help
+## Getting help
 
-1. Check the relevant specification document first
-2. Review the specification files in `documents/specification/`
-3. Look at examples in `/examples/`
-4. Search existing issues on GitHub
-5. Ask in GitHub Discussions
-
-## Quality Assurance
-
-**Before committing**:
-- [ ] All tests pass (`cargo test`)
-- [ ] Code is formatted (`cargo fmt`)
-- [ ] No clippy warnings (`cargo clippy`)
-- [ ] Documentation is updated
-- [ ] TASKS.md is updated (tasks completed/added)
-- [ ] Follows Clean Language Specification
-- [ ] Follows Frame specifications
-
-## Version Compatibility
-
-Frame follows semantic versioning (semver):
-- **Major** (2.0, 3.0): Breaking changes allowed
-- **Minor** (1.1, 1.2): New features, backward compatible
-- **Patch** (1.0.1, 1.0.2): Bug fixes only
-
-Breaking changes require:
-1. Advance notice (at least 2 minor versions)
-2. Deprecation warnings
-3. Migration documentation
-4. Automated migration tools (when possible)
-
-## Success Metrics
-
-Track these metrics:
-- Compilation time per 1000 LOC
-- Test coverage percentage
-- API latency (p50, p95, p99)
-- Memory usage
-- Throughput (req/sec)
-
----
-
-**Remember**: Frame is not just a framework—it's a unified programming model. Every decision should align with the Clean Language philosophy of simplicity, type safety, and transparency.
-
-For detailed implementation guidance, always refer to the specification documents linked above.
-
-## Testing policy
-
-Full strategy: [system-documents/testing/TEST_STRATEGY.md](system-documents/testing/TEST_STRATEGY.md).
-Rulebook: [tests/CONVENTIONS.md](tests/CONVENTIONS.md).
-
-Non-negotiable invariants for every change in this repo:
-
-1. **No placeholder tests.** No string-matching against literals that look like DSL syntax. Every test calls a real dot-notation API and asserts on a real return value or side effect. Enforced by `scripts/check-test-placeholders.py` on pre-commit, pre-push, and CI.
-2. **Every plugin edit touches the plugin's unit test folder.** See the coverage matrix in TEST_STRATEGY.md §6 for the file each plugin owes. If you edit `plugins/frame.X/` and the matching file in `tests/framework/unit/plugins/X/` is not updated in the same PR, the reviewer will ask why.
-3. **Every bug-fix PR includes a test that would have caught the bug.** Definition-of-done per CONVENTIONS.md §7.
-4. **Placeholders in `tests/PENDING.md` require a real upstream error code.** "TBD" and blank codes are rejected.
-5. **Do not add `--no-verify` to `git commit` or `git push`.** The hooks are the point.
-
-If you're unsure whether a test qualifies as real, ask: *"does this test call anything that would fail if I broke the plugin's implementation?"* If the answer is no, it is a placeholder.
-
-## Cross-Component Work Policy
-
-**CRITICAL: You are a Team Developer AI.** When you discover something in another component, choose the correct channel based on what you found:
-
-| What you found | Channel | Why |
-|---|---|---|
-| A **bug** (crash, wrong output, spec violation, regression) | **`report_error` MCP tool** — MANDATORY | Fingerprint dedup, occurrence tracking, automatic user notification on fix, visible on errors.cleanlanguage.dev |
-| A **design proposal, directive change, schema/API request, architectural ask** | Markdown file in `../foundation/management/cross-component-prompts/` | Requires discussion, not auto-fix |
-
-**Never** write a markdown file for something that is a bug. Bug reports in markdown are invisible to the dashboard, don't notify users when fixed, and can't be queried via `list_component_bugs`.
-
-### What You CAN Do
-
-- Read files from other components to understand interfaces
-- Call `report_error` for bugs found in other components
-- Write markdown prompts for design/architecture discussions
-- Update your component to work with existing interfaces
-
-### What You MUST NOT Do
-
-- Directly edit code in other components
-- Make changes to other components' configuration files
-- Write a markdown file for something that is a bug — use `report_error` instead
-
-See `../foundation/management/USER_TYPES_AND_ERROR_REPORTING.md` for the full policy.
-
-## Documentation Sync Protocol
-
-Facts about the language live in `foundation/spec/` (at the project root). Facts about the platform live in `foundation/platform-architecture/`. Do not duplicate them here — link to them instead.
-
-**When you make a change in this component, update the corresponding spec file in the same commit:**
-
-| Change type | Update required |
-|-------------|-----------------|
-| New or changed plugin contract | `foundation/spec/plugins/plugin-contract.md` |
-| New or changed host bridge function | `foundation/platform-architecture/HOST_BRIDGE.md` |
-| New or changed execution layer | `foundation/platform-architecture/EXECUTION_LAYERS.md` |
-
-The spec files are the single source of truth. Component documentation explains implementation — it does not redefine language rules.
-
-## Cross-component prompts
-
-The team publishes cross-component prompts, change requests, and handoffs at https://errors.cleanlanguage.dev/prompts.
-
-- `/team-prompt` publishes a prompt. Use it when this session discovered something a session in a **different** component must know before working: a required change there, a discovered contract, a blocker needing a decision from another maintainer, or a session-end handoff whose next reader is in a different repo.
-- `/team-prompts-list` fetches open prompts addressed to this component (inferred from `$PWD`). Consider running it at session start if the user asks for status.
-
-Do **not** use these skills for:
-- Compiler/plugin/runtime bug reports — those go through `report_error` via the MCP server.
-- Same-component notes — use `TASKS.md` or a session-handoff markdown file.
-- Chat.
-
-The API token lives at `~/.config/clean-errors/api_token` (mode 600). Team members without it get it from the team vault.
+1. Check the relevant plugin spec at `foundation/docs/framework/plugins/<name>.md`.
+2. Check the plugin contract at `foundation/spec/framework/plugin-contract.md`.
+3. Search open bugs via the `list_component_bugs` MCP tool.
