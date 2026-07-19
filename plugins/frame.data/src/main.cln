@@ -1686,7 +1686,15 @@ functions:
 		return result
 
 	// Generate field serialization code for INSERT/UPDATE params JSON array.
-	string generate_field_serialization(string field_names, string field_types, boolean skip_first)
+	// Emit source fragments that append field values to a `params` string.
+	// entity_prefix: the identifier to prepend to each field access.
+	//   Pass "" for the historical `this.<field>` form (accessed as bare
+	//   `<field>` in method bodies where `this` is implicit).
+	//   Pass "entity" (or another parameter name + ".") for the v2.1.3
+	//   Sub-cycle 3 static-taking-entity form where the entity is a method
+	//   parameter typed `any` (per plugin-execution-model constraints — the
+	//   plugin cannot see the paired entity's static type across files).
+	string generate_field_serialization(string field_names, string field_types, boolean skip_first, string entity_prefix)
 		string result = ""
 		string fields = field_names
 		string types = field_types
@@ -1709,6 +1717,13 @@ functions:
 				string separator = ""
 				if skip_first or first_added
 					separator = ", "
+				// entity_ref: `<prefix>.<field>` (e.g. `entity.email`) if
+				// entity_prefix is non-empty; otherwise bare `<field>` for
+				// the historical this-implicit form. safe_field_name still
+				// applies to the field identifier itself.
+				string entity_ref = safe_field_name(field)
+				if entity_prefix.length() > 0
+					entity_ref = entity_prefix + "." + entity_ref
 				// Emitted at column 0 — the callers (build_to_params_body /
 				// build_to_params_with_tenant_body / build_to_update_params_body)
 				// concatenate this into a source fragment where surrounding
@@ -1717,11 +1732,11 @@ functions:
 				// _emit_stmt_from_source (fingerprint reported by compiler in
 				// prompt 011e63d4-7bc0-11f1).
 				if ftype == "datetime"
-					result = result + "params = params + \"" + separator + "{\\\"__type\\\":\\\"epoch_s\\\",\\\"value\\\":\" + " + safe_field_name(field) + ".toInteger().toString() + \"}\"\n"
+					result = result + "params = params + \"" + separator + "{\\\"__type\\\":\\\"epoch_s\\\",\\\"value\\\":\" + " + entity_ref + ".toInteger().toString() + \"}\"\n"
 				else if needs_quotes
-					result = result + "params = params + \"" + separator + "\\\"\" + " + safe_field_name(field) + ".toString() + \"\\\"\"\n"
+					result = result + "params = params + \"" + separator + "\\\"\" + " + entity_ref + ".toString() + \"\\\"\"\n"
 				else
-					result = result + "params = params + \"" + separator + "\" + " + safe_field_name(field) + ".toString()\n"
+					result = result + "params = params + \"" + separator + "\" + " + entity_ref + ".toString()\n"
 				first_added = true
 			pos = comma_pos + 1
 			type_pos = type_comma + 1
@@ -1809,21 +1824,29 @@ functions:
 	// OutOfRange). Emitting the body as a single source fragment sidesteps the
 	// batch-handle-reuse problem entirely. Compiler 0.33.33's _emit_class_full
 	// dispatch accepts arena handles (via EmitArena::is_batch_handle branch).
+	// v2.1.3: rewritten as `save(any entity)` per DAT-S011. The entity is
+	// passed by the `Database.save(target)` capability dispatcher (see
+	// `emit_module_helpers_typed`) which forwards `target.save()` → the
+	// user's manual glue `return UserData.save(this)` → this method.
+	// `entity` is `any`-typed because the plugin does not know the paired
+	// entity's static type at emission (F1a's cross-class visibility
+	// limitation). Field access on `any` (`entity.id`, `entity.email`)
+	// resolves at runtime via `any`'s host-tag dispatch per type-system.md §9.
 	integer build_save_body(integer ctx, string table_name, boolean has_tenant)
-		string src = "if id == 0\n"
+		string src = "if entity.id == 0\n"
 		if has_tenant
 			src = src + "\tstring __tenant_id = tenant_getId()\n"
 			src = src + "\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
-			src = src + "\tstring params = __to_params_with_tenant(__tenant_id)\n"
+			src = src + "\tstring params = __to_params_with_tenant(entity, __tenant_id)\n"
 		else
 			src = src + "\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
-			src = src + "\tstring params = __to_params()\n"
+			src = src + "\tstring params = __to_params(entity)\n"
 		src = src + "\tstring __ins_result = _db_query(sql, params)\n"
-		src = src + "\tid = __extract_id(__ins_result)\n"
-		src = src + "\treturn id > 0\n"
+		src = src + "\tentity.id = __extract_id(__ins_result)\n"
+		src = src + "\treturn entity.id > 0\n"
 		src = src + "else\n"
 		src = src + "\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
-		src = src + "\tstring params = __to_update_params()\n"
+		src = src + "\tstring params = __to_update_params(entity)\n"
 		src = src + "\tinteger affected = _db_execute(sql, params)\n"
 		src = src + "\treturn affected > 0\n"
 		integer body_h = _emit_stmt_from_source(ctx, src, 0)
@@ -1845,15 +1868,17 @@ functions:
 	// The class-spec inline method's `body_handle` field accepts arena stmt
 	// handles per typed-emission §3.13 (resolved via arena.take_stmt() in
 	// _emit_class_full — see batch_schema.rs BatchMethod.body_handle).
+	// v2.1.3: rewritten as `delete(any entity)` per DAT-S011. Same rationale
+	// as build_save_body (see comment on that function).
 	integer build_delete_body(integer ctx, string table_name, boolean has_tenant)
-		string src = "if id == 0\n"
+		string src = "if entity.id == 0\n"
 		src = src + "\treturn false\n"
 		if has_tenant
 			src = src + "string __tenant_id = tenant_getId()\n"
 			src = src + "string sql = \"DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '\" + __tenant_id + \"'\"\n"
 		else
 			src = src + "string sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
-		src = src + "string params = \"[\" + id.toString() + \"]\"\n"
+		src = src + "string params = \"[\" + entity.id.toString() + \"]\"\n"
 		src = src + "integer affected = _db_execute(sql, params)\n"
 		src = src + "return affected > 0\n"
 		integer body_h = _emit_stmt_from_source(ctx, src, 0)
@@ -2110,28 +2135,32 @@ functions:
 	// The serialization code is generated at plugin time as a Clean source fragment
 	// using generate_field_serialization, then emitted via _emit_stmt_from_source.
 	// Returns the body block handle.
+	// v2.1.3: rewritten to take an `entity` parameter (typed `any`) so that
+	// field references become `entity.<field>` instead of the historical
+	// bare `<field>` (which relied on `this` being the model). See DAT-S011
+	// / DAT-S012 for the ownership shift under Option F1a.
 	integer build_to_params_body(integer ctx, string field_names, string field_types)
 		// Build source: params = "[" ... params = params + "]" ... return params
 		string src = "string params = \"[\"\n"
-		src = src + generate_field_serialization(field_names, field_types, false)
+		src = src + generate_field_serialization(field_names, field_types, false, "entity")
 		src = src + "params = params + \"]\"\n"
 		src = src + "return params\n"
 		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
 		return block_handle
 
-	// Build body for: string __to_params_with_tenant(string tenant_id)
+	// Build body for: string __to_params_with_tenant(any entity, string tenant_id)
 	integer build_to_params_with_tenant_body(integer ctx, string field_names, string field_types)
 		string src = "string params = \"[\\\"\" + tenant_id + \"\\\"\"\n"
-		src = src + generate_field_serialization(field_names, field_types, true)
+		src = src + generate_field_serialization(field_names, field_types, true, "entity")
 		src = src + "params = params + \"]\"\n"
 		src = src + "return params\n"
 		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
 		return block_handle
 
-	// Build body for: string __to_update_params()
+	// Build body for: string __to_update_params(any entity)
 	integer build_to_update_params_body(integer ctx, string field_names, string field_types)
-		string src = "string params = \"[\" + id.toString()\n"
-		src = src + generate_field_serialization(field_names, field_types, true)
+		string src = "string params = \"[\" + entity.id.toString()\n"
+		src = src + generate_field_serialization(field_names, field_types, true, "entity")
 		src = src + "params = params + \"]\"\n"
 		src = src + "return params\n"
 		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
@@ -2160,20 +2189,21 @@ functions:
 		// (inline assembly via string concatenation of plugin-authored integers —
 		//  these are handle IDs, not user source, so this is safe per §3.14 Am 7)
 
-		// --- save() ---
+		// --- save(any entity) ---  v2.1.3: takes the entity as an explicit
+		// `any`-typed parameter (see build_save_body comment).
 		integer save_bh = build_save_body(ctx, table_name, has_tenant)
 		if _ctx_had_error(ctx) != 0
 			return ""
 		if not first
 			methods = methods + ","
-		methods = methods + "{\"kind\":\"inline\",\"name\":\"save\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + save_bh.toString() + "}"
+		methods = methods + "{\"kind\":\"inline\",\"name\":\"save\",\"params\":[{\"name\":\"entity\",\"type\":\"any\"}],\"return_type\":\"boolean\",\"body_handle\":" + save_bh.toString() + "}"
 		first = false
 
-		// --- delete() ---
+		// --- delete(any entity) ---  v2.1.3: same shape as save.
 		integer del_bh = build_delete_body(ctx, table_name, has_tenant)
 		if _ctx_had_error(ctx) != 0
 			return ""
-		methods = methods + ",{\"kind\":\"inline\",\"name\":\"delete\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + del_bh.toString() + "}"
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"delete\",\"params\":[{\"name\":\"entity\",\"type\":\"any\"}],\"return_type\":\"boolean\",\"body_handle\":" + del_bh.toString() + "}"
 
 		// --- __field_list() ---
 		integer fl_bh = build_field_list_body(ctx, field_names)
@@ -2203,24 +2233,25 @@ functions:
 			return ""
 		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__generate_placeholders\",\"params\":[{\"name\":\"count\",\"type\":\"integer\"}],\"return_type\":\"string\",\"body_handle\":" + gp_bh.toString() + "}"
 
-		// --- __to_params() ---
+		// --- __to_params(any entity) ---  v2.1.3
 		integer tp_bh = build_to_params_body(ctx, field_names, field_types)
 		if _ctx_had_error(ctx) != 0
 			return ""
-		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + tp_bh.toString() + "}"
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params\",\"params\":[{\"name\":\"entity\",\"type\":\"any\"}],\"return_type\":\"string\",\"body_handle\":" + tp_bh.toString() + "}"
 
-		// --- __to_params_with_tenant(string tenant_id) — only if has_tenant ---
+		// --- __to_params_with_tenant(any entity, string tenant_id) ---
+		// only if has_tenant. v2.1.3: entity added as leading param.
 		if has_tenant
 			integer tpt_bh = build_to_params_with_tenant_body(ctx, field_names, field_types)
 			if _ctx_had_error(ctx) != 0
 				return ""
-			methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params_with_tenant\",\"params\":[{\"name\":\"tenant_id\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + tpt_bh.toString() + "}"
+			methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params_with_tenant\",\"params\":[{\"name\":\"entity\",\"type\":\"any\"},{\"name\":\"tenant_id\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + tpt_bh.toString() + "}"
 
-		// --- __to_update_params() ---
+		// --- __to_update_params(any entity) ---  v2.1.3
 		integer tup_bh = build_to_update_params_body(ctx, field_names, field_types)
 		if _ctx_had_error(ctx) != 0
 			return ""
-		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_update_params\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + tup_bh.toString() + "}"
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_update_params\",\"params\":[{\"name\":\"entity\",\"type\":\"any\"}],\"return_type\":\"string\",\"body_handle\":" + tup_bh.toString() + "}"
 
 		// --- __update_set() ---
 		string update_set_sql = generate_update_set_sql(field_names)
