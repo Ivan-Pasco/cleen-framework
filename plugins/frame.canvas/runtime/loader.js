@@ -580,6 +580,17 @@
           return self._writeLP(self._sha256Hex(self.readString(ptr, len)));
         },
 
+        // SHA-256 of a length-prefixed byte buffer at handle. Handle layout
+        // matches _req_body_bytes output: [4-byte LE length][bytes]. Returns
+        // a length-prefixed lowercase hex string (64 chars). Companion to
+        // _crypto_hash_sha256 for octet-stream inputs that must not go
+        // through UTF-8 decode/re-encode. Registry entry: function-registry.toml
+        // §_crypto_sha256_bytes (hosts=["all"]).
+        _crypto_sha256_bytes(handle) {
+          const bytes = self._readLPBytes(handle);
+          return self._writeLP(self._sha256Hex(bytes));
+        },
+
         _crypto_hash_sha512(ptr, len) {
           return self._writeLP(self._sha512Hex(self.readString(ptr, len)));
         },
@@ -781,6 +792,20 @@
       return new TextDecoder().decode(bytes);
     }
 
+    // Raw-bytes variant of _readLP. Returns a copy of the payload bytes at
+    // an LP handle without any UTF-8 decoding. Required by binary-input
+    // bridges (e.g. _crypto_sha256_bytes) whose consumers must see the exact
+    // wire bytes.
+    _readLPBytes(ptr) {
+      if (!this.memory) return new Uint8Array(0);
+      this._checkMemoryGrowth();
+      const dv = new DataView(this.memory.buffer);
+      const len = dv.getUint32(ptr, true);
+      // Copy out of the WASM buffer — the caller may hold this after
+      // subsequent allocations that could grow / relocate memory.
+      return new Uint8Array(this.memory.buffer, ptr + 4, len).slice();
+    }
+
     _writeLP(str) {
       if (!this.memory) return 0;
       this._checkMemoryGrowth();
@@ -813,7 +838,11 @@
         0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
         0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
       ];
-      const enc = new TextEncoder().encode(input);
+      // Accept string (UTF-8 encode) or Uint8Array (use as-is). The bytes
+      // variant is what _crypto_sha256_bytes needs — the caller reads raw
+      // bytes from a length-prefixed buffer and the hash must operate on
+      // those bytes without UTF-8 round-tripping.
+      const enc = (input instanceof Uint8Array) ? input : new TextEncoder().encode(input);
       const bitLen = enc.length * 8;
       // pad: 0x80, zeros, 64-bit big-endian length
       const padLen = (Math.floor((enc.length + 9 + 63) / 64) * 64) - enc.length;

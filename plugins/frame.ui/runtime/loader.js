@@ -182,6 +182,18 @@
 		return new TextDecoder().decode(bytes);
 	}
 
+	// Read a length-prefixed byte buffer at handle and return a copy of the
+	// payload as a Uint8Array. Required by binary-input bridges (e.g.
+	// _crypto_sha256_bytes) that must not UTF-8 round-trip the payload.
+	// Handle layout: [4-byte LE length][bytes]. The copy protects against
+	// subsequent allocations that could grow / relocate memory.
+	function readLPBytes(handle) {
+		checkMemoryGrowth();
+		const dv = new DataView(memory.buffer);
+		const len = dv.getUint32(handle, true);
+		return new Uint8Array(memory.buffer, handle + 4, len).slice();
+	}
+
 	function writeString(str) {
 		checkMemoryGrowth();
 		const bytes = new TextEncoder().encode(str);
@@ -374,7 +386,11 @@
 			0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
 			0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 		];
-		const enc = new TextEncoder().encode(input);
+		// Accept string (UTF-8 encode) or Uint8Array (use as-is). The bytes
+		// variant is what _crypto_sha256_bytes needs — the caller reads raw
+		// bytes from a length-prefixed buffer and the hash must operate on
+		// those bytes without UTF-8 round-tripping.
+		const enc = (input instanceof Uint8Array) ? input : new TextEncoder().encode(input);
 		const bitLen = enc.length * 8;
 		const padLen = (Math.floor((enc.length + 9 + 63) / 64) * 64) - enc.length;
 		const msg = new Uint8Array(enc.length + padLen);
@@ -1250,6 +1266,13 @@
 			// synchronous implementations are required — see the SHA-256/512
 			// and HMAC helpers at the top of the IIFE.
 			_crypto_hash_sha256: (ptr, len) => writeString(sha256Hex(readString(ptr, len))),
+			// SHA-256 of a length-prefixed byte buffer at handle. Handle layout
+			// matches _req_body_bytes output: [4-byte LE length][bytes]. Returns
+			// a length-prefixed lowercase hex string (64 chars). Companion to
+			// _crypto_hash_sha256 for octet-stream inputs that must not go
+			// through UTF-8 decode/re-encode. Registry: function-registry.toml
+			// §_crypto_sha256_bytes (hosts=["all"]).
+			_crypto_sha256_bytes: (handle) => writeString(sha256Hex(readLPBytes(handle))),
 			_crypto_hash_sha512: (ptr, len) => writeString(sha512Hex(readString(ptr, len))),
 			_crypto_hmac: (dataPtr, dataLen, keyPtr, keyLen, algPtr, algLen) => {
 				const data = readString(dataPtr, dataLen);
