@@ -125,7 +125,49 @@ external:
 // the v3 migration per the plugin.toml [lifecycle].server_init comment.
 
 functions:
+	// emit_module_helpers_typed (v2.1.3, 2026-07-18)
+	// Emits `class Database` with capability-typed save/delete methods per
+	// spec DAT-S011. The methods forward to `target.save()` / `target.delete()`
+	// via the `can Persist` capability contract (DAT-S000).
+	//
+	// The `can Persist:` declaration itself must live in the user's source
+	// today — the typed-emission bridge surface has no capability-emission
+	// bridge. Team-prompt filed 2026-07-18 for `_emit_capability`; when it
+	// lands this function will also emit `can Persist:`.
+	//
+	// Deduplication (per plugin-contract.md §3.1): identical class emitted
+	// from every source file that loads frame.data is silently dedup'd into
+	// one top-level declaration.
 	integer emit_module_helpers_typed(integer ctx, string ctx_json)
+		// Method body for Database.save(Persist target): return target.save()
+		string save_src = "return target.save()\n"
+		integer save_body_h = _emit_stmt_from_source(ctx, save_src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 1
+		if save_body_h == 0
+			return 1
+
+		// Method body for Database.delete(Persist target): return target.delete()
+		string delete_src = "return target.delete()\n"
+		integer delete_body_h = _emit_stmt_from_source(ctx, delete_src, 0)
+		if _ctx_had_error(ctx) != 0
+			return 1
+		if delete_body_h == 0
+			return 1
+
+		// Assemble the Database class spec JSON.
+		string db_spec = "{\"name\":\"Database\""
+		db_spec = db_spec + ",\"parent\":null"
+		db_spec = db_spec + ",\"fields\":[]"
+		db_spec = db_spec + ",\"methods\":["
+		db_spec = db_spec + "{\"kind\":\"inline\",\"name\":\"save\",\"params\":[{\"name\":\"target\",\"type\":\"Persist\"}],\"return_type\":\"boolean\",\"body_handle\":" + save_body_h.toString() + "}"
+		db_spec = db_spec + ",{\"kind\":\"inline\",\"name\":\"delete\",\"params\":[{\"name\":\"target\",\"type\":\"Persist\"}],\"return_type\":\"boolean\",\"body_handle\":" + delete_body_h.toString() + "}"
+		db_spec = db_spec + "]}"
+
+		integer db_spec_ptr = _batch_stringLit(ctx, db_spec)
+		_emit_class_full(ctx, db_spec_ptr, 1)
+		if _ctx_had_error(ctx) != 0
+			return 1
 		return 0
 
 	integer emit_server_init_typed(integer ctx, string ctx_json)
