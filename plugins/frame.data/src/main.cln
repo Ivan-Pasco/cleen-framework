@@ -1890,32 +1890,38 @@ functions:
 	// OutOfRange). Emitting the body as a single source fragment sidesteps the
 	// batch-handle-reuse problem entirely. Compiler 0.33.33's _emit_class_full
 	// dispatch accepts arena handles (via EmitArena::is_batch_handle branch).
-	// v3.0.12: method params reference the paired entity type concretely
-	// (model_name), because at emission the plugin already knows which
-	// entity it's building methods for — the class being built IS the
-	// paired type. Earlier versions (v2.1.3–v3.0.11) used `any` here on
-	// the theory that the plugin didn't know the paired type, but that
-	// was overcautious: `model_name` is the paired type, threaded through
-	// build_methods_json as its first parameter. Compiler 0.33.108's
-	// typed-emission (Amendment 13) requires resolvable type refs, which
-	// the concrete substitution satisfies. Field access (`entity.id`,
-	// `entity.email`) now resolves statically against the concrete class
-	// instead of via runtime host-tag dispatch on `any`.
+	// v3.0.14: save/delete take ZERO arguments and reference fields via
+	// `this` (implicit receiver in method bodies — bare `id`, bare `email`
+	// resolve against the enclosing class). This matches the Persist
+	// capability contract at foundation:130-138:
+	//   save() -> boolean
+	//   delete() -> boolean
+	// so `data`-emitted classes satisfy `can Persist` without SEM013
+	// signature mismatch. Database.save(target) / Database.delete(target)
+	// dispatch via `return target.save()` / `return target.delete()`
+	// (see emit_module_helpers_typed at :167-181) — no argument
+	// forwarding, so per-entity state must live on `this`.
+	//
+	// Historical: v2.1.3–v3.0.11 used `any entity`, v3.0.12–v3.0.13 used
+	// `<model_name> entity`. Both were incompatible with the Persist
+	// contract; v3.0.13 shipped `cans:["Persist"]` and regressed the
+	// vanilla `data Widget:` case with SEM013. v3.0.14 removes the entity
+	// param entirely and rewrites the bodies to use `this`.
 	integer build_save_body(integer ctx, string table_name, boolean has_tenant)
-		string src = "if entity.id == 0\n"
+		string src = "if id == 0\n"
 		if has_tenant
 			src = src + "\tstring __tenant_id = tenant_getId()\n"
 			src = src + "\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
-			src = src + "\tstring params = __to_params_with_tenant(entity, __tenant_id)\n"
+			src = src + "\tstring params = __to_params_with_tenant(__tenant_id)\n"
 		else
 			src = src + "\tstring sql = \"INSERT INTO " + table_name + " (\" + __field_list() + \") VALUES (\" + __placeholder_list() + \") RETURNING id\"\n"
-			src = src + "\tstring params = __to_params(entity)\n"
+			src = src + "\tstring params = __to_params()\n"
 		src = src + "\tstring __ins_result = _db_query(sql, params)\n"
-		src = src + "\tentity.id = __extract_id(__ins_result)\n"
-		src = src + "\treturn entity.id > 0\n"
+		src = src + "\tid = __extract_id(__ins_result)\n"
+		src = src + "\treturn id > 0\n"
 		src = src + "else\n"
 		src = src + "\tstring sql = \"UPDATE " + table_name + " SET \" + __update_set() + \" WHERE id = $1\"\n"
-		src = src + "\tstring params = __to_update_params(entity)\n"
+		src = src + "\tstring params = __to_update_params()\n"
 		src = src + "\tinteger affected = _db_execute(sql, params)\n"
 		src = src + "\treturn affected > 0\n"
 		integer body_h = _emit_stmt_from_source(ctx, src, 0)
@@ -1937,17 +1943,17 @@ functions:
 	// The class-spec inline method's `body_handle` field accepts arena stmt
 	// handles per typed-emission §3.13 (resolved via arena.take_stmt() in
 	// _emit_class_full — see batch_schema.rs BatchMethod.body_handle).
-	// v2.1.3: rewritten as `delete(any entity)` per DAT-S011. Same rationale
-	// as build_save_body (see comment on that function).
+	// v3.0.14: zero-arg body, references `id` on `this` (see build_save_body
+	// comment for the full v3.0.14 rationale).
 	integer build_delete_body(integer ctx, string table_name, boolean has_tenant)
-		string src = "if entity.id == 0\n"
+		string src = "if id == 0\n"
 		src = src + "\treturn false\n"
 		if has_tenant
 			src = src + "string __tenant_id = tenant_getId()\n"
 			src = src + "string sql = \"DELETE FROM " + table_name + " WHERE id = $1 AND tenant_id = '\" + __tenant_id + \"'\"\n"
 		else
 			src = src + "string sql = \"DELETE FROM " + table_name + " WHERE id = $1\"\n"
-		src = src + "string params = \"[\" + entity.id.toString() + \"]\"\n"
+		src = src + "string params = \"[\" + id.toString() + \"]\"\n"
 		src = src + "integer affected = _db_execute(sql, params)\n"
 		src = src + "return affected > 0\n"
 		integer body_h = _emit_stmt_from_source(ctx, src, 0)
@@ -2204,32 +2210,31 @@ functions:
 	// The serialization code is generated at plugin time as a Clean source fragment
 	// using generate_field_serialization, then emitted via _emit_stmt_from_source.
 	// Returns the body block handle.
-	// v2.1.3: rewritten to take an `entity` parameter (typed `any`) so that
-	// field references become `entity.<field>` instead of the historical
-	// bare `<field>` (which relied on `this` being the model). See DAT-S011
-	// / DAT-S012 for the ownership shift under Option F1a.
+	// v3.0.14: reverted to bare `<field>` references (zero-arg method,
+	// implicit `this`), matching the Persist-contract signature shift in
+	// build_save_body. See that function's comment for the full rationale.
 	integer build_to_params_body(integer ctx, string field_names, string field_types)
 		// Build source: params = "[" ... params = params + "]" ... return params
 		string src = "string params = \"[\"\n"
-		src = src + generate_field_serialization(field_names, field_types, false, "entity")
+		src = src + generate_field_serialization(field_names, field_types, false, "")
 		src = src + "params = params + \"]\"\n"
 		src = src + "return params\n"
 		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
 		return block_handle
 
-	// Build body for: string __to_params_with_tenant(any entity, string tenant_id)
+	// Build body for: string __to_params_with_tenant(string tenant_id)
 	integer build_to_params_with_tenant_body(integer ctx, string field_names, string field_types)
 		string src = "string params = \"[\\\"\" + tenant_id + \"\\\"\"\n"
-		src = src + generate_field_serialization(field_names, field_types, true, "entity")
+		src = src + generate_field_serialization(field_names, field_types, true, "")
 		src = src + "params = params + \"]\"\n"
 		src = src + "return params\n"
 		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
 		return block_handle
 
-	// Build body for: string __to_update_params(any entity)
+	// Build body for: string __to_update_params()
 	integer build_to_update_params_body(integer ctx, string field_names, string field_types)
-		string src = "string params = \"[\" + entity.id.toString()\n"
-		src = src + generate_field_serialization(field_names, field_types, true, "entity")
+		string src = "string params = \"[\" + id.toString()\n"
+		src = src + generate_field_serialization(field_names, field_types, true, "")
 		src = src + "params = params + \"]\"\n"
 		src = src + "return params\n"
 		integer block_handle = _emit_stmt_from_source(ctx, src, 0)
@@ -2265,14 +2270,14 @@ functions:
 			return ""
 		if not first
 			methods = methods + ","
-		methods = methods + "{\"kind\":\"inline\",\"name\":\"save\",\"params\":[{\"name\":\"entity\",\"type\":\"" + model_name + "\"}],\"return_type\":\"boolean\",\"body_handle\":" + save_bh.toString() + "}"
+		methods = methods + "{\"kind\":\"inline\",\"name\":\"save\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + save_bh.toString() + "}"
 		first = false
 
 		// --- delete(any entity) ---  v2.1.3: same shape as save.
 		integer del_bh = build_delete_body(ctx, table_name, has_tenant)
 		if _ctx_had_error(ctx) != 0
 			return ""
-		methods = methods + ",{\"kind\":\"inline\",\"name\":\"delete\",\"params\":[{\"name\":\"entity\",\"type\":\"" + model_name + "\"}],\"return_type\":\"boolean\",\"body_handle\":" + del_bh.toString() + "}"
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"delete\",\"params\":[],\"return_type\":\"boolean\",\"body_handle\":" + del_bh.toString() + "}"
 
 		// --- __field_list() ---
 		integer fl_bh = build_field_list_body(ctx, field_names)
@@ -2306,7 +2311,7 @@ functions:
 		integer tp_bh = build_to_params_body(ctx, field_names, field_types)
 		if _ctx_had_error(ctx) != 0
 			return ""
-		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params\",\"params\":[{\"name\":\"entity\",\"type\":\"" + model_name + "\"}],\"return_type\":\"string\",\"body_handle\":" + tp_bh.toString() + "}"
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + tp_bh.toString() + "}"
 
 		// --- __to_params_with_tenant(any entity, string tenant_id) ---
 		// only if has_tenant. v2.1.3: entity added as leading param.
@@ -2314,13 +2319,13 @@ functions:
 			integer tpt_bh = build_to_params_with_tenant_body(ctx, field_names, field_types)
 			if _ctx_had_error(ctx) != 0
 				return ""
-			methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params_with_tenant\",\"params\":[{\"name\":\"entity\",\"type\":\"" + model_name + "\"},{\"name\":\"tenant_id\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + tpt_bh.toString() + "}"
+			methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_params_with_tenant\",\"params\":[{\"name\":\"tenant_id\",\"type\":\"string\"}],\"return_type\":\"string\",\"body_handle\":" + tpt_bh.toString() + "}"
 
 		// --- __to_update_params(any entity) ---  v2.1.3
 		integer tup_bh = build_to_update_params_body(ctx, field_names, field_types)
 		if _ctx_had_error(ctx) != 0
 			return ""
-		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_update_params\",\"params\":[{\"name\":\"entity\",\"type\":\"" + model_name + "\"}],\"return_type\":\"string\",\"body_handle\":" + tup_bh.toString() + "}"
+		methods = methods + ",{\"kind\":\"inline\",\"name\":\"__to_update_params\",\"params\":[],\"return_type\":\"string\",\"body_handle\":" + tup_bh.toString() + "}"
 
 		// --- __update_set() ---
 		string update_set_sql = generate_update_set_sql(field_names)

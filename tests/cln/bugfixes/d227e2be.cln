@@ -16,6 +16,6 @@ data Widget:
 	string name
 
 start:
-	Widget w = Widget(id: 0, name: "test")
+	Widget w = Widget(0, "test")
 	Database.save(w)
 	print("saved")
