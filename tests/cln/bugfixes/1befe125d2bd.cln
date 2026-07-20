@@ -1,0 +1,16 @@
+// Test: bugfixes/1befe125d2bd — vanilla data Widget: block with primitive fields only
+// Component: framework/frame.data
+// Grammar: (data DSL — plugin-owned)
+// Fixed in: framework v3.0.12
+// Expected output: compiles cleanly, no PLUGIN013
+
+plugins:
+	frame.data
+
+data Widget:
+	integer id
+	string name
+	boolean is_active
+
+start:
+	print("compiled")
