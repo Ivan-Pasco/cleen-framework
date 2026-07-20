@@ -15,7 +15,6 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
       - name: Get version from tag
@@ -24,12 +23,12 @@ jobs:
 
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Frame Framework v${{ steps.get_version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          name: Frame Framework v${{ steps.get_version.outputs.version }}
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
           body: |
@@ -115,25 +114,16 @@ jobs:
         run: |
           sha256sum frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz > frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz.sha256
 
-      - name: Upload plugin archive
-        uses: actions/upload-release-asset@v1
+      - name: Attach plugin archive and checksum to release
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz
-          asset_name: frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz
-          asset_content_type: application/gzip
-
-      - name: Upload checksum
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz.sha256
-          asset_name: frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz.sha256
-          asset_content_type: text/plain
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: |
+            frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz
+            frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz.sha256
 
   update-manifest:
     name: Update Version Manifest
@@ -164,12 +154,11 @@ jobs:
           }
           EOF
 
-      - name: Upload manifest
-        uses: actions/upload-release-asset@v1
+      - name: Attach version manifest to release
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./version-manifest.json
-          asset_name: version-manifest.json
-          asset_content_type: application/json
+          tag_name: ${{ github.ref_name }}
+          fail_on_unmatched_files: true
+          files: version-manifest.json
