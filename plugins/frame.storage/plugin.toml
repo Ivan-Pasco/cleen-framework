@@ -16,6 +16,17 @@ abi_version = "1.0.0"
 expansion_version = "3.0.0"
 emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
 
+[lifecycle]
+# Plugin Contracts v3 — lifecycle.md §3.1 + §6.
+# Bridge-only plugins still need a lifecycle declaration. This plugin has
+# no module-scope helpers to emit; the typed slot returns 0. The
+# module_helpers_are_roots flag is preserved for symmetry with other
+# bridge-only plugins (no helpers actually emitted).
+module_helpers_are_roots = true
+# v3 typed variant — emit_module_helpers_typed(ctx, ctx_json) -> integer.
+# Returns 0 (no module-scope declarations to emit for frame.storage).
+module_helpers = "emit_module_helpers_typed"
+
 [handles]
 # Bridge-only plugin (plugin-contract.md §2.2). No block handlers.
 blocks = []
