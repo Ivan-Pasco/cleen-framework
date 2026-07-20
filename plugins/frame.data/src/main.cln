@@ -2815,6 +2815,16 @@ functions:
 		class_spec = class_spec + ",\"parent\":null"
 		class_spec = class_spec + ",\"fields\":" + fields_json
 		class_spec = class_spec + ",\"methods\":" + methods_json
+		// v3.0.13: claim `can Persist` on every data-emitted class.
+		// Every data model gets save()/delete() matching the Persist capability
+		// contract emitted by emit_module_helpers_typed, so every model should
+		// register itself as conforming. Without this, Database.save(entity)
+		// dispatches through a capability with 0 conforming classes and codegen
+		// reports "CallCapability: no class conforms to capability #N slot 0 —
+		// resolver should have prevented this". Compiler 0.33.111+ accepts
+		// `cans` on ClassSpec (#[serde(default)], backward-compatible).
+		// Closes team-prompt d227e2be.
+		class_spec = class_spec + ",\"cans\":[\"Persist\"]"
 		class_spec = class_spec + "}"
 
 		// Emit the class (flag 1 = exported).

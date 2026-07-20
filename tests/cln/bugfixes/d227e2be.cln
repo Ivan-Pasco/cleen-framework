@@ -1,0 +1,21 @@
+// Test: bugfixes/d227e2be — Database.save(entity) dispatches through Persist capability
+// Component: framework/frame.data
+// Grammar: (data DSL — plugin-owned) + capability dispatch
+// Fixed in: framework v3.0.13
+// Expected output: compiles cleanly, no "CallCapability: no class conforms" error.
+//   The vanilla data Widget: case (1befe125d2bd.cln) only exercises class emission;
+//   this test forces the compiler to resolve Database.save(w) through Widget's
+//   Persist conformance, which fails at codegen if the plugin doesn't emit
+//   "cans":["Persist"] in the class spec.
+
+plugins:
+	frame.data
+
+data Widget:
+	integer id
+	string name
+
+start:
+	Widget w = Widget(id: 0, name: "test")
+	Database.save(w)
+	print("saved")
