@@ -101,12 +101,45 @@ functions:
 		if hr_err != 0
 			return 1
 
-		// redirectTo / redirectToStatus / redirect DEFERRED — reference
-		// `_http_redirect`, which the current compiler resolves to a
-		// SymbolId at semantic time but does not carry into the codegen
-		// function map when emitted through the typed bridge surface.
-		// User endpoints can still redirect by calling `http.respond(302, …)`
-		// with a `Location` header directly through `http.setHeader`.
+		// ── redirect(url: string) -> string ──
+		// return _http_redirect(302, url)
+		integer rd_s302 = _expr_int_lit(ctx, 302, 0)
+		integer rd_url = _expr_ident(ctx, "url")
+		integer rd_call = _expr_call(ctx, "_http_redirect", "[" + rd_s302.toString() + "," + rd_url.toString() + "]")
+		integer rd_ret = _stmt_return(ctx, rd_call)
+		integer rd_body = _stmt_block(ctx, "[" + rd_ret.toString() + "]")
+		integer rd_p_str = _type_string(ctx)
+		integer rd_r_str = _type_string(ctx)
+		integer rd_err = _emit_function(ctx, "redirect", "[{\"name\":\"url\",\"type_handle\":" + rd_p_str.toString() + "}]", rd_r_str, rd_body, 2)
+		if rd_err != 0
+			return 1
+
+		// ── redirectTo(url: string) -> string ── (alias for redirect(url))
+		// return _http_redirect(302, url)
+		integer rt_s302 = _expr_int_lit(ctx, 302, 0)
+		integer rt_url = _expr_ident(ctx, "url")
+		integer rt_call = _expr_call(ctx, "_http_redirect", "[" + rt_s302.toString() + "," + rt_url.toString() + "]")
+		integer rt_ret = _stmt_return(ctx, rt_call)
+		integer rt_body = _stmt_block(ctx, "[" + rt_ret.toString() + "]")
+		integer rt_p_str = _type_string(ctx)
+		integer rt_r_str = _type_string(ctx)
+		integer rt_err = _emit_function(ctx, "redirectTo", "[{\"name\":\"url\",\"type_handle\":" + rt_p_str.toString() + "}]", rt_r_str, rt_body, 2)
+		if rt_err != 0
+			return 1
+
+		// ── redirectToStatus(url: string, status: integer) -> string ──
+		// return _http_redirect(status, url)
+		integer rts_url = _expr_ident(ctx, "url")
+		integer rts_status = _expr_ident(ctx, "status")
+		integer rts_call = _expr_call(ctx, "_http_redirect", "[" + rts_status.toString() + "," + rts_url.toString() + "]")
+		integer rts_ret = _stmt_return(ctx, rts_call)
+		integer rts_body = _stmt_block(ctx, "[" + rts_ret.toString() + "]")
+		integer rts_p_str = _type_string(ctx)
+		integer rts_p_int = _type_integer(ctx)
+		integer rts_r_str = _type_string(ctx)
+		integer rts_err = _emit_function(ctx, "redirectToStatus", "[{\"name\":\"url\",\"type_handle\":" + rts_p_str.toString() + "},{\"name\":\"status\",\"type_handle\":" + rts_p_int.toString() + "}]", rts_r_str, rts_body, 2)
+		if rts_err != 0
+			return 1
 
 		// ── notFound() -> string ──
 		// return _http_respond(404, "application/json", "{\"ok\":false,\"err\":{\"code\":\"NOT_FOUND\",\"message\":\"Resource not found\"}}")
@@ -158,14 +191,23 @@ functions:
 		if fb_err != 0
 			return 1
 
-		// httpHeader DEFERRED — references `_http_set_header`, which the
-		// current compiler resolves to a SymbolId at semantic time but does
-		// not carry into the codegen function map (same failure mode as
-		// `_http_redirect`, see redirect comment above).
+		// ── httpHeader(name: string, value: string) -> void ──
+		// _http_set_header(name, value)
+		integer hh_name = _expr_ident(ctx, "name")
+		integer hh_value = _expr_ident(ctx, "value")
+		integer hh_call = _stmt_call(ctx, "_http_set_header", "[" + hh_name.toString() + "," + hh_value.toString() + "]")
+		integer hh_body = _stmt_block(ctx, "[" + hh_call.toString() + "]")
+		integer hh_p_str1 = _type_string(ctx)
+		integer hh_p_str2 = _type_string(ctx)
+		integer hh_r_void = _type_void(ctx)
+		integer hh_err = _emit_function(ctx, "httpHeader", "[{\"name\":\"name\",\"type_handle\":" + hh_p_str1.toString() + "},{\"name\":\"value\",\"type_handle\":" + hh_p_str2.toString() + "}]", hh_r_void, hh_body, 2)
+		if hh_err != 0
+			return 1
 
-		// httpError DEFERRED — depends on __json_escape (see comment above).
-
-		// redirect DEFERRED (see redirectTo/redirectToStatus comment above).
+		// httpError DEFERRED — depends on __json_escape, which requires a
+		// method-call emission bridge (_expr_method_call) that the plugin
+		// contract does not currently expose. This is a plugin-API surface
+		// gap tracked separately, not the codegen bug closed by cln 0.33.119.
 
 		// ── httpStatus(code: integer, body: string) -> string ──
 		integer hs_code = _expr_ident(ctx, "code")
@@ -195,15 +237,130 @@ functions:
 		if st_err != 0
 			return 1
 
-		// param / body / header / method / resDownload / emailSend /
-		// emailSendFrom / emailLastError / __route_default_body DEFERRED —
-		// all reference server-host bridge functions (_req_param, _req_body,
-		// _req_header, _req_method, _res_download, _email_*, _res_set_header,
-		// _res_body) which the current compiler resolves at semantic time
-		// but drops from the codegen function map when invoked from a plugin-
-		// emitted helper. Only `_http_respond` currently survives that gap,
-		// so the emitted set is limited to helpers that call `_http_respond`
-		// alone. Restore once the codegen gap is closed.
+		// ── param(name: string) -> string ──
+		// return _req_param(name)
+		integer pm_name = _expr_ident(ctx, "name")
+		integer pm_call = _expr_call(ctx, "_req_param", "[" + pm_name.toString() + "]")
+		integer pm_ret = _stmt_return(ctx, pm_call)
+		integer pm_body = _stmt_block(ctx, "[" + pm_ret.toString() + "]")
+		integer pm_p_str = _type_string(ctx)
+		integer pm_r_str = _type_string(ctx)
+		integer pm_err = _emit_function(ctx, "param", "[{\"name\":\"name\",\"type_handle\":" + pm_p_str.toString() + "}]", pm_r_str, pm_body, 2)
+		if pm_err != 0
+			return 1
+
+		// ── body() -> string ──
+		// return _req_body()
+		integer bd_call = _expr_call(ctx, "_req_body", "[]")
+		integer bd_ret = _stmt_return(ctx, bd_call)
+		integer bd_body = _stmt_block(ctx, "[" + bd_ret.toString() + "]")
+		integer bd_r_str = _type_string(ctx)
+		integer bd_err = _emit_function(ctx, "body", "[]", bd_r_str, bd_body, 2)
+		if bd_err != 0
+			return 1
+
+		// ── header(name: string) -> string ──
+		// return _req_header(name)
+		integer hd_name = _expr_ident(ctx, "name")
+		integer hd_call = _expr_call(ctx, "_req_header", "[" + hd_name.toString() + "]")
+		integer hd_ret = _stmt_return(ctx, hd_call)
+		integer hd_body = _stmt_block(ctx, "[" + hd_ret.toString() + "]")
+		integer hd_p_str = _type_string(ctx)
+		integer hd_r_str = _type_string(ctx)
+		integer hd_err = _emit_function(ctx, "header", "[{\"name\":\"name\",\"type_handle\":" + hd_p_str.toString() + "}]", hd_r_str, hd_body, 2)
+		if hd_err != 0
+			return 1
+
+		// ── method() -> string ──
+		// return _req_method()
+		integer mt_call = _expr_call(ctx, "_req_method", "[]")
+		integer mt_ret = _stmt_return(ctx, mt_call)
+		integer mt_body = _stmt_block(ctx, "[" + mt_ret.toString() + "]")
+		integer mt_r_str = _type_string(ctx)
+		integer mt_err = _emit_function(ctx, "method", "[]", mt_r_str, mt_body, 2)
+		if mt_err != 0
+			return 1
+
+		// ── resDownload(filename: string) -> void ──
+		// _res_download(filename)
+		integer rdl_fn = _expr_ident(ctx, "filename")
+		integer rdl_call = _stmt_call(ctx, "_res_download", "[" + rdl_fn.toString() + "]")
+		integer rdl_body = _stmt_block(ctx, "[" + rdl_call.toString() + "]")
+		integer rdl_p_str = _type_string(ctx)
+		integer rdl_r_void = _type_void(ctx)
+		integer rdl_err = _emit_function(ctx, "resDownload", "[{\"name\":\"filename\",\"type_handle\":" + rdl_p_str.toString() + "}]", rdl_r_void, rdl_body, 2)
+		if rdl_err != 0
+			return 1
+
+		// ── emailSend(to: string, subject: string, html: string, text: string) -> boolean ──
+		// return _email_send(to, subject, html, text, "")   -- empty from-override uses configured default
+		integer es_to = _expr_ident(ctx, "to")
+		integer es_subj = _expr_ident(ctx, "subject")
+		integer es_html = _expr_ident(ctx, "html")
+		integer es_text = _expr_ident(ctx, "text")
+		integer es_from = _expr_string_lit(ctx, "")
+		integer es_call = _expr_call(ctx, "_email_send", "[" + es_to.toString() + "," + es_subj.toString() + "," + es_html.toString() + "," + es_text.toString() + "," + es_from.toString() + "]")
+		integer es_ret = _stmt_return(ctx, es_call)
+		integer es_body = _stmt_block(ctx, "[" + es_ret.toString() + "]")
+		integer es_p1 = _type_string(ctx)
+		integer es_p2 = _type_string(ctx)
+		integer es_p3 = _type_string(ctx)
+		integer es_p4 = _type_string(ctx)
+		integer es_r_bool = _type_boolean(ctx)
+		integer es_err = _emit_function(ctx, "emailSend", "[{\"name\":\"to\",\"type_handle\":" + es_p1.toString() + "},{\"name\":\"subject\",\"type_handle\":" + es_p2.toString() + "},{\"name\":\"html\",\"type_handle\":" + es_p3.toString() + "},{\"name\":\"text\",\"type_handle\":" + es_p4.toString() + "}]", es_r_bool, es_body, 2)
+		if es_err != 0
+			return 1
+
+		// ── emailSendFrom(to, subject, html, text, from: string) -> boolean ──
+		// return _email_send(to, subject, html, text, from)
+		integer esf_to = _expr_ident(ctx, "to")
+		integer esf_subj = _expr_ident(ctx, "subject")
+		integer esf_html = _expr_ident(ctx, "html")
+		integer esf_text = _expr_ident(ctx, "text")
+		integer esf_from = _expr_ident(ctx, "from")
+		integer esf_call = _expr_call(ctx, "_email_send", "[" + esf_to.toString() + "," + esf_subj.toString() + "," + esf_html.toString() + "," + esf_text.toString() + "," + esf_from.toString() + "]")
+		integer esf_ret = _stmt_return(ctx, esf_call)
+		integer esf_body = _stmt_block(ctx, "[" + esf_ret.toString() + "]")
+		integer esf_p1 = _type_string(ctx)
+		integer esf_p2 = _type_string(ctx)
+		integer esf_p3 = _type_string(ctx)
+		integer esf_p4 = _type_string(ctx)
+		integer esf_p5 = _type_string(ctx)
+		integer esf_r_bool = _type_boolean(ctx)
+		integer esf_err = _emit_function(ctx, "emailSendFrom", "[{\"name\":\"to\",\"type_handle\":" + esf_p1.toString() + "},{\"name\":\"subject\",\"type_handle\":" + esf_p2.toString() + "},{\"name\":\"html\",\"type_handle\":" + esf_p3.toString() + "},{\"name\":\"text\",\"type_handle\":" + esf_p4.toString() + "},{\"name\":\"from\",\"type_handle\":" + esf_p5.toString() + "}]", esf_r_bool, esf_body, 2)
+		if esf_err != 0
+			return 1
+
+		// ── emailLastError() -> string ──
+		// return _email_last_error()
+		integer ele_call = _expr_call(ctx, "_email_last_error", "[]")
+		integer ele_ret = _stmt_return(ctx, ele_call)
+		integer ele_body = _stmt_block(ctx, "[" + ele_ret.toString() + "]")
+		integer ele_r_str = _type_string(ctx)
+		integer ele_err = _emit_function(ctx, "emailLastError", "[]", ele_r_str, ele_body, 2)
+		if ele_err != 0
+			return 1
+
+		// ── __route_default_body(body: string) -> string ──
+		// Auto-wrap invoked by wrap_returns_with_json on each user-return.
+		// Sets Content-Type: application/json header, sets body, and returns
+		// the same body string so user code composes normally.
+		//   _res_set_header("Content-Type", "application/json")
+		//   _res_body(body)
+		//   return body
+		integer rdb_ct_name = _expr_string_lit(ctx, "Content-Type")
+		integer rdb_ct_val = _expr_string_lit(ctx, "application/json")
+		integer rdb_hdr = _stmt_call(ctx, "_res_set_header", "[" + rdb_ct_name.toString() + "," + rdb_ct_val.toString() + "]")
+		integer rdb_body_arg = _expr_ident(ctx, "body")
+		integer rdb_body_set = _stmt_call(ctx, "_res_body", "[" + rdb_body_arg.toString() + "]")
+		integer rdb_body_ret_arg = _expr_ident(ctx, "body")
+		integer rdb_ret = _stmt_return(ctx, rdb_body_ret_arg)
+		integer rdb_block = _stmt_block(ctx, "[" + rdb_hdr.toString() + "," + rdb_body_set.toString() + "," + rdb_ret.toString() + "]")
+		integer rdb_p_str = _type_string(ctx)
+		integer rdb_r_str = _type_string(ctx)
+		integer rdb_err = _emit_function(ctx, "__route_default_body", "[{\"name\":\"body\",\"type_handle\":" + rdb_p_str.toString() + "}]", rdb_r_str, rdb_block, 2)
+		if rdb_err != 0
+			return 1
 
 		return 0
 
@@ -416,14 +573,14 @@ functions:
 					string handler_code = extract_handler_body(remaining)
 					string handler_name = "__route_handler_" + method + "_" + route_id
 
-					// Apply auto-wrap only when `__route_default_body` is
-					// actually being emitted by module_helpers. Currently that
-					// helper is deferred (codegen drops `_res_set_header` /
-					// `_res_body` from the function map), so wrapping would
-					// generate references to a non-existent function. Handlers
-					// that need JSON content-type must call `http.respond(...)`
-					// explicitly.
+					// Auto-wrap raw `return X` in handlers with
+					// `return __route_default_body(X)` so users can write
+					// `return "hello"` and get a proper JSON response back.
+					// Skip when the handler already invokes a response helper
+					// (jsonResponse, redirect, notFound, http.respond, etc.).
 					string final_handler_code = handler_code
+					if handler_sets_response(handler_code) == false
+						final_handler_code = wrap_returns_with_json(handler_code)
 
 					// Build preamble stmts: guard, cache, middleware
 					string preamble_handles = ""
