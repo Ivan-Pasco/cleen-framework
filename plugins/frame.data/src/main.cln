@@ -80,7 +80,7 @@ external:
 	integer _emit_stmt_from_source(integer ctx, string source, integer origin_offset)
 	integer _emit_expr_from_source(integer ctx, string source, integer origin_offset)
 	// Amendment 13 (§3.18) — capability declaration emitter. Compiler 0.33.100+.
-	integer _emit_capability(integer ctx, integer capability_spec_lp)
+	integer _emit_capability(integer ctx, string capability_spec)
 	// ---- AST type constructors (§3.9) — for typed-emission return types
 	// and params_json type_handle fields per compiler contract at
 	// bridges.rs:1116. ----
@@ -160,8 +160,7 @@ functions:
 		persist_spec = persist_spec + "{\"name\":\"save\",\"params\":[],\"return_type\":\"boolean\"}"
 		persist_spec = persist_spec + ",{\"name\":\"delete\",\"params\":[],\"return_type\":\"boolean\"}"
 		persist_spec = persist_spec + "]}"
-		integer persist_spec_ptr = _batch_stringLit(ctx, persist_spec)
-		_emit_capability(ctx, persist_spec_ptr)
+		_emit_capability(ctx, persist_spec)
 		if _ctx_had_error(ctx) != 0
 			return 1
 
