@@ -1,0 +1,89 @@
+[plugin]
+name = "frame.storage"
+version = "1.0.0"
+description = "Server-side filesystem storage bridge for binary artifacts (tarballs, uploaded blobs, generated PDFs, WASM cache). Bridge-only plugin — no DSL block. Exposes storage.write/read/exists/delete for a host-configured filesystem root. Ships the plugin contract; hosts (clean-server, clean-node-server) implement the _fs_* bridge functions."
+author = "Clean Language Team"
+license = "MIT"
+
+[compatibility]
+min_compiler_version = "0.30.411"
+# Plugin Contracts v2 — runtime-abi.md §4.
+abi_version = "1.0.0"
+# Plugin Contracts v3 — typed-emission.md §2.1.
+# Bridge-only plugin: no [blocks] section, but expansion_version is still
+# declared for atomic-migration consistency. The compiler never dispatches
+# expand_block_typed on this plugin because [handles].blocks is empty.
+expansion_version = "3.0.0"
+emission_ops_hash = "60d06836a7068ee66a330e8c26ca59bc47cc44991b4f31d56e95e06c707eeaf0"
+
+[handles]
+# Bridge-only plugin (plugin-contract.md §2.2). No block handlers.
+blocks = []
+# All calls resolve through the [aliases] table below.
+expressions = ["storage.write", "storage.read", "storage.exists", "storage.delete"]
+
+[exports]
+# Bridge-only plugin — no expand function. get_keywords is provided so LSP
+# completions show the storage.* namespace.
+get_keywords = "get_keywords"
+
+# Bridge function declarations
+#
+# Plugin Contracts v2 — foundation/spec/plugins/contracts/bridge-host-classes.md §2.
+# Every bridge here is server-only: the filesystem write root is a
+# server-config value (FRAME_STORAGE_ROOT env or [storage] app config),
+# never guest-controlled. A browser-mode build that pulls one of these
+# in is a bug — tag every entry hosts=["server"] so the compiler raises
+# BRIDGE-HOST-MISMATCH instead of a runtime LinkError.
+#
+# Wire format for binary payloads (params/returns of type "ptr"):
+#   [4-byte LE length][UTF-8 or raw bytes] — same layout as _req_body_bytes
+#   and _crypto_sha256_bytes so bytes flow through verbatim without a
+#   UTF-8 detour. See foundation/spec/platform/HOST_BRIDGE.md §Binary I/O.
+[bridge]
+functions = [
+  { name = "_fs_write_bytes", params = ["string", "ptr"], returns = "i32",     expand_strings = true, hosts = ["server"], description = "Write raw bytes atomically to path under the host storage root. Returns 0 on success, 1=permission, 2=disk full, 3=invalid path, 4=parent not dir, 5=I/O." },
+  { name = "_fs_read_bytes",  params = ["string"],        returns = "ptr",     expand_strings = true, hosts = ["server"], description = "Read raw bytes from path under storage root. Returns length-prefixed ptr; empty buffer when file is missing." },
+  { name = "_fs_exists",      params = ["string"],        returns = "boolean", expand_strings = true, hosts = ["server"], description = "True if the file exists under storage root and is a regular file." },
+  { name = "_fs_delete",      params = ["string"],        returns = "boolean", expand_strings = true, hosts = ["server"], description = "Delete a file under storage root. Returns true on success, false when the file did not exist or removal failed." },
+]
+
+[language]
+# No block-level keywords — this plugin adds function symbols only.
+blocks = []
+keywords = []
+types = []
+functions = [
+  { name = "storage.write",  signature = "storage.write(path, bytes) -> integer",  description = "Write bytes to path under the host storage root. Returns 0 on success, non-zero error code on failure." },
+  { name = "storage.read",   signature = "storage.read(path) -> string",           description = "Read bytes from path under the host storage root. Returns empty string when missing." },
+  { name = "storage.exists", signature = "storage.exists(path) -> boolean",        description = "Check if a file exists under the host storage root." },
+  { name = "storage.delete", signature = "storage.delete(path) -> boolean",        description = "Delete a file under the host storage root. Returns true on success." },
+]
+completions = [
+  { trigger = "storage.", insert = "storage.write(\"${1:path}\", ${2:bytes})" },
+]
+
+[aliases]
+functions = [
+  { clean_name = "storage.write",  bridge_name = "_fs_write_bytes" },
+  { clean_name = "storage.read",   bridge_name = "_fs_read_bytes" },
+  { clean_name = "storage.exists", bridge_name = "_fs_exists" },
+  { clean_name = "storage.delete", bridge_name = "_fs_delete" },
+]
+
+[ai]
+description = "Server-side filesystem storage plugin. Use storage.write(path, bytes) to persist binary artifacts (reproduction tarballs, uploaded images, generated PDFs, WASM cache) under a host-configured storage root. The host rejects path traversal (../) at the bridge boundary; per-request write size cap is enforced by the host. Never treat the path as guest-controlled — it is resolved relative to FRAME_STORAGE_ROOT."
+constraints = [
+  "Never pass a user-supplied path directly to storage.write — always compute the destination from a validated content hash (e.g. SHA-256 of the payload) or a namespaced fixed prefix",
+  "Do not stream large uploads through Clean linear memory — for very large payloads (>200 MB), split into chunked writes or extend frame.server with _req_body_stream_to() instead",
+  "storage.read returns an empty string for missing files — check storage.exists() first when you need to distinguish missing from empty",
+]
+
+[[ai.patterns]]
+name = "content-addressed-artifact"
+use_when = "persisting an uploaded binary (tarball, image, PDF) whose canonical name is derived from a hash of its contents"
+anti_pattern = "using a client-supplied filename as the storage path — client-supplied names cause collisions between users, allow overwrites of other users' artifacts, and open path-traversal escape holes even when the host rejects '..'. Always hash the bytes (crypto.sha256_bytes) and compose the path as '<prefix>/<hash>.<ext>' before calling storage.write."
+example = "patterns/content-addressed-artifact.cln"
+
+[build]
+built_with_compiler = "0.33.115"

@@ -11,7 +11,7 @@ This file guides work on the Clean Language Frame framework. Frame provides the 
 - `tests/` — test suites (see `tests/CONVENTIONS.md`)
 - `scripts/` — build tooling
 
-## The 9 plugins
+## The 10 plugins
 
 | Plugin | What it adds | Prose spec | Formal spec |
 |---|---|---|---|
@@ -24,6 +24,7 @@ This file guides work on the Clean Language Frame framework. Frame provides the 
 | `frame.client` | Client-side `load:` / `form:` / `send:` | `foundation/docs/framework/plugins/client.md` | `foundation/spec/framework/grammar/frame-client.ebnf` |
 | `frame.jobs` | Background jobs, scheduled tasks | `foundation/docs/framework/plugins/jobs.md` | `foundation/spec/framework/grammar/frame-jobs.ebnf` |
 | `frame.locale` | Internationalization, translations | `foundation/docs/framework/plugins/locale.md` | `foundation/spec/framework/grammar/frame-locale.ebnf` |
+| `frame.storage` | Server-side filesystem bridge for binary artifacts | `foundation/docs/framework/plugins/storage.md` | `foundation/spec/framework/frame-storage-semantics.md` + `foundation/spec/framework/grammar/frame-storage.ebnf` |
 
 Framework-level docs (overview, getting started, project structure, CLI, platforms, dev guidelines, database plugins, plugin authoring) live under `foundation/docs/framework/`.
 

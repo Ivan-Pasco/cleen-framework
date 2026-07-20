@@ -54,6 +54,7 @@ jobs:
             - **frame.jobs** - Background job queue and cron scheduling
             - **frame.mcp** - MCP server (tools, resources, prompts for AI agents)
             - **frame.server** - HTTP server runtime
+            - **frame.storage** - Server-side filesystem bridge for binary artifacts
             - **frame.ui** - UI components and rendering
 
             ## What's New
@@ -81,6 +82,7 @@ jobs:
           cp -r plugins/frame.jobs frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.mcp frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.server frame-plugins-${{ needs.create-release.outputs.version }}/
+          cp -r plugins/frame.storage frame-plugins-${{ needs.create-release.outputs.version }}/
           cp -r plugins/frame.ui frame-plugins-${{ needs.create-release.outputs.version }}/
 
           # Create README
@@ -101,6 +103,7 @@ jobs:
           - frame.jobs - Background job queue and cron scheduling
           - frame.mcp - MCP server (tools, resources, prompts for AI agents)
           - frame.server - HTTP server runtime
+          - frame.storage - Server-side filesystem bridge for binary artifacts
           - frame.ui - UI components and rendering
 
           Documentation: https://github.com/Ivan-Pasco/cleen-framework
@@ -148,6 +151,7 @@ jobs:
               "frame.jobs": "included",
               "frame.mcp": "included",
               "frame.server": "included",
+              "frame.storage": "included",
               "frame.ui": "included"
             },
             "download": "https://github.com/Ivan-Pasco/cleen-framework/releases/download/v${{ needs.create-release.outputs.version }}/frame-plugins-${{ needs.create-release.outputs.version }}.tar.gz"
