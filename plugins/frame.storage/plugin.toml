@@ -1,7 +1,7 @@
 [plugin]
 name = "frame.storage"
 version = "1.0.0"
-description = "Server-side filesystem storage bridge for binary artifacts (tarballs, uploaded blobs, generated PDFs, WASM cache). Bridge-only plugin — no DSL block. Exposes storage.write/read/exists/delete for a host-configured filesystem root. Ships the plugin contract; hosts (clean-server, clean-node-server) implement the _fs_* bridge functions."
+description = "Server-side filesystem storage bridge for binary artifacts (tarballs, uploaded blobs, generated PDFs, WASM cache). Bridge-only plugin — no DSL block. Exposes storage.write/read/exists/delete for a host-configured filesystem root. Ships the plugin contract; the clean-server host implements the _fs_* bridge functions."
 author = "Clean Language Team"
 license = "MIT"
 
