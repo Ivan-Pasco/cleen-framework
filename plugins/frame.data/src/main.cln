@@ -1118,6 +1118,8 @@ functions:
 				if tab_pos != -1 and tab_pos < name_end
 					name_end = tab_pos
 				string field_name = line.substring(0, name_end).trim()
+				if field_name.length() > 0 and field_name.substring(field_name.length() - 1, field_name.length()) == ":"
+					field_name = field_name.substring(0, field_name.length() - 1).trim()
 				if field_name.length() > 0
 					if result.length() > 0
 						result = result + ","
@@ -1168,10 +1170,12 @@ functions:
 		if line.length() == 0
 			return ""
 		string field_name = ""
+		string field_type = ""
 		string constraints = ""
 		string default_val = ""
 		integer pos = 0
 		integer len = line.length()
+		boolean first_after_name = true
 
 		// Skip leading whitespace (defensive; caller already trims).
 		while pos < len
@@ -1188,6 +1192,8 @@ functions:
 				break
 			pos = pos + 1
 		field_name = line.substring(name_start, pos).trim()
+		if field_name.length() > 0 and field_name.substring(field_name.length() - 1, field_name.length()) == ":"
+			field_name = field_name.substring(0, field_name.length() - 1).trim()
 		if field_name.length() == 0
 			return ""
 
@@ -1212,6 +1218,17 @@ functions:
 			string tok = line.substring(tok_start, pos).trim()
 			if tok.length() == 0
 				continue
+
+			// If the first token after the name is a recognized Clean type,
+			// use it as the field type instead of stubbing `string`. This
+			// supports the colon-form `name: type [constraints]` documented
+			// in framework examples. Unknown tokens fall through to
+			// constraint mapping.
+			if first_after_name and field_type.length() == 0
+				first_after_name = false
+				if tok == "integer" or tok == "number" or tok == "string" or tok == "boolean" or tok == "datetime" or tok == "date" or tok == "text" or tok == "uuid" or tok == "json"
+					field_type = tok
+					continue
 
 			if tok == "default:"
 				// The next non-whitespace token is the default value.
@@ -1252,7 +1269,10 @@ functions:
 						constraints = constraints + ", "
 					constraints = constraints + v1_tok
 
-		string result = "string " + field_name
+		string emitted_type = field_type
+		if emitted_type.length() == 0
+			emitted_type = "string"
+		string result = emitted_type + " " + field_name
 		if default_val.length() > 0
 			result = result + " = " + default_val
 		if constraints.length() > 0
