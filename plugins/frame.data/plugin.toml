@@ -52,6 +52,10 @@ server_init = "emit_server_init_typed"
 expand = "expand_block_typed"
 validate = "validate_block"
 get_keywords = "get_keywords"
+# Contract 5 Phase C — cross-file lint hook. Emits FRAME-DATA-I002 and
+# FRAME-DATA-E026 by walking the pre-expansion AST via _ast_* accessors.
+# Spec: foundation/spec/framework/contracts/lint-extension.md §2.
+lint = "lint_project"
 
 [handles]
 # Model definitions and migration definitions
@@ -357,4 +361,4 @@ anti_pattern = "re-implementing the validation rules in application code — the
 example = "patterns/field-validation.cln"
 
 [build]
-built_with_compiler = "0.33.119"
+built_with_compiler = "0.33.125"
