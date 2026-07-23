@@ -116,16 +116,15 @@ external:
 	integer _batch_arrayPush(integer ctx, integer array_handle, integer item_handle)
 	integer _batch_stmtSeq(integer ctx, string stmts_lp)
 	integer _batch_args(integer ctx, string exprs_lp)
-	// ---- Contract 5 Phase C — read-only AST accessors for lint_project ----
-	// Spec: foundation/spec/framework/contracts/lint-extension.md §4.
-	// Each accessor returns a JSON LP-string; the compiler validates the
-	// project_ast_handle passed as `handle`. `list_blocks` returns entries
-	// shaped {file, line, content, attributes:{...}} (attributes exposed
-	// since compiler 0.33.125).
-	string _ast_list_classes(integer handle)
-	string _ast_class_fields(integer handle, string class_name)
-	string _ast_list_functions(integer handle)
-	string _ast_list_blocks(integer handle, string block_name)
+	// ---- Contract 5 Phase C — DISABLED pending team-prompt
+	// 6fc56776-86a0-11f1-9d55-da25a95a496b. _ast_class_fields and
+	// _ast_list_blocks in §4 use (ptr, len) 3-i32 convention,
+	// incompatible with Clean's LP-pointer `string` ABI (1 i32).
+	// Re-enable once §4 is aligned. Follow-up to f9ee2728.
+	// string _ast_list_classes(integer handle)
+	// string _ast_class_fields(integer handle, string class_name)
+	// string _ast_list_functions(integer handle)
+	// string _ast_list_blocks(integer handle, string block_name)
 
 // ============================================================================
 // V3 LIFECYCLE SLOTS (SKELETON — Sub-cycle 1)
@@ -4914,208 +4913,16 @@ functions:
 
 
 // ============================================================================
-// CONTRACT 5 PHASE C — lint_project
+// CONTRACT 5 PHASE C — lint_project (DISABLED, 2026-07-23 rollback #2)
 // ============================================================================
-// Emits two cross-file diagnostics that require whole-project visibility:
+// Restored from commit 92483fc in framework v2.12.178 after compiler 0.33.127
+// shipped cross-context bridge stubs (team-prompt f9ee2728 resolved). Failed
+// at deploy with `incompatible import type for env::_ast_class_fields` —
+// Contract 5 §4 declares two accessors with the (ptr, len) 3-i32 convention
+// while every other plugin bridge (typed-emission, host-bridge, server-ext)
+// uses LP-pointer 1-i32 convention for `string` params. Clean plugins cannot
+// declare externals in the raw (ptr, len) shape without dropping into
+// hand-written imports.
 //
-//   FRAME-DATA-I002  info   Data class D declared via `data D:` but no
-//                           entity class exposes a `D data` field.
-//   FRAME-DATA-E026  error  Entity `data`-linked class has a field name
-//                           the paired entity class does not declare, so
-//                           writes silently drop the column.
-//
-// Reference:
-//   foundation/spec/framework/contracts/lint-extension.md §2 (exports.lint),
-//   §3 (input/output JSON), §4 (_ast_* accessors), §5 (LINT001-003 model).
-//
-// Lint runs pre-expansion, so `data D:` blocks are still FrameworkBlock
-// statements — the class name D lives in attributes.model_name, exposed
-// on _ast_list_blocks entries since compiler 0.33.125.
-
-functions:
-	// Read the next quoted string that appears after `after` in `src`,
-	// starting the search at `from`. Returns "" if either the opening or
-	// closing quote is missing. The plugin's JSON scanners use this to
-	// walk the accessor output without pulling in a full JSON parser —
-	// the accessor emits a stable, escape-free shape that this tolerates.
-	string lint_next_quoted(string src, string after, integer pos)
-		string tail = src.substring(pos, src.length())
-		integer at = tail.indexOf(after)
-		if at == -1
-			return ""
-		integer key_end = at + after.length()
-		string rest = tail.substring(key_end, tail.length())
-		integer end = rest.indexOf("\"")
-		if end == -1
-			return ""
-		return rest.substring(0, end)
-
-	// Return the byte offset (in `src`) of the character just after the
-	// closing `}` that follows position `pos`. Used to advance a scan
-	// past one JSON object at a time. Returns src.length() if no `}`.
-	integer lint_after_next_brace(string src, integer pos)
-		string tail = src.substring(pos, src.length())
-		integer at = tail.indexOf("}")
-		if at == -1
-			return src.length()
-		return pos + at + 1
-
-	// Emit one diagnostic entry (already-serialized JSON object) into the
-	// running diagnostics buffer. Handles the leading comma.
-	string lint_push(string buf, boolean first, string entry)
-		if first
-			return buf + entry
-		return buf + "," + entry
-
-	// Escape a value going into a JSON string field. Only characters that
-	// occur in Clean identifiers, filenames, and short prose messages are
-	// considered — diagnostics don't contain user code fragments.
-	string lint_json_escape(string s)
-		string out = s.replace("\\", "\\\\")
-		out = out.replace("\"", "\\\"")
-		return out
-
-	// Contract 5 §2 entry point. Called once per project by `cln lint`
-	// and by `cln check` after typecheck. Returns a JSON array of
-	// diagnostic entries per §3.2, or "[]" for a clean run.
-	string lint_project(string input_json)
-		// Parse the context handle. §3.1: input is
-		//   {"project_ast_handle":N,"compiler_version":"...","config":{...}}
-		string handle_str = extract_attr(input_json, "project_ast_handle")
-		if handle_str.length() == 0
-			return "[]"
-		integer handle = handle_str.toInteger()
-
-		// ------------------------------------------------------------------
-		// Step 1: walk `data D:` blocks. Collect each declared data-class
-		//         name plus its file/line for later diagnostic anchoring.
-		// ------------------------------------------------------------------
-		string blocks_json = _ast_list_blocks(handle, "data")
-		list<string> data_names = []
-		list<string> data_files = []
-		list<integer> data_lines = []
-		integer bscan = 0
-		while bscan < blocks_json.length()
-			string tail = blocks_json.substring(bscan, blocks_json.length())
-			integer obj_at = tail.indexOf("{")
-			if obj_at == -1
-				break
-			integer obj_start = bscan + obj_at
-			integer obj_end = lint_after_next_brace(blocks_json, obj_start)
-			string entry = blocks_json.substring(obj_start, obj_end)
-			// A `data:` block with no argument (legacy config block) has
-			// no model_name — skip it.
-			string mname = lint_next_quoted(entry, "\"model_name\":\"", 0)
-			if mname.length() > 0
-				string mfile = lint_next_quoted(entry, "\"file\":\"", 0)
-				string line_str = extract_attr(entry, "line")
-				integer mline = 1
-				if line_str.length() > 0
-					mline = line_str.toInteger()
-				data_names.add(mname)
-				data_files.add(mfile)
-				data_lines.add(mline)
-			bscan = obj_end
-
-		// ------------------------------------------------------------------
-		// Step 2: walk every class in the project. For each class field
-		//         literally named "data", record its declared type as a
-		//         "referenced" data-class name. Also cache the class's
-		//         own field-name set for the E026 check.
-		// ------------------------------------------------------------------
-		string classes_json = _ast_list_classes(handle)
-		list<string> referenced = []
-		integer cscan = 0
-		string diagnostics = "["
-		boolean first_out = true
-		while cscan < classes_json.length()
-			string ctail = classes_json.substring(cscan, classes_json.length())
-			integer cobj_at = ctail.indexOf("{")
-			if cobj_at == -1
-				break
-			integer cobj_start = cscan + cobj_at
-			integer cobj_end = lint_after_next_brace(classes_json, cobj_start)
-			string centry = classes_json.substring(cobj_start, cobj_end)
-			string cname = lint_next_quoted(centry, "\"name\":\"", 0)
-			if cname.length() > 0
-				string fields_json = _ast_class_fields(handle, cname)
-				// Scan each field entry for name + type.
-				list<string> ent_field_names = []
-				string linked_data_type = ""
-				integer fscan = 0
-				while fscan < fields_json.length()
-					string ftail = fields_json.substring(fscan, fields_json.length())
-					integer fobj_at = ftail.indexOf("{")
-					if fobj_at == -1
-						break
-					integer fobj_start = fscan + fobj_at
-					integer fobj_end = lint_after_next_brace(fields_json, fobj_start)
-					string fentry = fields_json.substring(fobj_start, fobj_end)
-					string fname = lint_next_quoted(fentry, "\"name\":\"", 0)
-					string ftype = lint_next_quoted(fentry, "\"type\":\"", 0)
-					if fname.length() > 0
-						ent_field_names.add(fname)
-						if fname == "data" and ftype.length() > 0
-							referenced.add(ftype)
-							linked_data_type = ftype
-					fscan = fobj_end
-
-				// FRAME-DATA-E026: if this class links to a data class D,
-				// each field name on D must also be a field name on this
-				// entity. We walk D's fields and flag any that this class
-				// (the entity) doesn't declare.
-				if linked_data_type.length() > 0
-					string dfields_json = _ast_class_fields(handle, linked_data_type)
-					integer dscan = 0
-					while dscan < dfields_json.length()
-						string dtail = dfields_json.substring(dscan, dfields_json.length())
-						integer dobj_at = dtail.indexOf("{")
-						if dobj_at == -1
-							break
-						integer dobj_start = dscan + dobj_at
-						integer dobj_end = lint_after_next_brace(dfields_json, dobj_start)
-						string dentry = dfields_json.substring(dobj_start, dobj_end)
-						string dfname = lint_next_quoted(dentry, "\"name\":\"", 0)
-						if dfname.length() > 0 and not ent_field_names.contains(dfname)
-							// Anchor the diagnostic at the data class's
-							// declaration line (best available: field
-							// locations are not exposed by _ast_class_fields).
-							string dfile = ""
-							integer dline = 1
-							integer di = 0
-							while di < data_names.length()
-								if data_names.get(di) == linked_data_type
-									dfile = data_files.get(di)
-									dline = data_lines.get(di)
-									di = data_names.length()
-								else
-									di = di + 1
-							string entry_e026 = "{\"code\":\"FRAME-DATA-E026\","
-							entry_e026 = entry_e026 + "\"severity\":\"error\","
-							entry_e026 = entry_e026 + "\"message\":\"Data class '" + lint_json_escape(linked_data_type) + "' has field '" + lint_json_escape(dfname) + "' but paired entity '" + lint_json_escape(cname) + "' does not declare it; writes silently drop this column.\","
-							entry_e026 = entry_e026 + "\"location\":{\"file\":\"" + lint_json_escape(dfile) + "\",\"line\":" + dline.toString() + ",\"column\":1},"
-							entry_e026 = entry_e026 + "\"hint\":\"Add '" + lint_json_escape(dfname) + "' to '" + lint_json_escape(cname) + "', or remove it from '" + lint_json_escape(linked_data_type) + "' if it should not be persisted.\"}"
-							diagnostics = lint_push(diagnostics, first_out, entry_e026)
-							first_out = false
-						dscan = dobj_end
-			cscan = cobj_end
-
-		// ------------------------------------------------------------------
-		// Step 3: any data-class name never in `referenced` fires I002.
-		// ------------------------------------------------------------------
-		integer i = 0
-		while i < data_names.length()
-			string dname = data_names.get(i)
-			if not referenced.contains(dname)
-				string entry_i002 = "{\"code\":\"FRAME-DATA-I002\","
-				entry_i002 = entry_i002 + "\"severity\":\"info\","
-				entry_i002 = entry_i002 + "\"message\":\"Data class '" + lint_json_escape(dname) + "' is declared but never referenced by any entity class.\","
-				entry_i002 = entry_i002 + "\"location\":{\"file\":\"" + lint_json_escape(data_files.get(i)) + "\",\"line\":" + data_lines.get(i).toString() + ",\"column\":1},"
-				entry_i002 = entry_i002 + "\"hint\":\"Add a '" + lint_json_escape(dname) + " data' field to a paired entity class, or remove this data block if unused.\"}"
-				diagnostics = lint_push(diagnostics, first_out, entry_i002)
-				first_out = false
-			i = i + 1
-
-		diagnostics = diagnostics + "]"
-		return diagnostics
-
+// Follow-up team-prompt filed 2026-07-23 requesting §4 signature alignment.
+// Diagnostics (I002, E026) preserved in git commit d04143a / 92483fc.
