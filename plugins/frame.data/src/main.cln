@@ -4951,14 +4951,26 @@ functions:
 		return rest.substring(0, end)
 
 	// Return the byte offset (in `src`) of the character just after the
-	// closing `}` that follows position `pos`. Used to advance a scan
-	// past one JSON object at a time. Returns src.length() if no `}`.
+	// closing `}` that MATCHES the first `{` at or after position `pos`.
+	// Tracks nesting depth so nested objects (e.g. `attributes: {...}`
+	// inside a block entry) don't cause premature termination. Returns
+	// src.length() if unmatched. String literals with escaped braces are
+	// not accounted for — the lint accessor JSON never emits `{` or `}`
+	// inside a string value, so a simple depth counter is sufficient.
 	integer lint_after_next_brace(string src, integer pos)
-		string tail = src.substring(pos, src.length())
-		integer at = tail.indexOf("}")
-		if at == -1
-			return src.length()
-		return pos + at + 1
+		integer i = pos
+		integer depth = 0
+		integer len = src.length()
+		while i < len
+			string ch = src.substring(i, i + 1)
+			if ch == "{"
+				depth = depth + 1
+			if ch == "}"
+				depth = depth - 1
+				if depth == 0
+					return i + 1
+			i = i + 1
+		return len
 
 	// Emit one diagnostic entry (already-serialized JSON object) into the
 	// running diagnostics buffer. Handles the leading comma.
