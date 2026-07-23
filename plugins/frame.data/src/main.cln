@@ -4972,6 +4972,18 @@ functions:
 			i = i + 1
 		return len
 
+	// Manual set-membership check for list<string>. Workaround for a Clean
+	// stdlib bug where list<string>.contains(string) returns false even
+	// when the string value is present. Filed via team-prompt for the
+	// compiler team; this helper stays until the stdlib fix ships.
+	boolean lint_string_in_list(list<string> haystack, string needle)
+		integer i = 0
+		while i < haystack.length()
+			if haystack.get(i) == needle
+				return true
+			i = i + 1
+		return false
+
 	// Emit one diagnostic entry (already-serialized JSON object) into the
 	// running diagnostics buffer. Handles the leading comma.
 	string lint_push(string buf, boolean first, string entry)
@@ -5088,7 +5100,8 @@ functions:
 						integer dobj_end = lint_after_next_brace(dfields_json, dobj_start)
 						string dentry = dfields_json.substring(dobj_start, dobj_end)
 						string dfname = lint_next_quoted(dentry, "\"name\":\"", 0)
-						if dfname.length() > 0 and not ent_field_names.contains(dfname)
+						boolean df_present = lint_string_in_list(ent_field_names, dfname)
+						if dfname.length() > 0 and df_present == false
 							// Anchor the diagnostic at the data class's
 							// declaration line (best available: field
 							// locations are not exposed by _ast_class_fields).
@@ -5118,7 +5131,8 @@ functions:
 		integer i = 0
 		while i < data_names.length()
 			string dname = data_names.get(i)
-			if not referenced.contains(dname)
+			boolean is_ref = lint_string_in_list(referenced, dname)
+			if is_ref == false
 				string entry_i002 = "{\"code\":\"FRAME-DATA-I002\","
 				entry_i002 = entry_i002 + "\"severity\":\"info\","
 				entry_i002 = entry_i002 + "\"message\":\"Data class '" + lint_json_escape(dname) + "' is declared but never referenced by any entity class.\","
