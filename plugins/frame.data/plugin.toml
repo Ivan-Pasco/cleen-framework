@@ -52,13 +52,10 @@ server_init = "emit_server_init_typed"
 expand = "expand_block_typed"
 validate = "validate_block"
 get_keywords = "get_keywords"
-# Contract 5 Phase C — DISABLED pending compiler fix.
-# Blocked by team-prompt f9ee2728-8597-11f1-9d55-da25a95a496b: the compiler's
-# typed-emission and lint linkers do not stub each other's bridges, so a
-# plugin that declares both `_ast_*` (for lint) AND `_emit_*` (for expand)
-# externals fails to instantiate in either context. Re-enable by adding
-# `lint = "lint_project"` here once the compiler ships symmetric stubs.
-# lint = "lint_project"
+# Contract 5 Phase C — cross-file lint hook. Emits FRAME-DATA-I002 and
+# FRAME-DATA-E026 by walking the pre-expansion AST via _ast_* accessors.
+# Spec: foundation/spec/framework/contracts/lint-extension.md §2.
+lint = "lint_project"
 
 [handles]
 # Model definitions and migration definitions
@@ -364,4 +361,4 @@ anti_pattern = "re-implementing the validation rules in application code — the
 example = "patterns/field-validation.cln"
 
 [build]
-built_with_compiler = "0.33.125"
+built_with_compiler = "0.33.127"
