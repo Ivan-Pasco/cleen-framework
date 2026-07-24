@@ -1381,6 +1381,10 @@
 				// Reads a boxed-Any tree from WASM memory and serialises it to
 				// compact JSON, returning the LP-string pointer. Raises (throws)
 				// on an invalid tag — no silent "null" fallback (D5 / BOXED_ANY_ABI §6).
+				//
+				// Container layouts are JSON-tree fragments per BOXED_ANY_ABI §3.2/§3.3
+				// (bit-for-bit matching the compiler's __json_from_cln_list /
+				// __json_from_cln_pairs helpers). NOT Clean list<any> / pairs<string,any>.
 				const dv = () => new DataView(memory.buffer);
 
 				function readLPString(lpPtr) {
@@ -1405,26 +1409,27 @@
 							const lpPtr = dv().getInt32(ptr + 4, true);
 							return readLPString(lpPtr);
 						}
-						case 5: { // Array (list<any> pointer at ptr+4)
+						case 5: { // Array — JSON-tree Array fragment (BOXED_ANY_ABI §3.2)
+							// Layout: [count:i32 @0][elem_ptr:i32 × count @4], stride 4.
+							// No capacity, no type_id, no padding.
 							const listPtr = dv().getInt32(ptr + 4, true);
-							const size = dv().getInt32(listPtr, true);
+							const count = dv().getInt32(listPtr, true);
 							const result = [];
-							for (let i = 0; i < size; i++) {
-								// Element pointers start at listPtr+16, stride 4 bytes.
-								const elemPtr = dv().getInt32(listPtr + 16 + i * 4, true);
+							for (let i = 0; i < count; i++) {
+								const elemPtr = dv().getInt32(listPtr + 4 + i * 4, true);
 								result.push(readBoxedAny(elemPtr));
 							}
 							return result;
 						}
-						case 6: { // Object (pairs<string,any> pointer at ptr+4)
+						case 6: { // Object — JSON-tree Object fragment (BOXED_ANY_ABI §3.3)
+							// Layout: [count:i32 @0][(key_ptr:i32, val_ptr:i32) × count @4], stride 8.
+							// Memory order IS insertion order (D3). key_ptr is a raw LP-string
+							// pointer, NOT a boxed-Any tag-4.
 							const pairsPtr = dv().getInt32(ptr + 4, true);
 							const count = dv().getInt32(pairsPtr, true);
 							const result = {};
 							for (let i = 0; i < count; i++) {
-								// Entries start at pairsPtr+8, each 8 bytes:
-								//   offset 0: key_ptr (LP string)
-								//   offset 4: value_ptr (boxed-Any)
-								const entryBase = pairsPtr + 8 + i * 8;
+								const entryBase = pairsPtr + 4 + i * 8;
 								const keyPtr = dv().getInt32(entryBase, true);
 								const valPtr = dv().getInt32(entryBase + 4, true);
 								result[readLPString(keyPtr)] = readBoxedAny(valPtr);
@@ -1445,6 +1450,8 @@
 				// (JSON.stringify(v, null, 2)). readBoxedAny is factored locally
 				// to avoid a cross-closure reference that would complicate the
 				// DataView lifecycle — each bridge is self-contained.
+				//
+				// Container layouts: JSON-tree fragments per BOXED_ANY_ABI §3.2/§3.3.
 				const dv = () => new DataView(memory.buffer);
 
 				function readLPString(lpPtr) {
@@ -1468,21 +1475,23 @@
 							return readLPString(lpPtr);
 						}
 						case 5: {
+							// JSON-tree Array: [count @0][elem_ptr × count @4], stride 4.
 							const listPtr = dv().getInt32(ptr + 4, true);
-							const size = dv().getInt32(listPtr, true);
+							const count = dv().getInt32(listPtr, true);
 							const result = [];
-							for (let i = 0; i < size; i++) {
-								const elemPtr = dv().getInt32(listPtr + 16 + i * 4, true);
+							for (let i = 0; i < count; i++) {
+								const elemPtr = dv().getInt32(listPtr + 4 + i * 4, true);
 								result.push(readBoxedAny(elemPtr));
 							}
 							return result;
 						}
 						case 6: {
+							// JSON-tree Object: [count @0][(key_ptr, val_ptr) × count @4], stride 8.
 							const pairsPtr = dv().getInt32(ptr + 4, true);
 							const count = dv().getInt32(pairsPtr, true);
 							const result = {};
 							for (let i = 0; i < count; i++) {
-								const entryBase = pairsPtr + 8 + i * 8;
+								const entryBase = pairsPtr + 4 + i * 8;
 								const keyPtr = dv().getInt32(entryBase, true);
 								const valPtr = dv().getInt32(entryBase + 4, true);
 								result[readLPString(keyPtr)] = readBoxedAny(valPtr);
@@ -1566,21 +1575,18 @@
 						return ptr;
 					}
 					if (Array.isArray(value)) {
-						// tag 5: Array — list<any> header (16 bytes) + N × i32 element
-						// pointers. Recursively encode elements first so their pointers
-						// are stable before we allocate the header (recursive calls may
-						// grow memory, which doesn't invalidate already-returned integer
-						// pointer values — only DataView snapshots are invalidated).
+						// tag 5: JSON-tree Array fragment (BOXED_ANY_ABI §3.2).
+						// Layout: [count:i32 @0][elem_ptr:i32 × count @4]. Total 4+count*4.
+						// No capacity, no type_id, no padding — heterogeneous by construction.
+						// Recursively encode elements first so their pointers are stable
+						// before we allocate the header (recursive calls may grow memory,
+						// which doesn't invalidate already-returned integer pointer values —
+						// only DataView snapshots are invalidated).
 						const elemPtrs = value.map(writeBoxedAny);
-						const listPtr = allocBytes(16 + elemPtrs.length * 4);
-						// Write 16-byte list header per MEMORY_MODEL.md §List:
-						dv().setInt32(listPtr,      elemPtrs.length, true); // size
-						dv().setInt32(listPtr +  4, elemPtrs.length, true); // capacity = size
-						dv().setInt32(listPtr +  8, 0,               true); // type_id = 0 (any)
-						dv().setInt32(listPtr + 12, 0,               true); // padding
-						// Write element pointers starting at offset 16:
+						const listPtr = allocBytes(4 + elemPtrs.length * 4);
+						dv().setInt32(listPtr, elemPtrs.length, true); // count
 						for (let i = 0; i < elemPtrs.length; i++) {
-							dv().setInt32(listPtr + 16 + i * 4, elemPtrs[i], true);
+							dv().setInt32(listPtr + 4 + i * 4, elemPtrs[i], true);
 						}
 						const ptr = allocBytes(12);
 						dv().setInt32(ptr,     5, true);
@@ -1588,21 +1594,18 @@
 						dv().setInt32(ptr + 8, 0, true);
 						return ptr;
 					}
-					// typeof "object" (non-null, non-array) → tag 6: Object
+					// typeof "object" (non-null, non-array) → tag 6: JSON-tree Object fragment (§3.3).
+					// Layout: [count:i32 @0][(key_ptr:i32, val_ptr:i32) × count @4]. Total 4+count*8.
+					// key_ptr is a raw LP-string pointer, NOT a boxed-Any tag-4.
 					// Object.entries preserves insertion order for string keys (D3).
 					const entries = Object.entries(value);
-					// Encode all keys and values first to get stable pointers before
-					// allocating the pairs block header.
 					const encodedEntries = entries.map(([k, v]) => [writeLPString(k), writeBoxedAny(v)]);
-					const pairsPtr = allocBytes(8 + encodedEntries.length * 8);
-					// Write 8-byte pairs header per MEMORY_MODEL.md §Pairs:
-					dv().setInt32(pairsPtr,     encodedEntries.length, true); // count
-					dv().setInt32(pairsPtr + 4, encodedEntries.length, true); // capacity = count
-					// Write entries starting at offset 8, each 8 bytes:
+					const pairsPtr = allocBytes(4 + encodedEntries.length * 8);
+					dv().setInt32(pairsPtr, encodedEntries.length, true); // count
 					for (let i = 0; i < encodedEntries.length; i++) {
 						const [keyLpPtr, valPtr] = encodedEntries[i];
-						dv().setInt32(pairsPtr + 8 + i * 8,     keyLpPtr, true);
-						dv().setInt32(pairsPtr + 8 + i * 8 + 4, valPtr,   true);
+						dv().setInt32(pairsPtr + 4 + i * 8,     keyLpPtr, true);
+						dv().setInt32(pairsPtr + 4 + i * 8 + 4, valPtr,   true);
 					}
 					const ptr = allocBytes(12);
 					dv().setInt32(ptr,     6, true);

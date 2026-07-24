@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.9.6"
+version = "2.9.7"
 description = "HTTP endpoints, routing, middleware, and request/response helpers for Clean Language server-side applications. See CHANGELOG.md for release history."
 author = "Clean Language Team"
 license = "MIT"

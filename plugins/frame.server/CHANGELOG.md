@@ -4,6 +4,14 @@ Extracted from plugin.toml description on 2026-07-19. Each entry below was previ
 
 > Intro (pre-versioned): Server plugin for Clean Language - provides routing, request context, response helpers, and authentication guards.
 
+## v2.9.7
+
+fix container-payload layouts in the `_json_encode_v2`, `_json_encode_pretty_v2`, and `_json_decode_v2` bridges shipped in v2.9.6. The v2.9.6 code was built against a stale BOXED_ANY_ABI.md that described tag-5/tag-6 payloads as Clean `list<any>` / `pairs<string,any>` structures (16-byte and 8-byte headers with capacity/type_id fields). Foundation `[P1-hotfix-3]` (commit 1e22de3) corrected §3.2/§3.3 to what the compiler's `__json_from_cln_list` / `__json_from_cln_pairs` helpers actually emit: JSON-tree fragments with 4-byte `count` headers only. Encode paths now read tag-5 at `[count @0][elem_ptr × count @4]` (stride 4, total 4+count*4) and tag-6 at `[count @0][(key_ptr, val_ptr) × count @4]` (stride 8, total 4+count*8). Decode paths write the same shape. All `type_id` / `capacity` / `padding` writes removed. Added a compiler-format bit-for-bit compat test to `test_json_v2.mjs` (54/54 pass). Blast radius of v2.9.6 was zero — no compiler had yet emitted `_json_encode_v2` calls, so no deployed WASM used the broken path. **v2.9.6 is BROKEN — do not use.**
+
+## v2.9.6
+
+BROKEN — container-offset math built against a stale spec (superseded by v2.9.7). Added `_json_encode_v2`, `_json_encode_pretty_v2`, `_json_decode_v2` for the Delivery 2 JSON migration. Do not deploy.
+
 ## v2.9.4
 
 extend dev-capture emission to the compound `endpoints server:` block. In 2.9.2/2.9.3 emit_dev_capture(ctx) fired only from expand_server_typed, which handles the bare `server:` block. Single-block apps such as clean-errors use `endpoints server:` (parser lumps the second identifier under attrs_json's model_name key), which routes through expand_endpoints_typed and therefore silently skipped dev-capture emission — the /_debug/capture route was never registered and the most bug-prone app in the ecosystem could not self-capture. The routing branch in expand_block_typed now detects `"model_name":"server"` on an endpoints block and calls emit_dev_capture(ctx) after expand_endpoints_typed. Bare `server:` + separate `endpoints:` continues to fire dev-capture exactly once from expand_server_typed (unchanged). Dashboard #e4c3538d8242.

@@ -110,22 +110,24 @@ function readBoxedAny(ptr) {
             const lpPtr = dv().getInt32(ptr + 4, true);
             return readLPString(lpPtr);
         }
-        case 5: { // Array — list<any> pointer at ptr+4
+        case 5: { // Array — JSON-tree fragment (BOXED_ANY_ABI §3.2)
+            //   [count:i32 @0][elem_ptr:i32 × count @4], stride 4.
             const listPtr = dv().getInt32(ptr + 4, true);
-            const size = dv().getInt32(listPtr, true);
+            const count = dv().getInt32(listPtr, true);
             const result = [];
-            for (let i = 0; i < size; i++) {
-                const elemPtr = dv().getInt32(listPtr + 16 + i * 4, true);
+            for (let i = 0; i < count; i++) {
+                const elemPtr = dv().getInt32(listPtr + 4 + i * 4, true);
                 result.push(readBoxedAny(elemPtr));
             }
             return result;
         }
-        case 6: { // Object — pairs<string,any> pointer at ptr+4
+        case 6: { // Object — JSON-tree fragment (BOXED_ANY_ABI §3.3)
+            //   [count:i32 @0][(key_ptr, val_ptr) × count @4], stride 8.
             const pairsPtr = dv().getInt32(ptr + 4, true);
             const count = dv().getInt32(pairsPtr, true);
             const result = {};
             for (let i = 0; i < count; i++) {
-                const entryBase = pairsPtr + 8 + i * 8;
+                const entryBase = pairsPtr + 4 + i * 8;
                 const keyPtr = dv().getInt32(entryBase, true);
                 const valPtr = dv().getInt32(entryBase + 4, true);
                 result[readLPString(keyPtr)] = readBoxedAny(valPtr);
@@ -184,14 +186,12 @@ function writeBoxedAny(value) {
         return ptr;
     }
     if (Array.isArray(value)) {
+        // JSON-tree Array: [count @0][elem_ptr × count @4]. Total 4 + count*4.
         const elemPtrs = value.map(writeBoxedAny);
-        const listPtr = allocBytes(16 + elemPtrs.length * 4);
-        dv().setInt32(listPtr,      elemPtrs.length, true);
-        dv().setInt32(listPtr +  4, elemPtrs.length, true);
-        dv().setInt32(listPtr +  8, 0,               true); // type_id = 0 (any)
-        dv().setInt32(listPtr + 12, 0,               true); // padding
+        const listPtr = allocBytes(4 + elemPtrs.length * 4);
+        dv().setInt32(listPtr, elemPtrs.length, true);
         for (let i = 0; i < elemPtrs.length; i++) {
-            dv().setInt32(listPtr + 16 + i * 4, elemPtrs[i], true);
+            dv().setInt32(listPtr + 4 + i * 4, elemPtrs[i], true);
         }
         const ptr = allocBytes(12);
         dv().setInt32(ptr,     5, true);
@@ -200,15 +200,15 @@ function writeBoxedAny(value) {
         return ptr;
     }
     // typeof "object" (non-null, non-array)
+    // JSON-tree Object: [count @0][(key_ptr, val_ptr) × count @4]. Total 4 + count*8.
     const entries = Object.entries(value);
     const encodedEntries = entries.map(([k, v]) => [writeString(k), writeBoxedAny(v)]);
-    const pairsPtr = allocBytes(8 + encodedEntries.length * 8);
-    dv().setInt32(pairsPtr,     encodedEntries.length, true);
-    dv().setInt32(pairsPtr + 4, encodedEntries.length, true);
+    const pairsPtr = allocBytes(4 + encodedEntries.length * 8);
+    dv().setInt32(pairsPtr, encodedEntries.length, true);
     for (let i = 0; i < encodedEntries.length; i++) {
         const [keyLpPtr, valPtr] = encodedEntries[i];
-        dv().setInt32(pairsPtr + 8 + i * 8,     keyLpPtr, true);
-        dv().setInt32(pairsPtr + 8 + i * 8 + 4, valPtr,   true);
+        dv().setInt32(pairsPtr + 4 + i * 8,     keyLpPtr, true);
+        dv().setInt32(pairsPtr + 4 + i * 8 + 4, valPtr,   true);
     }
     const ptr = allocBytes(12);
     dv().setInt32(ptr,     6, true);
@@ -396,10 +396,10 @@ assertEq('encode pretty {a:1}', encodePretty({ a: 1 }),
     assert('decode array [1,2,3] returns non-zero', ptr !== 0);
     assertEq('decode array [1,2,3] tag', readTag(ptr), 5);
     const listPtr = dv().getInt32(ptr + 4, true);
-    assertEq('decode array [1,2,3] size', dv().getInt32(listPtr, true), 3);
-    // Verify each element is tag=1 (integer)
+    // JSON-tree Array (§3.2): count at offset 0, elem_ptrs at offset 4, stride 4.
+    assertEq('decode array [1,2,3] count', dv().getInt32(listPtr, true), 3);
     for (let i = 0; i < 3; i++) {
-        const elemPtr = dv().getInt32(listPtr + 16 + i * 4, true);
+        const elemPtr = dv().getInt32(listPtr + 4 + i * 4, true);
         assertEq('decode array [1,2,3] element ' + i + ' tag', readTag(elemPtr), 1);
         assertEq('decode array [1,2,3] element ' + i + ' value', readValueI64(elemPtr), i + 1);
     }
@@ -410,10 +410,10 @@ assertEq('encode pretty {a:1}', encodePretty({ a: 1 }),
     assert('decode object {"a":1} returns non-zero', ptr !== 0);
     assertEq('decode object {"a":1} tag', readTag(ptr), 6);
     const pairsPtr = dv().getInt32(ptr + 4, true);
+    // JSON-tree Object (§3.3): count at offset 0, entries at offset 4, stride 8.
     assertEq('decode object {"a":1} count', dv().getInt32(pairsPtr, true), 1);
-    // Read the first entry
-    const keyLpPtr = dv().getInt32(pairsPtr + 8, true);
-    const valPtr   = dv().getInt32(pairsPtr + 8 + 4, true);
+    const keyLpPtr = dv().getInt32(pairsPtr + 4, true);
+    const valPtr   = dv().getInt32(pairsPtr + 4 + 4, true);
     assertEq('decode object {"a":1} key', readLPString(keyLpPtr), 'a');
     assertEq('decode object {"a":1} value tag', readTag(valPtr), 1);
     assertEq('decode object {"a":1} value', readValueI64(valPtr), 1);
@@ -449,16 +449,14 @@ assertEq('decode empty string returns 0',      decode(''), 0);
 // ---------------------------------------------------------------------------
 
 {
-    // Build [42, "x", true, null] by hand in memory, then encode and compare.
+    // Build [42, "x", true, null] by hand as a JSON-tree Array fragment
+    // ([count][elem_ptrs], stride 4, total 4 + count*4), then encode.
     const elems = [42, 'x', true, null];
     const elemPtrs = elems.map(writeBoxedAny);
-    const listPtr = allocBytes(16 + elemPtrs.length * 4);
-    dv().setInt32(listPtr,      elemPtrs.length, true);
-    dv().setInt32(listPtr +  4, elemPtrs.length, true);
-    dv().setInt32(listPtr +  8, 0,               true);
-    dv().setInt32(listPtr + 12, 0,               true);
+    const listPtr = allocBytes(4 + elemPtrs.length * 4);
+    dv().setInt32(listPtr, elemPtrs.length, true);
     for (let i = 0; i < elemPtrs.length; i++) {
-        dv().setInt32(listPtr + 16 + i * 4, elemPtrs[i], true);
+        dv().setInt32(listPtr + 4 + i * 4, elemPtrs[i], true);
     }
     const boxedPtr = allocBytes(12);
     dv().setInt32(boxedPtr,     5, true);
@@ -476,17 +474,17 @@ assertEq('decode empty string returns 0',      decode(''), 0);
 // ---------------------------------------------------------------------------
 
 {
-    // Build {z: 1, a: 2} by hand — insertion order is z then a.
-    // JSON.stringify must emit keys in the same order.
+    // Build {z: 1, a: 2} by hand as a JSON-tree Object fragment
+    // ([count][(key_ptr, val_ptr) × count], stride 8, total 4 + count*8).
+    // Insertion order is z then a; JSON.stringify must emit keys in the same order.
     const entries = [['z', 1], ['a', 2]];
     const encodedEntries = entries.map(([k, v]) => [writeString(k), writeBoxedAny(v)]);
-    const pairsPtr = allocBytes(8 + encodedEntries.length * 8);
-    dv().setInt32(pairsPtr,     encodedEntries.length, true);
-    dv().setInt32(pairsPtr + 4, encodedEntries.length, true);
+    const pairsPtr = allocBytes(4 + encodedEntries.length * 8);
+    dv().setInt32(pairsPtr, encodedEntries.length, true);
     for (let i = 0; i < encodedEntries.length; i++) {
         const [kp, vp] = encodedEntries[i];
-        dv().setInt32(pairsPtr + 8 + i * 8,     kp, true);
-        dv().setInt32(pairsPtr + 8 + i * 8 + 4, vp, true);
+        dv().setInt32(pairsPtr + 4 + i * 8,     kp, true);
+        dv().setInt32(pairsPtr + 4 + i * 8 + 4, vp, true);
     }
     const boxedPtr = allocBytes(12);
     dv().setInt32(boxedPtr,     6, true);
@@ -498,6 +496,41 @@ assertEq('decode empty string returns 0',      decode(''), 0);
     // Must be z before a (insertion order, D3).
     assertEq('hand-built tag-6 object preserves insertion order (z before a)',
         result, '{"z":1,"a":2}');
+}
+
+// ---------------------------------------------------------------------------
+// Compiler bit-for-bit compat: hardcode a JSON-tree Array fragment matching
+// what __json_from_cln_list produces, without going through writeBoxedAny's
+// container path. Confirms the encode-side offset math matches the compiler
+// helpers in clean-language-compiler/src/stdlib/json_class.rs (§3.2).
+// ---------------------------------------------------------------------------
+
+{
+    // Three tag-1 boxed-Any integer blocks (12 bytes each).
+    const box1 = allocBytes(12);
+    dv().setInt32(box1, 1, true); dv().setBigInt64(box1 + 4, 1n, true);
+    const box2 = allocBytes(12);
+    dv().setInt32(box2, 1, true); dv().setBigInt64(box2 + 4, 2n, true);
+    const box3 = allocBytes(12);
+    dv().setInt32(box3, 1, true); dv().setBigInt64(box3 + 4, 3n, true);
+
+    // Compiler-format Array fragment: exactly [count=3, p1, p2, p3], no header.
+    const arrPtr = allocBytes(4 + 3 * 4);
+    dv().setInt32(arrPtr,      3,    true);
+    dv().setInt32(arrPtr + 4,  box1, true);
+    dv().setInt32(arrPtr + 8,  box2, true);
+    dv().setInt32(arrPtr + 12, box3, true);
+
+    // Boxed-Any tag-5 wrapper.
+    const boxedPtr = allocBytes(12);
+    dv().setInt32(boxedPtr,     5,      true);
+    dv().setInt32(boxedPtr + 4, arrPtr, true);
+    dv().setInt32(boxedPtr + 8, 0,      true);
+
+    const resultLp = _json_encode_v2(boxedPtr);
+    const result = readResultString(resultLp);
+    assertEq('compiler-format tag-5 Array fragment ([1,2,3]) encodes bit-for-bit',
+        result, '[1,2,3]');
 }
 
 // ---------------------------------------------------------------------------
