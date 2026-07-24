@@ -104,3 +104,27 @@ jobs:
 
       - name: Run framework runtime tests
         run: ./scripts/run-framework-tests.sh runtime
+
+  json-bridge-conformance:
+    name: JSON bridge conformance (JSONTestSuite)
+    runs-on: ubuntu-latest
+    needs: placeholder-guard
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run _json_encode_v2 / _json_decode_v2 unit tests
+        working-directory: plugins/frame.ui/scripts
+        run: node test_json_v2.mjs
+
+      - name: Run JSONTestSuite conformance harness against _json_decode_v2
+        working-directory: plugins/frame.ui/scripts
+        run: node test_json_conformance.mjs

@@ -1,0 +1,26 @@
+# JSONTestSuite conformance baseline for _json_decode_v2 (browser/loader.js).
+#
+# Locked by plugins/frame.ui/scripts/test_json_conformance.mjs.
+# Established: 2026-07-24 (framework v2.12.187, [P4b]).
+# Corpus: github.com/nst/JSONTestSuite @ submodule
+#         plugins/frame.ui/scripts/JSONTestSuite.
+#
+# Rules:
+#   - y_pass and n_reject are floors. Regressions fail CI.
+#   - y_total and n_total are corpus sizes. Any change requires an explicit
+#     baseline update (a submodule bump can grow or shrink these).
+#   - i_* counts warn on drift but do not fail (RFC 8259 leaves these
+#     implementation-defined).
+#
+# _json_decode_v2 is a thin wrapper over V8's JSON.parse, so a drop here
+# almost certainly signals either a bridge regression or a V8 change worth
+# investigating before locking a new baseline.
+
+y_pass=95
+y_total=95
+n_reject=188
+n_total=188
+i_parsed=32
+i_rejected=3
+i_errored=0
+i_total=35

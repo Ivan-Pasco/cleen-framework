@@ -1,0 +1,3 @@
+[submodule "plugins/frame.ui/scripts/JSONTestSuite"]
+	path = plugins/frame.ui/scripts/JSONTestSuite
+	url = https://github.com/nst/JSONTestSuite.git
