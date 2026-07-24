@@ -38,6 +38,11 @@ module_helpers = "emit_module_helpers_typed"
 expand = "expand_block_typed"
 validate = "validate_block"
 get_keywords = "get_keywords"
+# Contract 5 Phase C — lint hook. Emits FRAME-CANVAS-E040 for unmatched
+# `save`/`restore` calls inside a canvasScene: block. Scene-id lint is
+# deferred (needs DSL-aware walk beyond a token-boundary content scan).
+# Spec: foundation/spec/framework/contracts/lint-extension.md §2.
+lint = "lint_project"
 
 [handles]
 # Only canvasScene is a top-level block the compiler expands directly.

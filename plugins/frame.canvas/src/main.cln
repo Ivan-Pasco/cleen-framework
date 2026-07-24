@@ -63,6 +63,13 @@ external:
 	integer _batch_arrayPush(integer ctx, integer array_handle, integer item_handle)
 	integer _batch_stmtSeq(integer ctx, string stmts_lp)
 	integer _batch_args(integer ctx, string exprs_lp)
+	// ---- Contract 5 Phase C — lint AST accessors (§4) ----
+	// Cross-context trap-stubbed by compiler ≥0.33.127, so these coexist
+	// with typed-emission bridges in one plugin.wasm.
+	string _ast_list_classes(integer handle)
+	string _ast_class_fields(integer handle, string class_name)
+	string _ast_list_functions(integer handle)
+	string _ast_list_blocks(integer handle, string block_name)
 	// ---- Function / spec batch (§3.12, §3.14) ----
 	// Sub-cycle 2 adds these because event handlers and _frame_callback are emitted
 	// as batch-spec functions (one _batch_func per handler, wrapped by _batch_spec
@@ -3388,3 +3395,165 @@ functions:
 // implementations. All DSL helpers ported verbatim from main.v1.cln.
 // Dispatcher folded into expand_block_typed. validate_block and get_keywords
 // real bodies in place. plugin.toml version 3.0.0. main.v1.cln deleted.
+
+
+// ============================================================================
+// CONTRACT 5 PHASE C — lint_project (FRAME-CANVAS-E040)
+// ============================================================================
+// Emits FRAME-CANVAS-E040 for a canvasScene: block whose `save` / `restore`
+// tokens don't balance. Unbalanced pairs are the class of bug where a
+// transform stack rots between frames — hours of "why is the world drifting"
+// debugging that a lint pass catches statically.
+//
+// Scene-object id validation (the other spec'd diagnostic under FRAME-CANVAS-*)
+// is deferred — it needs DSL-aware walking (declared object ids inside
+// layers:/state:, cross-checked against `id="..."` referenced in animations),
+// which is beyond a simple token-boundary content scan. Filed as a future
+// concern; not blocking this ship.
+//
+// Reference:
+//   foundation/spec/framework/contracts/lint-extension.md §2/§4/§5.
+
+functions:
+	// Match a bare identifier at position `pos` in `src` — starts on a
+	// non-identifier boundary (start, whitespace, newline) and ends on
+	// the same. Returns true iff `src[pos..pos+word.length()]` is exactly
+	// `word` AND has non-identifier characters on both sides.
+	boolean canvas_word_at(string src, integer pos, string word)
+		integer wlen = word.length()
+		if pos + wlen > src.length()
+			return false
+		if src.substring(pos, pos + wlen) != word
+			return false
+		// Left boundary
+		if pos > 0
+			string prev = src.substring(pos - 1, pos)
+			boolean is_alpha = (prev >= "a" and prev <= "z") or (prev >= "A" and prev <= "Z")
+			boolean is_digit = prev >= "0" and prev <= "9"
+			boolean is_us = prev == "_"
+			if is_alpha or is_digit or is_us
+				return false
+		// Right boundary
+		if pos + wlen < src.length()
+			string next = src.substring(pos + wlen, pos + wlen + 1)
+			boolean is_alpha_n = (next >= "a" and next <= "z") or (next >= "A" and next <= "Z")
+			boolean is_digit_n = next >= "0" and next <= "9"
+			boolean is_us_n = next == "_"
+			if is_alpha_n or is_digit_n or is_us_n
+				return false
+		return true
+
+	// Count non-overlapping occurrences of `word` as a bare identifier in
+	// `content`. Not sensitive to `save_data` or `restored` — only exact
+	// `save`/`restore` tokens fire.
+	integer canvas_count_word(string content, string word)
+		integer count = 0
+		integer pos = 0
+		integer wlen = word.length()
+		while pos < content.length()
+			if canvas_word_at(content, pos, word)
+				count = count + 1
+				pos = pos + wlen
+			else
+				pos = pos + 1
+		return count
+
+	string canvas_json_escape(string s)
+		string out = s.replace("\\", "\\\\")
+		out = out.replace("\"", "\\\"")
+		return out
+
+	string canvas_next_quoted(string src, string after, integer pos)
+		string tail = src.substring(pos, src.length())
+		integer at = tail.indexOf(after)
+		if at == -1
+			return ""
+		integer key_end = at + after.length()
+		string rest = tail.substring(key_end, tail.length())
+		integer end2 = rest.indexOf("\"")
+		if end2 == -1
+			return ""
+		return rest.substring(0, end2)
+
+	string canvas_bare_field(string src, string key)
+		string pattern = "\"" + key + "\":"
+		integer at = src.indexOf(pattern)
+		if at == -1
+			return ""
+		integer start_pos = at + pattern.length()
+		integer end_pos = start_pos
+		while end_pos < src.length()
+			string ch = src.substring(end_pos, end_pos + 1)
+			if ch == "," or ch == "}" or ch == " "
+				break
+			end_pos = end_pos + 1
+		if end_pos == start_pos
+			return ""
+		return src.substring(start_pos, end_pos)
+
+	// Depth-counting brace matcher — handles nested attributes:{}.
+	integer canvas_after_next_brace(string src, integer pos)
+		integer i = pos
+		integer depth = 0
+		integer len = src.length()
+		while i < len
+			string ch = src.substring(i, i + 1)
+			if ch == "{"
+				depth = depth + 1
+			if ch == "}"
+				depth = depth - 1
+				if depth == 0
+					return i + 1
+			i = i + 1
+		return len
+
+	// Contract 5 §2 entry point.
+	string lint_project(string input_json)
+		string handle_str = canvas_bare_field(input_json, "project_ast_handle")
+		if handle_str.length() == 0
+			return "[]"
+		integer handle = handle_str.toInteger()
+
+		string blocks_json = _ast_list_blocks(handle, "canvasScene")
+		string diagnostics = "["
+		boolean first_out = true
+		integer bscan = 0
+		while bscan < blocks_json.length()
+			string btail = blocks_json.substring(bscan, blocks_json.length())
+			integer bobj_at = btail.indexOf("{")
+			if bobj_at == -1
+				break
+			integer bobj_start = bscan + bobj_at
+			integer bobj_end = canvas_after_next_brace(blocks_json, bobj_start)
+			string bentry = blocks_json.substring(bobj_start, bobj_end)
+			string bfile = canvas_next_quoted(bentry, "\"file\":\"", 0)
+			string bline_str = canvas_bare_field(bentry, "line")
+			integer bline = 1
+			if bline_str.length() > 0
+				bline = bline_str.toInteger()
+			string bcontent = canvas_next_quoted(bentry, "\"content\":\"", 0)
+
+			integer saves = canvas_count_word(bcontent, "save")
+			integer restores = canvas_count_word(bcontent, "restore")
+			if saves != restores
+				integer diff = saves - restores
+				string dir = "save"
+				integer count = diff
+				if diff < 0
+					dir = "restore"
+					count = 0 - diff
+				string entry = "{\"code\":\"FRAME-CANVAS-E040\","
+				entry = entry + "\"severity\":\"error\","
+				entry = entry + "\"message\":\"canvasScene has unbalanced canvas transform stack: \" + saves.toString() + \" save() call(s) vs \" + restores.toString() + \" restore() call(s). Every save must have a matching restore or the transform stack corrupts between frames.\","
+				entry = entry + "\"location\":{\"file\":\"" + canvas_json_escape(bfile) + "\",\"line\":" + bline.toString() + ",\"column\":1},"
+				entry = entry + "\"hint\":\"Missing \" + count.toString() + \" \" + dir + \"() call(s). Wrap every save/restore pair around a transform block so state is scoped, and never emit one without the other.\"}"
+				if first_out
+					diagnostics = diagnostics + entry
+				else
+					diagnostics = diagnostics + "," + entry
+				first_out = false
+
+			bscan = bobj_end
+
+		diagnostics = diagnostics + "]"
+		return diagnostics
