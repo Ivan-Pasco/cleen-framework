@@ -1448,8 +1448,15 @@ functions:
 
 						// Accumulate body lines: everything after the
 						// declaration until the next declaration or EOB.
+						// Preserve indentation RELATIVE to the first non-empty
+						// body line — trimming every line collapses nested
+						// sub-blocks (e.g. `where:` inside `return first:`) and
+						// the compiler then rejects the fragment because the
+						// sub-block content sits at column 0.
 						string body_src = ""
 						integer body_scan = line_end + 1
+						string base_indent = ""
+						boolean base_captured = false
 						while body_scan < body_len
 							integer body_end = queries_body.indexOf("\n", body_scan)
 							if body_end == -1
@@ -1461,11 +1468,43 @@ functions:
 								body_scan = body_len
 							else
 								if body_line_trim.length() > 0
-									body_src = body_src + body_line_trim + "\n"
+									if not base_captured
+										// Leading-whitespace prefix of the
+										// first non-empty body line becomes
+										// the "column 0" of the emitted body.
+										integer ip = 0
+										while ip < body_line_raw.length()
+											string ich = body_line_raw.substring(ip, ip + 1)
+											if ich != " " and ich != "\t"
+												break
+											ip = ip + 1
+										base_indent = body_line_raw.substring(0, ip)
+										base_captured = true
+									// Strip only the base indent; preserve
+									// anything deeper. If a line has less
+									// indent than base_indent (shouldn't
+									// happen inside a queries: method body),
+									// fall back to the trimmed form.
+									string emit_line = body_line_raw
+									if base_indent.length() > 0 and body_line_raw.startsWith(base_indent)
+										emit_line = body_line_raw.substring(base_indent.length(), body_line_raw.length())
+									else if base_indent.length() > 0
+										emit_line = body_line_trim
+									body_src = body_src + emit_line + "\n"
 								body_scan = body_end + 1
 
 						if body_src.length() > 0
-							integer body_h = _emit_stmt_from_source(ctx, body_src, 0)
+							// The DSL block form (`return E.first: ...`)
+							// is legal only at top-level block dispatch —
+							// _emit_stmt_from_source parses statement scope
+							// and doesn't re-enter plugin expansion. Rewrite
+							// the DSL into an equivalent SQL-building
+							// statement list before emission.
+							string rewritten = rewrite_query_method_body(body_src)
+							string emit_body = body_src
+							if rewritten.length() > 0
+								emit_body = rewritten
+							integer body_h = _emit_stmt_from_source(ctx, emit_body, 0)
 							if _ctx_had_error(ctx) != 0
 								return ""
 							if body_h != 0
@@ -3814,6 +3853,78 @@ functions:
 		if emit_tail != 0
 			return plugin_error(ctx, "FRAME-DATA-E003", "expand_find tail emit failed for " + model_name)
 		return 0
+
+	// Build a Clean-source method body for `E.first: <dsl>` that runs
+	// entirely inside a queries: method (no ctx-scoped statement emission).
+	// Returns a source string ending in `return <tail-expr>`. The caller
+	// hands the whole thing to `_emit_stmt_from_source` as one fragment
+	// so it becomes the method body's statement list.
+	//
+	// Only the non-tenant path is generated — data-class query methods
+	// are called via `<Entity>.data.<method>()` and do not participate in
+	// the start:-block tenant-injection flow that `expand_first` handles.
+	string build_first_method_source(string model_name, string dsl_body)
+		string table_name = pluralize(to_snake_case(model_name))
+		string where_clause = extract_subblock(dsl_body, "where:")
+		string order_clause = extract_subblock(dsl_body, "order:")
+
+		// Fast path: no where clause, static ORDER BY, LIMIT 1 baked in.
+		if where_clause.length() == 0
+			string sql = "SELECT * FROM " + table_name
+			if order_clause.length() > 0
+				sql = sql + " ORDER BY " + parse_order_clause(order_clause)
+			sql = sql + " LIMIT 1"
+			return "return json.get(json.get(json.get(_db_query(\"" + sql + "\", \"[]\"), \"data\"), \"rows\"), \"0\")\n"
+
+		// Full path: build the SQL string in local vars, then return the
+		// row expression.
+		string src = "string __first_sql = \"SELECT * FROM " + table_name + "\"\n"
+		src = src + "__first_sql = __first_sql + \" WHERE \" + (" + build_where_expr(where_clause) + ")\n"
+		if order_clause.length() > 0
+			src = src + "__first_sql = __first_sql + \" ORDER BY " + parse_order_clause(order_clause) + "\"\n"
+		src = src + "__first_sql = __first_sql + \" LIMIT 1\"\n"
+		src = src + "return json.get(json.get(json.get(_db_query(__first_sql, \"[]\"), \"data\"), \"rows\"), \"0\")\n"
+		return src
+
+	// Rewrite a queries: method body that uses the `return E.<verb>: <dsl>`
+	// block-form DSL into a source-string of Clean statements suitable for
+	// _emit_stmt_from_source. The DSL block form is legal only at top-level
+	// block dispatch — inside a method body the compiler doesn't re-enter
+	// plugin expansion, so the plugin has to translate the DSL here.
+	//
+	// Input `raw_body` is the concatenated method body (indentation stripped
+	// to the method's base column by emit_queries_methods_json). Recognizes:
+	//   return <Model>.first: NEWLINE <indented dsl>
+	// Returns "" when no rewrite matched (caller falls back to raw_body).
+	string rewrite_query_method_body(string raw_body)
+		string trimmed = raw_body.trim()
+		if not trimmed.startsWith("return ")
+			return ""
+		integer nl = trimmed.indexOf("\n")
+		string header = trimmed
+		string dsl_body = ""
+		if nl != -1
+			header = trimmed.substring(0, nl).trim()
+			dsl_body = trimmed.substring(nl + 1, trimmed.length())
+		if not header.endsWith(":")
+			return ""
+
+		// header: `return <Model>.<verb>:`
+		string after_return = header.substring(7, header.length() - 1).trim()
+		integer dot = after_return.indexOf(".")
+		if dot == -1
+			return ""
+		string model_name = after_return.substring(0, dot).trim()
+		string verb = after_return.substring(dot + 1, after_return.length()).trim()
+		if model_name.length() == 0 or verb.length() == 0
+			return ""
+
+		// The DSL body arrives with its indentation intact — extract_subblock
+		// consumes `where:` / `order:` headers at any indent, so no dedent
+		// needed here.
+		if verb == "first"
+			return build_first_method_source(model_name, dsl_body)
+		return ""
 
 	// Expand <Model>.first: block. Returns an integer expression handle
 	// producing json.get(..., "0") over the _db_query result with LIMIT 1.
