@@ -31,3 +31,6 @@ python3 ../../scripts/strip-unused-wasm-imports.py /tmp/frame_ui_strip.wat /tmp/
 wasm-tools parse /tmp/frame_ui_stripped.wat -o plugin.wasm
 rm -f /tmp/frame_ui_strip.wat /tmp/frame_ui_stripped.wat
 echo "Stripped unused imports from plugin.wasm"
+# Refresh build-manifest.json to match the post-strip plugin.wasm.
+# See bug #73177fafd75f.
+python3 ../../scripts/refresh-manifest-hash.py .

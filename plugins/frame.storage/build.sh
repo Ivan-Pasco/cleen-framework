@@ -16,6 +16,9 @@ if command -v wasm-tools &>/dev/null && command -v python3 &>/dev/null; then
 	wasm-tools parse /tmp/frame_storage_stripped.wat -o plugin.wasm
 	rm -f /tmp/frame_storage_strip.wat /tmp/frame_storage_stripped.wat
 	echo "Stripped unused imports from plugin.wasm"
+	# Refresh build-manifest.json to match the post-strip plugin.wasm.
+	# See bug #73177fafd75f.
+	python3 ../../scripts/refresh-manifest-hash.py .
 else
 	echo "WARNING: wasm-tools or python3 not found, skipping import stripping"
 	echo "Plugin may fail to load if compiler emits unused host function imports"
