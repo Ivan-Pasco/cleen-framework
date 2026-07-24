@@ -552,6 +552,24 @@
 		return btoa(bin);
 	}
 
+	// --- allocBytes: raw bump-allocator for fixed-size blocks ---
+	// Used by the _v2 JSON bridges to allocate boxed-Any blocks (12 bytes),
+	// list headers (16 + N*4 bytes), and pairs headers (8 + N*8 bytes) in WASM
+	// linear memory. Uses the same heapPtr bump pattern as mem_alloc and
+	// writeString. Prefer this over instance.exports.malloc for consistency.
+	// IMPORTANT: callers MUST refresh any DataView they hold after any call to
+	// allocBytes or writeString, because either can grow WASM memory and
+	// invalidate existing DataView snapshots.
+	function allocBytes(size) {
+		// 8-byte alignment matches the compiler's ALIGNMENT constant in
+		// native_stdlib/mod.rs and every other allocation in this loader.
+		const padded = size + ((8 - (size % 8)) % 8);
+		const p = heapPtr;
+		ensureCapacity(p + padded);
+		heapPtr += padded;
+		return p;
+	}
+
 	// --- Bridge Object ---
 
 	const bridge = {
@@ -1342,6 +1360,258 @@
 				}
 				if (node == null) return writeString('');
 				return writeString(typeof node === 'string' ? node : String(node));
+			},
+
+			// ========== _json_*_v2 bridges — Delivery 2 / Option B shape ==========
+			// These implement the BOXED_ANY_ABI.md layout (12-byte tag+value blocks,
+			// 16-byte list headers, 8-byte pairs headers). They co-exist with the
+			// legacy _json_encode / _json_decode / _json_get bridges above, which
+			// are preserved byte-for-byte for frame.server 2.9.5 backward compat.
+			//
+			// DataView safety: WASM memory can grow on any writeString/allocBytes
+			// call (which may call ensureCapacity → memory.grow). Every function
+			// here uses the () => new DataView(memory.buffer) pattern (dv()) so
+			// each field access always reads from the current buffer reference.
+			//
+			// Spec refs: foundation/spec/platform/BOXED_ANY_ABI.md §3–§5,
+			//            foundation/spec/platform/MEMORY_MODEL.md §List/§Pairs,
+			//            foundation/spec/platform/runtime-abi/v1.toml lines 1521–1546.
+
+			_json_encode_v2: (boxedAnyPtr) => {
+				// Reads a boxed-Any tree from WASM memory and serialises it to
+				// compact JSON, returning the LP-string pointer. Raises (throws)
+				// on an invalid tag — no silent "null" fallback (D5 / BOXED_ANY_ABI §6).
+				const dv = () => new DataView(memory.buffer);
+
+				function readLPString(lpPtr) {
+					const len = dv().getUint32(lpPtr, true);
+					return readString(lpPtr + 4, len);
+				}
+
+				function readBoxedAny(ptr) {
+					const tag = dv().getInt32(ptr, true);
+					switch (tag) {
+						case 0: // Null
+							return null;
+						case 1: // Integer (i64 little-endian split at ptr+4 and ptr+8)
+							// Number(BigInt) is precision-lossy above 2^53; that matches
+							// the symmetric decode path (tag-1-vs-tag-3 partition in §5.2).
+							return Number(dv().getBigInt64(ptr + 4, true));
+						case 2: // Boolean
+							return dv().getInt32(ptr + 4, true) !== 0;
+						case 3: // Number (f64 little-endian at ptr+4)
+							return dv().getFloat64(ptr + 4, true);
+						case 4: { // String (LP pointer at ptr+4)
+							const lpPtr = dv().getInt32(ptr + 4, true);
+							return readLPString(lpPtr);
+						}
+						case 5: { // Array (list<any> pointer at ptr+4)
+							const listPtr = dv().getInt32(ptr + 4, true);
+							const size = dv().getInt32(listPtr, true);
+							const result = [];
+							for (let i = 0; i < size; i++) {
+								// Element pointers start at listPtr+16, stride 4 bytes.
+								const elemPtr = dv().getInt32(listPtr + 16 + i * 4, true);
+								result.push(readBoxedAny(elemPtr));
+							}
+							return result;
+						}
+						case 6: { // Object (pairs<string,any> pointer at ptr+4)
+							const pairsPtr = dv().getInt32(ptr + 4, true);
+							const count = dv().getInt32(pairsPtr, true);
+							const result = {};
+							for (let i = 0; i < count; i++) {
+								// Entries start at pairsPtr+8, each 8 bytes:
+								//   offset 0: key_ptr (LP string)
+								//   offset 4: value_ptr (boxed-Any)
+								const entryBase = pairsPtr + 8 + i * 8;
+								const keyPtr = dv().getInt32(entryBase, true);
+								const valPtr = dv().getInt32(entryBase + 4, true);
+								result[readLPString(keyPtr)] = readBoxedAny(valPtr);
+							}
+							return result;
+						}
+						default:
+							throw new Error('_json_encode_v2: invalid boxed-Any tag ' + tag + ' at ptr ' + ptr);
+					}
+				}
+
+				const value = readBoxedAny(boxedAnyPtr);
+				return writeString(JSON.stringify(value));
+			},
+
+			_json_encode_pretty_v2: (boxedAnyPtr) => {
+				// Identical to _json_encode_v2 but produces 2-space-indented JSON
+				// (JSON.stringify(v, null, 2)). readBoxedAny is factored locally
+				// to avoid a cross-closure reference that would complicate the
+				// DataView lifecycle — each bridge is self-contained.
+				const dv = () => new DataView(memory.buffer);
+
+				function readLPString(lpPtr) {
+					const len = dv().getUint32(lpPtr, true);
+					return readString(lpPtr + 4, len);
+				}
+
+				function readBoxedAny(ptr) {
+					const tag = dv().getInt32(ptr, true);
+					switch (tag) {
+						case 0:
+							return null;
+						case 1:
+							return Number(dv().getBigInt64(ptr + 4, true));
+						case 2:
+							return dv().getInt32(ptr + 4, true) !== 0;
+						case 3:
+							return dv().getFloat64(ptr + 4, true);
+						case 4: {
+							const lpPtr = dv().getInt32(ptr + 4, true);
+							return readLPString(lpPtr);
+						}
+						case 5: {
+							const listPtr = dv().getInt32(ptr + 4, true);
+							const size = dv().getInt32(listPtr, true);
+							const result = [];
+							for (let i = 0; i < size; i++) {
+								const elemPtr = dv().getInt32(listPtr + 16 + i * 4, true);
+								result.push(readBoxedAny(elemPtr));
+							}
+							return result;
+						}
+						case 6: {
+							const pairsPtr = dv().getInt32(ptr + 4, true);
+							const count = dv().getInt32(pairsPtr, true);
+							const result = {};
+							for (let i = 0; i < count; i++) {
+								const entryBase = pairsPtr + 8 + i * 8;
+								const keyPtr = dv().getInt32(entryBase, true);
+								const valPtr = dv().getInt32(entryBase + 4, true);
+								result[readLPString(keyPtr)] = readBoxedAny(valPtr);
+							}
+							return result;
+						}
+						default:
+							throw new Error('_json_encode_pretty_v2: invalid boxed-Any tag ' + tag + ' at ptr ' + ptr);
+					}
+				}
+
+				const value = readBoxedAny(boxedAnyPtr);
+				return writeString(JSON.stringify(value, null, 2));
+			},
+
+			_json_decode_v2: (bytesPtr, len) => {
+				// Parses the raw UTF-8 string at (bytesPtr, len) as JSON, writes a
+				// boxed-Any tree into WASM linear memory, and returns the pointer.
+				// Returns 0 (null sentinel) on JSON.parse failure — never throws.
+				// The compiler emits a post-call null-check per BOXED_ANY_ABI §6.
+				const dv = () => new DataView(memory.buffer);
+
+				const text = readString(bytesPtr, len);
+				let parsed;
+				try {
+					parsed = JSON.parse(text);
+				} catch (_) {
+					return 0; // parse-failure sentinel (BOXED_ANY_ABI §6)
+				}
+
+				function writeLPString(str) {
+					// Delegates to the outer writeString, which bump-allocates and
+					// returns the LP pointer. Any DataView held before this call is
+					// invalid after it; always re-acquire via dv().
+					return writeString(str);
+				}
+
+				function writeBoxedAny(value) {
+					if (value === null) {
+						// tag 0: Null — allocate 12 bytes, write 0 at tag and both
+						// value words. allocBytes may grow memory; re-acquire dv().
+						const ptr = allocBytes(12);
+						dv().setInt32(ptr,     0, true); // tag = 0
+						dv().setInt32(ptr + 4, 0, true); // value low = 0
+						dv().setInt32(ptr + 8, 0, true); // value high = 0
+						return ptr;
+					}
+					if (typeof value === 'boolean') {
+						// tag 2: Boolean
+						const ptr = allocBytes(12);
+						dv().setInt32(ptr,     2, true);
+						dv().setInt32(ptr + 4, value ? 1 : 0, true);
+						dv().setInt32(ptr + 8, 0, true);
+						return ptr;
+					}
+					if (typeof value === 'number') {
+						// Partition: integers in safe range → tag 1 (i64 split),
+						// everything else → tag 3 (f64). Mirrors BOXED_ANY_ABI §5.2.
+						if (Number.isInteger(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER) {
+							const ptr = allocBytes(12);
+							dv().setInt32(ptr, 1, true);
+							// Write the 64-bit integer as two little-endian i32 words.
+							dv().setBigInt64(ptr + 4, BigInt(value), true);
+							return ptr;
+						} else {
+							const ptr = allocBytes(12);
+							dv().setInt32(ptr, 3, true);
+							dv().setFloat64(ptr + 4, value, true);
+							return ptr;
+						}
+					}
+					if (typeof value === 'string') {
+						// tag 4: String — LP pointer in value slot at offset 4.
+						const lpPtr = writeLPString(value);
+						// writeLPString may have grown memory; allocBytes will also
+						// grow if needed. Always re-acquire dv() after each.
+						const ptr = allocBytes(12);
+						dv().setInt32(ptr,     4, true);
+						dv().setInt32(ptr + 4, lpPtr, true);
+						dv().setInt32(ptr + 8, 0, true);
+						return ptr;
+					}
+					if (Array.isArray(value)) {
+						// tag 5: Array — list<any> header (16 bytes) + N × i32 element
+						// pointers. Recursively encode elements first so their pointers
+						// are stable before we allocate the header (recursive calls may
+						// grow memory, which doesn't invalidate already-returned integer
+						// pointer values — only DataView snapshots are invalidated).
+						const elemPtrs = value.map(writeBoxedAny);
+						const listPtr = allocBytes(16 + elemPtrs.length * 4);
+						// Write 16-byte list header per MEMORY_MODEL.md §List:
+						dv().setInt32(listPtr,      elemPtrs.length, true); // size
+						dv().setInt32(listPtr +  4, elemPtrs.length, true); // capacity = size
+						dv().setInt32(listPtr +  8, 0,               true); // type_id = 0 (any)
+						dv().setInt32(listPtr + 12, 0,               true); // padding
+						// Write element pointers starting at offset 16:
+						for (let i = 0; i < elemPtrs.length; i++) {
+							dv().setInt32(listPtr + 16 + i * 4, elemPtrs[i], true);
+						}
+						const ptr = allocBytes(12);
+						dv().setInt32(ptr,     5, true);
+						dv().setInt32(ptr + 4, listPtr, true);
+						dv().setInt32(ptr + 8, 0, true);
+						return ptr;
+					}
+					// typeof "object" (non-null, non-array) → tag 6: Object
+					// Object.entries preserves insertion order for string keys (D3).
+					const entries = Object.entries(value);
+					// Encode all keys and values first to get stable pointers before
+					// allocating the pairs block header.
+					const encodedEntries = entries.map(([k, v]) => [writeLPString(k), writeBoxedAny(v)]);
+					const pairsPtr = allocBytes(8 + encodedEntries.length * 8);
+					// Write 8-byte pairs header per MEMORY_MODEL.md §Pairs:
+					dv().setInt32(pairsPtr,     encodedEntries.length, true); // count
+					dv().setInt32(pairsPtr + 4, encodedEntries.length, true); // capacity = count
+					// Write entries starting at offset 8, each 8 bytes:
+					for (let i = 0; i < encodedEntries.length; i++) {
+						const [keyLpPtr, valPtr] = encodedEntries[i];
+						dv().setInt32(pairsPtr + 8 + i * 8,     keyLpPtr, true);
+						dv().setInt32(pairsPtr + 8 + i * 8 + 4, valPtr,   true);
+					}
+					const ptr = allocBytes(12);
+					dv().setInt32(ptr,     6, true);
+					dv().setInt32(ptr + 4, pairsPtr, true);
+					dv().setInt32(ptr + 8, 0, true);
+					return ptr;
+				}
+
+				return writeBoxedAny(parsed);
 			},
 
 			// List operations — layout: [length:i32][capacity:i32][type_id:i32][pad:i32][elements...]

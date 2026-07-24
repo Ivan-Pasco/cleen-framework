@@ -1,6 +1,6 @@
 [plugin]
 name = "frame.server"
-version = "2.9.5"
+version = "2.9.6"
 description = "HTTP endpoints, routing, middleware, and request/response helpers for Clean Language server-side applications. See CHANGELOG.md for release history."
 author = "Clean Language Team"
 license = "MIT"
@@ -186,6 +186,9 @@ functions = [
   { name = "_json_encode", params = ["string"], returns = "string", description = "Encode value to JSON string", expand_strings = true, hosts = ["all"] },
   { name = "_json_decode", params = ["string"], returns = "string", description = "Decode JSON string to value", expand_strings = true, hosts = ["all"] },
   { name = "_json_get", params = ["any", "string"], returns = "any", description = "Extract value from JSON using dot-separated path (e.g., 'user.name'). First param is Any-boxed (typically a raw SQL result or already-boxed JSON string); second param is the path.", expand_strings = false, hosts = ["all"] },
+  { name = "_json_encode_v2",        params = ["any"],    returns = "string", description = "Encode boxed-Any to compact JSON. Delivery 2 shape. Raises on invalid input.", expand_strings = false, hosts = ["all"] },
+  { name = "_json_encode_pretty_v2", params = ["any"],    returns = "string", description = "Encode boxed-Any to 2-space indented JSON. Delivery 2 shape. Raises on invalid input.", expand_strings = false, hosts = ["all"] },
+  { name = "_json_decode_v2",        params = ["string"], returns = "any",    description = "Decode JSON string to boxed-Any. Delivery 2 shape. Returns 0 sentinel on parse failure — caller must null-check.", expand_strings = true,  hosts = ["all"] },
 
   # HTTP Client - Basic Methods
   # Server-side outbound client. Browser code uses frame.client's api.* (declared in frame.client/plugin.toml).
@@ -510,4 +513,4 @@ anti_pattern = "polling the server with repeated GET requests on a timer — use
 example = "patterns/live-feed-realtime.cln"
 
 [build]
-built_with_compiler = "0.33.129"
+built_with_compiler = "0.33.134"
