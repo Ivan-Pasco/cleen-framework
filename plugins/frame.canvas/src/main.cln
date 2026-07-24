@@ -56,6 +56,10 @@ external:
 	// ---- Statement builders (§3.14) ----
 	integer _batch_stmtCall(integer ctx, string callee, integer args_array_handle)
 	integer _batch_stmtAssign(integer ctx, string target, integer expr_handle)
+	// _batch_stmtVarDecl — real let-declaration; required in function-body scope
+	// where SEM007 rejects assignment-to-undeclared. Shipped in cln 0.33.121
+	// (prompt f7183604). Handle interop with _emit_statement_into_start.
+	integer _batch_stmtVarDecl(integer ctx, string name, string type_lp, integer expr_handle)
 	integer _batch_stmtBlock(integer ctx, integer stmts_array_handle)
 	integer _batch_stmtReturn(integer ctx, integer expr_handle)
 	// ---- Array helpers (§3.14, Am 7, Am 8) ----
@@ -233,6 +237,11 @@ functions:
 	// Statement builders
 	integer sassign(integer ctx, string target, integer expr)
 		return _batch_stmtAssign(ctx, target, expr)
+
+	// First introduction of a local — VarDecl, not Assignment. Required in
+	// function-body scope so SEM007 doesn't fire (prompt f7183604).
+	integer svardecl(integer ctx, string name, string typ, integer expr)
+		return _batch_stmtVarDecl(ctx, name, typ, expr)
 
 	integer sr(integer ctx, integer expr)
 		return _batch_stmtReturn(ctx, expr)
@@ -744,7 +753,8 @@ functions:
 						integer vd_h = sl(ctx, vdefault)
 						integer a = _batch_args(ctx, "[" + vn_h.toString() + "," + vd_h.toString() + "]")
 						integer call_h = _batch_call(ctx, "_canvas_var_get", a)
-						integer stmt_h = _batch_stmtAssign(ctx, vname, call_h)
+						// First introduction inside _frame_callback body — VarDecl (prompt f7183604).
+						integer stmt_h = _batch_stmtVarDecl(ctx, vname, "number", call_h)
 						_batch_arrayPush(ctx, body_arr, stmt_h)
 			scan = next_scan
 		if _ctx_had_error(ctx) != 0
@@ -786,7 +796,8 @@ functions:
 						integer vv_h = ident(ctx, vname)
 						integer a = _batch_args(ctx, "[" + vn_h.toString() + "," + vv_h.toString() + "]")
 						integer call_h = _batch_call(ctx, "_canvas_var_set", a)
-						integer stmt_h = _batch_stmtAssign(ctx, target, call_h)
+						// First introduction of __svN — VarDecl (prompt f7183604).
+						integer stmt_h = _batch_stmtVarDecl(ctx, target, "integer", call_h)
 						_batch_arrayPush(ctx, body_arr, stmt_h)
 						idx = idx + 1
 			scan = next_scan
@@ -830,7 +841,8 @@ functions:
 						integer vd_h = sl(ctx, vdefault)
 						integer a = _batch_args(ctx, "[" + vn_h.toString() + "," + vd_h.toString() + "]")
 						integer call_h = _batch_call(ctx, "_canvas_var_set", a)
-						integer stmt_h = _batch_stmtAssign(ctx, target, call_h)
+						// First introduction of __siN in start: — VarDecl (prompt f7183604).
+						integer stmt_h = _batch_stmtVarDecl(ctx, target, "integer", call_h)
 						_emit_statement_into_start(ctx, stmt_h)
 						idx = idx + 1
 			scan = next_scan
@@ -1285,12 +1297,12 @@ functions:
 		integer body_arr = _batch_arrayNew(ctx)
 		// number <param> = _canvas_get_delta_time()
 		integer dt_expr = call0(ctx, "_canvas_get_delta_time")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, param, dt_expr))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, param, "number", dt_expr))
 		// user body pass-through
 		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E201", "onFrame")
 		// integer __rfr = _canvas_request_frame(__cv)
 		integer rfr_expr = call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__rfr", rfr_expr))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__rfr", "integer", rfr_expr))
 
 		integer params_h = params_cv_1(ctx, param, "number")
 		emit_one_fn(ctx, "_on_frame", params_h, "void", body_arr)
@@ -1313,8 +1325,8 @@ functions:
 		string y_var = scene_param_part(params_str, 1)
 
 		integer body_arr = _batch_arrayNew(ctx)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, x_var, call0(ctx, "_canvas_event_x")))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, y_var, call0(ctx, "_canvas_event_y")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, x_var, "number", call0(ctx, "_canvas_event_x")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, y_var, "number", call0(ctx, "_canvas_event_y")))
 		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E211", "onPointerDown")
 
 		integer params_h = params_cv_2(ctx, x_var, "number", y_var, "number")
@@ -1334,8 +1346,8 @@ functions:
 		string y_var = scene_param_part(params_str, 1)
 
 		integer body_arr = _batch_arrayNew(ctx)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, x_var, call0(ctx, "_canvas_event_x")))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, y_var, call0(ctx, "_canvas_event_y")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, x_var, "number", call0(ctx, "_canvas_event_x")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, y_var, "number", call0(ctx, "_canvas_event_y")))
 		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E221", "onPointerMove")
 
 		integer params_h = params_cv_2(ctx, x_var, "number", y_var, "number")
@@ -1355,8 +1367,8 @@ functions:
 		string y_var = scene_param_part(params_str, 1)
 
 		integer body_arr = _batch_arrayNew(ctx)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, x_var, call0(ctx, "_canvas_event_x")))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, y_var, call0(ctx, "_canvas_event_y")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, x_var, "number", call0(ctx, "_canvas_event_x")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, y_var, "number", call0(ctx, "_canvas_event_y")))
 		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E231", "onPointerUp")
 
 		integer params_h = params_cv_2(ctx, x_var, "number", y_var, "number")
@@ -1378,7 +1390,7 @@ functions:
 		string key_var = scene_param_part(params_str, 0)
 
 		integer body_arr = _batch_arrayNew(ctx)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, key_var, call0(ctx, "_canvas_event_key")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, key_var, "string", call0(ctx, "_canvas_event_key")))
 		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E241", "onKeyDown")
 
 		integer params_h = params_cv_1(ctx, key_var, "string")
@@ -1397,7 +1409,7 @@ functions:
 		string key_var = scene_param_part(params_str, 0)
 
 		integer body_arr = _batch_arrayNew(ctx)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, key_var, call0(ctx, "_canvas_event_key")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, key_var, "string", call0(ctx, "_canvas_event_key")))
 		append_user_body(ctx, body_arr, body, 0, "FRAME-CANVAS-E251", "onKeyUp")
 
 		integer params_h = params_cv_1(ctx, key_var, "string")
@@ -1598,8 +1610,8 @@ functions:
 		//         integer __rfr = _canvas_request_frame(__cv)
 		// -------------------------------------------------------------------
 		integer fcb_body_arr = _batch_arrayNew(ctx)
-		// number <frame_param> = _canvas_get_delta_time()
-		_batch_arrayPush(ctx, fcb_body_arr, sassign(ctx, frame_param, call0(ctx, "_canvas_get_delta_time")))
+		// number <frame_param> = _canvas_get_delta_time() — first introduction, VarDecl.
+		_batch_arrayPush(ctx, fcb_body_arr, svardecl(ctx, frame_param, "number", call0(ctx, "_canvas_get_delta_time")))
 		// state var load (Sub-cycle 3a: typed emit directly into body_arr)
 		if has_state
 			scene_state_load(ctx, fcb_body_arr, state_body)
@@ -1613,7 +1625,7 @@ functions:
 		if has_state
 			scene_state_save(ctx, fcb_body_arr, state_body)
 		// integer __rfr = _canvas_request_frame(__cv)
-		_batch_arrayPush(ctx, fcb_body_arr, sassign(ctx, "__rfr", call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))))
+		_batch_arrayPush(ctx, fcb_body_arr, svardecl(ctx, "__rfr", "integer", call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))))
 		integer fcb_params = params_cv(ctx)
 		emit_one_fn(ctx, "_frame_callback", fcb_params, "void", fcb_body_arr)
 
@@ -1748,7 +1760,8 @@ functions:
 		integer h_expr = _batch_intLit(ctx, string_to_int_default(height, 600), 0)
 		integer id_expr = sl(ctx, id_str)
 		integer init_call = _batch_call(ctx, "_canvas_init", arr3(ctx, w_expr, h_expr, id_expr))
-		_emit_statement_into_start(ctx, sassign(ctx, "__cv", init_call))
+		// First introduction of __cv in start: — VarDecl (prompt f7183604).
+		_emit_statement_into_start(ctx, svardecl(ctx, "__cv", "integer", init_call))
 
 		// _canvas_set_fps(__cv, fps_val)
 		integer fps_expr = _batch_intLit(ctx, string_to_int_default(fps_val, 60), 0)
@@ -1772,21 +1785,22 @@ functions:
 			expand_camera(ctx, "{}", camera_body)
 
 		// Optional key/lifecycle registration calls in start: block.
+		// First introductions of __rkd/__rku/__rex/__rps/__rrs — VarDecl (prompt f7183604).
 		if kd_trimmed.length() > 0
 			integer rkd_call = call1(ctx, "_canvas_on_key_down", ident(ctx, "__cv"))
-			_emit_statement_into_start(ctx, sassign(ctx, "__rkd", rkd_call))
+			_emit_statement_into_start(ctx, svardecl(ctx, "__rkd", "integer", rkd_call))
 		if ku_trimmed.length() > 0
 			integer rku_call = call1(ctx, "_canvas_on_key_up", ident(ctx, "__cv"))
-			_emit_statement_into_start(ctx, sassign(ctx, "__rku", rku_call))
+			_emit_statement_into_start(ctx, svardecl(ctx, "__rku", "integer", rku_call))
 		if ex_trimmed.length() > 0
 			integer rex_call = call1(ctx, "_canvas_on_exit", ident(ctx, "__cv"))
-			_emit_statement_into_start(ctx, sassign(ctx, "__rex", rex_call))
+			_emit_statement_into_start(ctx, svardecl(ctx, "__rex", "integer", rex_call))
 		if ps_trimmed.length() > 0
 			integer rps_call = call1(ctx, "_canvas_on_pause", ident(ctx, "__cv"))
-			_emit_statement_into_start(ctx, sassign(ctx, "__rps", rps_call))
+			_emit_statement_into_start(ctx, svardecl(ctx, "__rps", "integer", rps_call))
 		if rs_trimmed.length() > 0
 			integer rrs_call = call1(ctx, "_canvas_on_resume", ident(ctx, "__cv"))
-			_emit_statement_into_start(ctx, sassign(ctx, "__rrs", rrs_call))
+			_emit_statement_into_start(ctx, svardecl(ctx, "__rrs", "integer", rrs_call))
 
 		// State-var init — typed emission via scene_state_init.
 		if has_state
@@ -1815,7 +1829,7 @@ functions:
 
 		// integer __rfr0 = _canvas_request_frame(__cv)
 		integer rfr0_call = call1(ctx, "_canvas_request_frame", ident(ctx, "__cv"))
-		_emit_statement_into_start(ctx, sassign(ctx, "__rfr0", rfr0_call))
+		_emit_statement_into_start(ctx, svardecl(ctx, "__rfr0", "integer", rfr0_call))
 
 		if _ctx_had_error(ctx) != 0
 			return plugin_error(ctx, "FRAME-CANVAS-E400", "expand_canvas_scene sticky-error tripped")

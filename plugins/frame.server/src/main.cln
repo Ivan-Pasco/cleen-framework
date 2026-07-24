@@ -26,6 +26,9 @@ external:
 	integer _expr_bool_lit(integer ctx, integer value)
 	integer _expr_ident(integer ctx, string name)
 	integer _expr_call(integer ctx, string callee, string args_json)
+	// _expr_method_call — receiver.method(args). Complements _expr_call.
+	// Shipped in cln 0.33.120 (compiler prompt a356a9b0).
+	integer _expr_method_call(integer ctx, integer recv_handle, string method, string args_json)
 	// _expr_binop takes the operator as an LP-string (e.g. "+", "==") — the
 	// compiler's typed-emission bridge routes through map_binary_op(&str).
 	integer _expr_binop(integer ctx, string op, integer lhs_handle, integer rhs_handle)
@@ -154,18 +157,65 @@ functions:
 		if nf_err != 0
 			return 1
 
-		// ── __json_escape(s: string) -> string ── (DEFERRED)
-		// The typed-emission bridge surface has no method-call bridge (issue
-		// tracked separately), so `s.replace(...)` cannot be reconstructed
-		// through `_expr_call`. Emission of `__json_escape` and the three
-		// helpers that reference it (`notFoundMsg`, `badRequest`, `httpError`)
-		// is deferred until the bridge lands. User endpoints do not call these
-		// helpers directly, and `http.respond(...)` / `jsonResponse(...)` cover
-		// the common paths.
+		// ── __json_escape(s: string) -> string ──
+		// return s.replace("\\", "\\\\").replace("\"", "\\\"")
+		// Uses _expr_method_call (shipped cln 0.33.120, prompt a356a9b0).
+		// Nested method-call form avoids needing a var-decl bridge on this
+		// non-batch typed-emission surface.
+		integer je_s = _expr_ident(ctx, "s")
+		integer je_bs_from = _expr_string_lit(ctx, "\\")
+		integer je_bs_to = _expr_string_lit(ctx, "\\\\")
+		integer je_call1 = _expr_method_call(ctx, je_s, "replace", "[" + je_bs_from.toString() + "," + je_bs_to.toString() + "]")
+		integer je_q_from = _expr_string_lit(ctx, "\"")
+		integer je_q_to = _expr_string_lit(ctx, "\\\"")
+		integer je_call2 = _expr_method_call(ctx, je_call1, "replace", "[" + je_q_from.toString() + "," + je_q_to.toString() + "]")
+		integer je_ret = _stmt_return(ctx, je_call2)
+		integer je_body = _stmt_block(ctx, "[" + je_ret.toString() + "]")
+		integer je_p_str = _type_string(ctx)
+		integer je_r_str = _type_string(ctx)
+		integer je_err = _emit_function(ctx, "__json_escape", "[{\"name\":\"s\",\"type_handle\":" + je_p_str.toString() + "}]", je_r_str, je_body, 2)
+		if je_err != 0
+			return 1
 
-		// notFoundMsg / badRequest DEFERRED — both depend on __json_escape,
-		// which cannot be emitted through the current typed-emission bridge
-		// surface (no method-call bridge). Restore when the bridge lands.
+		// ── notFoundMsg(message: string) -> string ──
+		// return _http_respond(404, "application/json",
+		//   "{\"ok\":false,\"err\":{\"code\":\"NOT_FOUND\",\"message\":\"" + __json_escape(message) + "\"}}")
+		integer nfm_msg_ident = _expr_ident(ctx, "message")
+		integer nfm_esc = _expr_call(ctx, "__json_escape", "[" + nfm_msg_ident.toString() + "]")
+		integer nfm_prefix = _expr_string_lit(ctx, "{\"ok\":false,\"err\":{\"code\":\"NOT_FOUND\",\"message\":\"")
+		integer nfm_suffix = _expr_string_lit(ctx, "\"}}")
+		integer nfm_body_p1 = _expr_binop(ctx, "+", nfm_prefix, nfm_esc)
+		integer nfm_body_expr = _expr_binop(ctx, "+", nfm_body_p1, nfm_suffix)
+		integer nfm_s404 = _expr_int_lit(ctx, 404, 0)
+		integer nfm_ct = _expr_string_lit(ctx, "application/json")
+		integer nfm_call = _expr_call(ctx, "_http_respond", "[" + nfm_s404.toString() + "," + nfm_ct.toString() + "," + nfm_body_expr.toString() + "]")
+		integer nfm_ret = _stmt_return(ctx, nfm_call)
+		integer nfm_body = _stmt_block(ctx, "[" + nfm_ret.toString() + "]")
+		integer nfm_p_str = _type_string(ctx)
+		integer nfm_r_str = _type_string(ctx)
+		integer nfm_err = _emit_function(ctx, "notFoundMsg", "[{\"name\":\"message\",\"type_handle\":" + nfm_p_str.toString() + "}]", nfm_r_str, nfm_body, 2)
+		if nfm_err != 0
+			return 1
+
+		// ── badRequest(message: string) -> string ──
+		// return _http_respond(400, "application/json",
+		//   "{\"ok\":false,\"err\":{\"code\":\"VALIDATION_ERROR\",\"message\":\"" + __json_escape(message) + "\"}}")
+		integer br_msg_ident = _expr_ident(ctx, "message")
+		integer br_esc = _expr_call(ctx, "__json_escape", "[" + br_msg_ident.toString() + "]")
+		integer br_prefix = _expr_string_lit(ctx, "{\"ok\":false,\"err\":{\"code\":\"VALIDATION_ERROR\",\"message\":\"")
+		integer br_suffix = _expr_string_lit(ctx, "\"}}")
+		integer br_body_p1 = _expr_binop(ctx, "+", br_prefix, br_esc)
+		integer br_body_expr = _expr_binop(ctx, "+", br_body_p1, br_suffix)
+		integer br_s400 = _expr_int_lit(ctx, 400, 0)
+		integer br_ct = _expr_string_lit(ctx, "application/json")
+		integer br_call = _expr_call(ctx, "_http_respond", "[" + br_s400.toString() + "," + br_ct.toString() + "," + br_body_expr.toString() + "]")
+		integer br_ret = _stmt_return(ctx, br_call)
+		integer br_body = _stmt_block(ctx, "[" + br_ret.toString() + "]")
+		integer br_p_str = _type_string(ctx)
+		integer br_r_str = _type_string(ctx)
+		integer br_err = _emit_function(ctx, "badRequest", "[{\"name\":\"message\",\"type_handle\":" + br_p_str.toString() + "}]", br_r_str, br_body, 2)
+		if br_err != 0
+			return 1
 
 		// ── unauthorized() -> string ──
 		integer ua_s401 = _expr_int_lit(ctx, 401, 0)
@@ -204,10 +254,27 @@ functions:
 		if hh_err != 0
 			return 1
 
-		// httpError DEFERRED — depends on __json_escape, which requires a
-		// method-call emission bridge (_expr_method_call) that the plugin
-		// contract does not currently expose. This is a plugin-API surface
-		// gap tracked separately, not the codegen bug closed by cln 0.33.119.
+		// ── httpError(status_code: integer, message: string) -> string ──
+		// return _http_respond(status_code, "application/json",
+		//   "{\"ok\":false,\"err\":{\"code\":\"HTTP_ERROR\",\"message\":\"" + __json_escape(message) + "\"}}")
+		// Un-deferred once _expr_method_call landed (cln 0.33.120, prompt a356a9b0).
+		integer he_msg_ident = _expr_ident(ctx, "message")
+		integer he_esc = _expr_call(ctx, "__json_escape", "[" + he_msg_ident.toString() + "]")
+		integer he_prefix = _expr_string_lit(ctx, "{\"ok\":false,\"err\":{\"code\":\"HTTP_ERROR\",\"message\":\"")
+		integer he_suffix = _expr_string_lit(ctx, "\"}}")
+		integer he_body_p1 = _expr_binop(ctx, "+", he_prefix, he_esc)
+		integer he_body_expr = _expr_binop(ctx, "+", he_body_p1, he_suffix)
+		integer he_code = _expr_ident(ctx, "status_code")
+		integer he_ct = _expr_string_lit(ctx, "application/json")
+		integer he_call = _expr_call(ctx, "_http_respond", "[" + he_code.toString() + "," + he_ct.toString() + "," + he_body_expr.toString() + "]")
+		integer he_ret = _stmt_return(ctx, he_call)
+		integer he_body = _stmt_block(ctx, "[" + he_ret.toString() + "]")
+		integer he_p_int = _type_integer(ctx)
+		integer he_p_str = _type_string(ctx)
+		integer he_r_str = _type_string(ctx)
+		integer he_err = _emit_function(ctx, "httpError", "[{\"name\":\"status_code\",\"type_handle\":" + he_p_int.toString() + "},{\"name\":\"message\",\"type_handle\":" + he_p_str.toString() + "}]", he_r_str, he_body, 2)
+		if he_err != 0
+			return 1
 
 		// ── httpStatus(code: integer, body: string) -> string ──
 		integer hs_code = _expr_ident(ctx, "code")
@@ -426,7 +493,7 @@ functions:
 
 functions:
 	string get_keywords()
-		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"status\", \"httpHeader\", \"httpError\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\", \"LIVE\", \"FEED\", \"live.send\", \"live.broadcast\", \"live.close\", \"live.clientId\", \"live.message\", \"live.roomJoin\", \"live.roomLeave\", \"live.roomBroadcast\", \"live.onMessage\", \"live.onClose\"]"
+		return "[\"endpoints\", \"routes\", \"cache\", \"handle\", \"jsonResponse\", \"htmlResponse\", \"redirect\", \"redirectTo\", \"notFound\", \"notFoundMsg\", \"badRequest\", \"unauthorized\", \"forbidden\", \"httpStatus\", \"status\", \"httpHeader\", \"httpError\", \"middleware\", \"param\", \"body\", \"header\", \"method\", \"mail\", \"resDownload\", \"emailSend\", \"emailSendFrom\", \"emailLastError\", \"res.download\", \"email.send\", \"email.sendFrom\", \"email.lastError\", \"LIVE\", \"FEED\", \"live.send\", \"live.broadcast\", \"live.close\", \"live.clientId\", \"live.message\", \"live.roomJoin\", \"live.roomLeave\", \"live.roomBroadcast\", \"live.onMessage\", \"live.onClose\"]"
 
 // ============================================================================
 // VALIDATION EXPORT (unchanged from v1 — not a lifecycle slot)
