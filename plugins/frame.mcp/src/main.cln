@@ -94,7 +94,7 @@ functions:
 		return ""
 
 	string get_keywords()
-		return "[\"mcp\", \"tool\", \"resource\", \"prompt\", \"params\", \"args\", \"transport\", \"apiKey\", \"mimeType\", \"version\", \"description\", \"port\", \"host\", \"json\", \"text\", \"error\"]"
+		return "[\"mcp\", \"tool\", \"resource\", \"prompt\", \"params\", \"args\", \"transport\", \"apiKey\", \"mimeType\", \"version\", \"description\", \"port\", \"host\", \"mcpJson\", \"mcpText\", \"mcpError\"]"
 
 // ============================================================================
 // PLUGIN-LEVEL DIAGNOSTIC HELPER
@@ -509,8 +509,9 @@ functions:
 
 		return _batch_func(ctx, "__mcp_extract_bool_str", params, "string", body_arr)
 
-	// json(__data: string) -> string
+	// mcpJson(__data: string) -> string
 	// return "{\"type\":\"text\",\"text\":" + __data + "}"
+	// Renamed from `json` to avoid colliding with the compiler's `json` builtin namespace (SEM003).
 	integer build_json_helper(integer ctx)
 		integer params = params1(ctx, "__data", "string")
 		integer body_arr = arr0(ctx)
@@ -519,10 +520,11 @@ functions:
 		integer e1 = concat(ctx, prefix, id(ctx, "__data"))
 		integer full = concat(ctx, e1, suffix)
 		_batch_arrayPush(ctx, body_arr, sret(ctx, full))
-		return _batch_func(ctx, "json", params, "string", body_arr)
+		return _batch_func(ctx, "mcpJson", params, "string", body_arr)
 
-	// text(__msg: string) -> string
+	// mcpText(__msg: string) -> string
 	// return "{\"type\":\"text\",\"text\":\"" + __mcp_json_escape(__msg) + "\"}"
+	// Renamed from `text` for namespace consistency with mcpJson / mcpError.
 	integer build_text_helper(integer ctx)
 		integer params = params1(ctx, "__msg", "string")
 		integer body_arr = arr0(ctx)
@@ -532,10 +534,11 @@ functions:
 		integer e1 = concat(ctx, prefix, esc)
 		integer full = concat(ctx, e1, suffix)
 		_batch_arrayPush(ctx, body_arr, sret(ctx, full))
-		return _batch_func(ctx, "text", params, "string", body_arr)
+		return _batch_func(ctx, "mcpText", params, "string", body_arr)
 
-	// error(__message: string) -> string
+	// mcpError(__message: string) -> string
 	// return "{\"isError\":true,\"content\":[{\"type\":\"text\",\"text\":\"" + __mcp_json_escape(__message) + "\"}]}"
+	// Renamed from `error` to avoid colliding with the compiler's `error` global builtin (SEM003).
 	integer build_error_helper(integer ctx)
 		integer params = params1(ctx, "__message", "string")
 		integer body_arr = arr0(ctx)
@@ -545,7 +548,7 @@ functions:
 		integer e1 = concat(ctx, prefix, esc)
 		integer full = concat(ctx, e1, suffix)
 		_batch_arrayPush(ctx, body_arr, sret(ctx, full))
-		return _batch_func(ctx, "error", params, "string", body_arr)
+		return _batch_func(ctx, "mcpError", params, "string", body_arr)
 
 // ============================================================================
 // MAIN EXPAND — expand_mcp_typed

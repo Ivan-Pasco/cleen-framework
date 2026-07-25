@@ -12,4 +12,4 @@ mcp "my-app-tools":
 		description: "A simple greeting tool that returns a personalized message"
 		params:
 			name: string
-		return text("Hello, " + name + "!")
+		return mcpText("Hello, " + name + "!")

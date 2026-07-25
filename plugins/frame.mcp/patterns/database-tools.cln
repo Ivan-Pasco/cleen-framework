@@ -29,7 +29,7 @@ mcp "blog-tools":
 				createdAt desc
 			limit: limit
 			offset: offset
-		return json(posts)
+		return mcpJson(posts)
 
 	tool "get_post":
 		description: "Retrieve a single blog post by its numeric ID. Returns the full post object or an error if not found."
@@ -39,8 +39,8 @@ mcp "blog-tools":
 			where:
 				id == id
 		if post == null
-			return error("Post not found with id " + id.toString())
-		return json(post)
+			return mcpError("Post not found with id " + id.toString())
+		return mcpJson(post)
 
 	tool "search_posts":
 		description: "Search published posts by keyword match in title or content. Returns matching posts."
@@ -53,7 +53,7 @@ mcp "blog-tools":
 			order:
 				createdAt desc
 			limit: limit
-		return json(results)
+		return mcpJson(results)
 
 	tool "create_post":
 		description: "Create a new blog post in draft state (published = false). Returns the created post with its assigned ID."
@@ -66,7 +66,7 @@ mcp "blog-tools":
 			content = content
 			authorId = author_id
 			published = false
-		return json(post)
+		return mcpJson(post)
 
 	tool "publish_post":
 		description: "Publish a draft post, making it publicly visible. Returns an error if the post is already published or does not exist."
@@ -76,12 +76,12 @@ mcp "blog-tools":
 			where:
 				id == id
 		if post == null
-			return error("Post not found with id " + id.toString())
+			return mcpError("Post not found with id " + id.toString())
 		Post updated = Post.update:
 			where:
 				id == id
 			published = true
-		return json(updated)
+		return mcpJson(updated)
 
 	tool "delete_post":
 		description: "Permanently delete a post and all its associated comments. Returns a confirmation message."
@@ -91,14 +91,14 @@ mcp "blog-tools":
 			where:
 				id == id
 		if post == null
-			return error("Post not found with id " + id.toString())
+			return mcpError("Post not found with id " + id.toString())
 		Comment.delete:
 			where:
 				postId == id
 		Post.delete:
 			where:
 				id == id
-		return text("Post " + id.toString() + " and all its comments have been permanently deleted.")
+		return mcpText("Post " + id.toString() + " and all its comments have been permanently deleted.")
 
 	tool "add_comment":
 		description: "Add a comment to a blog post. Returns the created comment object."
@@ -110,12 +110,12 @@ mcp "blog-tools":
 			where:
 				id == post_id
 		if post == null
-			return error("Post not found with id " + post_id.toString())
+			return mcpError("Post not found with id " + post_id.toString())
 		Comment c = Comment.insert:
 			postId = post_id
 			authorName = author_name
 			body = body
-		return json(c)
+		return mcpJson(c)
 
 	tool "list_comments":
 		description: "List all comments on a specific blog post in chronological order."
@@ -126,7 +126,7 @@ mcp "blog-tools":
 				postId == post_id
 			order:
 				createdAt asc
-		return json(comments)
+		return mcpJson(comments)
 
 	tool "get_stats":
 		description: "Return aggregate blog statistics: total posts, published posts, draft posts, total comments, and total authors."
@@ -139,7 +139,7 @@ mcp "blog-tools":
 		integer total_authors = User.count:
 			where:
 				role == "author"
-		return json("{\"totalPosts\":" + total_posts.toString() + ",\"publishedPosts\":" + published_count.toString() + ",\"draftPosts\":" + (total_posts - published_count).toString() + ",\"totalComments\":" + total_comments.toString() + ",\"totalAuthors\":" + total_authors.toString() + "}")
+		return mcpJson("{\"totalPosts\":" + total_posts.toString() + ",\"publishedPosts\":" + published_count.toString() + ",\"draftPosts\":" + (total_posts - published_count).toString() + ",\"totalComments\":" + total_comments.toString() + ",\"totalAuthors\":" + total_authors.toString() + "}")
 
 	// ─── RESOURCES ────────────────────────────────────────────────────────────
 
@@ -152,7 +152,7 @@ mcp "blog-tools":
 			order:
 				createdAt desc
 			limit: 10
-		return json(posts)
+		return mcpJson(posts)
 
 	resource "posts://drafts":
 		description: "All unpublished draft posts awaiting editorial review"
@@ -162,7 +162,7 @@ mcp "blog-tools":
 				published == false
 			order:
 				createdAt desc
-		return json(drafts)
+		return mcpJson(drafts)
 
 	resource "users://authors":
 		description: "All registered authors on this blog platform"
@@ -172,7 +172,7 @@ mcp "blog-tools":
 				role == "author"
 			order:
 				name asc
-		return json(authors)
+		return mcpJson(authors)
 
 	// ─── PROMPTS ──────────────────────────────────────────────────────────────
 
@@ -186,7 +186,7 @@ mcp "blog-tools":
 			where:
 				id == post_id
 		if post == null
-			return error("Post not found with id " + post_id.toString())
+			return mcpError("Post not found with id " + post_id.toString())
 		return "Write a compelling " + platform + " summary of this blog post in " + max_chars.toString() + " characters or fewer. Include a hook, the key takeaway, and a call to action.\n\nTitle: " + post.title + "\n\nContent:\n" + post.content
 
 	prompt "write_post":
@@ -206,5 +206,5 @@ mcp "blog-tools":
 			where:
 				id == comment_id
 		if comment == null
-			return error("Comment not found with id " + comment_id.toString())
+			return mcpError("Comment not found with id " + comment_id.toString())
 		return "Write a " + tone + " author reply to the following reader comment. Acknowledge the reader's point directly, add value with your response, and keep it under 3 sentences.\n\nComment by " + comment.authorName + ":\n" + comment.body

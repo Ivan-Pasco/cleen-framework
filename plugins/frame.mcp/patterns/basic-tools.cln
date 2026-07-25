@@ -14,7 +14,7 @@ mcp "math-tools":
 			a: number
 			b: number
 		number result = a + b
-		return json(result.toString())
+		return mcpJson(result.toString())
 
 	tool "multiply":
 		description: "Multiply two numbers together and return the result"
@@ -22,7 +22,7 @@ mcp "math-tools":
 			a: number
 			b: number
 		number result = a * b
-		return json(result.toString())
+		return mcpJson(result.toString())
 
 	tool "greet":
 		description: "Generate a personalized greeting in the requested language"
@@ -30,16 +30,16 @@ mcp "math-tools":
 			name: string
 			language: string = "english"
 		if language == "spanish"
-			return text("Hola, " + name + "!")
+			return mcpText("Hola, " + name + "!")
 		if language == "french"
-			return text("Bonjour, " + name + "!")
+			return mcpText("Bonjour, " + name + "!")
 		if language == "german"
-			return text("Hallo, " + name + "!")
+			return mcpText("Hallo, " + name + "!")
 		if language == "italian"
-			return text("Ciao, " + name + "!")
+			return mcpText("Ciao, " + name + "!")
 		if language == "portuguese"
-			return text("Olá, " + name + "!")
-		return text("Hello, " + name + "!")
+			return mcpText("Olá, " + name + "!")
+		return mcpText("Hello, " + name + "!")
 
 	tool "word_count":
 		description: "Count the approximate number of words in a text string"
@@ -57,17 +57,17 @@ mcp "math-tools":
 			if is_space
 				in_word = false
 			i = i + 1
-		return json(count.toString())
+		return mcpJson(count.toString())
 
 	resource "info://version":
 		description: "Server version and capability information"
 		mimeType: "application/json"
-		return json("{\"name\":\"math-tools\",\"version\":\"1.0.0\",\"tools\":[\"add\",\"multiply\",\"greet\",\"word_count\"]}")
+		return mcpJson("{\"name\":\"math-tools\",\"version\":\"1.0.0\",\"tools\":[\"add\",\"multiply\",\"greet\",\"word_count\"]}")
 
 	resource "info://supported-languages":
 		description: "List of languages supported by the greet tool"
 		mimeType: "application/json"
-		return json("[\"english\",\"spanish\",\"french\",\"german\",\"italian\",\"portuguese\"]")
+		return mcpJson("[\"english\",\"spanish\",\"french\",\"german\",\"italian\",\"portuguese\"]")
 
 	prompt "explain_calculation":
 		description: "Generate a prompt asking an AI to explain a mathematical concept"
