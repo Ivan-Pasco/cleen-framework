@@ -87,7 +87,17 @@ jobs:
       - name: Install latest Frame plugins
         run: |
           set -euo pipefail
-          cleen frame install latest
+          # cleen frame install requires cleen to know about the compiler via
+          # its own state. Download the frame plugin bundle directly and
+          # extract into ~/.cleen/plugins/.
+          frame_tag="$(curl -fsSL https://api.github.com/repos/Ivan-Pasco/cleen-framework/releases/latest | jq -r '.tag_name')"
+          frame_ver="${frame_tag#v}"
+          echo "Installing Frame plugins $frame_ver (from $frame_tag)"
+          mkdir -p "$HOME/.cleen/plugins"
+          curl -fsSL -o /tmp/frame-plugins.tar.gz \
+            "https://github.com/Ivan-Pasco/cleen-framework/releases/download/$frame_tag/frame-plugins-$frame_ver.tar.gz"
+          tar -xzf /tmp/frame-plugins.tar.gz -C "$HOME/.cleen/plugins"
+          ls "$HOME/.cleen/plugins/"
 
       - name: Install runner dependencies
         working-directory: plugins/frame.ui/scripts
