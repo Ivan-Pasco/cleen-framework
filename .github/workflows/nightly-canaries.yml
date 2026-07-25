@@ -62,14 +62,25 @@ jobs:
 
       - name: Install latest Clean Language compiler
         run: |
-          cleen install latest
-          ver="$(ls -1 "$HOME/.cleen/versions" | sort -V | tail -n1)"
-          echo "Activating Clean Language compiler $ver"
+          set -euo pipefail
+          # `cleen install latest` can swallow GitHub API failures (HTTP 301
+          # etc.) — resolve the concrete tag ourselves so the install step
+          # fails loudly instead of leaving no version installed.
+          tag="$(curl -fsSL https://api.github.com/repos/Ivan-Pasco/clean-language-compiler/releases/latest | jq -r '.tag_name')"
+          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
+            echo "Failed to resolve latest compiler tag from GitHub API"
+            exit 1
+          fi
+          ver="${tag#v}"
+          echo "Installing Clean Language compiler $ver (from $tag)"
+          cleen install "$ver"
           cleen use "$ver"
           cln --version
 
       - name: Install latest Frame plugins
-        run: cleen frame install latest
+        run: |
+          set -euo pipefail
+          cleen frame install latest
 
       - name: Install runner dependencies
         working-directory: plugins/frame.ui/scripts

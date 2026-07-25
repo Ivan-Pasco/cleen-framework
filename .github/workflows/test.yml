@@ -75,17 +75,28 @@ jobs:
 
       - name: Install latest Clean Language compiler
         run: |
-          cleen install latest
-          # cleen install does not auto-activate, and `cleen use` requires a
-          # concrete version (rejects "latest"). Resolve the installed version
-          # from the versions dir and activate it.
-          ver="$(ls -1 "$HOME/.cleen/versions" | sort -V | tail -n1)"
-          echo "Activating Clean Language compiler $ver"
+          set -euo pipefail
+          # `cleen install latest` resolves latest via the GitHub API and has
+          # been observed to swallow HTTP 301 responses (prints a warning but
+          # exits 0), which then makes `cleen use ""` fail with an opaque
+          # "Invalid version format" downstream. Resolve the tag ourselves
+          # against the Releases API so we install a concrete version and
+          # fail loudly if the resolution step breaks.
+          tag="$(curl -fsSL https://api.github.com/repos/Ivan-Pasco/clean-language-compiler/releases/latest | jq -r '.tag_name')"
+          if [ -z "$tag" ] || [ "$tag" = "null" ]; then
+            echo "Failed to resolve latest compiler tag from GitHub API"
+            exit 1
+          fi
+          ver="${tag#v}"
+          echo "Installing Clean Language compiler $ver (from $tag)"
+          cleen install "$ver"
           cleen use "$ver"
           cln --version
 
       - name: Install latest Frame plugins
-        run: cleen frame install latest
+        run: |
+          set -euo pipefail
+          cleen frame install latest
 
       - name: Download clean-server (linux x64 binary)
         run: |
