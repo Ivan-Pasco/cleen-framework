@@ -40,6 +40,11 @@ external:
 	// Statement builders (§3.14)
 	integer _batch_stmtCall(integer ctx, string callee, integer args_array_handle)
 	integer _batch_stmtAssign(integer ctx, string target, integer expr_handle)
+	// _batch_stmtVarDecl produces a real Statement::VariableDecl (let-declaration).
+	// Required for first-introduction of a local in function-body / handler /
+	// callback scope; stmtAssign is only valid at start: scope or as a
+	// reassignment of an already-declared local (see prompt #f7183604).
+	integer _batch_stmtVarDecl(integer ctx, string name, string type_lp, integer expr_handle_or_0)
 	integer _batch_stmtIf(integer ctx, integer cond_handle, integer then_array_handle, integer else_array_handle)
 	integer _batch_stmtWhile(integer ctx, integer cond_handle, integer body_array_handle)
 	integer _batch_stmtReturn(integer ctx, integer expr_handle)
@@ -169,9 +174,15 @@ functions:
 	integer call3(integer ctx, string callee, integer arg1, integer arg2, integer arg3)
 		return _batch_call(ctx, callee, arr3(ctx, arg1, arg2, arg3))
 
-	// Statement: identifier assign to expression
+	// Statement: identifier assign to expression (reassignment of a declared local
+	// OR first-introduction at start: scope, where implicit-decl is tolerated).
 	integer sassign(integer ctx, string target, integer expr)
 		return _batch_stmtAssign(ctx, target, expr)
+
+	// Statement: typed first-introduction (let-declaration) — required in
+	// function-body / handler / callback scope. See prompt #f7183604.
+	integer svardecl(integer ctx, string target, string typ, integer expr)
+		return _batch_stmtVarDecl(ctx, target, typ, expr)
 
 	// Statement: return expression
 	integer sret(integer ctx, integer expr)
@@ -271,9 +282,9 @@ functions:
 		integer params = params1(ctx, "s", "string")
 		integer body_arr = arr0(ctx)
 
-		// r = s.replace("\\", "\\\\")
+		// string r = s.replace("\\", "\\\\")
 		integer e1 = methcall2(ctx, "s", "replace", sl(ctx, "\\"), sl(ctx, "\\\\"))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "r", e1))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "r", "string", e1))
 
 		// r = r.replace("\"", "\\\"")
 		integer e2 = methcall2(ctx, "r", "replace", sl(ctx, "\""), sl(ctx, "\\\""))
@@ -308,29 +319,29 @@ functions:
 		integer params = params2(ctx, "__json", "string", "__key", "string")
 		integer body_arr = arr0(ctx)
 
-		// __search = "\"" + __key + "\":\""
+		// string __search = "\"" + __key + "\":\""
 		integer q = sl(ctx, "\"")
 		integer colonq = sl(ctx, "\":\"")
 		integer part1 = concat(ctx, q, id(ctx, "__key"))
 		integer search_e = concat(ctx, part1, colonq)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__search", search_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__search", "string", search_e))
 
-		// __pos = __json.indexOf(__search)
+		// integer __pos = __json.indexOf(__search)
 		integer pos_e = methcall1(ctx, "__json", "indexOf", id(ctx, "__search"))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__pos", pos_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__pos", "integer", pos_e))
 
 		// if __pos < 0: return ""
 		integer if1 = sif1(ctx, lt_id_il(ctx, "__pos", 0), sret(ctx, sl(ctx, "")))
 		_batch_arrayPush(ctx, body_arr, if1)
 
-		// __start = __pos + __search.length()
+		// integer __start = __pos + __search.length()
 		integer slen = methcall0(ctx, "__search", "length")
 		integer start_e = add(ctx, id(ctx, "__pos"), slen)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__start", start_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__start", "integer", start_e))
 
-		// __end = __json.indexOf("\"", __start)
+		// integer __end = __json.indexOf("\"", __start)
 		integer end_e = methcall2(ctx, "__json", "indexOf", sl(ctx, "\""), id(ctx, "__start"))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__end", end_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__end", "integer", end_e))
 
 		// if __end < 0: return ""
 		integer if2 = sif1(ctx, lt_id_il(ctx, "__end", 0), sret(ctx, sl(ctx, "")))
@@ -351,7 +362,7 @@ functions:
 		integer body_arr = arr0(ctx)
 
 		integer call_e = call2(ctx, "__mcp_extract_str", id(ctx, "__json"), id(ctx, "__key"))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__val", call_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__val", "string", call_e))
 
 		integer if1 = sif1(ctx, eq_id_sl(ctx, "__val", ""), sret(ctx, id(ctx, "__default")))
 		_batch_arrayPush(ctx, body_arr, if1)
@@ -378,36 +389,36 @@ functions:
 		integer params = params2(ctx, "__json", "string", "__key", "string")
 		integer body_arr = arr0(ctx)
 
-		// __isearch = "\"" + __key + "\":"
+		// string __isearch = "\"" + __key + "\":"
 		integer q = sl(ctx, "\"")
 		integer qcolon = sl(ctx, "\":")
 		integer part1 = concat(ctx, q, id(ctx, "__key"))
 		integer isearch_e = concat(ctx, part1, qcolon)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__isearch", isearch_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__isearch", "string", isearch_e))
 
-		// __ipos = __json.indexOf(__isearch)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__ipos", methcall1(ctx, "__json", "indexOf", id(ctx, "__isearch"))))
+		// integer __ipos = __json.indexOf(__isearch)
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__ipos", "integer", methcall1(ctx, "__json", "indexOf", id(ctx, "__isearch"))))
 
 		// if __ipos < 0: return 0
 		_batch_arrayPush(ctx, body_arr, sif1(ctx, lt_id_il(ctx, "__ipos", 0), sret(ctx, il(ctx, 0))))
 
-		// __istart = __ipos + __isearch.length()
+		// integer __istart = __ipos + __isearch.length()
 		integer slen = methcall0(ctx, "__isearch", "length")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__istart", add(ctx, id(ctx, "__ipos"), slen)))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__istart", "integer", add(ctx, id(ctx, "__ipos"), slen)))
 
-		// __irest = __json.substring(__istart, __json.length())
+		// string __irest = __json.substring(__istart, __json.length())
 		integer jlen = methcall0(ctx, "__json", "length")
 		integer irest_e = methcall2(ctx, "__json", "substring", id(ctx, "__istart"), jlen)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__irest", irest_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__irest", "string", irest_e))
 
-		// __icomma = __irest.indexOf(",")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__icomma", methcall1(ctx, "__irest", "indexOf", sl(ctx, ","))))
+		// integer __icomma = __irest.indexOf(",")
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__icomma", "integer", methcall1(ctx, "__irest", "indexOf", sl(ctx, ","))))
 
-		// __ibrace = __irest.indexOf("}")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__ibrace", methcall1(ctx, "__irest", "indexOf", sl(ctx, "}"))))
+		// integer __ibrace = __irest.indexOf("}")
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__ibrace", "integer", methcall1(ctx, "__irest", "indexOf", sl(ctx, "}"))))
 
-		// __iend = __irest.length()
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__iend", methcall0(ctx, "__irest", "length")))
+		// integer __iend = __irest.length()
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__iend", "integer", methcall0(ctx, "__irest", "length")))
 
 		// if __icomma >= 0 and __icomma < __iend: __iend = __icomma
 		integer c_ge0 = gte_id_il(ctx, "__icomma", 0)
@@ -429,9 +440,9 @@ functions:
 		// Or use batch.field: field(sub_e, "trim") returns a call? No, field is receiver.name (member access).
 		// Method chaining requires: first the substring result, then .trim() call.
 		// The cleanest is to introduce a temp: __itmp = __irest.substring(0, __iend); __inum = __itmp.trim()
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__itmp", sub_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__itmp", "string", sub_e))
 		integer trim_e = methcall0(ctx, "__itmp", "trim")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__inum", trim_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__inum", "string", trim_e))
 
 		// if __inum == "": return 0
 		_batch_arrayPush(ctx, body_arr, sif1(ctx, eq_id_sl(ctx, "__inum", ""), sret(ctx, il(ctx, 0))))
@@ -454,9 +465,9 @@ functions:
 		integer qcolon = sl(ctx, "\":")
 		integer part1 = concat(ctx, q, id(ctx, "__key"))
 		integer search_e = concat(ctx, part1, qcolon)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__disearch", search_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__disearch", "string", search_e))
 
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__dipos", methcall1(ctx, "__json", "indexOf", id(ctx, "__disearch"))))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__dipos", "integer", methcall1(ctx, "__json", "indexOf", id(ctx, "__disearch"))))
 
 		_batch_arrayPush(ctx, body_arr, sif1(ctx, lt_id_il(ctx, "__dipos", 0), sret(ctx, id(ctx, "__default"))))
 
@@ -475,22 +486,22 @@ functions:
 		integer qcolon = sl(ctx, "\":")
 		integer part1 = concat(ctx, q, id(ctx, "__key"))
 		integer bsearch_e = concat(ctx, part1, qcolon)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bsearch", bsearch_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__bsearch", "string", bsearch_e))
 
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bpos", methcall1(ctx, "__json", "indexOf", id(ctx, "__bsearch"))))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__bpos", "integer", methcall1(ctx, "__json", "indexOf", id(ctx, "__bsearch"))))
 
 		_batch_arrayPush(ctx, body_arr, sif1(ctx, lt_id_il(ctx, "__bpos", 0), sret(ctx, sl(ctx, "false"))))
 
 		integer slen = methcall0(ctx, "__bsearch", "length")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bstart", add(ctx, id(ctx, "__bpos"), slen)))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__bstart", "integer", add(ctx, id(ctx, "__bpos"), slen)))
 
 		integer jlen = methcall0(ctx, "__json", "length")
 		integer brest_e = methcall2(ctx, "__json", "substring", id(ctx, "__bstart"), jlen)
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__brest", brest_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__brest", "string", brest_e))
 
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bcomma", methcall1(ctx, "__brest", "indexOf", sl(ctx, ","))))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bbrace", methcall1(ctx, "__brest", "indexOf", sl(ctx, "}"))))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__bend", methcall0(ctx, "__brest", "length")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__bcomma", "integer", methcall1(ctx, "__brest", "indexOf", sl(ctx, ","))))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__bbrace", "integer", methcall1(ctx, "__brest", "indexOf", sl(ctx, "}"))))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__bend", "integer", methcall0(ctx, "__brest", "length")))
 
 		integer c_ge0 = gte_id_il(ctx, "__bcomma", 0)
 		integer c_lt = _batch_binop(ctx, "<", id(ctx, "__bcomma"), id(ctx, "__bend"))
@@ -504,7 +515,7 @@ functions:
 
 		// return __brest.substring(0, __bend).trim()
 		integer sub_e = methcall2(ctx, "__brest", "substring", il(ctx, 0), id(ctx, "__bend"))
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__btmp", sub_e))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__btmp", "string", sub_e))
 		_batch_arrayPush(ctx, body_arr, sret(ctx, methcall0(ctx, "__btmp", "trim")))
 
 		return _batch_func(ctx, "__mcp_extract_bool_str", params, "string", body_arr)
@@ -885,7 +896,8 @@ functions:
 		return 0
 
 	// Build a single: TYPE pname = <extract call>(<json_var>, "pname"[, default])
-	// as a _batch_stmtAssign expression. The compiler infers type from RHS.
+	// as a _batch_stmtVarDecl statement — declares a new local in the tool /
+	// resource / prompt handler body scope.
 	integer build_extractor_stmt(integer ctx, string ptype, string pname, string pdefault, boolean has_default, string json_var)
 		integer json_arg = id(ctx, json_var)
 		integer name_arg = sl(ctx, pname)
@@ -896,35 +908,35 @@ functions:
 					clean_default = pdefault.substring(1, pdefault.length() - 1)
 				integer def_arg = sl(ctx, clean_default)
 				integer call_e = call3(ctx, "__mcp_extract_str_default", json_arg, name_arg, def_arg)
-				return sassign(ctx, pname, call_e)
+				return svardecl(ctx, pname, "string", call_e)
 			integer call_e = call2(ctx, "__mcp_extract_str", json_arg, name_arg)
-			return sassign(ctx, pname, call_e)
+			return svardecl(ctx, pname, "string", call_e)
 		if ptype == "integer"
 			if has_default
 				integer dnum = pdefault.toInteger()
 				integer def_arg = il(ctx, dnum)
 				integer call_e = call3(ctx, "__mcp_extract_int_default", json_arg, name_arg, def_arg)
-				return sassign(ctx, pname, call_e)
+				return svardecl(ctx, pname, "integer", call_e)
 			integer call_e = call2(ctx, "__mcp_extract_int", json_arg, name_arg)
-			return sassign(ctx, pname, call_e)
+			return svardecl(ctx, pname, "integer", call_e)
 		if ptype == "number"
 			// number = __mcp_extract_int(...).toNumber()
 			integer call_e = call2(ctx, "__mcp_extract_int", json_arg, name_arg)
 			_batch_arrayPush(ctx, arr0(ctx), 0)
 			integer chain = _batch_call(ctx, "toNumber", arr1(ctx, call_e))
-			return sassign(ctx, pname, chain)
+			return svardecl(ctx, pname, "number", chain)
 		if ptype == "boolean"
 			// boolean = __mcp_extract_bool_str(...) == "true"
 			integer call_e = call2(ctx, "__mcp_extract_bool_str", json_arg, name_arg)
 			integer eq_e = _batch_binop(ctx, "==", call_e, sl(ctx, "true"))
-			return sassign(ctx, pname, eq_e)
+			return svardecl(ctx, pname, "boolean", eq_e)
 		// list<T> / any → treat as string
 		if has_default
 			integer def_arg = sl(ctx, pdefault)
 			integer call_e = call3(ctx, "__mcp_extract_str_default", json_arg, name_arg, def_arg)
-			return sassign(ctx, pname, call_e)
+			return svardecl(ctx, pname, "string", call_e)
 		integer call_e = call2(ctx, "__mcp_extract_str", json_arg, name_arg)
-		return sassign(ctx, pname, call_e)
+		return svardecl(ctx, pname, "string", call_e)
 
 // ============================================================================
 // DISPATCHER FUNCTIONS + __mcp_handle EMISSION (BATCH)
@@ -988,8 +1000,8 @@ functions:
 		integer params = params3(ctx, "name", "string", "__params_json", "string", "__req_id", "string")
 		integer body_arr = arr0(ctx)
 
-		// result = ""
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "result", sl(ctx, "")))
+		// string result = ""
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "result", "string", sl(ctx, "")))
 
 		// Emit one if per tool dispatch case
 		integer scan = 0
@@ -1046,7 +1058,7 @@ functions:
 		integer params = params2(ctx, "uri", "string", "__req_id", "string")
 		integer body_arr = arr0(ctx)
 
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "result", sl(ctx, "")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "result", "string", sl(ctx, "")))
 
 		integer scan = 0
 		integer safety = 0
@@ -1103,7 +1115,7 @@ functions:
 		integer params = params3(ctx, "name", "string", "__args_json", "string", "__req_id", "string")
 		integer body_arr = arr0(ctx)
 
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "result", sl(ctx, "")))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "result", "string", sl(ctx, "")))
 
 		integer scan = 0
 		integer safety = 0
@@ -1157,9 +1169,9 @@ functions:
 		integer body_arr = arr0(ctx)
 
 		// string __method = __mcp_extract_str(__msg, "method")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__method", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "method"))))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__method", "string", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "method"))))
 		// string __req_id = __mcp_extract_str(__msg, "id")
-		_batch_arrayPush(ctx, body_arr, sassign(ctx, "__req_id", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "id"))))
+		_batch_arrayPush(ctx, body_arr, svardecl(ctx, "__req_id", "string", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "id"))))
 
 		// if __method == "initialize": return "{...initialize response...}"
 		string init_resp = "{\"jsonrpc\":\"2.0\",\"id\":"
@@ -1201,15 +1213,15 @@ functions:
 		//     __tool_params = __msg.substring(__args_start, __msg.length() - 1)
 		//   return __mcp_dispatch_tool(__tool_name, __tool_params, __req_id)
 		integer tc_body = arr0(ctx)
-		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__tool_name", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "name"))))
-		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__args_key", sl(ctx, "\"arguments\":")))
-		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__args_pos", methcall1(ctx, "__msg", "indexOf", id(ctx, "__args_key"))))
-		_batch_arrayPush(ctx, tc_body, sassign(ctx, "__tool_params", sl(ctx, "{}")))
+		_batch_arrayPush(ctx, tc_body, svardecl(ctx, "__tool_name", "string", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "name"))))
+		_batch_arrayPush(ctx, tc_body, svardecl(ctx, "__args_key", "string", sl(ctx, "\"arguments\":")))
+		_batch_arrayPush(ctx, tc_body, svardecl(ctx, "__args_pos", "integer", methcall1(ctx, "__msg", "indexOf", id(ctx, "__args_key"))))
+		_batch_arrayPush(ctx, tc_body, svardecl(ctx, "__tool_params", "string", sl(ctx, "{}")))
 		// nested if body
 		integer nest_body = arr0(ctx)
 		integer args_len = methcall0(ctx, "__args_key", "length")
 		integer args_start_e = add(ctx, id(ctx, "__args_pos"), args_len)
-		_batch_arrayPush(ctx, nest_body, sassign(ctx, "__args_start", args_start_e))
+		_batch_arrayPush(ctx, nest_body, svardecl(ctx, "__args_start", "integer", args_start_e))
 		integer msg_len = methcall0(ctx, "__msg", "length")
 		integer msg_len_minus_one = _batch_binop(ctx, "-", msg_len, il(ctx, 1))
 		integer substr_e = methcall2(ctx, "__msg", "substring", id(ctx, "__args_start"), msg_len_minus_one)
@@ -1233,7 +1245,7 @@ functions:
 
 		// resources/read: __uri = extract_str("uri"); return dispatch_resource(__uri, __req_id)
 		integer rr_body = arr0(ctx)
-		_batch_arrayPush(ctx, rr_body, sassign(ctx, "__uri", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "uri"))))
+		_batch_arrayPush(ctx, rr_body, svardecl(ctx, "__uri", "string", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "uri"))))
 		_batch_arrayPush(ctx, rr_body, sret(ctx, call2(ctx, "__mcp_dispatch_resource", id(ctx, "__uri"), id(ctx, "__req_id"))))
 		integer rr_if = _batch_stmtIf(ctx, eq_id_sl(ctx, "__method", "resources/read"), rr_body, 0)
 		_batch_arrayPush(ctx, body_arr, rr_if)
@@ -1257,14 +1269,14 @@ functions:
 		//   if __pargs_pos >= 0: __pargs_start = ...; __prompt_args = __msg.substring(...)
 		//   return __mcp_dispatch_prompt(__prompt_name, __prompt_args, __req_id)
 		integer pg_body = arr0(ctx)
-		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__prompt_name", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "name"))))
-		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__pargs_key", sl(ctx, "\"arguments\":")))
-		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__pargs_pos", methcall1(ctx, "__msg", "indexOf", id(ctx, "__pargs_key"))))
-		_batch_arrayPush(ctx, pg_body, sassign(ctx, "__prompt_args", sl(ctx, "{}")))
+		_batch_arrayPush(ctx, pg_body, svardecl(ctx, "__prompt_name", "string", call2(ctx, "__mcp_extract_str", id(ctx, "__msg"), sl(ctx, "name"))))
+		_batch_arrayPush(ctx, pg_body, svardecl(ctx, "__pargs_key", "string", sl(ctx, "\"arguments\":")))
+		_batch_arrayPush(ctx, pg_body, svardecl(ctx, "__pargs_pos", "integer", methcall1(ctx, "__msg", "indexOf", id(ctx, "__pargs_key"))))
+		_batch_arrayPush(ctx, pg_body, svardecl(ctx, "__prompt_args", "string", sl(ctx, "{}")))
 		integer pnest = arr0(ctx)
 		integer pargs_len = methcall0(ctx, "__pargs_key", "length")
 		integer pargs_start_e = add(ctx, id(ctx, "__pargs_pos"), pargs_len)
-		_batch_arrayPush(ctx, pnest, sassign(ctx, "__pargs_start", pargs_start_e))
+		_batch_arrayPush(ctx, pnest, svardecl(ctx, "__pargs_start", "integer", pargs_start_e))
 		integer pmsg_len = methcall0(ctx, "__msg", "length")
 		integer pmsg_len_minus_one = _batch_binop(ctx, "-", pmsg_len, il(ctx, 1))
 		integer psubstr_e = methcall2(ctx, "__msg", "substring", id(ctx, "__pargs_start"), pmsg_len_minus_one)
@@ -1303,7 +1315,7 @@ functions:
 			_emit_statement_into_start(ctx, _batch_stmtCall(ctx, "_mcp_http_serve", serve_args))
 
 			// boolean __http_running = true
-			_emit_statement_into_start(ctx, sassign(ctx, "__http_running", bl(ctx, true)))
+			_emit_statement_into_start(ctx, svardecl(ctx, "__http_running", "boolean", bl(ctx, true)))
 
 			// while __http_running:
 			//   __req = _mcp_http_accept()
@@ -1312,11 +1324,11 @@ functions:
 			//     if __resp.length() > 0:
 			//       _mcp_stdio_write(__resp)
 			integer wbody = arr0(ctx)
-			_batch_arrayPush(ctx, wbody, sassign(ctx, "__req", call0(ctx, "_mcp_http_accept")))
+			_batch_arrayPush(ctx, wbody, svardecl(ctx, "__req", "string", call0(ctx, "_mcp_http_accept")))
 			integer reqlen = methcall0(ctx, "__req", "length")
 			integer reqlen_gt0 = _batch_binop(ctx, ">", reqlen, il(ctx, 0))
 			integer inner1 = arr0(ctx)
-			_batch_arrayPush(ctx, inner1, sassign(ctx, "__resp", call1(ctx, "__mcp_handle", id(ctx, "__req"))))
+			_batch_arrayPush(ctx, inner1, svardecl(ctx, "__resp", "string", call1(ctx, "__mcp_handle", id(ctx, "__req"))))
 			integer resplen = methcall0(ctx, "__resp", "length")
 			integer resplen_gt0 = _batch_binop(ctx, ">", resplen, il(ctx, 0))
 			integer inner2 = arr0(ctx)
@@ -1327,7 +1339,7 @@ functions:
 		else
 			// stdio (default)
 			// boolean __running = true
-			_emit_statement_into_start(ctx, sassign(ctx, "__running", bl(ctx, true)))
+			_emit_statement_into_start(ctx, svardecl(ctx, "__running", "boolean", bl(ctx, true)))
 
 			// while __running:
 			//   __msg = _mcp_stdio_read()
@@ -1336,12 +1348,12 @@ functions:
 			//     __response = __mcp_handle(__msg)
 			//     if __response.length() > 0: _mcp_stdio_write(__response)
 			integer wbody = arr0(ctx)
-			_batch_arrayPush(ctx, wbody, sassign(ctx, "__msg", call0(ctx, "_mcp_stdio_read")))
+			_batch_arrayPush(ctx, wbody, svardecl(ctx, "__msg", "string", call0(ctx, "_mcp_stdio_read")))
 			integer msglen = methcall0(ctx, "__msg", "length")
 			integer msglen_eq0 = _batch_binop(ctx, "==", msglen, il(ctx, 0))
 			_batch_arrayPush(ctx, wbody, sif1(ctx, msglen_eq0, sassign(ctx, "__running", bl(ctx, false))))
 			integer inner_body = arr0(ctx)
-			_batch_arrayPush(ctx, inner_body, sassign(ctx, "__response", call1(ctx, "__mcp_handle", id(ctx, "__msg"))))
+			_batch_arrayPush(ctx, inner_body, svardecl(ctx, "__response", "string", call1(ctx, "__mcp_handle", id(ctx, "__msg"))))
 			integer resplen = methcall0(ctx, "__response", "length")
 			integer resplen_gt0 = _batch_binop(ctx, ">", resplen, il(ctx, 0))
 			integer inner2 = arr0(ctx)
