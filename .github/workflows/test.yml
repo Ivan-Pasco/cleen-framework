@@ -76,21 +76,29 @@ jobs:
       - name: Install latest Clean Language compiler
         run: |
           set -euo pipefail
-          # `cleen install latest` resolves latest via the GitHub API and has
-          # been observed to swallow HTTP 301 responses (prints a warning but
-          # exits 0), which then makes `cleen use ""` fail with an opaque
-          # "Invalid version format" downstream. Resolve the tag ourselves
-          # against the Releases API so we install a concrete version and
-          # fail loudly if the resolution step breaks.
+          # The Ivan-Pasco/clean-language-compiler GitHub repo was renamed
+          # (assets now live under -old) and `cleen install` doesn't follow
+          # the 301 redirect on asset downloads. Bypass cleen entirely and
+          # place the binary where `cleen use` expects it, so downstream
+          # `cleen frame install` still works. Resolve the tag ourselves so
+          # any resolution failure is loud.
           tag="$(curl -fsSL https://api.github.com/repos/Ivan-Pasco/clean-language-compiler/releases/latest | jq -r '.tag_name')"
           if [ -z "$tag" ] || [ "$tag" = "null" ]; then
             echo "Failed to resolve latest compiler tag from GitHub API"
             exit 1
           fi
           ver="${tag#v}"
-          echo "Installing Clean Language compiler $ver (from $tag)"
-          cleen install "$ver"
-          cleen use "$ver"
+          echo "Installing Clean Language compiler $ver (from $tag) directly from Releases"
+          mkdir -p "$HOME/.cleen/versions/$ver" "$HOME/.cleen/bin"
+          curl -fsSL -o "$HOME/.cleen/versions/$ver/cln" \
+            "https://github.com/Ivan-Pasco/clean-language-compiler/releases/download/$tag/cln-linux-x86_64"
+          chmod +x "$HOME/.cleen/versions/$ver/cln"
+          ln -sf "$HOME/.cleen/versions/$ver/cln" "$HOME/.cleen/bin/cln"
+          # Mark the active version so cleen commands (e.g. `cleen frame install`)
+          # resolve against it.
+          # cleen looks for either .active-version or active-version depending on version.
+          echo "$ver" > "$HOME/.cleen/active-version"
+          echo "$ver" > "$HOME/.cleen/.active-version"
           cln --version
 
       - name: Install latest Frame plugins

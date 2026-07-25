@@ -63,18 +63,25 @@ jobs:
       - name: Install latest Clean Language compiler
         run: |
           set -euo pipefail
-          # `cleen install latest` can swallow GitHub API failures (HTTP 301
-          # etc.) — resolve the concrete tag ourselves so the install step
-          # fails loudly instead of leaving no version installed.
+          # The Ivan-Pasco/clean-language-compiler GitHub repo was renamed
+          # (assets now live under -old) and `cleen install` doesn't follow
+          # the 301 redirect on asset downloads. Bypass cleen entirely and
+          # place the binary where `cleen use` expects it, so downstream
+          # `cleen frame install` still works.
           tag="$(curl -fsSL https://api.github.com/repos/Ivan-Pasco/clean-language-compiler/releases/latest | jq -r '.tag_name')"
           if [ -z "$tag" ] || [ "$tag" = "null" ]; then
             echo "Failed to resolve latest compiler tag from GitHub API"
             exit 1
           fi
           ver="${tag#v}"
-          echo "Installing Clean Language compiler $ver (from $tag)"
-          cleen install "$ver"
-          cleen use "$ver"
+          echo "Installing Clean Language compiler $ver (from $tag) directly from Releases"
+          mkdir -p "$HOME/.cleen/versions/$ver" "$HOME/.cleen/bin"
+          curl -fsSL -o "$HOME/.cleen/versions/$ver/cln" \
+            "https://github.com/Ivan-Pasco/clean-language-compiler/releases/download/$tag/cln-linux-x86_64"
+          chmod +x "$HOME/.cleen/versions/$ver/cln"
+          ln -sf "$HOME/.cleen/versions/$ver/cln" "$HOME/.cleen/bin/cln"
+          echo "$ver" > "$HOME/.cleen/active-version"
+          echo "$ver" > "$HOME/.cleen/.active-version"
           cln --version
 
       - name: Install latest Frame plugins
