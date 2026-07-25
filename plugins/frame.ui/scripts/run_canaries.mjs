@@ -164,8 +164,11 @@ function runCln(args, cwd) {
 }
 
 async function compileCanary(canaryPath, outWasm) {
+	// --plugins enables bridge resolution against ~/.cleen/plugins/. Without it,
+	// canaries whose namespaces are plugin-backed (ui, canvas, storage, etc.)
+	// compile with unresolved bridge stubs and LinkError at instantiation.
 	const { code, stdout, stderr } = await runCln(
-		['compile', canaryPath, '-o', outWasm],
+		['compile', canaryPath, '-o', outWasm, '--plugins', '--target', 'browser'],
 		process.cwd()
 	);
 	if (code !== 0) {
