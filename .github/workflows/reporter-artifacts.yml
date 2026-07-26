@@ -138,7 +138,19 @@ jobs:
           CLN_REPRO_DB_URL: mysql://root:cln_repro@127.0.0.1:3306/cln_repro_replay
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Three outcome categories per dashboard bug #0bf2697d
+          # (reporter-artifacts-fetch-vs-replay-conflation):
+          #
+          #   PASS      — cln-repro fetched a tarball and replay passed
+          #   FAIL      — cln-repro fetched a tarball and replay FAILED
+          #                (this is what should block the release)
+          #   NO_ARTIF  — cln-repro couldn't find a tarball URL in the
+          #                issue body (metadata malformed). Historically
+          #                this was conflated with FAIL and blocked the
+          #                release, even though nothing was actually red.
+          #                Now: warn + continue.
           FAILURES=0
+          MISSING=0
           TOTAL=0
           RESULTS_FILE=/tmp/replay_results.md
           echo "# Replay results — cln $(cln --version | awk '{print $NF}')" > "$RESULTS_FILE"
@@ -156,7 +168,18 @@ jobs:
             RC=$?
             set -e
             FP=$(grep -oE 'fingerprint=[a-f0-9]+' "/tmp/replay-$TOTAL.log" | head -1 | cut -d= -f2)
-            if [[ $RC -eq 0 ]]; then
+            # Fetch-failure detection: cln-repro emits a distinctive line
+            # when the issue body has no 'Tarball download:' URL to fetch.
+            # Match any of the known variants (older cln-repro versions
+            # emitted different wordings).
+            if grep -qE 'no tarball URL|missing tarball|Tarball download.*not found|no artifact url' \
+                 "/tmp/replay-$TOTAL.log"; then
+              MISSING=$((MISSING+1))
+              echo "| $ISSUE_URL | ${FP:0:12} | NO_ARTIFACT |" >> "$RESULTS_FILE"
+              echo "WARN: $ISSUE_URL — metadata malformed (no tarball URL). Skipping, not counting as failure."
+              # Non-fatal comment on the issue so the reporter knows.
+              gh issue comment "$ISSUE_URL" --body "⚠️ **Cannot replay** on cln $(cln --version | awk '{print $NF}') — issue body is missing the 'Tarball download:' URL line, so nothing to fetch. This does not block the release; please attach the tarball URL so the next run can replay." || true
+            elif [[ $RC -eq 0 ]]; then
               echo "| $ISSUE_URL | ${FP:0:12} | PASS |" >> "$RESULTS_FILE"
               echo "PASS: $ISSUE_URL"
               # Comment on the issue: this release passed
@@ -174,13 +197,18 @@ jobs:
           done < /tmp/issue_urls.txt
 
           echo "" >> "$RESULTS_FILE"
-          echo "**Total: $TOTAL, Failures: $FAILURES**" >> "$RESULTS_FILE"
+          echo "**Total: $TOTAL, Failures: $FAILURES, No-artifact: $MISSING**" >> "$RESULTS_FILE"
           cat "$RESULTS_FILE"
 
           if [[ $FAILURES -gt 0 ]]; then
             echo ""
             echo "Release blocked: $FAILURES reporter artifact(s) still fail."
             exit 1
+          fi
+
+          if [[ $MISSING -gt 0 ]]; then
+            echo ""
+            echo "Note: $MISSING issue(s) skipped — metadata malformed (no tarball URL). Release NOT blocked; please attach tarball URLs to those issues."
           fi
 
       - name: summary
