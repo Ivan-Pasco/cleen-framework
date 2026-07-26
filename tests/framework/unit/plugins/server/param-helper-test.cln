@@ -1,0 +1,22 @@
+// Test: frame.server — param(name) helper resolves inside endpoints server: handler.
+// Regression for reporter-artifact fingerprints 45e19e55e2e6 and 6c2e8ed25b57.
+// Before v2.12.173, the compiler dropped bridge references from plugin-emitted
+// helpers, so `param(name)` was left DEFERRED and endpoint code calling it
+// failed to compile (SEM007). Fix landed once compiler 0.33.119 closed the
+// codegen gap.
+
+plugins:
+	frame.server
+
+server:
+	port: 3401
+
+endpoints:
+	POST "/users":
+		string name = param("name")
+		if name.length() == 0
+			return badRequest("name is required")
+		return jsonResponse("{\"ok\": true}")
+
+start:
+	printl("[boot] param-helper-test server ready")
