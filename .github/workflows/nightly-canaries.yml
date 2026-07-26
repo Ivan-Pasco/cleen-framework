@@ -107,8 +107,14 @@ jobs:
         working-directory: plugins/frame.ui/scripts
         run: node run_canaries.mjs
 
-      - name: Upload canary report (on failure)
-        if: failure()
+      - name: Upload canary report
+        # Upload on every outcome, not just failure. The Layer 3
+        # cross-component matrix aggregator (in clean-language-compiler
+        # nightly.yml step 7) downloads this artifact by name and treats
+        # a missing file as "no data" → every applicable cell renders ✗.
+        # Successful L2 runs must still emit the report so the matrix
+        # renders green cells for browser rows.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: canary-report
