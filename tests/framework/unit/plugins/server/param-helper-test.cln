@@ -20,3 +20,6 @@ endpoints:
 
 start:
 	printl("[boot] param-helper-test server ready")
+	// Compile-only regression: reaching start: proves the plugin-emitted
+	// param(name) helper survived codegen (bug reproduced pre-0.33.119).
+	printl("PASS: server-param-helper")
