@@ -52,6 +52,12 @@ external:
 	integer _stmt_block(integer ctx, string stmts_json)
 	integer _stmt_call(integer ctx, string callee, string args_json)
 	integer _stmt_assign(integer ctx, string target, integer expr_handle)
+	// _stmt_var_decl produces a real Statement::VariableDecl (let-declaration).
+	// Required for first-introduction of a handler-scope local; _stmt_assign
+	// alone yields Statement::Assignment which SEM007-fails outside start: scope.
+	// See prompt #cc970925 (compiler side) and #f7183604 (framework adoption).
+	// Pass expr_handle_or_0 = 0 for a declaration with no initializer.
+	integer _stmt_var_decl(integer ctx, string name, string type_lp, integer expr_handle_or_0)
 	integer _stmt_if(integer ctx, integer cond_handle, integer then_block_handle, integer else_block_handle)
 	integer _stmt_return(integer ctx, integer expr_handle)
 	// Expression constructors
@@ -570,9 +576,12 @@ functions:
 					_emit_error(ctx, 2, "FRAME-CLIENT-E010", "failed to build api.get call for " + vn, "{\"source\":\"plugin\"}")
 					return 1
 
-				integer assign_stmt = _stmt_assign(ctx, res_var, get_call)
+				// __res_<var> is a first-introduction of a handler-scope local —
+				// use _stmt_var_decl (real let-declaration) so SEM007 doesn't fire
+				// on the identifier. See prompt #f7183604 / #cc970925.
+				integer assign_stmt = _stmt_var_decl(ctx, res_var, "any", get_call)
 				if assign_stmt == 0
-					_emit_error(ctx, 2, "FRAME-CLIENT-E011", "failed to build assign stmt for " + res_var, "{\"source\":\"plugin\"}")
+					_emit_error(ctx, 2, "FRAME-CLIENT-E011", "failed to build var-decl stmt for " + res_var, "{\"source\":\"plugin\"}")
 					return 1
 
 				integer emit_assign = _emit_statement_into_start(ctx, assign_stmt)
@@ -994,9 +1003,11 @@ functions:
 			if body_expr == 0
 				_emit_error(ctx, 2, "FRAME-CLIENT-E062", "failed to build JSON body expr for form:", "{\"source\":\"plugin\"}")
 				return 1
-			integer body_assign = _stmt_assign(ctx, "__body", body_expr)
+			// __body is a first-introduction of a handler-scope local — use
+			// _stmt_var_decl. See prompt #f7183604.
+			integer body_assign = _stmt_var_decl(ctx, "__body", "string", body_expr)
 			if body_assign == 0
-				_emit_error(ctx, 2, "FRAME-CLIENT-E063", "failed to build __body assign", "{\"source\":\"plugin\"}")
+				_emit_error(ctx, 2, "FRAME-CLIENT-E063", "failed to build __body var-decl", "{\"source\":\"plugin\"}")
 				return 1
 			body_stmts = body_stmts.substring(0, body_stmts.length() - 1) + "," + body_assign.toString() + "]"
 
@@ -1012,9 +1023,11 @@ functions:
 			_emit_error(ctx, 2, "FRAME-CLIENT-E065", "failed to build api." + method + " call", "{\"source\":\"plugin\"}")
 			return 1
 
-		integer res_assign = _stmt_assign(ctx, "__res", api_call)
+		// __res is a first-introduction of a handler-scope local — use
+		// _stmt_var_decl. See prompt #f7183604.
+		integer res_assign = _stmt_var_decl(ctx, "__res", "any", api_call)
 		if res_assign == 0
-			_emit_error(ctx, 2, "FRAME-CLIENT-E066", "failed to build __res assign", "{\"source\":\"plugin\"}")
+			_emit_error(ctx, 2, "FRAME-CLIENT-E066", "failed to build __res var-decl", "{\"source\":\"plugin\"}")
 			return 1
 		body_stmts = body_stmts.substring(0, body_stmts.length() - 1) + "," + res_assign.toString() + "]"
 
@@ -1436,9 +1449,10 @@ functions:
 			if body_expr_s == 0
 				_emit_error(ctx, 2, "FRAME-CLIENT-E119", "failed to build body expr for send:", "{\"source\":\"plugin\"}")
 				return 1
-			integer body_assign_s = _stmt_assign(ctx, "__body", body_expr_s)
+			// First-introduction of __body in send handler — var-decl. See #f7183604.
+			integer body_assign_s = _stmt_var_decl(ctx, "__body", "string", body_expr_s)
 			if body_assign_s == 0
-				_emit_error(ctx, 2, "FRAME-CLIENT-E120", "failed to build __body assign for send:", "{\"source\":\"plugin\"}")
+				_emit_error(ctx, 2, "FRAME-CLIENT-E120", "failed to build __body var-decl for send:", "{\"source\":\"plugin\"}")
 				return 1
 			body_stmts = body_stmts.substring(0, body_stmts.length() - 1) + "," + body_assign_s.toString() + "]"
 			integer body_ident_s = _expr_ident(ctx, "__body")
@@ -1453,7 +1467,8 @@ functions:
 			_emit_error(ctx, 2, "FRAME-CLIENT-E122", "failed to build api call for send:", "{\"source\":\"plugin\"}")
 			return 1
 
-		integer res_assign_s = _stmt_assign(ctx, "__res", api_call_s)
+		// First-introduction of __res in send handler — var-decl. See #f7183604.
+		integer res_assign_s = _stmt_var_decl(ctx, "__res", "any", api_call_s)
 		if res_assign_s == 0
 			_emit_error(ctx, 2, "FRAME-CLIENT-E123", "failed to build __res assign for send:", "{\"source\":\"plugin\"}")
 			return 1
