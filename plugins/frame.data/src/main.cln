@@ -1424,7 +1424,7 @@ functions:
 	// the queries body is empty or contains no valid declarations. Sets sticky
 	// error context on parse/emit failure; caller should check _ctx_had_error
 	// after this call.
-	string emit_queries_methods_json(integer ctx, string queries_body)
+	string emit_queries_methods_json(integer ctx, string queries_body, string model_name)
 		string result = ""
 		integer line_start = 0
 		integer body_len = queries_body.length()
@@ -1500,7 +1500,7 @@ functions:
 							// and doesn't re-enter plugin expansion. Rewrite
 							// the DSL into an equivalent SQL-building
 							// statement list before emission.
-							string rewritten = rewrite_query_method_body(body_src)
+							string rewritten = rewrite_query_method_body(body_src, model_name)
 							string emit_body = body_src
 							if rewritten.length() > 0
 								emit_body = rewritten
@@ -2870,7 +2870,7 @@ functions:
 		if is_v2_sub_block_form(orig_v2_body)
 			string queries_body = extract_v2_sub_block(orig_v2_body, "queries")
 			if queries_body.length() > 0
-				string queries_entries = emit_queries_methods_json(ctx, queries_body)
+				string queries_entries = emit_queries_methods_json(ctx, queries_body, model_name)
 				if _ctx_had_error(ctx) != 0
 					return 1
 				if queries_entries.length() > 0
@@ -3896,7 +3896,7 @@ functions:
 	// to the method's base column by emit_queries_methods_json). Recognizes:
 	//   return <Model>.first: NEWLINE <indented dsl>
 	// Returns "" when no rewrite matched (caller falls back to raw_body).
-	string rewrite_query_method_body(string raw_body)
+	string rewrite_query_method_body(string raw_body, string default_model_name)
 		string trimmed = raw_body.trim()
 		if not trimmed.startsWith("return ")
 			return ""
@@ -3909,13 +3909,21 @@ functions:
 		if not header.endsWith(":")
 			return ""
 
-		// header: `return <Model>.<verb>:`
+		// header: `return <Model>.<verb>:` or (inside a queries: sub-block) the
+		// model-less shorthand `return <verb>:` — bind the receiver to the
+		// enclosing model in the shorthand form.
 		string after_return = header.substring(7, header.length() - 1).trim()
 		integer dot = after_return.indexOf(".")
+		string model_name = ""
+		string verb = ""
 		if dot == -1
-			return ""
-		string model_name = after_return.substring(0, dot).trim()
-		string verb = after_return.substring(dot + 1, after_return.length()).trim()
+			if default_model_name.length() == 0
+				return ""
+			model_name = default_model_name
+			verb = after_return.trim()
+		else
+			model_name = after_return.substring(0, dot).trim()
+			verb = after_return.substring(dot + 1, after_return.length()).trim()
 		if model_name.length() == 0 or verb.length() == 0
 			return ""
 

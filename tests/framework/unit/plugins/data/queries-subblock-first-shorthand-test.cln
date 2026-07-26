@@ -1,0 +1,40 @@
+// Test: frame.data — v2 queries: sub-block with model-less `return first:` shorthand.
+// Regression guard for dashboard #543847a2 (FRAME-DATA-DSL-NO-USABLE-PATH-3012):
+// `return first:` inside a queries: method body must resolve its receiver to
+// the enclosing model, not fail with SYN001 on the plugin-emitted fragment.
+
+server:
+	port: 3401
+
+data Page:
+	fields:
+		id: integer pk auto
+		slug: string unique
+		is_active: boolean
+
+	queries:
+		Page bySlug(string s)
+			return first:
+				where slug == s and is_active == true
+
+endpoints:
+	GET "/test":
+		Page.insert:
+			slug = "hello"
+			is_active = true
+		Page.insert:
+			slug = "gone"
+			is_active = false
+
+		Page found = Page.data.bySlug("hello")
+		Page missing = Page.data.bySlug("gone")
+
+		boolean ok = found != null and missing == null
+		if ok
+			printl("PASS: data-queries-subblock-first-shorthand")
+		else
+			printl("FAIL: data-queries-subblock-first-shorthand")
+		return json({ok: ok})
+
+start:
+	printl("[boot] data-queries-subblock-first-shorthand server ready")
