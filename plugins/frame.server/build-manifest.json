@@ -3,7 +3,7 @@
   "compiler_version": "0.33.150",
   "contract_version": "1.0.0",
   "runtime_abi_version": "1.0.0",
-  "generated_at_epoch_seconds": 1785037837,
+  "generated_at_epoch_seconds": 1785042212,
   "artifacts": [
     {
       "name": "plugin.wasm",
