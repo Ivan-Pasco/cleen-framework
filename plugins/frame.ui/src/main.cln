@@ -4845,6 +4845,41 @@ functions:
 			i = i + 1
 		return true
 
+	// Extract a JSON attribute value from a JSON string, mirroring
+	// frame.data's extract_attr (main.cln:2706 in that plugin). frame.ui's
+	// pre-existing extract_attr_value is HTML-attribute-shaped (name="value")
+	// and cannot read JSON key-value pairs. Handles both string values
+	// ("key":"value") and bare values ("key":123).
+	string ui_lint_json_attr(string json_str, string key)
+		string pattern = "\"" + key + "\":"
+		integer pos = json_str.indexOf(pattern)
+		if pos == -1
+			return ""
+		integer val_start = pos + pattern.length()
+		while val_start < json_str.length()
+			string ch = json_str.substring(val_start, val_start + 1)
+			if ch != " " and ch != "\t"
+				break
+			val_start = val_start + 1
+		if val_start >= json_str.length()
+			return ""
+		string first_ch = json_str.substring(val_start, val_start + 1)
+		if first_ch == "\""
+			integer val_end = val_start + 1
+			while val_end < json_str.length()
+				string ch2 = json_str.substring(val_end, val_end + 1)
+				if ch2 == "\""
+					break
+				val_end = val_end + 1
+			return json_str.substring(val_start + 1, val_end)
+		integer val_end2 = val_start
+		while val_end2 < json_str.length()
+			string ch3 = json_str.substring(val_end2, val_end2 + 1)
+			if ch3 == "," or ch3 == "}" or ch3 == " " or ch3 == "\n"
+				break
+			val_end2 = val_end2 + 1
+		return json_str.substring(val_start, val_end2).trim()
+
 	// Names of event attributes to inspect. Kept in sync with the browser
 	// events set at the top of extract_attributes (main.cln:2234).
 	// Comma-delimited so we can drive the outer loop with indexOf.
@@ -4879,7 +4914,7 @@ functions:
 	// and by `cln check` after typecheck. Returns a JSON array of
 	// diagnostic entries per §3.2, or "[]" for a clean run.
 	string lint_project(string input_json)
-		string handle_str = extract_attr_value(input_json, "project_ast_handle")
+		string handle_str = ui_lint_json_attr(input_json, "project_ast_handle")
 		if handle_str.length() == 0
 			return "[]"
 		integer handle = handle_str.toInteger()
@@ -4931,7 +4966,7 @@ functions:
 					integer bobj_end = ui_lint_after_next_brace(blocks_json, bobj_start)
 					string bentry = blocks_json.substring(bobj_start, bobj_end)
 					string bfile = ui_lint_next_quoted(bentry, "\"file\":\"", 0)
-					string bline_str = extract_attr_value(bentry, "line")
+					string bline_str = ui_lint_json_attr(bentry, "line")
 					integer bline = 1
 					if bline_str.length() > 0
 						bline = bline_str.toInteger()
