@@ -1,9 +1,10 @@
 name: Test policy guard
 
-# Enforces system-documents/testing/TEST_STRATEGY.md §5.
-# Runs on every PR and every push to main, regardless of what changed.
-# This job is intentionally separate from test.yml so it fires even on
-# doc-only PRs — the policy guard also checks tests/PENDING.md hygiene.
+# Runs scripts/check-test-placeholders.py to block placeholder .cln tests
+# from landing. Fires on every PR and push to main so doc-only PRs are
+# still gated. The historical `system-documents/testing/TEST_STRATEGY.md`
+# gate was dropped in July 2026 (doc was never checked in); the script's
+# rule list is self-contained.
 
 on:
   push:
@@ -28,9 +29,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Ensure strategy doc is present
-        run: test -f system-documents/testing/TEST_STRATEGY.md
 
       - name: Ensure conventions doc is present
         run: test -f tests/CONVENTIONS.md

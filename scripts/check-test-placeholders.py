@@ -2,9 +2,8 @@
 """
 check-test-placeholders.py
 
-Enforcement for system-documents/testing/TEST_STRATEGY.md §5.
 Walks every .cln under tests/ and plugins/*/tests/ and blocks placeholder
-patterns from landing.
+patterns from landing. Rule list is self-contained below.
 
 Usage:
     check-test-placeholders.py                     # walk full tree
@@ -16,9 +15,9 @@ Exit codes:
     1 — one or more offenses (details on stdout)
     2 — invocation error (bad flags, missing tree)
 
-The script is intentionally strict. See TEST_STRATEGY.md §5 for the exempt
-paths and the full rule list. Adding an exempt path requires editing this
-script AND TEST_STRATEGY.md in the same commit.
+The script is intentionally strict. Exempt paths are declared in
+EXEMPT_RELATIVE_PATHS / EXEMPT_SUFFIXES below. Every exemption should be
+justified in a code comment next to the entry.
 """
 
 from __future__ import annotations

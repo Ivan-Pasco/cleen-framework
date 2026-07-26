@@ -11,16 +11,18 @@
 # Contact: errors.cleanlanguage.dev/prompts/detail?id=<canary-prompt>
 #
 # Trigger design:
-#   - On every push to a v* tag (release candidate build): required to pass.
-#   - On workflow_dispatch: manual re-run against latest tag.
-#   - On issue label change to "reporter-artifact": re-check that one issue.
+#   - On workflow_dispatch: manual re-run against latest tag or a specific
+#     framework version. This is the ONLY trigger since July 2026.
+#
+# Historical: previously ran on every `v*` tag push (i.e. every comita run).
+# Removed because unresolved reporter-artifact issues would spam a red email
+# on every patch bump until the upstream bug was fixed. Reporter-artifact
+# issues are tracked in the errors dashboard; kick this workflow manually
+# when validating a fix.
 
 name: reporter-artifacts
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       target_version:

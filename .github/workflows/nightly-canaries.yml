@@ -6,28 +6,24 @@ name: Nightly Canaries (Layer 2 — browser)
 # corpus (owned by clean-language-compiler at tests/cln/canaries/*.cln)
 # and the L3 aggregate matrix in the compiler repo.
 #
-# Runs nightly and on-demand. If this job goes red, the framework's
-# browser host bridge has diverged from the registry contract at
-# foundation/platform-architecture/function-registry.toml.
+# Trigger design (July 2026): workflow_dispatch only.
+#
+# Removed:
+#   - `schedule:` (03:17 UTC) — nightly failure emails were the loudest
+#     signal source. Run on demand when browser host bridge or the
+#     canary runner is being changed.
+#   - `push:` on runner-related paths — race condition against the
+#     Release Frame Framework workflow: this job queried the latest tag
+#     from the GitHub API before release assets finished uploading,
+#     causing 404s on frame-plugins-<ver>.tar.gz.
 
 on:
-  schedule:
-    # 03:17 UTC nightly. Off-peak; deliberately not on the hour so we do
-    # not clash with the compiler's L3 matrix job kicking off at 03:00.
-    - cron: '17 3 * * *'
   workflow_dispatch:
     inputs:
       compiler_ref:
         description: 'Compiler ref (branch/tag/sha) to pull canaries from. Defaults to main.'
         required: false
         default: 'main'
-  push:
-    branches: [main]
-    paths:
-      - 'plugins/frame.ui/scripts/run_canaries.mjs'
-      - 'plugins/frame.ui/scripts/package.json'
-      - 'plugins/frame.ui/runtime/loader.js'
-      - '.github/workflows/nightly-canaries.yml'
 
 permissions:
   contents: read
