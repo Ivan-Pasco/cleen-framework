@@ -153,6 +153,15 @@ external:
 	// emission mode can resolve them without ambiguity). ----
 	string _build_state_get(string key)
 	void _build_state_set(string key, string value)
+	// ---- Contract 5 Phase C — read-only AST accessors for lint_project ----
+	// Spec: foundation/spec/framework/contracts/lint-extension.md §4.
+	// Each accessor returns a JSON LP-string; the compiler validates the
+	// project_ast_handle passed as `handle`. `list_blocks` returns entries
+	// shaped {file, line, content, attributes:{...}}.
+	string _ast_list_classes(integer handle)
+	string _ast_class_fields(integer handle, string class_name)
+	string _ast_list_functions(integer handle)
+	string _ast_list_blocks(integer handle, string block_name)
 
 // ============================================================================
 // V3 LIFECYCLE SLOTS (SKELETON — Sub-cycle 1)
@@ -4663,3 +4672,245 @@ functions:
 		result = result + "\t\tif not __routes_auth_ok\n"
 		result = result + "\t\t\treturn unauthorized()\n"
 		return result
+
+// ============================================================================
+// CONTRACT 5 PHASE C — lint_project
+// ============================================================================
+// Emits one cross-file diagnostic that requires whole-project visibility:
+//
+//   FRAME-UI-C005  warning  Event attribute (onclick="funcName", oninput="...",
+//                           etc.) references a bare identifier that is not an
+//                           exported function anywhere in the project.
+//                           Inline Clean statements (e.g. onclick="doIt() and
+//                           count = count + 1") are NOT flagged — only the
+//                           single-identifier form.
+//
+// Reference:
+//   foundation/spec/framework/contracts/lint-extension.md §2 (exports.lint),
+//   §3 (input/output JSON), §4 (_ast_* accessors), §5 (LINT001-003 model).
+//
+// Scans `html:` and `component:` block content strings; the compiler exposes
+// the raw pre-expansion FrameworkBlock content via _ast_list_blocks.
+functions:
+	// Read the next quoted string that appears after `after` in `src`,
+	// starting the search at `from`. Returns "" if either the opening or
+	// closing quote is missing. Mirrors frame.data's lint_next_quoted.
+	string ui_lint_next_quoted(string src, string after, integer pos)
+		string tail = src.substring(pos, src.length())
+		integer at = tail.indexOf(after)
+		if at == -1
+			return ""
+		integer key_end = at + after.length()
+		string rest = tail.substring(key_end, tail.length())
+		integer end = rest.indexOf("\"")
+		if end == -1
+			return ""
+		return rest.substring(0, end)
+
+	// Return the byte offset (in `src`) of the character just after the
+	// closing `}` that matches the first `{` at or after position `pos`.
+	// Depth-tracking to survive nested attributes:{...} inside a block.
+	integer ui_lint_after_next_brace(string src, integer pos)
+		integer i = pos
+		integer depth = 0
+		integer len = src.length()
+		while i < len
+			string ch = src.substring(i, i + 1)
+			if ch == "{"
+				depth = depth + 1
+			if ch == "}"
+				depth = depth - 1
+				if depth == 0
+					return i + 1
+			i = i + 1
+		return len
+
+	// list<string>.contains(string) workaround (see frame.data
+	// lint_string_in_list — same stdlib bug).
+	boolean ui_lint_string_in_list(list<string> haystack, string needle)
+		integer i = 0
+		while i < haystack.length()
+			if haystack.get(i) == needle
+				return true
+			i = i + 1
+		return false
+
+	string ui_lint_push(string buf, boolean first, string entry)
+		if first
+			return buf + entry
+		return buf + "," + entry
+
+	// Escape a value going into a JSON string field. Only characters that
+	// occur in Clean identifiers and short prose messages.
+	string ui_lint_json_escape(string s)
+		string out = s.replace("\\", "\\\\")
+		out = out.replace("\"", "\\\"")
+		return out
+
+	// True if `s` is a legal Clean identifier: starts with letter or
+	// underscore, remaining chars letter/digit/underscore. Rejects anything
+	// with `(`, `.`, `+`, whitespace — those are the signals that the
+	// attribute value is an inline expression, not a bare function reference.
+	boolean ui_lint_is_bare_identifier(string s)
+		integer len = s.length()
+		if len == 0
+			return false
+		string first = s.substring(0, 1)
+		boolean first_ok = false
+		if first == "_"
+			first_ok = true
+		else
+			integer fc = first.toInteger()
+			// Rough letter check via ranges — cheaper than iterating alphabet.
+			// A-Z = 65..90, a-z = 97..122. toInteger on a single-char string
+			// returns 0 when not numeric, so use string comparison instead.
+			if first >= "A" and first <= "Z"
+				first_ok = true
+			if first >= "a" and first <= "z"
+				first_ok = true
+		if not first_ok
+			return false
+		integer i = 1
+		while i < len
+			string ch = s.substring(i, i + 1)
+			boolean ch_ok = false
+			if ch == "_"
+				ch_ok = true
+			if ch >= "A" and ch <= "Z"
+				ch_ok = true
+			if ch >= "a" and ch <= "z"
+				ch_ok = true
+			if ch >= "0" and ch <= "9"
+				ch_ok = true
+			if not ch_ok
+				return false
+			i = i + 1
+		return true
+
+	// Names of event attributes to inspect. Kept in sync with the browser
+	// events set at the top of extract_attributes (main.cln:2234).
+	// Comma-delimited so we can drive the outer loop with indexOf.
+	string ui_lint_event_attr_names()
+		return "onclick,oninput,onchange,onsubmit,onfocus,onblur,onkeydown,onkeyup,onkeypress,onmouseover,onmouseenter,onmouseleave,onmousedown,onmouseup,onmousemove,oncontextmenu,ondragstart,ondragend,ondragenter,ondragover,ondragleave,ondrop,onpointerdown,onpointermove,onpointerup,onpointercancel,onpointerenter,onpointerleave,onwheel,onscroll"
+
+	// Walk `content` for every occurrence of `<attr>="<val>"`. When val is
+	// a bare identifier, append it (once) to `out_names`. Uses a scan
+	// cursor so overlapping attributes are all seen.
+	list<string> ui_lint_collect_bare_handlers(string content, string attr, list<string> out_names)
+		string needle = attr + "=\""
+		integer pos = 0
+		integer safety = 0
+		while safety < 500
+			safety = safety + 1
+			integer hit = content.indexOf(needle, pos)
+			if hit == -1
+				return out_names
+			integer val_start = hit + needle.length()
+			integer val_end = content.indexOf("\"", val_start)
+			if val_end == -1
+				return out_names
+			string raw = content.substring(val_start, val_end).trim()
+			if ui_lint_is_bare_identifier(raw)
+				boolean already = ui_lint_string_in_list(out_names, raw)
+				if not already
+					out_names.add(raw)
+			pos = val_end + 1
+		return out_names
+
+	// Contract 5 §2 entry point. Called once per project by `cln lint`
+	// and by `cln check` after typecheck. Returns a JSON array of
+	// diagnostic entries per §3.2, or "[]" for a clean run.
+	string lint_project(string input_json)
+		string handle_str = extract_attr_value(input_json, "project_ast_handle")
+		if handle_str.length() == 0
+			return "[]"
+		integer handle = handle_str.toInteger()
+
+		// ------------------------------------------------------------------
+		// Step 1: gather every top-level function name so we can decide
+		//         which bare-identifier event values are unresolved.
+		//         _ast_list_functions returns [{name, file, line, return_type?}, ...]
+		// ------------------------------------------------------------------
+		list<string> declared_funcs = []
+		string funcs_json = _ast_list_functions(handle)
+		integer fscan = 0
+		while fscan < funcs_json.length()
+			string ftail = funcs_json.substring(fscan, funcs_json.length())
+			integer fobj_at = ftail.indexOf("{")
+			if fobj_at == -1
+				fscan = funcs_json.length()
+			else
+				integer fobj_start = fscan + fobj_at
+				integer fobj_end = ui_lint_after_next_brace(funcs_json, fobj_start)
+				string fentry = funcs_json.substring(fobj_start, fobj_end)
+				string fname = ui_lint_next_quoted(fentry, "\"name\":\"", 0)
+				if fname.length() > 0
+					declared_funcs.add(fname)
+				fscan = fobj_end
+
+		// ------------------------------------------------------------------
+		// Step 2: walk `html:` and `component:` block content strings.
+		//         Extract every bare-identifier value from every event
+		//         attribute (onclick/oninput/etc.). Emit one diagnostic per
+		//         unresolved reference, anchored at the block's first line.
+		// ------------------------------------------------------------------
+		string diagnostics = "["
+		boolean first_out = true
+		list<string> block_kinds = ["html", "component", "ui", "page"]
+		string events = ui_lint_event_attr_names()
+		integer bki = 0
+		while bki < block_kinds.length()
+			string bkind = block_kinds.get(bki)
+			string blocks_json = _ast_list_blocks(handle, bkind)
+			integer bscan = 0
+			while bscan < blocks_json.length()
+				string btail = blocks_json.substring(bscan, blocks_json.length())
+				integer bobj_at = btail.indexOf("{")
+				if bobj_at == -1
+					bscan = blocks_json.length()
+				else
+					integer bobj_start = bscan + bobj_at
+					integer bobj_end = ui_lint_after_next_brace(blocks_json, bobj_start)
+					string bentry = blocks_json.substring(bobj_start, bobj_end)
+					string bfile = ui_lint_next_quoted(bentry, "\"file\":\"", 0)
+					string bline_str = extract_attr_value(bentry, "line")
+					integer bline = 1
+					if bline_str.length() > 0
+						bline = bline_str.toInteger()
+					string bcontent = ui_lint_next_quoted(bentry, "\"content\":\"", 0)
+					// Gather all bare-handler names from this block.
+					list<string> bare_names = []
+					integer eidx = 0
+					integer esafety = 0
+					while esafety < 100
+						esafety = esafety + 1
+						integer ecomma = events.indexOf(",", eidx)
+						string attr = ""
+						if ecomma == -1
+							attr = events.substring(eidx, events.length())
+							esafety = 100
+						else
+							attr = events.substring(eidx, ecomma)
+							eidx = ecomma + 1
+						if attr.length() > 0
+							bare_names = ui_lint_collect_bare_handlers(bcontent, attr, bare_names)
+					// For each bare name, emit UI-C005 if it isn't a
+					// declared function.
+					integer ni = 0
+					while ni < bare_names.length()
+						string nm = bare_names.get(ni)
+						boolean has_it = ui_lint_string_in_list(declared_funcs, nm)
+						if not has_it
+							string entry = "{\"code\":\"FRAME-UI-C005\","
+							entry = entry + "\"severity\":\"warning\","
+							entry = entry + "\"message\":\"Event handler '" + ui_lint_json_escape(nm) + "' is not a declared function in this project.\","
+							entry = entry + "\"location\":{\"file\":\"" + ui_lint_json_escape(bfile) + "\",\"line\":" + bline.toString() + ",\"column\":1},"
+							entry = entry + "\"hint\":\"Define '" + ui_lint_json_escape(nm) + "()' in a functions: block, or rewrite the attribute as an inline expression.\"}"
+							diagnostics = ui_lint_push(diagnostics, first_out, entry)
+							first_out = false
+						ni = ni + 1
+					bscan = bobj_end
+			bki = bki + 1
+
+		diagnostics = diagnostics + "]"
+		return diagnostics
