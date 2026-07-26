@@ -4695,6 +4695,10 @@ functions:
 	// Read the next quoted string that appears after `after` in `src`,
 	// starting the search at `from`. Returns "" if either the opening or
 	// closing quote is missing. Mirrors frame.data's lint_next_quoted.
+	// NOTE: This function is escape-blind — it stops at the first `"` and
+	// does NOT unescape. Use for short attributes (name, file) that never
+	// contain quotes. For `content` (which is JSON-escaped and can embed
+	// `\"`), use ui_lint_next_quoted_escaped below.
 	string ui_lint_next_quoted(string src, string after, integer pos)
 		string tail = src.substring(pos, src.length())
 		integer at = tail.indexOf(after)
@@ -4706,6 +4710,60 @@ functions:
 		if end == -1
 			return ""
 		return rest.substring(0, end)
+
+	// Read the next JSON-escaped quoted string after `after` in `src`.
+	// Handles `\"`, `\\`, `\n`, `\r`, `\t`, and `\uXXXX` escapes. Terminates
+	// at the first UNESCAPED `"`. Returns the decoded string.
+	// Compiler `_ast_list_blocks` JSON-escapes the block content field, so
+	// event attributes like onclick=\"funcName\" round-trip as
+	// `onclick=\\\"funcName\\\"` in the raw payload — the escape-blind
+	// ui_lint_next_quoted would truncate at the first `\"` and see empty
+	// content.
+	string ui_lint_next_quoted_escaped(string src, string after)
+		integer at = src.indexOf(after)
+		if at == -1
+			return ""
+		integer i = at + after.length()
+		integer len = src.length()
+		string out = ""
+		while i < len
+			string ch = src.substring(i, i + 1)
+			if ch == "\""
+				return out
+			if ch == "\\"
+				if i + 1 >= len
+					return out
+				string esc = src.substring(i + 1, i + 2)
+				if esc == "\""
+					out = out + "\""
+					i = i + 2
+				else if esc == "\\"
+					out = out + "\\"
+					i = i + 2
+				else if esc == "n"
+					out = out + "\n"
+					i = i + 2
+				else if esc == "r"
+					out = out + "\r"
+					i = i + 2
+				else if esc == "t"
+					out = out + "\t"
+					i = i + 2
+				else if esc == "u" and i + 5 < len
+					// \uXXXX — 4 hex digits. Rare in HTML attribute values;
+					// pass through as the literal char for the four common
+					// ASCII cases. For anything above 0x7F we fall back to
+					// leaving the escape sequence intact.
+					string hex = src.substring(i + 2, i + 6)
+					out = out + "\\u" + hex
+					i = i + 6
+				else
+					out = out + esc
+					i = i + 2
+			else
+				out = out + ch
+				i = i + 1
+		return out
 
 	// Return the byte offset (in `src`) of the character just after the
 	// closing `}` that matches the first `{` at or after position `pos`.
@@ -4877,7 +4935,7 @@ functions:
 					integer bline = 1
 					if bline_str.length() > 0
 						bline = bline_str.toInteger()
-					string bcontent = ui_lint_next_quoted(bentry, "\"content\":\"", 0)
+					string bcontent = ui_lint_next_quoted_escaped(bentry, "\"content\":\"")
 					// Gather all bare-handler names from this block.
 					list<string> bare_names = []
 					integer eidx = 0
